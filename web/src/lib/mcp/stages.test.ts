@@ -4,7 +4,10 @@ import { assembleOperations } from "@/lib/mcp/operations";
 import { STAGE_META_KEY, stageMeta, TOOL_STAGES } from "@/lib/mcp/stages";
 import { isLineageStage } from "@/lib/views/lineage/types";
 
-const published = ["whoami", ...assembleOperations().map((operation) => operation.id)];
+const published = [
+  "whoami",
+  ...assembleOperations({ focusedConsole: true }).map((operation) => operation.id),
+];
 
 test("every published tool has a stage entry, so a new tool cannot skip the decision", () => {
   for (const id of published) {

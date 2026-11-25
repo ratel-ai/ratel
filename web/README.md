@@ -10,10 +10,6 @@ intelligence that reads them. One Next.js app, two editions
 - **Ratel, Cloud edition** (`RATEL_COMPOSITION=cloud`): the same tree plus the private modules checked out at
   `ee/src`. Not built here.
 
-> The application code is arriving from `ratel-cloud` slice by slice through
-> [`scripts/platform-sync`](../scripts/platform-sync/README.md). Until the move completes,
-> this folder is a subset of that app; the layout below is the target.
-
 ## Layout
 
 ```
@@ -51,7 +47,7 @@ pnpm install
 docker compose up db                       # Postgres 16 on localhost:5432
 cp web/.env.example web/.env.local
 pnpm --filter @ratel/platform dev          # http://localhost:3000; migrates on boot, then serves
-docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
 ## Configuration
@@ -75,8 +71,9 @@ Next reads, `next.config.ts`'s build-time variables and the variables a third-pa
 stay outside it (listed at the top of `config.ts`).
 
 Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`,
-`toolRunInsights`): in the file `flags.<key>`, in the environment `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES` and `FF_TOOL_RUN_INSIGHTS`. A flag
+`toolRunInsights`, `focusedConsole`): in the file `flags.<key>`, in the environment `FF_EVAL_GATE`,
+`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS` and
+`FF_FOCUSED_CONSOLE`. A flag
 takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and

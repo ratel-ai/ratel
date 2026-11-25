@@ -25,9 +25,9 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `traces-sessions/` | the Traces Sessions tab (copies): `sessions` (one row per session, newest activity first, paged by a cursor, no timeframe), `summary`, `tab-aggregates` and `timeframe` (the summary inside each tab: its `?window=` and that tab's numbers and volume), `view` (All or Failed), `route` (the two API routes' shared guard) |
 
 The experiment reads are in `traces/` (`experiment-*`, `calibration-view`); the Calibration pages and
-their services stay upstream until they land. Copies and owned files are listed in `scripts/platform-sync/map.json`.
+their services stay upstream until they land.
 
 The match-quality analyst gets its model from the model kit (`lib/readings/models`, ADR-0009):
 `analystDepsOver` runs on whichever provider the deployment selects, and `job.ts`
-(`resolveAnalystFactory`, owned for this) asks the kit instead of asking whether Claude is
-configured. `anthropicAnalystDeps` still names a Claude model outright, for the tests that pin it.
+(`resolveAnalystFactory`) asks the kit instead of asking whether Claude is configured.
+`anthropicAnalystDeps` still names a Claude model outright, for the tests that pin it.

@@ -22,6 +22,7 @@ import {
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
 import { mcpServersOperations } from "@/lib/mcp/operations/mcp-servers";
 import { observabilityOperations } from "@/lib/mcp/operations/observability";
+import { overviewOperations, overviewWriteOperations } from "@/lib/mcp/operations/overview";
 import { playgroundOperations } from "@/lib/mcp/operations/playground";
 import { qualityOperations } from "@/lib/mcp/operations/quality";
 import { rankingOperations } from "@/lib/mcp/operations/ranking";
@@ -40,6 +41,8 @@ import { buildRegistry, type McpOperation, type Registry } from "@/lib/mcp/regis
 export interface AssembleOptions {
   /** Omit write operations, for a read-only deployment or a read-only test. */
   includeWrites?: boolean;
+  /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
+  focusedConsole?: boolean;
 }
 
 /**
@@ -58,6 +61,7 @@ export function assembleOperations(
   const includeWrites = options.includeWrites ?? true;
   const core = [
     ...scopeOperations(),
+    ...(options.focusedConsole ? overviewOperations() : []),
     ...catalogOperations(),
     ...observabilityOperations(),
     ...runsOperations(),
@@ -81,6 +85,7 @@ export function assembleOperations(
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),
     ...writeOperations(),
+    ...(options.focusedConsole ? overviewWriteOperations() : []),
     ...runtimeWriteOperations(),
     ...toolCrafterWriteOperations(),
     ...loopWriteOperations(),
@@ -97,8 +102,8 @@ export function assembleOperations(
  * `whoami`. The Integrations page states it; flag-off.test.ts pins it to the
  * server's own tools/list.
  */
-export function agentToolCount(): number {
-  return assembleOperations().filter((operation) => !operation.appOnly).length + 1;
+export function agentToolCount(options: AssembleOptions = {}): number {
+  return assembleOperations(options).filter((operation) => !operation.appOnly).length + 1;
 }
 
 /** Build a registry for one request. */

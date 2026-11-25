@@ -23,6 +23,23 @@ test("every default in docker-compose.yml matches .env.example", () => {
   }
 });
 
+test("web, worker and demo run the published images, and only the override builds", () => {
+  const image = (name) => new RegExp(`image: ratelai/${name}:\\$\\{RATEL_VERSION:-\\d+\\.\\d+\\.\\d+\\} # x-release-please-version\\n`);
+  assert.match(compose.slice(0, compose.indexOf("\nservices:")), image("ratel"));
+  assert.match(service("demo"), image("ratel-demo"));
+  assert.doesNotMatch(compose, /build:/);
+  const build = read("docker-compose.build.yml");
+  for (const name of ["web", "worker", "demo"]) assert.match(build, new RegExp(`\\n  ${name}:\\n    image: ratel-${name}\\n    build:`));
+});
+
+test("a release moves the default version in docker-compose.yml and .env.example", () => {
+  const files = JSON.parse(read("release-please-config.json")).packages["."]["extra-files"];
+  for (const path of ["docker-compose.yml", ".env.example"]) {
+    assert.ok(files.some((file) => file.type === "generic" && file.path === path), path);
+  }
+  assert.match(read(".env.example"), /# x-release-please-start-version\nRATEL_VERSION=\d+\.\d+\.\d+\n# x-release-please-end\n/);
+});
+
 test("every published port stays on localhost", () => {
   const ports = [...compose.matchAll(/ports:\s*\[([^\]]*)\]/g)].map((match) => match[1]);
   assert.equal(ports.length, 2);

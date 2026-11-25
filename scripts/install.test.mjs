@@ -27,22 +27,22 @@ const sh = async (body, { args = [], env = {} } = {}) => {
 };
 
 const parsed = (args, env) =>
-  sh('parse_args "$@"\nprintf "%s|%s|%s|%s\\n" "$REF" "$INSTALL_DIR" "$ASSUME_YES" "$WITH_DEMO"', {
+  sh('parse_args "$@"\nprintf "%s|%s|%s|%s\\n" "${REF:-$VERSION}" "$INSTALL_DIR" "$ASSUME_YES" "$WITH_DEMO"', {
     args,
     env,
   });
 const access = (args, env) =>
   sh('parse_args "$@"\nprintf "%s|%s|%s|%s\\n" "$ACCESS" "$DOMAIN" "$TLS" "$AUTH_HASH"', { args, env });
 
-test("parse_args defaults to main, ~/ratel, interactive and no demo", async () => {
+test("parse_args defaults to the latest release, ~/ratel, interactive and no demo", async () => {
   const { stdout } = await parsed([]);
-  assert.match(stdout.trim(), /^main\|\/.+\/ratel\|0\|0$/);
+  assert.match(stdout.trim(), /^latest\|\/.+\/ratel\|0\|0$/);
   assert.doesNotMatch(stdout, /\/opt\/ratel/);
 });
 
 test("parse_args reads every flag, in both spellings", async () => {
-  const spaced = await parsed(["--ref", "v1.2.3", "--dir", "/srv/r", "--yes", "--demo"]);
-  assert.equal(spaced.stdout.trim(), "v1.2.3|/srv/r|1|1");
+  const spaced = await parsed(["--ref", "feat/x", "--dir", "/srv/r", "--yes", "--demo"]);
+  assert.equal(spaced.stdout.trim(), "feat/x|/srv/r|1|1");
   const joined = await parsed(["--ref=abc123", "--dir=/x", "-y"]);
   assert.equal(joined.stdout.trim(), "abc123|/x|1|0");
 });
@@ -51,6 +51,164 @@ test("parse_args takes the same settings from the environment, flags win", async
   const env = { RATEL_REF: "dev", RATEL_DIR: "/e", RATEL_YES: "1", RATEL_DEMO: "1" };
   assert.equal((await parsed([], env)).stdout.trim(), "dev|/e|1|1");
   assert.equal((await parsed(["--ref", "flag"], env)).stdout.trim(), "flag|/e|1|1");
+});
+
+const target = (args, env) => sh('parse_args "$@"\nprintf "%s|%s\\n" "$VERSION" "$REF"', { args, env });
+
+test("parse_args takes a release as --version, or as --ref vX.Y.Z", async () => {
+  for (const args of [["--version", "0.3.0"], ["--version=v0.3.0"], ["--ref", "v0.3.0"]]) {
+    assert.equal((await target(args)).stdout.trim(), "0.3.0|", args.join(" "));
+  }
+  assert.equal((await target(["--version", "edge"])).stdout.trim(), "edge|");
+  assert.equal((await target(["--ref=v0.3.0-rc.1"])).stdout.trim(), "0.3.0-rc.1|");
+  assert.equal((await target([], { RATEL_VERSION: "0.3.0" })).stdout.trim(), "0.3.0|");
+});
+
+test("parse_args takes every other ref as a source build, an SDK tag too", async () => {
+  for (const ref of ["main", "feat/x", "6e8ce216", "sdk-ts-v0.13.0"]) {
+    assert.equal((await target(["--ref", ref])).stdout.trim(), `|${ref}`, ref);
+  }
+});
+
+test("parse_args: a flag wins over the other setting's variable, and both flags are an error", async () => {
+  assert.equal((await target(["--ref", "main"], { RATEL_VERSION: "0.3.0" })).stdout.trim(), "|main");
+  assert.equal((await target(["--version", "0.3.0"], { RATEL_REF: "main" })).stdout.trim(), "0.3.0|");
+  assert.equal((await target(["--version", "0.3.0", "--ref", "main"])).code, 2);
+  for (const bad of ["0.3", "main", "0.3.0;id", "0.3.0/x"]) assert.equal((await target(["--version", bad])).code, 2, bad);
+});
+
+test("parse_args keeps RATEL_VERSION out of docker compose, which reads .env", async () => {
+  const { stdout } = await sh('parse_args\necho "${RATEL_VERSION-unset}"', { env: { RATEL_VERSION: "v0.3.0" } });
+  assert.equal(stdout.trim(), "unset");
+});
+
+/** Docker Hub's tag API for one repository with these tags. */
+const hub = async (tags) => {
+  const server = createServer((req, res) => {
+    const { pathname } = new URL(req.url, "http://hub");
+    const results = tags.map((name) => ({ name, images: [{ architecture: "amd64" }, { architecture: "arm64" }] }));
+    if (pathname === "/tags") res.writeHead(200).end(JSON.stringify({ count: tags.length, results }));
+    else if (tags.includes(pathname.replace("/tags/", ""))) res.writeHead(200).end("{}");
+    else res.writeHead(404).end("{}");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { url: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
+};
+const resolved = async (args, tags) => {
+  const service = await hub(tags);
+  try {
+    return await sh('parse_args "$@"\nresolve_version >&2\nprintf "%s|%s\\n" "$VERSION" "$(git_ref)"', {
+      args,
+      env: { RATEL_HUB_URL: service.url },
+    });
+  } finally {
+    service.close();
+  }
+};
+
+test("resolve_version takes the highest published X.Y.Z, not a moving tag or a pre-release", async () => {
+  const tags = ["edge", "latest", "0.9", "0.10", "0.9.2", "0.10.1", "0.10.0", "0.11.0-rc.1", "0.0.0-test"];
+  assert.equal((await resolved([], tags)).stdout.trim(), "0.10.1|v0.10.1");
+  assert.equal((await resolved(["--version", "latest"], tags)).stdout.trim(), "0.10.1|v0.10.1");
+});
+
+test("resolve_version never takes an SDK tag: v0.2.0 is one, and it has no image", async () => {
+  const { code, stderr } = await resolved(["--ref", "v0.2.0"], ["0.4.0", "latest"]);
+  assert.equal(code, 1);
+  assert.match(stderr, /0\.2\.0 is not a published Ratel release/);
+  assert.equal((await resolved([], ["0.4.0", "sdk-ts-v0.13.0", "v0.2.0"])).stdout.trim(), "0.4.0|v0.4.0");
+});
+
+test("resolve_version takes a published pre-release or edge when asked, and edge reads main", async () => {
+  assert.equal((await resolved(["--version", "0.5.0-rc.1"], ["0.5.0-rc.1"])).stdout.trim(), "0.5.0-rc.1|v0.5.0-rc.1");
+  assert.equal((await resolved(["--version", "edge"], ["edge"])).stdout.trim(), "edge|main");
+});
+
+test("resolve_version builds main while no release is published, and leaves a --ref alone", async () => {
+  assert.equal((await resolved([], ["edge"])).stdout.trim(), "|main");
+  assert.equal((await resolved(["--ref", "feat/x"], ["0.4.0"])).stdout.trim(), "|feat/x");
+});
+
+test("resolve_version stops when Docker Hub does not answer, rather than build main", async () => {
+  const { code, stderr } = await sh("parse_args\nresolve_version", { env: { RATEL_HUB_URL: "http://127.0.0.1:9" } });
+  assert.equal(code, 1);
+  assert.match(stderr, /--version/);
+});
+
+/** A bare origin with a v0.4.0 and a v0.5.0 release on main, and main one commit ahead. */
+const origin = async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ratel-origin-"));
+  await run("sh", [
+    "-ec",
+    `cd "${dir}" && git init -q -b main . && git config user.email t@example.com && git config user.name t
+     image() { echo 'image: ratelai/ratel:x' > docker-compose.yml; }
+     image; git add . && git commit -qm one && git tag v0.4.0
+     echo 2 > f; git add . && git commit -qm two && git tag v0.5.0
+     echo 3 > f; git add . && git commit -qm three`,
+  ]);
+  return dir;
+};
+const fetched = async (repo, dir, args) =>
+  sh('parse_args "$@"\nfetch_source\ngit describe --tags --always', {
+    args: [...args, "--dir", dir],
+    env: { RATEL_REPO: repo },
+  });
+
+test("fetch_source checks out a release's tag, and upgrades a source checkout to it", async () => {
+  const repo = await origin();
+  const dir = join(mkdtempSync(join(tmpdir(), "ratel-dir-")), "ratel");
+  assert.match((await fetched(repo, dir, ["--version", "0.4.0"])).stdout, /v0\.4\.0\n$/);
+  assert.match((await fetched(repo, dir, ["--version", "0.5.0"])).stdout, /v0\.5\.0\n$/);
+});
+
+test("fetch_source refuses a release older than the checkout, unless --allow-downgrade", async () => {
+  const repo = await origin();
+  const dir = join(mkdtempSync(join(tmpdir(), "ratel-dir-")), "ratel");
+  await fetched(repo, dir, ["--ref", "main"]);
+  const refused = await fetched(repo, dir, ["--version", "0.5.0"]);
+  assert.equal(refused.code, 1);
+  assert.match(refused.stderr, /newer than v0\.5\.0/);
+  const forced = await fetched(repo, dir, ["--version", "0.5.0", "--allow-downgrade"]);
+  assert.match(forced.stdout, /v0\.5\.0\n$/);
+});
+
+/** An installed directory with the compose files, as fetch_source leaves it. */
+const installed = (files = ["docker-compose.yml", "docker-compose.build.yml"], composeText = "image: ratelai/ratel:x\n") => {
+  const dir = mkdtempSync(join(tmpdir(), "ratel-installed-"));
+  for (const file of files) writeFileSync(join(dir, file), composeText);
+  writeFileSync(join(dir, ".env"), "POSTGRES_PASSWORD=mine\nRATEL_VERSION=0.1.0\nCOMPOSE_FILE=old\n");
+  return dir;
+};
+const configured = async (dir, setup) => {
+  await sh(`${setup}\nconfigure_compose "${dir}" >/dev/null`);
+  const text = envFile(dir);
+  return [value(text, "RATEL_VERSION"), value(text, "COMPOSE_FILE"), value(text, "POSTGRES_PASSWORD")];
+};
+
+test("configure_compose pins a release in .env and keeps the rest", async () => {
+  assert.deepEqual(await configured(installed(), "VERSION=0.4.0 ACCESS=private"), ["0.4.0", undefined, "mine"]);
+  assert.deepEqual(await configured(installed(), "VERSION=0.4.0 ACCESS=public"), [
+    "0.4.0",
+    "docker-compose.yml:docker-compose.caddy.yml",
+    "mine",
+  ]);
+});
+
+test("configure_compose adds the build override for a source build and pins no version", async () => {
+  const build = "docker-compose.yml:docker-compose.build.yml";
+  assert.deepEqual(await configured(installed(), "VERSION= REF=main ACCESS=private"), [undefined, build, "mine"]);
+  assert.deepEqual(await configured(installed(), "VERSION= REF=main ACCESS=public"), [
+    undefined,
+    `${build}:docker-compose.caddy.yml`,
+    "mine",
+  ]);
+});
+
+test("configure_compose builds a ref or a release from before docker-compose.build.yml", async () => {
+  const old = () => installed(["docker-compose.yml"], "build: .\n");
+  assert.deepEqual(await configured(old(), "VERSION= REF=old ACCESS=private"), [undefined, undefined, "mine"]);
+  const { stdout } = await sh(`VERSION=0.1.0 ACCESS=private\nconfigure_compose "${old()}" >/dev/null 2>&1\necho "$VERSION"`);
+  assert.equal(stdout, "\n", "started as a source build");
 });
 
 test("parse_args rejects an unknown flag and a flag with no value", async () => {

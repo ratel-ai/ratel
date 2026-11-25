@@ -7,12 +7,14 @@
 #
 # It finds the cloud you are logged in to (AWS, Google Cloud, Azure, DigitalOcean or Hetzner),
 # creates one VM with OpenTofu or Terraform, and installs Ratel on it with install.sh. Run `up`
-# again to upgrade the VM to a new --ref. State and secrets stay on this machine, in
+# again to upgrade the VM to the latest release, or to --version. State and secrets stay on this machine, in
 # ~/.ratel/deploy/<name>/. See README.md "Deploy to your cloud".
 set -eu
 
 RATEL_RAW_URL="${RATEL_RAW_URL:-https://raw.githubusercontent.com/ratel-ai/ratel}"
 RATEL_DEPLOY_HOME="${RATEL_DEPLOY_HOME:-$HOME/.ratel/deploy}"
+# The releases are the image's X.Y.Z tags: git also has old SDK tags named vX.Y.Z.
+RATEL_HUB_URL="${RATEL_HUB_URL:-https://hub.docker.com/v2/repositories/ratelai/ratel}"
 CLOUDS="aws gcp azure digitalocean hetzner"
 # deploy/terraform/<cloud>/ and deploy/terraform/cloud-init/: what a download fetches.
 MODULE_FILES="main.tf variables.tf outputs.tf"
@@ -21,7 +23,7 @@ SSH_USER=ratel
 # install.sh's login user in the public mode.
 CONSOLE_USER=ratel
 INSTALL_DIR=/opt/ratel
-# The install takes about 5 minutes on 2 vCPU. Certificates can take a minute more.
+# A source build (--ref) takes about 5 minutes on 2 vCPU. Certificates can take a minute more.
 HEALTH_TRIES=60
 
 # The settings. parse_args sets the flags; a new deploy fills the rest with apply_defaults, an
@@ -31,6 +33,7 @@ NAME=ratel
 CLOUD=""
 REGION=""
 SIZE=""
+VERSION=""
 REF=""
 ACCESS=""
 DOMAIN=""
@@ -70,12 +73,12 @@ parse_args() {
         [ -z "$COMMAND" ] || usage_error "one command only: $COMMAND or $1"
         COMMAND=$1
         ;;
-      --cloud | --region | --size | --name | --ref | --access | --domain | --allow-cidr | --iac)
+      --cloud | --region | --size | --name | --version | --ref | --access | --domain | --allow-cidr | --iac)
         [ $# -ge 2 ] || usage_error "$1 needs a value"
         set_flag "${1#--}" "$2"
         shift
         ;;
-      --cloud=* | --region=* | --size=* | --name=* | --ref=* | --access=* | --domain=* | --allow-cidr=* | --iac=*)
+      --cloud=* | --region=* | --size=* | --name=* | --version=* | --ref=* | --access=* | --domain=* | --allow-cidr=* | --iac=*)
         flag=${1%%=*}
         set_flag "${flag#--}" "${1#*=}"
         ;;
@@ -86,6 +89,9 @@ parse_args() {
     shift
   done
   [ -n "$COMMAND" ] || COMMAND=up
+  # A release has an image, so --ref vX.Y.Z means --version.
+  if is_version "${REF#v}" && [ -z "$VERSION" ]; then VERSION=${REF#v} REF=""; fi
+  [ -z "$VERSION" ] || [ -z "$REF" ] || usage_error "pass --version or --ref, not both"
 }
 
 # Every value ends up in an HCL file, a shell command on the VM or a Caddyfile, so each one is
@@ -97,6 +103,10 @@ set_flag() {
       ;;
     region) check_word "$1" "$2"; REGION=$2 ;;
     size) check_word "$1" "$2"; SIZE=$2 ;;
+    version)
+      [ "$2" = edge ] || is_version "${2#v}" || usage_error "--version is X.Y.Z or edge: $2"
+      VERSION=${2#v}
+      ;;
     ref)
       check_word "$1" "$2"
       case "$2" in *..*) usage_error "--ref cannot contain .." ;; esac
@@ -130,6 +140,11 @@ check_word() {
   printf '%s' "$2" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/-]*$' || usage_error "--$1 has characters it cannot have: $2"
 }
 
+# X.Y.Z, or a pre-release X.Y.Z-rc.N.
+is_version() {
+  printf '%s\n' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
+}
+
 usage() {
   cat <<'EOF'
 Usage: deploy.sh [up|status|destroy] [options]
@@ -142,7 +157,8 @@ Usage: deploy.sh [up|status|destroy] [options]
   --region      the cloud's region (default: your CLI's region, or a common one)
   --size        the VM type (default: 2 vCPU or more, 8 GB RAM)
   --name        the deploy's name, for several deploys (default: ratel)
-  --ref         the branch, tag or commit to install (default: main)
+  --version     the release to run (default: the latest one), or edge
+  --ref         a branch or commit to build from source instead
   --access      public: HTTPS with a login on 80 and 443 (default)
                 private: no web port, reach it with an SSH tunnel
   --domain      public: your DNS name for the VM (default: <ip>.sslip.io)
@@ -162,7 +178,6 @@ usage_error() {
 # The defaults of a new deploy. The region comes from the cloud's CLI when it has one set.
 apply_defaults() {
   [ -n "$ACCESS" ] || ACCESS=public
-  [ -n "$REF" ] || REF=main
   [ -n "$REGION" ] || REGION=$(cli_region "$CLOUD")
   if [ -z "$REGION" ]; then
     case "$CLOUD" in
@@ -182,6 +197,31 @@ apply_defaults() {
       hetzner) SIZE=cx33 ;;
     esac
   fi
+}
+
+# Pins the latest release unless --version or --ref is set. With no release yet, main is built
+# from source.
+choose_version() {
+  [ -z "$VERSION$REF" ] || return 0
+  tags=$(curl -fsSL --max-time 20 "$RATEL_HUB_URL/tags?page_size=100") ||
+    fail "Docker Hub did not answer, so the latest release is unknown. Try again, or pass --version X.Y.Z."
+  # latest, edge, X.Y and pre-releases do not match.
+  VERSION=$(printf '%s' "$tags" | tr '{,' '[\n*]' |
+    sed -n 's/^ *"name": *"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/p' |
+    sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+  if [ -z "$VERSION" ]; then
+    warn "No Ratel release is published yet. Building main from source."
+    REF=main
+  fi
+}
+
+describe_version() {
+  if [ -n "$VERSION" ]; then echo "$VERSION"; else echo "$REF, built from source"; fi
+}
+
+# The git ref of install.sh and the modules: main knows every release.
+script_ref() {
+  if [ -n "$VERSION" ]; then echo main; else echo "$REF"; fi
 }
 
 cli_region() {
@@ -211,6 +251,7 @@ create() {
   step "Engine"
   choose_engine
   apply_defaults
+  choose_version
   [ "$CLOUD" != gcp ] || PROJECT=$(gcloud config get-value project 2>/dev/null)
   MY_IP=$(caller_ip) || fail "Cannot find this machine's public IP, which SSH is opened to."
 
@@ -219,7 +260,7 @@ create() {
   info "Cloud:    $CLOUD, region $REGION"
   info "Size:     $SIZE"
   info "Access:   $(describe_access)"
-  info "Ref:      $REF"
+  info "Version:  $(describe_version)"
   info "State:    $STATE"
   init_state
   stage_modules "$(module_source)"
@@ -415,7 +456,7 @@ save_config() {
   (
     umask 077
     {
-      for key in CLOUD ENGINE REGION SIZE ACCESS DOMAIN ALLOW_CIDRS REF PROJECT MY_IP APPLIED; do
+      for key in CLOUD ENGINE REGION SIZE ACCESS DOMAIN ALLOW_CIDRS VERSION REF PROJECT MY_IP APPLIED; do
         eval "value=\${$key:-}"
         printf '%s=%s\n' "$key" "$value"
       done
@@ -459,7 +500,7 @@ tf_dir() {
   echo "$TF_ROOT/$CLOUD"
 }
 
-# The modules come from this checkout when deploy.sh runs from one, else from GitHub at --ref.
+# The modules come from this checkout when deploy.sh runs from one, else from GitHub at script_ref.
 module_source() {
   if [ -n "${RATEL_DEPLOY_MODULES:-}" ]; then
     echo "$RATEL_DEPLOY_MODULES"
@@ -474,7 +515,7 @@ module_source() {
       fi
       ;;
   esac
-  echo "$RATEL_RAW_URL/$REF/deploy/terraform"
+  echo "$RATEL_RAW_URL/$(script_ref)/deploy/terraform"
 }
 
 # Copies (or downloads) deploy/terraform/<cloud>/ and deploy/terraform/cloud-init/ into the
@@ -517,11 +558,17 @@ write_tfvars() {
       printf 'access = "%s"\n' "$ACCESS"
       printf 'domain = "%s"\n' "$DOMAIN"
       printf 'tls = "%s"\n' "$tls"
-      printf 'ref = "%s"\n' "$REF"
-      printf 'install_url = "%s"\n' "$RATEL_RAW_URL/$REF/install.sh"
+      printf 'ratel_version = "%s"\n' "$VERSION"
+      # A deploy keeps the modules that made it, and older ones know only ref.
+      printf 'ref = "%s"\n' "${REF:-$(version_ref)}"
+      printf 'install_url = "%s"\n' "$RATEL_RAW_URL/$(script_ref)/install.sh"
       [ "$CLOUD" != gcp ] || printf 'project = "%s"\n' "$PROJECT"
     } >"$1"
   )
+}
+
+version_ref() {
+  if [ "$VERSION" = edge ]; then echo main; else echo "v$VERSION"; fi
 }
 
 hcl_list() {
@@ -659,7 +706,7 @@ wait_for_ssh() {
 
 # Streams the install's output from cloud-init until cloud-init is done.
 follow_install() {
-  info "Following the install on the VM (cloud-init runs install.sh, about 5 minutes)."
+  info "Following the install on the VM (cloud-init runs install.sh; a source build takes about 5 minutes)."
   # The ratel user is in the adm group, which reads the log. Single quotes: it runs on the VM.
   # shellcheck disable=SC2016
   if remote 'tail -n +1 -F /var/log/cloud-init-output.log 2>/dev/null & t=$!
@@ -723,7 +770,7 @@ print_result() {
   info ""
   info "SSH:      $(ssh_command)"
   info "Status:   deploy.sh status$(name_flag)"
-  info "Upgrade:  deploy.sh up$(name_flag) --ref <branch|tag|sha>"
+  info "Upgrade:  deploy.sh up$(name_flag) [--version X.Y.Z]"
   info "Destroy:  deploy.sh destroy$(name_flag)"
 }
 
@@ -733,19 +780,18 @@ name_flag() {
 
 # --- up: an existing deploy --------------------------------------------------------------------
 
-# Reruns install.sh on the VM with the new --ref. The VM keeps its access mode. When this
+# Reruns install.sh on the VM with the new version. The VM keeps its access mode. When this
 # machine's IP changed, the firewall follows it first.
 upgrade() {
-  given_ref=$REF
   for flag in REGION SIZE ACCESS DOMAIN ALLOW_CIDRS IAC; do
     eval "value=\${$flag:-}"
     [ -z "$value" ] || warn "--$(echo "$flag" | tr 'A-Z_' 'a-z-') does not change an existing deploy. Destroy it and deploy again to change it."
   done
   load_config
-  REF=${given_ref:-$(config_get REF)}
+  upgrade_target
   step "Upgrade"
   info "Deploy:   $NAME on $CLOUD ($REGION)"
-  info "Ref:      $REF"
+  info "Version:  $(describe_version)"
   cloud_env
   read_outputs
 
@@ -762,12 +808,27 @@ upgrade() {
   fi
 
   wait_for_ssh
-  confirm "Upgrade Ratel on $IP to $REF?" || { info "Nothing was changed."; exit 0; }
-  remote "curl -fsSL '$RATEL_RAW_URL/$REF/install.sh' | sudo sh -s -- --yes --ref '$REF' --dir $INSTALL_DIR" ||
+  confirm "Upgrade Ratel on $IP to $(describe_version)?" || { info "Nothing was changed."; exit 0; }
+  remote "$(install_command)" ||
     fail "install.sh failed on the VM. The output is above."
   save_config
   wait_for_health
   print_result upgrade
+}
+
+# --version and --ref win. Without them, a deploy of a branch or commit stays on it, and any other
+# one (also the old default, main) moves to the latest release.
+upgrade_target() {
+  [ -z "$VERSION$REF" ] || return 0
+  REF=$(config_get REF)
+  [ "$REF" != main ] || REF=""
+  choose_version
+}
+
+# The command that upgrades the VM, run on it over SSH.
+install_command() {
+  if [ -n "$VERSION" ]; then target="--version '$VERSION'"; else target="--ref '$REF'"; fi
+  echo "curl -fsSL '$RATEL_RAW_URL/$(script_ref)/install.sh' | sudo sh -s -- --yes $target --dir $INSTALL_DIR"
 }
 
 # --- status and destroy ------------------------------------------------------------------------
@@ -784,7 +845,9 @@ status() {
   info "Cloud:    $CLOUD, region $REGION, size $SIZE"
   info "IP:       $IP"
   info "Access:   $(describe_access | sed "s/<ip>.sslip.io/$SITE/")"
-  info "Ref:      $(config_get REF)"
+  VERSION=$(config_get VERSION)
+  REF=$(config_get REF)
+  info "Version:  $(describe_version)"
   if health >/dev/null 2>&1; then ok "Healthy: $(health_target)"; else warn "Not answering: $(health_target)"; fi
   if [ "$ACCESS" = public ]; then
     info "Open:     $URL (user and password in $STATE/login)"

@@ -31,6 +31,7 @@ module "host" {
   access         = var.access
   domain         = var.domain
   tls            = var.tls
+  ratel_version  = var.ratel_version
   ref            = var.ref
   install_url    = var.install_url
 }

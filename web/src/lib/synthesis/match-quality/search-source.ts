@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, exists, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { traceEventHits, traceEvents } from "@/lib/ingest/trace-events/schema";
+import { analyzedTraceCondition } from "@/lib/platform/analysis-filter";
 import { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
 import type { ExperimentWindow } from "@/lib/synthesis/experiments/service";
@@ -60,6 +61,7 @@ export async function countCapturedSearches(
         eq(traceEvents.projectId, projectId),
         eq(traceEvents.type, SEARCH_TYPE),
         isNotNull(traceEvents.query),
+        await analyzedTraceCondition(projectId, traceEvents.traceId),
         gte(traceEvents.occurredAt, window.since),
         lt(traceEvents.occurredAt, window.until),
       ),
@@ -85,6 +87,7 @@ export async function countCapturedSearchesPerWindow(
         eq(traceEvents.projectId, projectId),
         eq(traceEvents.type, SEARCH_TYPE),
         isNotNull(traceEvents.query),
+        await analyzedTraceCondition(projectId, traceEvents.traceId),
         gte(traceEvents.occurredAt, new Date(now - longest * 86_400_000)),
       ),
     );
@@ -132,6 +135,7 @@ export async function listSearchTelemetryProjects(
               gte(eventTime, window.since),
               lt(eventTime, window.until),
               isNotNull(traceEvents.query),
+              await analyzedTraceCondition(projects.id, traceEvents.traceId),
               gte(traceEvents.occurredAt, window.since),
               lt(traceEvents.occurredAt, window.until),
             ),
@@ -169,6 +173,7 @@ export async function loadSearchSelections(
         eq(traceEvents.projectId, projectId),
         eq(traceEvents.type, SEARCH_TYPE),
         isNotNull(traceEvents.query),
+        await analyzedTraceCondition(projectId, traceEvents.traceId),
         gte(traceEvents.occurredAt, window.since),
         lt(traceEvents.occurredAt, window.until),
       ),

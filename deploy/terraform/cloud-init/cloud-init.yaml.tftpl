@@ -12,4 +12,4 @@ users:
 package_update: true
 packages: [curl, ca-certificates]
 runcmd:
-  - [sh, -c, "curl -fsSL '${install_url}' | sh -s -- --yes --ref '${ref}' --dir ${install_dir} ${access_args}"]
+  - [sh, -c, "curl -fsSL '${install_url}' | sh -s -- --yes ${install_args} --dir ${install_dir} ${access_args}"]

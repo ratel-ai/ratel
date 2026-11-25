@@ -44,7 +44,8 @@ without the checkout.
 ## Consequences
 
 - Contributors never see or need the Cloud code. This repository builds, tests and ships
-  Ratel OSS alone, and the OSS image holds no Cloud code (`pnpm check:private` guards it).
+  Ratel OSS alone, and the OSS image holds no Cloud code (`pnpm check:boundary` guards the
+  imports).
 - A Cloud developer works in one tree with one dev server.
 - A change to core and Cloud is two pull requests, merged public first. The private CI builds
   against the public branch of the same name. Additive contract changes keep the gap small.

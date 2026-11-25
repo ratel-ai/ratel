@@ -1,0 +1,22 @@
+# Builds web, worker and demo from this checkout instead of pulling the published images. For
+# developers, CI and install.sh --ref:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build --wait
+# or set COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml in .env.
+# The local image names keep a build from taking the name of a published version.
+services:
+  web:
+    image: ratel-web
+    build: &build
+      context: .
+      dockerfile: web/Dockerfile
+      target: oss
+
+  worker:
+    image: ratel-worker
+    build: *build
+
+  demo:
+    image: ratel-demo
+    build:
+      <<: *build
+      target: demo

@@ -21,9 +21,11 @@
 //
 //   node scripts/link-ee.mjs           install the commercial routes; fails if the checkout is missing
 //   node scripts/link-ee.mjs --auto    install them if the checkout is there, remove them otherwise;
-//                                      never fails. Runs before every dev and build
+//                                      never fails. Runs before every dev and build, and
+//                                      refreshes the checkout's git hooks when it ships an installer
 //   node scripts/link-ee.mjs --unlink  remove them, back to the open-source tree
 
+import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
@@ -43,6 +45,7 @@ const EE_SRC = join(ROOT, "ee", "src", "src");
 const ROUTES = join(EE_SRC, "routes");
 // Generated and gitignored: nothing tracked ever lives here.
 const TARGET = join(ROOT, "web", "src", "app", "(ee)");
+const HOOK_INSTALLER = join(ROOT, "ee", "src", "scripts", "install-hooks.sh");
 const PROXY_SOURCE = join(EE_SRC, "proxy.ts");
 const PROXY_TARGET = join(ROOT, "web", "src", "proxy.ts");
 const PUBLIC_SOURCE = join(EE_SRC, "public");
@@ -98,10 +101,24 @@ const install = () => {
   installPublic();
 };
 
+/** Best effort: a failure warns, and dev and build go on. */
+const installHooks = () => {
+  if (!existsSync(HOOK_INSTALLER)) return;
+  const run = spawnSync("sh", [HOOK_INSTALLER], {
+    cwd: ROOT,
+    stdio: ["ignore", "ignore", "inherit"],
+    timeout: 15_000,
+  });
+  if (run.status !== 0) {
+    console.warn(`could not install the git hooks: ${run.error?.message ?? `exit ${run.status}`}`);
+  }
+};
+
 const mode = process.argv[2] ?? "--link";
 
 if (mode === "--auto") {
   existsSync(ROUTES) ? install() : remove();
+  installHooks();
 } else if (mode === "--unlink") {
   remove();
   console.log("ee routes removed: open-source tree");

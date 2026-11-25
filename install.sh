@@ -5,7 +5,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
 #
 # Options (each also reads an environment variable):
-#   --ref <branch|tag|sha>  RATEL_REF   what to check out (default: main)
+#   --version <X.Y.Z>       RATEL_VERSION  the release to run (default: the latest one). Also
+#                                       latest, or edge (the last build of main).
+#   --ref <branch|sha>      RATEL_REF   build this from source instead. vX.Y.Z means --version.
+#   --allow-downgrade                   accept a release older than the one installed
 #   --dir <path>            RATEL_DIR   where to put it (default: ~/ratel, or /opt/ratel as root)
 #   --yes, -y               RATEL_YES=1 answer yes to every question (for scripts)
 #   --demo                  RATEL_DEMO=1 load the demo data after the start
@@ -16,11 +19,17 @@
 #   --auth-hash <bcrypt>    RATEL_AUTH_HASH public: the login's hash (default: a new password,
 #                                         printed once)
 #
-# Run it again to upgrade: it fetches the ref, rebuilds and restarts. It keeps the values in an
-# existing .env and stops if the checkout has local changes. A rerun keeps the access settings.
+# It checks out the release's tag for its compose files and runs the published image
+# docker.io/ratelai/ratel. Run it again to upgrade: it pulls the new image and restarts, also from
+# a source build. The data volume stays. It keeps the values in an existing .env (it sets
+# RATEL_VERSION and COMPOSE_FILE) and stops if the checkout has local changes. A rerun keeps the
+# access settings.
 set -eu
 
 RATEL_REPO="${RATEL_REPO:-https://github.com/ratel-ai/ratel.git}"
+# The releases are the X.Y.Z tags of the image, not of git: the repo also has old SDK tags and
+# releases named vX.Y.Z (v0.1.4 to v0.2.0), and they have no image.
+RATEL_HUB_URL="${RATEL_HUB_URL:-https://hub.docker.com/v2/repositories/ratelai/ratel}"
 RATEL_METADATA_URL="${RATEL_METADATA_URL:-http://169.254.169.254}"
 RATEL_DMI_DIR="${RATEL_DMI_DIR:-/sys/class/dmi/id}"
 README_SERVER_URL="https://github.com/ratel-ai/ratel#on-a-server"
@@ -30,9 +39,9 @@ MIN_DISK_MB=5120
 # The two secrets README.md "On a server" asks for, and the external scheduler's bearer.
 ENV_SECRETS="POSTGRES_PASSWORD TRACE_SIGNALS_HASH_SALT CRON_SECRET"
 SUDO=""
-# The public access mode: docker-compose.caddy.yml runs this image in front of web.
+# The published image, and the public access mode: docker-compose.caddy.yml runs this image in front of web.
+IMAGE=ratelai/ratel
 CADDY_IMAGE=caddy:2.11-alpine
-CADDY_COMPOSE_FILE=docker-compose.yml:docker-compose.caddy.yml
 AUTH_USER=ratel
 # README.md "On a server": the SDKs and MCP clients use project API keys on these routes, and a
 # monitor reads /api/health. Each prefix also opens its subpaths, but never /v1foo.
@@ -49,7 +58,6 @@ main() {
   step "Environment"
   info "Host:     $(describe_os "$os") ($(uname -m))"
   info "Platform: $(describe_cloud "$cloud")"
-  info "Ref:      $REF"
   info "Dir:      $INSTALL_DIR"
 
   step "Prerequisites"
@@ -58,6 +66,15 @@ main() {
   ensure_docker "$os"
   check_compose
   check_resources
+
+  step "Version"
+  resolve_version
+  # Before any change on disk: a failed pull leaves the running install as it was.
+  if [ -n "$VERSION" ]; then
+    info "Pulling $IMAGE:$VERSION"
+    dc pull --quiet "$IMAGE:$VERSION" >/dev/null || fail "Cannot pull $IMAGE:$VERSION. Nothing was changed."
+    ok "$IMAGE:$VERSION"
+  fi
 
   step "Source"
   fetch_source
@@ -68,17 +85,24 @@ main() {
   step "Access"
   configure_access "$INSTALL_DIR" "$cloud"
 
+  configure_compose "$INSTALL_DIR"
+
   step "Start"
   cd "$INSTALL_DIR"
-  info "Building and starting. The first build takes about 5 minutes."
-  # .env names the compose files (COMPOSE_FILE). --remove-orphans stops Caddy after a switch to
-  # private.
-  dc compose up -d --build --wait --remove-orphans
+  # .env names the version and the compose files (RATEL_VERSION, COMPOSE_FILE). --remove-orphans
+  # stops Caddy after a switch to private.
+  if [ -n "$VERSION" ]; then
+    dc compose up -d --wait --remove-orphans
+  else
+    info "Building and starting. The first build takes about 5 minutes."
+    dc compose up -d --build --wait --remove-orphans
+  fi
   port=$(env_value RATEL_PORT 3000)
   wait_healthy "http://127.0.0.1:$port/api/health"
 
   if [ "$WITH_DEMO" = 1 ]; then
     step "Demo data"
+    if [ -n "$VERSION" ]; then dc compose --profile demo pull --quiet demo; fi
     dc compose --profile demo run --rm demo
   fi
 
@@ -88,7 +112,9 @@ main() {
 # --- Arguments ---------------------------------------------------------------------------------
 
 parse_args() {
-  REF="${RATEL_REF:-main}"
+  VERSION=""
+  REF=""
+  ALLOW_DOWNGRADE=0
   INSTALL_DIR="${RATEL_DIR:-}"
   ASSUME_YES="${RATEL_YES:-0}"
   WITH_DEMO="${RATEL_DEMO:-0}"
@@ -100,6 +126,9 @@ parse_args() {
     case "$1" in
       --ref) [ $# -ge 2 ] || usage_error "--ref needs a value"; REF="$2"; shift ;;
       --ref=*) REF="${1#*=}" ;;
+      --version) [ $# -ge 2 ] || usage_error "--version needs a value"; VERSION="$2"; shift ;;
+      --version=*) VERSION="${1#*=}" ;;
+      --allow-downgrade) ALLOW_DOWNGRADE=1 ;;
       --dir) [ $# -ge 2 ] || usage_error "--dir needs a value"; INSTALL_DIR="$2"; shift ;;
       --dir=*) INSTALL_DIR="${1#*=}" ;;
       -y | --yes) ASSUME_YES=1 ;;
@@ -117,7 +146,21 @@ parse_args() {
     esac
     shift
   done
-  [ -n "$REF" ] || usage_error "--ref is empty"
+  [ -z "$VERSION" ] || [ -z "$REF" ] || usage_error "pass --version or --ref, not both"
+  if [ -z "$VERSION$REF" ]; then
+    VERSION="${RATEL_VERSION:-}"
+    REF="${RATEL_REF:-}"
+    [ -z "$VERSION" ] || [ -z "$REF" ] || usage_error "set RATEL_VERSION or RATEL_REF, not both"
+  fi
+  # docker compose would take it over the value in .env.
+  unset RATEL_VERSION
+  if is_version "${REF#v}"; then VERSION=$REF REF=""; fi
+  VERSION=${VERSION#v}
+  if [ -z "$VERSION$REF" ]; then VERSION=latest; fi
+  case "$VERSION" in
+    "" | latest | edge) ;;
+    *) is_version "$VERSION" || usage_error "--version is X.Y.Z, latest or edge: $VERSION" ;;
+  esac
   case "$REF" in *..*) usage_error "--ref cannot contain .." ;; esac
   case "$ACCESS" in "" | private | public) ;; *) usage_error "--access is private or public" ;; esac
   case "$TLS" in "" | acme | internal) ;; *) usage_error "--tls is acme or internal" ;; esac
@@ -130,17 +173,25 @@ parse_args() {
   [ -n "$INSTALL_DIR" ] || INSTALL_DIR=$(default_dir)
 }
 
+# X.Y.Z, or a pre-release X.Y.Z-rc.N.
+is_version() {
+  printf '%s\n' "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
+}
+
 default_dir() {
   if [ "$(id -u)" = 0 ]; then echo /opt/ratel; else echo "$HOME/ratel"; fi
 }
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--ref <branch|tag|sha>] [--dir <path>] [--yes] [--demo]
+Usage: install.sh [--version <X.Y.Z> | --ref <branch|sha>] [--allow-downgrade]
+                  [--dir <path>] [--yes] [--demo]
                   [--access private|public] [--domain <name>] [--tls acme|internal]
                   [--auth-hash <bcrypt>]
 
-  --ref        what to check out (default: main)
+  --version    the release to run (default: the latest one). Also latest or edge.
+  --ref        a branch or commit to build from source. vX.Y.Z means --version.
+  --allow-downgrade  accept a release older than the one installed
   --dir        where to put it (default: ~/ratel, or /opt/ratel as root)
   --yes        answer yes to every question
   --demo       load the demo data after the start
@@ -355,18 +406,64 @@ check_resources() {
   fi
 }
 
+# --- Version -----------------------------------------------------------------------------------
+
+# Leaves either VERSION (a published image) or REF (a source build) set, and the other empty.
+resolve_version() {
+  case "$VERSION" in
+    "") ;;
+    latest)
+      tags=$(curl -fsSL --max-time 20 "$RATEL_HUB_URL/tags?page_size=100") ||
+        fail "Docker Hub did not answer, so the latest release is unknown. Try again, or pass --version X.Y.Z."
+      VERSION=$(latest_release "$tags")
+      if [ -z "$VERSION" ]; then
+        warn "No Ratel release is published yet. Building main from source."
+        REF=main
+      fi
+      ;;
+    *)
+      code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 20 "$RATEL_HUB_URL/tags/$VERSION") || code=000
+      case "$code" in
+        200) ;;
+        404) fail "$VERSION is not a published Ratel release. See https://hub.docker.com/r/$IMAGE/tags" ;;
+        *) fail "Docker Hub did not answer (HTTP $code), so --version $VERSION is not checked. Try again." ;;
+      esac
+      ;;
+  esac
+  if [ -n "$VERSION" ]; then ok "Release $VERSION"; else ok "Source build of $REF"; fi
+}
+
+# Prints the highest X.Y.Z in a Docker Hub tag list, or nothing. latest, edge, X.Y and
+# pre-releases do not match.
+latest_release() {
+  printf '%s' "$1" | tr '{,' '[\n*]' |
+    sed -n 's/^ *"name": *"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/p' |
+    sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1
+}
+
+# The git ref with the compose files.
+git_ref() {
+  case "$VERSION" in
+    "") echo "$REF" ;;
+    edge) echo main ;;
+    *) echo "v$VERSION" ;;
+  esac
+}
+
 # --- Source ------------------------------------------------------------------------------------
 
 # Clones on the first run. On a later run fetches and checks out the ref, fast-forward only, and
 # stops on local changes rather than discarding them.
 fetch_source() {
+  ref=$(git_ref)
   if [ -d "$INSTALL_DIR/.git" ]; then
     cd "$INSTALL_DIR"
     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
       fail "$INSTALL_DIR has local changes. Commit or stash them, then run the installer again."
     fi
-    info "Existing checkout found. Upgrading to $REF."
+    info "Existing checkout found. Moving it to $ref."
     git fetch --quiet --tags origin
+    check_downgrade "$ref"
   elif [ -e "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
     fail "$INSTALL_DIR exists and is not a Ratel checkout. Choose another path with --dir."
   else
@@ -375,20 +472,29 @@ fetch_source() {
     cd "$INSTALL_DIR"
   fi
 
-  if git show-ref --verify --quiet "refs/remotes/origin/$REF"; then
-    if git show-ref --verify --quiet "refs/heads/$REF"; then
-      git checkout --quiet "$REF"
-      git merge --quiet --ff-only "origin/$REF" ||
-        fail "$REF has local commits that are not on origin. Resolve them, then run the installer again."
+  if git show-ref --verify --quiet "refs/remotes/origin/$ref"; then
+    if git show-ref --verify --quiet "refs/heads/$ref"; then
+      git checkout --quiet "$ref"
+      git merge --quiet --ff-only "origin/$ref" ||
+        fail "$ref has local commits that are not on origin. Resolve them, then run the installer again."
     else
-      git checkout --quiet -b "$REF" "origin/$REF"
+      git checkout --quiet -b "$ref" "origin/$ref"
     fi
   else
-    git fetch --quiet origin "$REF" 2>/dev/null || true
-    git checkout --quiet --detach "$REF" 2>/dev/null ||
-      fail "$REF is not a branch, tag or commit of $RATEL_REPO."
+    git fetch --quiet origin "$ref" 2>/dev/null || true
+    git checkout --quiet --detach "$ref" 2>/dev/null ||
+      fail "$ref is not a branch, tag or commit of $RATEL_REPO."
   fi
   ok "$(git log -1 --format='%h %s' | cut -c1-72)"
+}
+
+# Migrations only go forward, so an older release would run on a newer schema.
+check_downgrade() {
+  case "$VERSION" in "" | edge) return 0 ;; esac
+  [ "$ALLOW_DOWNGRADE" = 0 ] || return 0
+  git rev-parse --quiet --verify "refs/tags/$1^{commit}" >/dev/null || fail "$1 is not a tag of $RATEL_REPO."
+  git merge-base --is-ancestor HEAD "refs/tags/$1" ||
+    fail "The installed commit $(git rev-parse --short HEAD) is newer than $1 or not part of it. Keep it with --ref <branch|sha>, wait for a newer release, or accept the risk with --allow-downgrade."
 }
 
 # --- Configuration -----------------------------------------------------------------------------
@@ -419,6 +525,23 @@ write_env() {
   info "Keep a copy of .env: a lost TRACE_SIGNALS_HASH_SALT splits old hashes from new."
 }
 
+# Pins the release in .env, or adds the build override for a source build, and names the compose
+# files there, so every `docker compose` command in the directory uses them.
+configure_compose() {
+  if [ -n "$VERSION" ] && ! grep -q "$IMAGE:" "$1/docker-compose.yml"; then
+    warn "v$VERSION is older than the image deploy. Building it from source."
+    VERSION=""
+  fi
+  files=docker-compose.yml
+  # A ref from before the override builds with docker-compose.yml alone.
+  if [ -z "$VERSION" ] && [ -f "$1/docker-compose.build.yml" ]; then files=$files:docker-compose.build.yml; fi
+  if [ "$ACCESS" = public ]; then files=$files:docker-compose.caddy.yml; fi
+  if [ "$files" = docker-compose.yml ]; then files=""; fi
+  set_env_line "$1/.env" RATEL_VERSION "$VERSION"
+  set_env_line "$1/.env" COMPOSE_FILE "$files"
+  if [ -n "$VERSION" ]; then ok "RATEL_VERSION=$VERSION in .env"; fi
+}
+
 random_hex() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 32
@@ -435,9 +558,8 @@ env_value() {
 
 # --- Access ------------------------------------------------------------------------------------
 
-# Private keeps the ports on 127.0.0.1. Public writes ./Caddyfile and adds the Caddy overlay to
-# COMPOSE_FILE in .env, so every `docker compose` command in the directory includes it. With no
-# flags, a rerun keeps the mode: public while a Caddyfile exists.
+# Private keeps the ports on 127.0.0.1. Public writes ./Caddyfile, and configure_compose adds the
+# Caddy overlay. With no flags, a rerun keeps the mode: public while a Caddyfile exists.
 configure_access() {
   caddyfile="$1/Caddyfile"
   if [ -z "$ACCESS" ]; then
@@ -445,7 +567,6 @@ configure_access() {
   fi
   if [ "$ACCESS" = private ]; then
     rm -f "$caddyfile"
-    set_env_line "$1/.env" COMPOSE_FILE ""
     ok "Private: the console listens on 127.0.0.1 only."
     return 0
   fi
@@ -465,7 +586,6 @@ configure_access() {
   fi
 
   (umask 077 && write_caddyfile "$DOMAIN" "$AUTH_HASH" "$TLS" >"$caddyfile.tmp") && mv "$caddyfile.tmp" "$caddyfile"
-  set_env_line "$1/.env" COMPOSE_FILE "$CADDY_COMPOSE_FILE"
   # The console builds its snippets from BASE_URL. Only the example's default is replaced.
   if [ "$(sed -n 's/^BASE_URL=//p' "$1/.env" | tail -n 1)" = "http://localhost:3000" ]; then
     set_env_line "$1/.env" BASE_URL "https://$DOMAIN"
@@ -533,7 +653,7 @@ print_summary() {
     print_private_access "$cloud" "$port" "$url"
   fi
   info ""
-  info "Upgrade:  rerun the installer with the same --dir (and --ref)"
+  info "Upgrade:  rerun the installer with the same --dir"
   info "Backup:   cd $INSTALL_DIR && ${SUDO}docker compose exec -T db pg_dump -U ratel ratel > ratel.sql"
   info "Logs:     cd $INSTALL_DIR && ${SUDO}docker compose logs -f web worker"
   info "Stop:     cd $INSTALL_DIR && ${SUDO}docker compose down"

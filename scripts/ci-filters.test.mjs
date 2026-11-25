@@ -79,8 +79,8 @@ test("setup-branch-ruleset.sh sets every output", () => {
   assertTrue(r, OUTPUTS);
 });
 
-test("platform-sync change runs platform only", () => {
-  const r = on(["scripts/platform-sync/sync.mjs"]);
+test("layer check change runs platform only", () => {
+  const r = on(["scripts/check-layers.mjs"]);
   assertTrue(r, ["platform"]);
   assertFalse(r, ["design_system", "compose", "lockfiles"]);
 });
@@ -126,6 +126,7 @@ test("deploy.sh, its modules and its test set deploy and platform", () => {
 });
 
 test("the Caddy overlay sets compose and platform", () => {
+  assertTrue(on(["docker-compose.build.yml"]), ["compose", "platform"]);
   assertTrue(on(["docker-compose.caddy.yml"]), ["compose", "platform"]);
   assertFalse(on(["docker-compose.caddy.yml"]), ["deploy", "lockfiles"]);
 });
