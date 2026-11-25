@@ -15,6 +15,7 @@ import { type Config, getConfig } from "@/config";
 import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 
 /** The job queue's queries (owned port of the upstream query hub). */
 
@@ -168,6 +169,7 @@ export function oldestQueuedJobAgeQuery(): SQL {
     select floor(extract(epoch from now() - min(${jobs.createdAt})) * 1000) as age_ms
     from ${jobs}
     where ${jobs.status} = 'queued' and ${jobs.kind} = any(array[${kinds}]::text[])
+      and ${notOnHold(jobs.projectId)}
   `;
 }
 
@@ -249,7 +251,7 @@ export async function claimNextQueuedJob(
     .update(jobs)
     .set({ status: "running", startedAt: new Date() })
     .where(
-      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${kindFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
+      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' and ${notOnHold(sql`q.project_id`)} ${projectFilter} ${createdFilter} ${kindFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
     )
     .returning({
       id: jobs.id,

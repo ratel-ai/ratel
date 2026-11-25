@@ -44,6 +44,7 @@ npm packages.
 | `api-key-bearer.ts` | `resolveProjectFromBearer`: the project a `/api/v1/*` bearer key belongs to |
 | `api-keys/` | scoped keys (ratel-cloud #428): `scopes.ts` (every scope and the Full, read-only, ingest and custom presets), `policy.ts` (`apiKeyPolicy`, the one place that decides what a key may do), `authenticate.ts` (`authenticateApiKey`, the bearer decision every key route shares: 401, 403 with the missing scope, or the key and its policy) and `routes.ts` (`BEARER_ROUTE_SCOPES`, the scope each bearer route needs; `routes.test.ts` fails a route that authenticates a key without its entry) |
 | `internal-auth/` | service-to-service routes (`docs/internal-api.md`): `bearer.ts` (`RATEL_INTERNAL_SECRET`, compared in constant time; unset or short is off and the routes answer 404) and `key-resolve.ts` (who a key belongs to and its limits, for an ingest gateway) |
+| `org-hold/` | an organization or projects on hold until they open (`docs/internal-api.md`): the rows, the read cache, the route, `notOnHold` for a query over every project, and `console.ts`, which sends a reader to `/maintenance` (an operator in a support session may look). Jobs queue and wait; ingest stores |
 | `format.ts` | `fmtCount`, `fmtCost`: the shared numeric display formatters |
 
 These differ from their `ratel-cloud` origin: the client, the schema and

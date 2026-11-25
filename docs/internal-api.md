@@ -124,3 +124,9 @@ summarised. `state` is `none` unless every project of the scope is on hold.
 In Ratel Cloud a hold refuses every write (503, `Retry-After`), also relayed telemetry, and shows a
 maintenance page in place of the console. Setting it also needs the `cloud-org-migration` flag;
 reading and clearing do not.
+
+In this core a hold is the time between the import and the opening. Telemetry is accepted and
+stored, its jobs are queued, and no job runs. The scheduled sweeps skip the projects. The console
+sends their readers to `/maintenance`; an operator in a support session may look. An API key keeps
+its reads. Clearing the hold starts the jobs. `quiet` does not wait for `pendingSummarySpans` here,
+and `state` is never `moved`.

@@ -1,5 +1,5 @@
-import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
 import { SECRET_KEY_EVENTS_BUCKET } from "@/lib/ingest/ingest-limits";
+import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-handler";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
