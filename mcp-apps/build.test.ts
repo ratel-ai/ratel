@@ -145,6 +145,7 @@ test("the server loads the built views and links the generic views' tools", () =
     "detail",
     "health",
     "list",
+    "overview",
     "replay",
     "series",
     "trace",

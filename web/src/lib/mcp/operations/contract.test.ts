@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations();
+const operations = assembleOperations({ focusedConsole: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -93,6 +93,11 @@ test("read-only assembly drops every mutating operation", () => {
 const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["list_projects", false],
   ["get_project_overview", false],
+  ["get_overview", false],
+  ["list_overview_changes", false],
+  ["change_overview_layout", true],
+  ["undo_overview_change", true],
+  ["restore_overview_layout", true],
   ["list_skills", false],
   ["get_skill", false],
   ["get_catalog_status", false],

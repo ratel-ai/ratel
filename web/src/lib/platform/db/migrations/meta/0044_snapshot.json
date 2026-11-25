@@ -1,5 +1,5 @@
 {
-  "id": "2e68c3cc-8e78-4a81-9e0c-964f5db88060",
+  "id": "7abd9ae5-0dc2-4dc0-800a-15ef618234ac",
   "prevId": "03a331df-92db-4e06-9295-6a7def6d5bbb",
   "version": "7",
   "dialect": "postgresql",
@@ -10897,252 +10897,41 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.sandbox_versions": {
-      "name": "sandbox_versions",
+    "public.overview_layouts": {
+      "name": "overview_layouts",
       "schema": "",
       "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
         "project_id": {
           "name": "project_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "sandbox_id": {
-          "name": "sandbox_id",
-          "type": "uuid",
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "manifest": {
-          "name": "manifest",
+        "layout": {
+          "name": "layout",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
-        "git_commit": {
-          "name": "git_commit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "git_dirty": {
-          "name": "git_dirty",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bundle_sha256": {
-          "name": "bundle_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bundle_bytes": {
-          "name": "bundle_bytes",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "api_key_id": {
-          "name": "api_key_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'uploading'"
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "image_ref": {
-          "name": "image_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "build_log": {
-          "name": "build_log",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "build_started_at": {
-          "name": "build_started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "build_heartbeat_at": {
-          "name": "build_heartbeat_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "build_finished_at": {
-          "name": "build_finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         }
       },
-      "indexes": {
-        "sandbox_versions_project_created_idx": {
-          "name": "sandbox_versions_project_created_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "sandbox_versions_sandbox_created_idx": {
-          "name": "sandbox_versions_sandbox_created_idx",
-          "columns": [
-            {
-              "expression": "sandbox_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "sandbox_versions_project_id_projects_id_fk": {
-          "name": "sandbox_versions_project_id_projects_id_fk",
-          "tableFrom": "sandbox_versions",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "sandbox_versions_sandbox_id_sandboxes_id_fk": {
-          "name": "sandbox_versions_sandbox_id_sandboxes_id_fk",
-          "tableFrom": "sandbox_versions",
-          "tableTo": "sandboxes",
-          "columnsFrom": [
-            "sandbox_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.sandboxes": {
-      "name": "sandboxes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "sandboxes_project_name_idx": {
-          "name": "sandboxes_project_name_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sandboxes_project_id_projects_id_fk": {
-          "name": "sandboxes_project_id_projects_id_fk",
-          "tableFrom": "sandboxes",
+        "overview_layouts_project_id_projects_id_fk": {
+          "name": "overview_layouts_project_id_projects_id_fk",
+          "tableFrom": "overview_layouts",
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
@@ -11154,7 +10943,15 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "overview_layouts_project_id_person_id_pk": {
+          "name": "overview_layouts_project_id_person_id_pk",
+          "columns": [
+            "project_id",
+            "person_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},

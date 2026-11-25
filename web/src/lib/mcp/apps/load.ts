@@ -46,7 +46,11 @@ export const defaultMcpAppLoadDeps: McpAppLoadDeps = {
   readViews: readGeneratedViews,
   // The full set, writes included: a binding is checked against every tool the
   // server can register, not against what one caller happens to reach.
-  toolIds: () => new Set(["whoami", ...assembleOperations().map((operation) => operation.id)]),
+  toolIds: () =>
+    new Set([
+      "whoami",
+      ...assembleOperations({ focusedConsole: true }).map((operation) => operation.id),
+    ]),
 };
 
 /**
