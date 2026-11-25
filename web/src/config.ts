@@ -441,6 +441,13 @@ const CONFIG_SCHEMA = schema({
   sandboxes: {
     /** Seals sandbox secrets: 32 random bytes in base64 (`lib/platform/sealed-secrets.ts`). */
     secretsKey: optional("SANDBOX_SECRETS_KEY", configured, { sensitive: true }),
+    /** The provider's account. With none, Ratel sandbox shows "not configured". */
+    modalTokenId: optional("MODAL_TOKEN_ID", configured, { sensitive: true }),
+    modalTokenSecret: optional("MODAL_TOKEN_SECRET", configured, { sensitive: true }),
+    /** The provider's app that holds the builds and the instances. */
+    modalApp: setting("MODAL_APP", trimmed, D.sandboxes.modalApp),
+    /** Where builds and instances run. */
+    region: setting("SANDBOX_REGION", trimmed, D.sandboxes.region),
     /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */
     bundleDir: optional("SANDBOX_BUNDLE_DIR", trimmed),
     /** Each project's limits. A value above the hard limit counts as the hard limit. */

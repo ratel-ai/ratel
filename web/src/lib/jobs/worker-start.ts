@@ -1,6 +1,6 @@
 import { runDrainTick } from "@/lib/jobs/drain";
 import { type DrainObserverDeps, drainTimeoutMs, timedDrain } from "@/lib/jobs/drain-observer";
-import { RUN_IMPORT_JOB } from "@/lib/jobs/kinds";
+import { LONG_JOB_KINDS } from "@/lib/jobs/kinds";
 import { drainProjectJobs } from "@/lib/jobs/store";
 import { startWorker, type WorkerDeps, type WorkerHandle } from "@/lib/jobs/worker";
 import { getDb } from "@/lib/platform/db/client";
@@ -12,9 +12,9 @@ const logger = getLogger("jobs/worker");
 const GLOBAL_KEY = Symbol.for("ratel.platform.worker");
 
 export interface BackgroundWorkerDeps {
-  /** The analysis lane: every queued kind but imports. */
+  /** The analysis lane: every queued kind but the long ones. */
   drain: WorkerDeps["drain"];
-  /** The import lane (RC-40): `run_import` only, so a long import never holds analysis back. */
+  /** The long lane (RC-40): `LONG_JOB_KINDS` only, so a long job never holds analysis back. */
   drainImports?: WorkerDeps["drainImports"];
   /** The day's most expensive statements, logged once a day (`reportTopQueries`). */
   reportTopQueries?: () => Promise<void>;
@@ -27,8 +27,8 @@ export interface BackgroundWorkerDeps {
 }
 
 const defaultDeps = (): BackgroundWorkerDeps => ({
-  drain: () => drainProjectJobs(undefined, undefined, { kinds: { except: [RUN_IMPORT_JOB] } }),
-  drainImports: () => drainProjectJobs(undefined, undefined, { kinds: { only: [RUN_IMPORT_JOB] } }),
+  drain: () => drainProjectJobs(undefined, undefined, { kinds: { except: LONG_JOB_KINDS } }),
+  drainImports: () => drainProjectJobs(undefined, undefined, { kinds: { only: LONG_JOB_KINDS } }),
   reportTopQueries: () => reportTopQueries(),
   tick: workerTick(),
   startWorker,

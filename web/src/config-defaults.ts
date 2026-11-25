@@ -192,7 +192,7 @@ export const CONFIG_DEFAULTS = {
     maxSessions: 100_000,
     maxCallsPerSession: 500,
   },
-  sandboxes: { limits: SANDBOX_HARD_LIMITS },
+  sandboxes: { modalApp: "ratel-sandboxes", region: "eu", limits: SANDBOX_HARD_LIMITS },
   topics: {
     maxTurns: 20_000,
     newMinTurns: 5,
