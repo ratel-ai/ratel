@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createVersionSchema, manifestSchema } from "../domain/manifest";
+import { createVersionSchema, manifestSchema, secretNameSchema } from "../domain/manifest";
 import { runResultSchema } from "../domain/run";
 
 // Copies of the conformance vectors of protocol/sandbox/v1 (ratel-sdk).
@@ -25,3 +25,14 @@ for (const kind of ["valid", "invalid"] as const) {
     });
   }
 }
+
+test("the refusal of a reserved secret name has no name of a provider", () => {
+  for (const name of ["RATEL_URL", "MODAL_TOKEN_ID", "AWS_REGION"]) {
+    const refusal = secretNameSchema.safeParse(name);
+    assert.ok(!refusal.success);
+    assert.equal(
+      refusal.error.issues[0]?.message,
+      "Ratel reserves the prefix of this name. Use another name.",
+    );
+  }
+});
