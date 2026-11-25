@@ -302,6 +302,7 @@ const ENTRY: LayoutHistoryEntry = {
   at: new Date(NOW.getTime() - 5 * 60_000),
   summary: "Removed Metrics",
   layout: DEFAULT_LAYOUT,
+  readable: true,
   current: false,
 };
 
@@ -314,7 +315,7 @@ function historyHtml(over: Partial<Parameters<typeof HistoryBody>[0]> = {}): str
         entries: [
           { ...ENTRY, id: 3, source: { kind: "web" }, summary: "Resized Metrics", current: true },
           ENTRY,
-          { ...ENTRY, id: 1, summary: "Moved Metrics", layout: null },
+          { ...ENTRY, id: 1, summary: "Moved Metrics", layout: null, readable: false },
         ],
       },
       notice: null,

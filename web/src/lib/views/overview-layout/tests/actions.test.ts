@@ -9,7 +9,7 @@ import {
   restoreOverviewLayout,
   undoOverviewChange,
 } from "../actions";
-import { KEPT_CHANGES, type LayoutRecord, NO_RECORD } from "../domain/history";
+import { KEPT_CHANGES, type LayoutRecord, NO_RECORD, postedRevision } from "../domain/history";
 import { DEFAULT_LAYOUT, sameLayout, WIDGET_CATALOG } from "../domain/layout";
 import type { OverviewLayoutStore } from "../ports/store";
 import { pageLayout, webLayoutReader } from "../readers";
@@ -216,6 +216,7 @@ test("each change is an entry: who, where, what and the layout after it", async 
         summary: "Removed Health score",
         layout: second.layout,
         current: true,
+        readable: true,
         timed: true,
       },
       {
@@ -226,6 +227,7 @@ test("each change is an entry: who, where, what and the layout after it", async 
         summary: "Removed Agents and MCP servers",
         layout: first.layout,
         current: false,
+        readable: true,
         timed: true,
       },
     ],
@@ -321,6 +323,16 @@ test("restore goes to any kept state as an entry, and undo takes the restore bac
   assert.deepEqual(await restore(Number.NaN, at), { ok: false, reason: "not_kept" });
 });
 
+test("what a page posts as its revision is never null, which would skip the check", async () => {
+  const at = deps(PERSON, memory());
+  await change(REMOVE, at);
+  for (const posted of [null, undefined, 1, {}]) {
+    const result = await changeOverviewLayout("p1", REMOVE, at, postedRevision(posted));
+    assert.ok(!result.ok && result.reason === "stale", String(posted));
+  }
+  assert.equal(postedRevision("1.a"), "1.a");
+});
+
 test("a change, an undo and a restore on a stale base are refused with what is there now", async () => {
   const db = memory();
   const at = deps(PERSON, db);
@@ -389,7 +401,8 @@ test("a layout or an entry this build cannot read is never overwritten by an und
   assert.deepEqual(await undo(at), { ok: false, reason: "unreadable" });
   assert.deepEqual(await restore(1, at), { ok: false, reason: "unreadable" });
   assert.equal(db.rows.get("p1/user_1")?.layout, later);
-  assert.ok((await change({ kind: "reset" }, at)).ok);
+  const reset = await change({ kind: "reset" }, at);
+  assert.ok(reset.ok && reset.undo === null, "Undo is not offered where it must refuse");
   assert.deepEqual(await undo(at), { ok: false, reason: "unreadable_entry" });
   assert.ok((await restore(1, at)).ok, "the entry before it is still readable");
 });

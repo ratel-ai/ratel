@@ -9,23 +9,24 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
+import {
+  createLayoutQueue,
+  DROPPED,
+  FAILED,
+  type Refused,
+  type Saved,
+} from "@/components/console/home/focused/layout-queue";
 import { offeredTo } from "@/components/console/home/focused/widgets";
 import type { LayoutHistoryEntry, LayoutSnapshot } from "@/lib/views/overview-layout/actions";
-import { isEarlier } from "@/lib/views/overview-layout/domain/history";
 import {
   changeLayout,
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewWidgetId,
-  sameLayout,
 } from "@/lib/views/overview-layout/domain/layout";
 
-/** `current`: the layout changed in another place, and this is it. */
-type Refused = { ok: false; message: string; current?: LayoutSnapshot };
-type Saved = ({ ok: true; changed: string | null } & LayoutSnapshot) | Refused;
 export type LayoutHistory =
   | { ok: true; entries: LayoutHistoryEntry[]; snapshot: LayoutSnapshot }
   | Refused;
@@ -73,7 +74,8 @@ const LayoutContext = createContext<LayoutState | null>(null);
  * The layout as this page shows it, and whether the person edits it. A change is drawn at once and
  * saved once; saves run one after another, each on the revision of the one before it. A save that
  * fails puts back the last saved layout and says so. A layout that changed in another place is
- * shown, never overwritten, and the changes that wait are dropped, as they were made on the old one.
+ * shown, never overwritten, and the changes that wait are dropped, as they were made on the old one
+ * (`layout-queue.ts`).
  */
 export function OverviewLayoutProvider({
   initial,
@@ -97,25 +99,21 @@ export function OverviewLayoutProvider({
   const [added, setAdded] = useState<readonly OverviewWidgetId[]>([]);
   const [said, setSaid] = useState("");
   const [pending, setPending] = useState(0);
-  const saved = useRef<LayoutSnapshot>(initial);
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const waiting = useRef(0);
-  /** Counts what the person did, to name the latest change. */
-  const changes = useRef(0);
-  /** Goes up when the changes that wait are dropped. */
-  const line = useRef(0);
+  const [queue] = useState(() =>
+    createLayoutQueue(initial, {
+      show: setLayout,
+      undoable: setUndoable,
+      pending: setPending,
+      refused: () => setSaid(""),
+      changedElsewhere: () => router.refresh(),
+    }),
+  );
 
-  // A fresh render of the server's: another tab or an agent may have changed the layout. The one
-  // of an earlier save can come late.
+  // Another tab or an agent may have changed the layout.
   const { layout: served, revision, undo: servedUndo } = initial;
   useEffect(() => {
-    const known = saved.current;
-    if (pending > 0 || isEarlier(revision, known.revision)) return;
-    if (revision === known.revision && sameLayout(served, known.layout)) return;
-    saved.current = { layout: served, revision, undo: servedUndo };
-    setLayout(served);
-    setUndoable(servedUndo);
-  }, [served, revision, servedUndo, pending]);
+    if (pending === 0) queue.served({ layout: served, revision, undo: servedUndo });
+  }, [queue, served, revision, servedUndo, pending]);
 
   // A change that waits would be lost with the page, and its entry too.
   useEffect(() => {
@@ -133,99 +131,51 @@ export function OverviewLayoutProvider({
     setSaid(next ? "Edit mode. Add, move, resize or remove widgets." : "Edit mode is off.");
   }, []);
 
-  /** Runs a write after the ones before it, on the revision they left. */
-  const enqueue = useCallback(
-    (write: (base: string) => Promise<Saved>): Promise<Saved> => {
-      changes.current += 1;
-      waiting.current += 1;
-      setPending((count) => count + 1);
-      const mine = line.current;
-      const run = async (): Promise<Saved> => {
-        if (mine !== line.current) return DROPPED;
-        const result = await write(saved.current.revision).catch(() => FAILED);
-        if (result.ok || result.current) {
-          const { layout, revision, undo } = result.ok
-            ? result
-            : (result.current as LayoutSnapshot);
-          saved.current = { layout, revision, undo };
-          setUndoable(undo);
-        }
-        if (!result.ok && result.current) {
-          line.current += 1;
-          // A widget that came back in another place has no body on this page yet.
-          router.refresh();
-        }
-        if (!result.ok) {
-          // Nothing was saved, so there is no change of this page's to take back.
-          changes.current += 1;
-          setLayout(saved.current.layout);
-          setSaid("");
-        } else if (waiting.current === 1) {
-          // Nothing else is drawn on top of it.
-          setLayout(result.layout);
-        }
-        return result;
-      };
-      const done = queue.current.then(run).finally(() => {
-        waiting.current -= 1;
-        setPending((count) => count - 1);
-      });
-      queue.current = done;
-      return done;
-    },
-    [router],
-  );
-
   const change = useCallback(
     (next: OverviewLayoutChange, announcement = "") => {
-      if (!actions) return changes.current;
+      if (!actions) return queue.latest();
       setLayout((current) => changeLayout(current, next, offeredTo(current)));
       setSaid(announcement);
-      void enqueue((base) => actions.save(next, base)).then(report);
-      return changes.current;
+      void queue.enqueue((base) => actions.save(next, base)).then(report);
+      return queue.latest();
     },
-    [actions, enqueue],
+    [actions, queue],
   );
 
   const undo = useCallback(
     (only?: { change: number; otherwise: OverviewLayoutChange }) => {
       if (!actions) return;
-      if (only && only.change !== changes.current) {
+      if (only && only.change !== queue.latest()) {
         change(only.otherwise);
         return;
       }
-      void enqueue((base) => actions.undo(base)).then((result) => {
-        if (result.ok && result.changed) setSaid(result.changed);
-        report(result);
-      });
+      void queue
+        .enqueueUndo((base) => actions.undo(base))
+        .then((result) => {
+          if (result.ok && result.changed) setSaid(result.changed);
+          report(result);
+        });
     },
-    [actions, change, enqueue],
+    [actions, change, queue],
   );
 
   const restore = useCallback(
     async (entryId: number) => {
       if (!actions) return FAILED;
-      const result = await enqueue((base) => actions.restore(entryId, base));
+      const result = await queue.enqueue((base) => actions.restore(entryId, base));
       if (result.ok && result.changed) setSaid(result.changed);
       return result;
     },
-    [actions, enqueue],
+    [actions, queue],
   );
 
   const readHistory = useCallback(async () => {
     if (!actions) return FAILED;
-    await queue.current;
+    await queue.idle();
     const result = await actions.history().catch(() => FAILED);
-    // What the list shows is what the page shows, so Restore is on the list that was read.
-    if (result.ok && waiting.current === 0 && result.snapshot.revision !== saved.current.revision) {
-      changes.current += 1;
-      router.refresh();
-      saved.current = result.snapshot;
-      setLayout(result.snapshot.layout);
-      setUndoable(result.snapshot.undo);
-    }
+    if (result.ok) queue.read(result.snapshot);
     return result;
-  }, [actions, router]);
+  }, [actions, queue]);
 
   const editable = actions !== null;
   const state = useMemo(
@@ -280,10 +230,6 @@ export function useOverviewLayout(): LayoutState {
   if (!state) throw new Error("useOverviewLayout is used outside OverviewLayoutProvider");
   return state;
 }
-
-const FAILED: Refused = { ok: false, message: "The server did not answer." };
-/** It waited behind a change that was refused as stale, which is what the person reads. */
-const DROPPED: Refused = { ok: false, message: "" };
 
 function report(result: Saved) {
   if (result.ok || result === DROPPED) return;

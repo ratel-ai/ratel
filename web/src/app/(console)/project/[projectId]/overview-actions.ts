@@ -16,6 +16,7 @@ import {
   restoreOverviewLayout,
   undoOverviewChange,
 } from "@/lib/views/overview-layout/actions";
+import { postedRevision } from "@/lib/views/overview-layout/domain/history";
 import { webLayoutDeps } from "@/lib/views/overview-layout/readers";
 
 const logger = getLogger("overview-layout/actions");
@@ -46,7 +47,7 @@ export async function saveOverviewLayout(
   base: unknown,
 ): Promise<OverviewLayoutActionResult> {
   return saved("overview_layout_change", projectId, (id) =>
-    changeOverviewLayout(id, change, webLayoutDeps, revision(base)),
+    changeOverviewLayout(id, change, webLayoutDeps, postedRevision(base)),
   );
 }
 
@@ -55,7 +56,7 @@ export async function undoOverviewLayout(
   base: unknown,
 ): Promise<OverviewLayoutActionResult> {
   return saved("overview_layout_undo", projectId, (id) =>
-    undoOverviewChange(id, webLayoutDeps, revision(base)),
+    undoOverviewChange(id, webLayoutDeps, postedRevision(base)),
   );
 }
 
@@ -65,7 +66,7 @@ export async function restoreOverviewLayoutEntry(
   base: unknown,
 ): Promise<OverviewLayoutActionResult> {
   return saved("overview_layout_restore", projectId, (id) =>
-    restoreOverviewLayout(id, Number(entryId), webLayoutDeps, revision(base)),
+    restoreOverviewLayout(id, Number(entryId), webLayoutDeps, postedRevision(base)),
   );
 }
 
@@ -116,6 +117,3 @@ const failure = (reason: keyof typeof LAYOUT_REFUSALS): OverviewLayoutFailure =>
   ok: false,
   message: LAYOUT_REFUSALS[reason],
 });
-
-/** Never null, which would skip the check: text that is no revision is stale. */
-const revision = (base: unknown) => (typeof base === "string" ? base : "");

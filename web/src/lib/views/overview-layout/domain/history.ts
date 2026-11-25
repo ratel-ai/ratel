@@ -63,6 +63,10 @@ export function revisionOf({ layout, entries }: LayoutRecord): string {
   return `${entries[0]?.seq ?? 0}.${layout === undefined ? "0" : fingerprint(canonical(layout))}`;
 }
 
+/** What a page posts as its revision. Never null, which would skip the check: text that is no revision is stale. */
+export const postedRevision = (posted: unknown): string =>
+  typeof posted === "string" ? posted : "";
+
 /** `a` is a state from before `b`. */
 export function isEarlier(a: string, b: string): boolean {
   return Number.parseInt(a, 10) < Number.parseInt(b, 10);

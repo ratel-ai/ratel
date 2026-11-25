@@ -204,6 +204,7 @@ const entry = (
   id,
   source,
   summary,
+  readable: id !== 2,
   current: id === 4,
   at: new Date(Date.parse("2026-11-24T10:00:00.000Z") - minutes * 60_000).toISOString(),
 });

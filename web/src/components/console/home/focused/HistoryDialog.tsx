@@ -138,23 +138,19 @@ export function HistoryBody({
         <LayoutHistoryList
           entries={history.entries}
           now={now}
-          action={(entry) =>
-            entry.layout ? (
-              <Button
-                size="sm"
-                className="max-lg:h-9"
-                loading={restoring === entry.id}
-                disabled={restoring !== null && restoring !== entry.id}
-                focusableWhenDisabled
-                aria-label={`Restore the layout after: ${entry.summary}`}
-                onClick={() => onRestore(entry)}
-              >
-                Restore
-              </Button>
-            ) : (
-              <span className="shrink-0 text-xs text-fg-subtle">Made by a newer version</span>
-            )
-          }
+          action={(entry) => (
+            <Button
+              size="sm"
+              className="max-lg:h-9"
+              loading={restoring === entry.id}
+              disabled={restoring !== null && restoring !== entry.id}
+              focusableWhenDisabled
+              aria-label={`Restore the layout after: ${entry.summary}`}
+              onClick={() => onRestore(entry)}
+            >
+              Restore
+            </Button>
+          )}
         />
       )}
     </>

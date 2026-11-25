@@ -7,6 +7,8 @@ import type { ChangeSource } from "@/lib/views/overview-layout/domain/history";
 /** An entry as it is drawn, in the console and in a chat. */
 export type DrawnEntry = Pick<LayoutHistoryEntry, "id" | "source" | "summary" | "current"> & {
   at: Date | string;
+  /** False for a layout that this build cannot read. */
+  readable?: boolean;
 };
 
 /** The changes of a person's layout, newest first. */
@@ -43,6 +45,8 @@ export function LayoutHistoryList<E extends DrawnEntry>({
             </span>
             {entry.current ? (
               <span className="shrink-0 text-xs text-fg-subtle">Current layout</span>
+            ) : entry.readable === false ? (
+              <span className="shrink-0 text-xs text-fg-subtle">Made by a newer version</span>
             ) : (
               action?.(entry)
             )}

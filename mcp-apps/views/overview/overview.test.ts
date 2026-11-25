@@ -132,7 +132,7 @@ test("the history: what, who, where and when, newest first, and nothing to press
   assert.match(text, /History of your layout.*Support agent/);
   assert.match(
     text,
-    /Took back: Removed Metrics ?You on the web, ?just now ?Current layout.*Removed Metrics ?You through claude-code, ?4m ago.*You through an MCP client, ?2h ago.*Resized Agents and MCP servers ?You on the web, ?33h ago/,
+    /Took back: Removed Metrics ?You on the web, ?just now ?Current layout.*Removed Metrics ?You through claude-code, ?4m ago.*You through an MCP client, ?2h ago ?Made by a newer version.*Resized Agents and MCP servers ?You on the web, ?33h ago/,
   );
   assert.equal((html.match(/<button/g) ?? []).length, 1, "Open in Ratel only");
   assert.match(drawHistory("list_overview_changes · none").text, /No changes yet/);

@@ -68,6 +68,8 @@ export interface LayoutHistoryEntry {
   layout: OverviewLayout | null;
   /** The layout after it is what the person sees now, so there is nothing to restore. */
   current: boolean;
+  /** False when this build cannot read its layout. */
+  readable: boolean;
 }
 
 export type LayoutRefusal =
@@ -205,6 +207,7 @@ export async function readOverviewHistory(
         at,
         summary,
         layout,
+        readable: layout !== null,
         current: now !== null && layout !== null && sameLayout(layout, now),
       };
     }),
@@ -263,10 +266,11 @@ function ownerOf(reader: LayoutReader | null): LayoutKey | LayoutRefusal {
 }
 
 function snapshotOf(record: LayoutRecord, offered: OfferedWidgets): LayoutSnapshot {
+  const target = isUnreadable(record.layout) ? null : undoTarget(record);
   return {
     layout: readArrangement(record.layout, offered).layout,
     revision: revisionOf(record),
-    undo: isUnreadable(record.layout) ? null : (undoTarget(record)?.summary ?? null),
+    undo: target && keptArrangement(target.layout, offered) ? target.summary : null,
   };
 }
 

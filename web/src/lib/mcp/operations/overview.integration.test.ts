@@ -315,6 +315,10 @@ test("the history's own view is drawn from the same entries, and undo draws the 
     view.entries.map(({ summary }: { summary: string }) => summary),
     dataOf(listed).changes.map(({ what }: { what: string }) => what),
   );
+  assert.deepEqual(
+    view.entries.map(({ readable }: { readable: boolean }) => readable),
+    [true],
+  );
   const { revision } = dataOf(listed).layout;
   const undone = await call("undo_overview_change", { revision }, ANA, true);
   assert.ok(undone.ok && undone.view?.kind === "overview");

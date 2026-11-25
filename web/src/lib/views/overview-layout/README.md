@@ -23,7 +23,8 @@ background work, so it has no `register.ts`.
 - The history is personal, as the layout is: its person is the author of every entry. A change
   through MCP also has the client's name, from the request's User-Agent.
 - Undo takes back the latest change that is not taken back yet, so it can go further back. It never
-  takes back an undo; it takes back a restore.
+  takes back an undo; it takes back a restore. An undo is an entry too, so 25 changes allow 13
+  undos. Undo is not offered when this build cannot read the layout to go back to.
 - A write gives the revision that it was made on. Another revision is refused as `stale`, with the
   layout that is there now. The web always gives it. An MCP change can leave it out, as it is made
   on what is there; an MCP undo or restore cannot.

@@ -129,11 +129,19 @@ test("an entry is stored whole, and is nobody else's", async () => {
     layout,
   });
   assert.deepEqual([first.seq, first.before, first.source], [1, null, { kind: "web" }]);
+  const summaries = async (at: { projectId: string; personId: string }) =>
+    (await store.read(at)).entries.map(({ summary }) => summary);
   for (const other of [
     { projectId: P1, personId: "ben" },
     { projectId: P2, personId: "ana" },
-  ])
+  ]) {
     assert.deepEqual(await store.read(other), NO_RECORD);
+    await store.update(other, changed({ kind: "remove", widget: "metrics" }));
+    await store.update(other, changed(height(1)));
+    await store.update(other, changed(height(2)));
+    assert.deepEqual(await summaries(other), ["resize", "resize", "remove"]);
+    assert.deepEqual(await summaries(key), ["remove", "remove"]);
+  }
   await pg.close();
 });
 

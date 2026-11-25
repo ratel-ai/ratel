@@ -220,11 +220,12 @@ export function overviewOperations(
                   project: { id: project.id, name: project.name },
                   root: projectRoot(project.id),
                   now: deps.now().toISOString(),
-                  entries: entries.map(({ id, source, summary, current, at }) => ({
+                  entries: entries.map(({ id, source, summary, current, readable, at }) => ({
                     id,
                     source,
                     summary,
                     current,
+                    readable,
                     at: at.toISOString(),
                   })),
                 },
