@@ -8,7 +8,7 @@ import {
   otherCases,
   VERDICT_RULE,
 } from "../domain/compare";
-import { snapshotOf, type TrialResult } from "../domain/score";
+import { type ScorerResult, snapshotOf, type TrialResult } from "../domain/score";
 import { NO_REFUND } from "./support";
 
 type Side = {
@@ -16,6 +16,8 @@ type Side = {
   number?: number;
   scorers?: CaseScorer[];
   name?: string;
+  /** The judge model of each trial. */
+  models?: string[];
 };
 
 /** A completed experiment with these cases. The key is the case id. */
@@ -39,8 +41,16 @@ function run(id: string, cases: Record<string, Side>): ComparedRun {
         ]),
       ),
     },
-    trials: sides.flatMap(([caseId, { results }]) =>
-      results.map((result) => ({ caseVersionId: versionOf(caseId), result })),
+    trials: sides.flatMap(([caseId, { results, scorers = [], models = [] }]) =>
+      results.map((result, index) => ({
+        caseVersionId: versionOf(caseId),
+        result,
+        scorers: scorers.flatMap(({ id, name, gating, definition }): ScorerResult[] => {
+          const model = definition.kind === "judge" ? models[index] : undefined;
+          if (!model) return [];
+          return [{ scorerId: id, name, kind: "judge", gating, status: "pass", reason: "", model }];
+        }),
+      })),
     ),
   };
 }
@@ -223,4 +233,62 @@ test("the same two experiments always give the same result, in any order of the 
     return { ...made, trials: [...made.trials].reverse() };
   };
   assert.deepEqual(compare(mixed(baseline, "base"), mixed(candidate, "next")), first);
+});
+
+const JUDGE: CaseScorer = {
+  id: "judge",
+  name: "Polite",
+  gating: true,
+  definition: { kind: "judge", config: { prompt: "Is it polite?", output: "boolean" } },
+};
+const judgedBy = (...models: string[]): Side => ({ ...PASS, scorers: [JUDGE], models });
+
+test("a judge with another model is another scorer", () => {
+  for (const [before, after] of [
+    [judgedBy("a", "a", "a"), judgedBy("b", "b", "b")],
+    [judgedBy("a", "a", "a"), judgedBy("a", "b", "a")],
+    [judgedBy("a", "b", "a"), judgedBy("a", "b", "a")],
+  ] as const) {
+    const refusal = compare(
+      run("base", { x: before, y: PASS }),
+      run("next", { x: after, y: PASS }),
+    );
+    assert.ok(!refusal.ok);
+    assert.equal(refusal.reason, "scorers_differ");
+    assert.deepEqual(refusal.scorers, [
+      { caseId: "x", caseName: "x", name: "Polite", difference: "changed" },
+    ]);
+    assert.match(refusal.message, /judge model/);
+  }
+});
+
+test("the same judge model, and a judge with no answer, are compared", () => {
+  compared({ x: judgedBy("a", "a", "a") }, { x: judgedBy("a", "a") });
+  compared({ x: judgedBy("a", "a", "a") }, { x: judgedBy() });
+});
+
+test("two judges of a case can have two models, also with new ids", () => {
+  const other: CaseScorer = {
+    ...JUDGE,
+    id: "other",
+    name: "Short",
+    definition: { kind: "judge", config: { prompt: "Is it short?", output: "boolean" } },
+  };
+  const side = (id: string) => {
+    const made = run(id, { x: { ...PASS, scorers: [{ ...JUDGE, id: `j-${id}` }, other] } });
+    const results: ScorerResult[] = [
+      [`j-${id}`, "a"],
+      ["other", "b"],
+    ].map(([scorerId = "", model]) => ({
+      scorerId,
+      name: scorerId,
+      kind: "judge",
+      gating: true,
+      status: "pass",
+      reason: "",
+      model,
+    }));
+    return { ...made, trials: made.trials.map((trial) => ({ ...trial, scorers: results })) };
+  };
+  assert.ok(compare(side("base"), side("next")).ok);
 });
