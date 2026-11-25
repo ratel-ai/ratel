@@ -1,3 +1,4 @@
+import { ingestQueueRouteDeps } from "@/lib/composition/registry";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
@@ -35,5 +36,7 @@ async function handlePost(req: Request) {
         loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
       },
     },
+    // Queue the batch for a worker when EXPERIMENTAL_INGEST_QUEUE=1 (RTL-314).
+    ingestQueue: ingestQueueRouteDeps(),
   });
 }
