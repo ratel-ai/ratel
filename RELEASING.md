@@ -63,8 +63,8 @@ and pushes `docker.io/ratelai/ratel-demo` with the same tags:
 | A manual run (`gh workflow run image.yml -f tag=<tag>`) | `<tag>` only |
 
 The merge of a release PR cancels the older `edge` runs that are still in progress, because its own
-`edge` run replaces them. An ordinary push to `main` waits for the run in progress. Nothing cancels
-a release build, a tag build, a manual run or `release-please.yml`.
+`edge` run replaces them. An ordinary push to `main` waits for the run in progress. That merge
+never cancels a release build, a tag build, a manual run or a `release-please.yml` run in progress.
 
 Each image has OCI labels and annotations (source, revision, version, created, licenses), a
 provenance attestation (`mode=max`) and an SBOM. Read them with
