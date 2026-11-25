@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/ratel-ai/ratel/compare/v0.4.0...v0.5.0) (2026-11-25)
+
+
+### Features
+
+* **ingest:** queue accepted batches, persist them from a fair per-project queue ([#469](https://github.com/ratel-ai/ratel/issues/469)) ([b0f1cd5](https://github.com/ratel-ai/ratel/commit/b0f1cd5ea9723a956d2e8ada2025159562a17886))
+
 ## [0.4.0](https://github.com/ratel-ai/ratel/compare/v0.3.1...v0.4.0) (2026-11-25)
 
 
