@@ -113,6 +113,7 @@ async function setup() {
   return { experiment, baselines, key, member, events };
 }
 
+const UNPIN = new Request("http://x", { method: "DELETE" });
 const pin = (experimentId: unknown) =>
   new Request("http://x", { method: "PUT", body: JSON.stringify({ experimentId }) });
 
@@ -162,11 +163,26 @@ test("a person removes the pin", async () => {
   const t = await setup();
   const id = await t.experiment(["pass"]);
   await handlePinByMember(pin(id), PROJECT_ID, t.member());
-  assert.equal((await handleUnpinByMember(PROJECT_ID, t.member())).status, 200);
+  assert.equal((await handleUnpinByMember(UNPIN, PROJECT_ID, t.member())).status, 200);
   assert.equal(await t.baselines.get(PROJECT_ID), null);
-  const again = await handleUnpinByKey(t.key("DELETE /api/v1/evals/baseline"));
+  const again = await handleUnpinByKey(UNPIN, t.key("DELETE /api/v1/evals/baseline"));
   assert.equal(again.status, 200);
   assert.deepEqual(t.events, ["eval_baseline_pinned console", "eval_baseline_unpinned console"]);
+});
+
+test("an unpin from a stale page does not remove the pin of another person", async () => {
+  const t = await setup();
+  const [mine, theirs] = [await t.experiment(["pass"]), await t.experiment(["pass"])];
+  await handlePinByMember(pin(theirs), PROJECT_ID, t.member());
+  const unpin = (experimentId: string) =>
+    new Request(`http://x/?experimentId=${experimentId}`, { method: "DELETE" });
+  const stale = await handleUnpinByMember(unpin(mine), PROJECT_ID, t.member());
+  assert.deepEqual([stale.status, (await stale.json()).error], [409, "changed"]);
+  assert.equal((await t.baselines.get(PROJECT_ID))?.experimentId, theirs);
+  const wrong = await handleUnpinByMember(unpin("x"), PROJECT_ID, t.member());
+  assert.equal(wrong.status, 400);
+  assert.equal((await handleUnpinByMember(unpin(theirs), PROJECT_ID, t.member())).status, 200);
+  assert.equal(await t.baselines.get(PROJECT_ID), null);
 });
 
 test("the comparison has the verdict, the rule and the changed cases, with no captured text", async () => {
@@ -216,6 +232,7 @@ test("other scorers are refused with the reason and the names", async () => {
     { caseId: CASE_ID, caseName: "late order", name: "No refund", difference: "gating" },
   ]);
   assert.match(body.message, /No refund/);
+  assert.equal(body.baseline.experimentId, base);
 });
 
 test("the baseline itself and a running experiment are refused", async () => {
@@ -243,7 +260,7 @@ test("a key of another project reads no comparison and no baseline, and cannot p
   assert.deepEqual(await read.json(), { baseline: null });
   const put = await handlePinByKey(pin(next), t.key("PUT /api/v1/evals/baseline", other));
   assert.equal(put.status, 404);
-  await handleUnpinByKey(t.key("DELETE /api/v1/evals/baseline", other));
+  await handleUnpinByKey(UNPIN, t.key("DELETE /api/v1/evals/baseline", other));
   assert.equal((await t.baselines.get(PROJECT_ID))?.experimentId, base);
 });
 
@@ -256,7 +273,10 @@ test("a read key cannot pin, and a write key cannot read a comparison", async ()
     (await handlePinByKey(pin(id), t.key("PUT /api/v1/evals/baseline", read))).status,
     403,
   );
-  assert.equal((await handleUnpinByKey(t.key("DELETE /api/v1/evals/baseline", read))).status, 403);
+  assert.equal(
+    (await handleUnpinByKey(UNPIN, t.key("DELETE /api/v1/evals/baseline", read))).status,
+    403,
+  );
   assert.equal((await handleCompareByKey(id, t.key(COMPARE, write))).status, 403);
   assert.equal(await t.baselines.get(PROJECT_ID), null);
 });
@@ -270,7 +290,7 @@ test("with the flag off the routes answer 404, and a support session cannot pin"
       await handleCompareByKey(id, deps),
       await handleGetBaselineByKey(deps),
       await handlePinByKey(pin(id), deps),
-      await handleUnpinByKey(deps),
+      await handleUnpinByKey(UNPIN, deps),
     ]) {
       assert.equal(response.status, 404);
     }
@@ -280,6 +300,6 @@ test("with the flag off the routes answer 404, and a support session cannot pin"
   assert.equal((await handleCompareByMember(PROJECT_ID, id, off)).status, 404);
   const support = t.member({ isRestricted: async () => true });
   assert.equal((await handlePinByMember(pin(id), PROJECT_ID, support)).status, 403);
-  assert.equal((await handleUnpinByMember(PROJECT_ID, support)).status, 403);
+  assert.equal((await handleUnpinByMember(UNPIN, PROJECT_ID, support)).status, 403);
   assert.equal(await t.baselines.get(PROJECT_ID), null);
 });

@@ -22,6 +22,8 @@ export type ComparisonResult =
       ok: false;
       refusal: Omit<CompareRefusal, "ok" | "reason"> & {
         reason: CompareRefusal["reason"] | "not_found" | "no_baseline";
+        /** Null: no baseline is pinned. */
+        pin: Baseline | null;
       };
     };
 
@@ -69,7 +71,7 @@ export async function compareWithBaseline(
   const comparison = compare(sides.baseline, sides.candidate);
   if (!comparison.ok) {
     const { ok: _, ...refusal } = comparison;
-    return { ok: false, refusal };
+    return { ok: false, refusal: { ...refusal, pin } };
   }
   return { ok: true, pin, ...sides, comparison };
 }
@@ -79,5 +81,5 @@ async function find(projectId: string, experimentId: string, { experiments }: Ba
 }
 
 function refused(reason: "not_found" | "no_baseline", message: string): ComparisonResult {
-  return { ok: false, refusal: { reason, message, scorers: [] } };
+  return { ok: false, refusal: { reason, message, scorers: [], pin: null } };
 }

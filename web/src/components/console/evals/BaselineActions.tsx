@@ -29,7 +29,9 @@ export function BaselineActions({
   async function send(method: "PUT" | "DELETE") {
     setPending(true);
     setError(null);
-    const response = await fetch(`/api/projects/${projectId}/evals/baseline`, {
+    const path = `/api/projects/${projectId}/evals/baseline`;
+    // Only the pin that this page shows: another person can have pinned another experiment.
+    const response = await fetch(method === "PUT" ? path : `${path}?experimentId=${experimentId}`, {
       method,
       ...(method === "PUT"
         ? {
@@ -38,8 +40,9 @@ export function BaselineActions({
           }
         : {}),
     }).catch(() => null);
-    if (response?.ok) router.refresh();
-    else setError("The baseline did not change. Try again.");
+    if (response?.ok || response?.status === 409) router.refresh();
+    if (response?.status === 409) setError("Another person changed the baseline.");
+    else if (!response?.ok) setError("The baseline did not change. Try again.");
     setPending(false);
   }
 

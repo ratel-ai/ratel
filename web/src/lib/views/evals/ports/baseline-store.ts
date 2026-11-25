@@ -5,6 +5,6 @@ export interface BaselineStore {
   get(projectId: string): Promise<Baseline | null>;
   /** Replaces the pin before it. */
   pin(projectId: string, baseline: Baseline): Promise<void>;
-  /** False when nothing was pinned. */
-  unpin(projectId: string): Promise<boolean>;
+  /** Only when it is that experiment, if one is given. False when no pin was removed. */
+  unpin(projectId: string, experimentId?: string): Promise<boolean>;
 }

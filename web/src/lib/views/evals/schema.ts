@@ -143,7 +143,7 @@ export const evalTrials = pgTable(
   ],
 );
 
-/** The pinned baseline of a project. Only a person pins or unpins it: no job writes here. */
+/** The pinned baseline of a project. A person pins and unpins it, in the console or with a key. No job writes here. */
 export const evalBaselines = pgTable("eval_baselines", {
   projectId: uuid("project_id")
     .primaryKey()

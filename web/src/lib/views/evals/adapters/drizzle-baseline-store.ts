@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import type { BaselineStore } from "../ports/baseline-store";
 import { evalBaselines } from "../schema";
@@ -26,10 +26,15 @@ export function createDrizzleBaselineStore(db: Db): BaselineStore {
         .onConflictDoUpdate({ target: evalBaselines.projectId, set: baseline });
     },
 
-    async unpin(projectId) {
+    async unpin(projectId, experimentId) {
       const rows = await db
         .delete(evalBaselines)
-        .where(eq(evalBaselines.projectId, projectId))
+        .where(
+          and(
+            eq(evalBaselines.projectId, projectId),
+            experimentId ? eq(evalBaselines.experimentId, experimentId) : undefined,
+          ),
+        )
         .returning({ projectId: evalBaselines.projectId });
       return rows.length > 0;
     },

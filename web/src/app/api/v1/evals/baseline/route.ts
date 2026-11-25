@@ -21,5 +21,5 @@ export const PUT = withRequestLog(async (req: Request) =>
 
 /** DELETE /api/v1/evals/baseline: removes the pin. */
 export const DELETE = withRequestLog(async (req: Request) =>
-  handleUnpinByKey(keyBaselineDeps(req, BEARER_ROUTE_SCOPES["DELETE /api/v1/evals/baseline"])),
+  handleUnpinByKey(req, keyBaselineDeps(req, BEARER_ROUTE_SCOPES["DELETE /api/v1/evals/baseline"])),
 );

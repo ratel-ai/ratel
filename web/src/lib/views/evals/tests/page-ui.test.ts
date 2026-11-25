@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
+import { PairedTrials } from "@/components/console/evals/CompareCase";
 import { CompareView } from "@/components/console/evals/CompareView";
 import { EvalsView } from "@/components/console/evals/EvalsView";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
@@ -12,11 +13,13 @@ import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import { compare } from "../domain/compare";
 import type { Experiment, Trial } from "../domain/experiment";
+import { pairedTrials } from "../domain/paired-trials";
 import type { TrialResult } from "../domain/score";
 import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
 import {
   type CaseEditorModel,
   type CaseVersionView,
+  type ComparedCaseRow,
   comparePageModel,
   experimentPageModel,
   readyVersions,
@@ -300,16 +303,78 @@ test("the comparison page: the verdict and its rule, the changed cases, then the
   assert.equal(asOther.ok && asOther.pinnedBy, "a project key");
 });
 
+test("the trials of a case are paired by index, with gaps and with one side", () => {
+  const trial = (id: string, index: number) => ({ id, index });
+  const ids = (pairs: ReturnType<typeof pairedTrials<{ id: string; index: number }>>) =>
+    pairs.map(({ index, baseline, candidate }) => [index, baseline?.id, candidate?.id]);
+  const left = [trial("b2", 2), trial("b0", 0)];
+  const right = [trial("c0", 0), trial("c1", 1), trial("c2", 2)];
+  assert.deepEqual(ids(pairedTrials(left, right)), [
+    [0, "b0", "c0"],
+    [1, undefined, "c1"],
+    [2, "b2", "c2"],
+  ]);
+  assert.deepEqual(ids(pairedTrials(null, [trial("c0", 0)])), [[0, undefined, "c0"]]);
+  assert.deepEqual(ids(pairedTrials([trial("b0", 0)], null)), [[0, "b0", undefined]]);
+});
+
+test("an open case shows each pair with its scorer reasons, its trace and the side that is missing", () => {
+  const { trials } = compared("a", { one: "pass" });
+  const [trial] = trials;
+  assert.ok(trial);
+  const scorer = {
+    scorerId: "s",
+    name: "No refund",
+    kind: "check" as const,
+    gating: true,
+    status: "pass" as const,
+    reason: "tools ne refund_order: the value is [].",
+  };
+  const row: ComparedCaseRow = {
+    caseId: "one",
+    name: "one",
+    change: "removed",
+    baseline: {
+      versionId: "one",
+      number: 1,
+      status: "pass",
+      counts: { pass: 1, fail: 0, invalid: 0, open: 0 },
+      costUsd: null,
+      meanDurationMs: null,
+      trials: [{ ...trial, traceId: "d".repeat(32), scorers: [scorer] }],
+    },
+    candidate: null,
+  };
+  const html = render(createElement(PairedTrials, { projectId: PROJECT_ID, row }));
+  const text = visibleText(html);
+  for (const part of [
+    "Baseline, trial 1",
+    "Candidate, trial 1",
+    "Not in this experiment",
+    scorer.reason,
+    "Loading",
+  ]) {
+    assert.ok(text.includes(part), part);
+  }
+  assert.match(html, new RegExp(`traces/${"d".repeat(32)}`));
+});
+
 test("a refused comparison shows the reason and the scorers that differ", () => {
   const scorers = [
     { caseId: "c1", caseName: "Late refund", name: "No refund", difference: "changed" as const },
   ];
+  const pin = { experimentId: "base-1", pinnedBy: "u", pinnedAt: new Date(NOW) };
   const model = comparePageModel(
     { projectId: PROJECT_ID, experimentId: "b" },
-    { ok: false, refusal: { reason: "scorers_differ", message: "The scorers differ.", scorers } },
+    {
+      ok: false,
+      refusal: { reason: "scorers_differ", message: "The scorers differ.", scorers, pin },
+    },
     "u",
   );
-  const text = visibleText(render(createElement(CompareView, { model, now: NOW })));
+  const html = render(createElement(CompareView, { model, now: NOW }));
+  const text = visibleText(html);
+  assert.match(html, /evals\/experiments\/base-1"/);
   for (const part of ["the scorers differ", "No refund", "Late refund", "The definition changed"]) {
     assert.ok(text.includes(part), part);
   }

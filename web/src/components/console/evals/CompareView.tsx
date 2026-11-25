@@ -131,6 +131,14 @@ function Refused({ model }: { model: Extract<ComparePageModel, { ok: false }> })
     <>
       <Callout tone="warning" title={REFUSED[model.reason] ?? "Not compared"}>
         {model.message}
+        {model.baselineId ? (
+          <Link
+            href={experimentHref(projectId, model.baselineId)}
+            className="ml-1 text-fg underline underline-offset-2 hover:text-fg-muted"
+          >
+            Open the baseline
+          </Link>
+        ) : null}
       </Callout>
       {scorers.length > 0 ? (
         <Section title="Scorers that differ">

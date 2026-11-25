@@ -189,7 +189,14 @@ export type ComparePageModel = { projectId: string; experimentId: string } & (
       changed: ComparedCaseRow[];
       others: ComparedCaseRow[];
     }
-  | { ok: false; reason: string; message: string; scorers: ScorerDifference[] }
+  | {
+      ok: false;
+      reason: string;
+      message: string;
+      scorers: ScorerDifference[];
+      /** Null: no baseline is pinned. */
+      baselineId: string | null;
+    }
 );
 
 export function comparePageModel(
@@ -198,7 +205,10 @@ export function comparePageModel(
   /** The identity of the reader, to say "you". */
   reader: string,
 ): ComparePageModel {
-  if (!result.ok) return { ...ids, ok: false, ...result.refusal };
+  if (!result.ok) {
+    const { pin, ...refusal } = result.refusal;
+    return { ...ids, ok: false, ...refusal, baselineId: pin?.experimentId ?? null };
+  }
   const { pin, baseline, candidate, comparison } = result;
   const before = trialsByCase(baseline.trials);
   const after = trialsByCase(candidate.trials);

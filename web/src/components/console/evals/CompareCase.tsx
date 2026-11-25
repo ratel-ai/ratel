@@ -4,7 +4,9 @@ import { Badge, type Tone } from "@ratel/design-system/badge";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useId, useState } from "react";
-import type { ComparedCaseRow, ComparedCaseSide } from "@/lib/views/evals/page-model";
+// Not from the page model: that one has server code.
+import { pairedTrials } from "@/lib/views/evals/domain/paired-trials";
+import type { ComparedCaseRow, ComparedCaseSide, TrialView } from "@/lib/views/evals/page-model";
 import { caseHref } from "@/lib/views/evals/paths";
 import { CountBadges } from "./ExperimentList";
 import { TrialPanel } from "./TrialPanel";
@@ -24,10 +26,6 @@ export function CompareCase({ projectId, row }: { projectId: string; row: Compar
   const [open, setOpen] = useState(false);
   const panel = useId();
   const change = CHANGE[row.change];
-  const sides = [row.baseline, row.candidate];
-  const indexes = [
-    ...new Set(sides.flatMap((side) => side?.trials.map(({ index }) => index) ?? [])),
-  ].sort((left, right) => left - right);
   return (
     <>
       <button
@@ -51,33 +49,46 @@ export function CompareCase({ projectId, row }: { projectId: string; row: Compar
         </span>
       </button>
       <div id={panel} hidden={!open}>
-        {open ? (
-          <div className="border-t border-line px-4 py-4">
-            <Link
-              href={caseHref(projectId, row.caseId)}
-              className="text-ui text-fg-muted underline underline-offset-2 hover:text-fg"
-            >
-              Open the case
-            </Link>
-            <div className="mt-3 grid gap-x-6 md:grid-cols-2">
-              <h3 className="hidden text-ui font-semibold text-fg md:block">Baseline</h3>
-              <h3 className="hidden text-ui font-semibold text-fg md:block">Candidate</h3>
-              {indexes.map((index) => (
-                <Fragment key={index}>
-                  <Pane label="Baseline" projectId={projectId} side={row.baseline} index={index} />
-                  <Pane
-                    label="Candidate"
-                    projectId={projectId}
-                    side={row.candidate}
-                    index={index}
-                  />
-                </Fragment>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        {open ? <PairedTrials projectId={projectId} row={row} /> : null}
       </div>
     </>
+  );
+}
+
+/** The evidence of one case: each baseline trial next to the candidate trial. */
+export function PairedTrials({ projectId, row }: { projectId: string; row: ComparedCaseRow }) {
+  const pairs = pairedTrials(row.baseline?.trials ?? null, row.candidate?.trials ?? null);
+  return (
+    <div className="border-t border-line px-4 py-4">
+      <Link
+        href={caseHref(projectId, row.caseId)}
+        className="text-ui text-fg-muted underline underline-offset-2 hover:text-fg"
+      >
+        Open the case
+      </Link>
+      <div className="mt-3 grid gap-x-6 md:grid-cols-2">
+        <h3 className="hidden text-ui font-semibold text-fg md:block">Baseline</h3>
+        <h3 className="hidden text-ui font-semibold text-fg md:block">Candidate</h3>
+        {pairs.map(({ index, baseline, candidate }) => (
+          <Fragment key={index}>
+            <Pane
+              label="Baseline"
+              projectId={projectId}
+              trial={baseline}
+              index={index}
+              inExperiment={row.baseline !== null}
+            />
+            <Pane
+              label="Candidate"
+              projectId={projectId}
+              trial={candidate}
+              index={index}
+              inExperiment={row.candidate !== null}
+            />
+          </Fragment>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -101,19 +112,20 @@ function SideSummary({ label, side }: { label: string; side: ComparedCaseSide | 
   );
 }
 
-/** The trial with this index, next to the one of the other side. */
 function Pane({
   label,
   projectId,
-  side,
+  trial,
   index,
+  inExperiment,
 }: {
   label: string;
   projectId: string;
-  side: ComparedCaseSide | null;
+  trial: TrialView | undefined;
   index: number;
+  /** Whether the case is in the experiment of this side. */
+  inExperiment: boolean;
 }) {
-  const trial = side?.trials.find((found) => found.index === index);
   return (
     <div className="min-w-0 border-t border-line py-3">
       <h4 className="mb-2 text-xs text-fg-subtle md:sr-only">
@@ -123,7 +135,7 @@ function Pane({
         <TrialPanel projectId={projectId} trial={trial} loadEvidence />
       ) : (
         <p className="text-ui text-fg-subtle">
-          {side ? "No trial with this number" : "Not in this experiment"}
+          {inExperiment ? "No trial with this number" : "Not in this experiment"}
         </p>
       )}
     </div>

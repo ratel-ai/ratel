@@ -173,6 +173,21 @@ test("other scorers are refused, and the scorers that differ are named", () => {
   }
 });
 
+test("a message with many scorers names the first ones and counts the others", () => {
+  const ids = Array.from({ length: 30 }, (_, index) => `case-${10 + index}`);
+  const side = (scorers: CaseScorer[]) =>
+    Object.fromEntries(ids.map((id) => [id, { ...PASS, scorers }]));
+  const refusal = compare(
+    run("base", side([NO_REFUND])),
+    run("next", side([{ ...NO_REFUND, gating: false }])),
+  );
+  assert.ok(!refusal.ok);
+  assert.equal(refusal.scorers.length, 30);
+  assert.match(refusal.message, /case-10.*case-12/);
+  assert.doesNotMatch(refusal.message, /case-13/);
+  assert.match(refusal.message, /27 more/);
+});
+
 test("a removed scorer, and one of two equal scorers, is a difference", () => {
   const twin = { ...NO_REFUND, id: "twin", name: "Twin" };
   const refusal = compare(

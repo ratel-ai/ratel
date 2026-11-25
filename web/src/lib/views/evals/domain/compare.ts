@@ -56,6 +56,8 @@ export const VERDICT_RULE: Record<Verdict | "nothing", string> = {
   nothing: "Inconclusive: no case is in both experiments, so there is nothing to compare.",
 };
 
+/** `scorers` has all of them. The message names the first ones. */
+const NAMED_SCORERS = 3;
 const CHANGE_ORDER: CaseChange[] = [
   "regressed",
   "inconclusive",
@@ -81,9 +83,14 @@ export function compare(
   }
   const scorers = scorerDifferences(baseline.experiment, candidate.experiment);
   if (scorers.length > 0) {
-    const words = scorers.map(
-      ({ caseName, name, difference }) => `"${name}" of "${caseName}" (${DIFFERENCE[difference]})`,
-    );
+    const words = scorers
+      .slice(0, NAMED_SCORERS)
+      .map(
+        ({ caseName, name, difference }) =>
+          `"${name}" of "${caseName}" (${DIFFERENCE[difference]})`,
+      );
+    const others = scorers.length - words.length;
+    if (others > 0) words.push(`and ${others} more`);
     const message = `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it.`;
     return { ...refused("scorers_differ", message), scorers };
   }

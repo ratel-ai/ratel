@@ -13,6 +13,6 @@ export const PUT = withRequestLog(async (request: Request, context: Context) =>
 );
 
 /** DELETE /api/projects/[projectId]/evals/baseline: a member removes the pin. */
-export const DELETE = withRequestLog(async (_request: Request, context: Context) =>
-  handleUnpinByMember((await context.params).projectId, consoleBaselineDeps),
+export const DELETE = withRequestLog(async (request: Request, context: Context) =>
+  handleUnpinByMember(request, (await context.params).projectId, consoleBaselineDeps),
 );

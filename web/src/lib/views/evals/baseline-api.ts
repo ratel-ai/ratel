@@ -44,9 +44,9 @@ export function handlePinByKey(request: Request, deps: BaselineKeyDeps): Promise
   );
 }
 
-export function handleUnpinByKey(deps: BaselineKeyDeps): Promise<Response> {
+export function handleUnpinByKey(request: Request, deps: BaselineKeyDeps): Promise<Response> {
   return forKey(deps, "unpin_baseline", (subject, apiKeyId) =>
-    unpin(subject, { pinnedBy: `key:${apiKeyId}`, surface: "api" }, deps),
+    unpin(request, subject, { pinnedBy: `key:${apiKeyId}`, surface: "api" }, deps),
   );
 }
 
@@ -76,6 +76,7 @@ export function handlePinByMember(
 }
 
 export function handleUnpinByMember(
+  request: Request,
   projectId: string,
   deps: BaselineConsoleDeps,
 ): Promise<Response> {
@@ -83,7 +84,7 @@ export function handleUnpinByMember(
     projectId,
     { feature: "evals", operation: "unpin_baseline" },
     deps,
-    (member) => unpin(member, actor(member), deps),
+    (member) => unpin(request, member, actor(member), deps),
     { write: true },
   );
 }
@@ -120,9 +121,22 @@ async function pin(
   return reply(200, { baseline: baselineView(projectId, result.baseline, deps) });
 }
 
-async function unpin(subject: UsageSubject, by: Actor, deps: BaselineApiDeps): Promise<Response> {
-  if (await deps.baselines().baselines.unpin(subject.projectId)) {
+/** With `?experimentId=`, removes the pin only when it is still that experiment. */
+async function unpin(
+  request: Request,
+  subject: UsageSubject,
+  by: Actor,
+  deps: BaselineApiDeps,
+): Promise<Response> {
+  const shown = new URL(request.url).searchParams.get("experimentId") ?? undefined;
+  if (shown !== undefined && !z.uuid().safeParse(shown).success) {
+    return refuse(400, "invalid", "experimentId: the id of an experiment.");
+  }
+  const { baselines } = deps.baselines();
+  if (await baselines.unpin(subject.projectId, shown)) {
     await deps.track("eval_baseline_unpinned", subject, by);
+  } else if (shown !== undefined && (await baselines.get(subject.projectId))) {
+    return refuse(409, "changed", "Another experiment is the baseline now. Load the page again.");
   }
   return reply(200, { baseline: null });
 }
@@ -134,12 +148,13 @@ async function comparison(
 ): Promise<Response> {
   const result = await compareWithBaseline(projectId, experimentId, deps.baselines());
   if (result.ok) return reply(200, comparisonView(projectId, result, deps));
-  const { reason, message, scorers } = result.refusal;
+  const { reason, message, scorers, pin: pinned } = result.refusal;
   if (reason === "not_found") return notFound();
   return reply(COMPARE_STATUS[reason], {
     error: reason,
     message,
     ...(scorers.length > 0 ? { scorers } : {}),
+    ...(pinned ? { baseline: baselineView(projectId, pinned, deps) } : {}),
   });
 }
 
