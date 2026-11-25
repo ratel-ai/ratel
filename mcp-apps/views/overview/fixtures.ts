@@ -1,9 +1,13 @@
+import { metricQuery } from "@/lib/contracts/query";
 import { healthScoreView } from "@/lib/readings/trace-signals/health-score";
+import type { DashboardItem } from "@/lib/views/home/dashboard-items";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
 import type { ChangeSource } from "@/lib/views/overview-layout/domain/history";
 import {
   changeLayout,
+  type DashboardItemId,
   DEFAULT_LAYOUT,
+  dashboardItemId,
   type OverviewLayout,
   type OverviewWidgetId,
   onlyWidget,
@@ -140,6 +144,20 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
     healthHref: HEALTH,
     partial: false,
   },
+  alerts: {
+    items: [
+      {
+        id: "a1",
+        name: "Too many errors",
+        value: "12%",
+        condition: "above 5%",
+        since: "12m ago",
+        href: `${ROOT}/alerts/a1`,
+      },
+    ],
+    href: `${ROOT}/alerts`,
+  },
+  dashboards: null,
   context: null,
 };
 
@@ -170,6 +188,7 @@ function single(
     topology: null,
     health: null,
     attention: null,
+    alerts: null,
     [widget]: DATA[widget],
     ...over,
     layout: onlyWidget(entry),
@@ -185,6 +204,30 @@ function single(
   };
 }
 
+function aloneItem(): ViewFixture {
+  const overview = {
+    ...DATA,
+    metrics: null,
+    topology: null,
+    health: null,
+    attention: null,
+    alerts: null,
+    dashboards: { [RUNS]: ITEMS[RUNS] },
+    layout: [
+      { id: RUNS, x: 0, y: 0, w: 12, h: 5, removed: false, title: "Runs by model" },
+    ] satisfies OverviewLayout,
+    lastEventAt: "2026-11-24T10:00:00.000Z",
+  };
+  return {
+    tool: "get_overview",
+    input: { dashboardId: BOARD, widgetId: "runs" },
+    result: okResult(
+      { project: { id: PROJECT, name: DATA.project.name }, range: "7d", widget: RUNS },
+      { view: { kind: "overview", overview, linked: true, widget: RUNS } },
+    ),
+  };
+}
+
 const ARRANGED = changeLayout(
   changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "topology" }),
   {
@@ -193,6 +236,49 @@ const ARRANGED = changeLayout(
     x: 4,
     y: 0,
   },
+);
+
+const BOARD = "44444444-4444-4444-8444-444444444444";
+const RUNS = dashboardItemId(BOARD, "runs");
+const GONE = dashboardItemId(BOARD, "gone");
+const item = (
+  title: string,
+  widget: Pick<Extract<DashboardItem, { kind: "widget" }>["widget"], "query" | "chart">,
+  result: Extract<DashboardItem, { kind: "widget" }>["result"],
+): DashboardItem => ({
+  kind: "widget",
+  title,
+  dashboard: { name: "Support board", href: `${ROOT}/dashboards/${BOARD}` },
+  widget: { id: "runs", title, layout: { x: 0, y: 0, w: 6, h: 5 }, ...widget },
+  result,
+  filters: {},
+  range: { preset: "7d", from: "2026-11-18", to: "2026-11-24" },
+});
+const ITEMS: Record<DashboardItemId, DashboardItem> = {
+  [RUNS]: item(
+    "Runs by model",
+    { query: metricQuery("trace_count", "count", { dimensions: ["model"] }), chart: "table" },
+    {
+      kind: "metric",
+      bucket: "day",
+      buckets: [],
+      series: [{ groups: [{ value: "claude-sonnet-5-5" }], total: 141, samples: 141, values: [] }],
+    },
+  ),
+  [GONE]: {
+    kind: "broken",
+    title: null,
+    problem: "It was removed from the dashboard Support board.",
+  },
+};
+const WITH_ITEMS = [RUNS, GONE].reduce<OverviewLayout>(
+  (layout, widget) =>
+    changeLayout(layout, {
+      kind: "add",
+      widget,
+      source: { title: widget === RUNS ? "Runs by model" : "Old chart", w: 6, h: 5 },
+    }),
+  changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "topology" }),
 );
 
 const entry = (
@@ -230,6 +316,9 @@ function history(entries: readonly ReturnType<typeof entry>[]): ViewFixture {
 
 const fixtures: ViewFixtures = {
   get_overview: fixture(),
+  "get_overview · dashboard widgets": fixture({ topology: null, dashboards: ITEMS }, WITH_ITEMS),
+  "get_overview · dashboard widgets, failed read": fixture({ dashboards: "failed" }, WITH_ITEMS),
+  "get_overview · a dashboard widget": aloneItem(),
   "get_overview · removed widget": fixture({ topology: null }, ARRANGED),
   "get_overview · no score": fixture({
     health: {
@@ -251,6 +340,10 @@ const fixtures: ViewFixtures = {
   "get_overview · attention, nothing": single("attention", {
     attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false },
   }),
+  "get_overview · alerts": single("alerts"),
+  "get_overview · alerts, none": single("alerts", {
+    alerts: { items: [], href: `${ROOT}/alerts` },
+  }),
   "get_overview · topology, failed read": single("topology", { topology: "failed" }),
   "get_overview · metrics, no data": single("metrics", { hasTelemetry: false, metrics: null }),
   "get_overview · unknown widget": {
@@ -258,7 +351,7 @@ const fixtures: ViewFixtures = {
     input: { widget: "spend" },
     result: errorResult(
       "invalid_params",
-      'The Overview has no widget with the name "spend". The widgets are: metrics, topology, health, attention.',
+      'The Overview has no widget with the name "spend". The widgets are: metrics, topology, health, attention, alerts.',
     ),
   },
   change_overview_layout: {

@@ -269,6 +269,8 @@ export interface ListTracesOptions extends TraceFacetFilters {
   limit?: number;
   /** RC-505 property filters, matched on the per-trace rollup. */
   traces?: TraceFilter;
+  /** The window is of the rollup's start, as in metrics, and not of the spans'. */
+  summaryWindow?: boolean;
 }
 
 export interface TraceSummary {
@@ -465,10 +467,7 @@ export async function listTraces(
     experimentName: otelSpans.experimentName,
     experimentArm: otelSpans.experimentArm,
   };
-  const windowBounds = and(
-    options.since ? gte(otelSpans.startedAt, options.since) : undefined,
-    options.until ? lt(otelSpans.startedAt, options.until) : undefined,
-  );
+  const windowBounds = spanWindow(projectId, options);
   // Earliest in-window true root per trace — an index-only walk of the partial
   // roots index, never a scan of the full span corpus.
   const rootedTraces = db
@@ -1568,7 +1567,27 @@ function traceMembershipSubqueries(
   };
 }
 
-function traceRollups(projectId: string, window: TraceWindow, db: TraceQueriesDb) {
+/** The spans of a window: those that start in it, or all of the traces whose rollup does. */
+function spanWindow(
+  projectId: string,
+  { since, until, summaryWindow }: Pick<ListTracesOptions, "since" | "until" | "summaryWindow">,
+) {
+  if (!summaryWindow || !since || !until)
+    return and(
+      since ? gte(otelSpans.startedAt, since) : undefined,
+      until ? lt(otelSpans.startedAt, until) : undefined,
+    );
+  return sql`${otelSpans.traceId} in (select s.trace_id from otel_trace_summaries s
+    where s.project_id = ${projectId}
+      and s.started_at >= ${since.toISOString()}::timestamptz
+      and s.started_at < ${until.toISOString()}::timestamptz)`;
+}
+
+function traceRollups(
+  projectId: string,
+  window: TraceWindow & Pick<ListTracesOptions, "summaryWindow">,
+  db: TraceQueriesDb,
+) {
   const representativeColumns = {
     traceId: otelSpans.traceId,
     rootName: otelSpans.name,
@@ -1576,10 +1595,7 @@ function traceRollups(projectId: string, window: TraceWindow, db: TraceQueriesDb
     durationMs: otelSpans.durationMs,
     statusCode: otelSpans.statusCode,
   };
-  const windowBounds = and(
-    gte(otelSpans.startedAt, window.since),
-    lt(otelSpans.startedAt, window.until),
-  );
+  const windowBounds = spanWindow(projectId, window);
   const rootedTraces = db
     .selectDistinctOn([otelSpans.traceId], representativeColumns)
     .from(otelSpans)

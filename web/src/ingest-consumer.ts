@@ -1,5 +1,6 @@
 import { composition } from "@/lib/composition/ports";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
+import { geoIngest } from "@/lib/ingest/geo/ingest";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { processLogs } from "@/lib/ingest/otlp/process-logs";
 import { processTraces } from "@/lib/ingest/otlp/process-traces";
@@ -106,6 +107,8 @@ export function configuredHandler(replay?: ReplayDeps): EnvelopeHandler {
         },
         genAiLogs,
         otlpRawCapture,
+        // Codes instead of addresses in every row, and no raw copy of a body that holds one.
+        locate: geoIngest.locate,
         modelPricing,
       }),
     logs: (envelope, context) =>

@@ -41,6 +41,11 @@ does what it did.
 **A held organization's telemetry is still stored**, by this consumer and by the ingest lane. The hold
 stops the jobs that would act on it.
 
+**Addresses.** Where ADR-0009's routes locate a batch and take its addresses out before they queue it
+(`ingest/geo`, while `customMonitoring` is on for the organization), a gateway does not decode, so the
+envelope holds the body as sent, and so do Kafka and an archive of it. Process locates the spans before any
+row is built and keeps no raw copy of such a body. What the gateway keeps is open (see Consequences).
+
 **The gateway obeys the accept rules below.** They were written for one accept in two places; this core's
 routes now follow ADR-0009 instead, so the table is what a gateway does before it publishes, and what
 process does after.
@@ -215,6 +220,8 @@ it can be handed over with its offsets.
 
 - A deployment can take over a topic where another reader stopped, and give it back.
 - Two queues exist. They share the store, not the retry, the order or the clock; joining them is open.
+- An envelope can hold an address that this core would not have stored. Until that is decided, an organization
+  with `customMonitoring` on is not put on a topic.
 - A sender behind a gateway learns less: bad payloads and refused traces show in the product and in the
   dead letters, not in the answer.
 - Two implementations share one frame. The sample files are the contract, and a change to one

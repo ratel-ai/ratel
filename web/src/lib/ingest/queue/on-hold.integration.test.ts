@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { metricQuery } from "@/lib/contracts/query";
 import { claimNextQueuedJob, enqueueJob, oldestQueuedJobAgeQuery } from "@/lib/jobs/queries";
 import { listProjectsDueTraceTurnBuild } from "@/lib/ledger/turns/queries";
 import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
@@ -8,6 +9,10 @@ import { listProjectsWithUnfoldedEvents } from "@/lib/readings/intent-graph/quer
 import { enqueueDueQueryCategorizations } from "@/lib/readings/query-intents/queries";
 import { refreshQualitySnapshots } from "@/lib/synthesis/quality/snapshot";
 import { pruneExpiredOtelSpans } from "@/lib/synthesis/traces/queries";
+import { evaluateAlerts } from "@/lib/views/alerts/evaluate";
+import { createAlertRule } from "@/lib/views/alerts/store";
+import type { AlertDraft } from "@/lib/views/alerts/types";
+import { sweepScorers } from "@/lib/views/scorers/sweep";
 import { persistIngestBatch } from "./persist";
 import { claimNextIngestBatch, enqueueIngestBatch, markIngestBatchDone } from "./queries";
 import {
@@ -138,6 +143,37 @@ test("the scheduled sweeps skip a held project and take the other", async () => 
       folds: ids(await listProjectsWithUnfoldedEvents(db, { commitLagMs: 0, retentionDays: 400 })),
     };
   }
+});
+
+test("alerts and scorers of a held project wait, and go on after the hold", async () => {
+  const { client, db } = await setupDeployment();
+  const query = JSON.stringify(metricQuery("error_rate", "rate"));
+  const draft: AlertDraft = {
+    name: "Errors",
+    query: JSON.parse(query),
+    operator: "above",
+    threshold: 0.5,
+    windowMinutes: 5,
+    destinationIds: [],
+  };
+  assert.ok(await createAlertRule(PROJECT_ID, draft, "user", db));
+  await client.exec(`
+    insert into trace_scorers (project_id, name, kind, config, created_by, updated_by)
+    values ('${PROJECT_ID}', 'Fast', 'check', '{"path":"duration_ms","op":"lt","value":10}', 'u', 'u')`);
+  const on = async () => true;
+  const taken = async () => {
+    await client.exec("update alert_rules set last_evaluated_at = null");
+    return [
+      (await evaluateAlerts({ flagOn: on }, db)).evaluated,
+      (await sweepScorers({ flagOn: on }, db)).scorers,
+    ];
+  };
+  assert.deepEqual(await taken(), [1, 1]);
+  await setHold(HOLD, db);
+  assert.deepEqual(await taken(), [0, 0]);
+  await clearHold(HOLD, db);
+  assert.deepEqual(await taken(), [1, 1]);
+  await client.close();
 });
 
 test("held before it exists: what arrives with it is swept by nothing, and its telemetry is stored", async () => {

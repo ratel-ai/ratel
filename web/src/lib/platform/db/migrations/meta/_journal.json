@@ -334,8 +334,57 @@
     {
       "idx": 47,
       "version": "7",
-      "when": 1795636393866,
-      "tag": "0047_org_holds",
+      "when": 1795620000000,
+      "tag": "0047_dashboards",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1795620001000,
+      "tag": "0048_trace_scorers",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795620002000,
+      "tag": "0049_trace_scorer_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795620003000,
+      "tag": "0050_trace_geography",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1795620004000,
+      "tag": "0051_alert_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1795620005000,
+      "tag": "0052_alert_destinations",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1795620006000,
+      "tag": "0053_slack_app",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795640022802,
+      "tag": "0054_org_holds",
       "breakpoints": true
     }
   ]

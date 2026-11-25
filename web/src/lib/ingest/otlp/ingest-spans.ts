@@ -123,6 +123,15 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    */
   genAiLogs?: Pick<GenAiLogStore, "findLogs"> &
     Partial<Pick<GenAiLogStore, "findSpans" | "restateCalls">>;
+  /**
+   * Where each span comes from: marks the spans with country and region codes, before any row is
+   * built, and says whether one carried an IP address. Absent, no span is located.
+   */
+  locate?: (
+    projectId: string,
+    organization: PersistSpansContext["organization"],
+    spans: readonly DecodedSpan[],
+  ) => Promise<{ addressed: boolean }>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -140,6 +149,8 @@ export type PersistSpansResult =
       accepted: number;
       calls: number;
       rows: EventWithMetric[];
+      /** The batch carried an IP address, or may have: its raw body must not be kept. */
+      addressed: boolean;
       refused?: number;
       dropped?: number;
     }
@@ -224,6 +235,15 @@ async function storeDecodedSpans(
   batch: MeteredBatch,
 ): Promise<PersistSpansResult> {
   const { logError } = deps;
+  // Fail open for the batch, and closed for the address.
+  let addressed = false;
+  try {
+    addressed = (await deps.locate?.(projectId, organization, spans))?.addressed ?? false;
+  } catch (err) {
+    addressed = true;
+    logError("span location failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+  }
   // Speak one vocabulary downstream: additively re-key Vercel AI SDK `ai.*`
   // content onto the `gen_ai.*` semconv every consumer below already reads. A
   // no-op for spans that arrive translated (or never carried `ai.*` at all).
@@ -251,7 +271,7 @@ async function storeDecodedSpans(
     spans = spans.filter(
       (span) => span.traceId.length > 0 && span.traceId.length <= MAX_METERED_TRACE_ID,
     );
-    if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
+    if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [], addressed };
     try {
       const outcomes = await deps.traceMetering.meterTraceBatch(
         { organization, projectId },
@@ -269,7 +289,14 @@ async function storeDecodedSpans(
       batch.admitted = spansByTrace(spans);
       if (spans.length === 0) {
         if (refused > 0) return { ok: false, stage: "refused" };
-        return { ok: true, accepted: 0, calls: 0, rows: [], ...(dropped > 0 ? { dropped } : {}) };
+        return {
+          ok: true,
+          accepted: 0,
+          calls: 0,
+          rows: [],
+          addressed,
+          ...(dropped > 0 ? { dropped } : {}),
+        };
       }
     } catch (err) {
       logError("trace meter write failed", err, {
@@ -470,6 +497,7 @@ async function storeDecodedSpans(
     accepted,
     calls: calls.length,
     rows,
+    addressed,
     ...(refused > 0 ? { refused } : {}),
     ...(dropped > 0 ? { dropped } : {}),
   };

@@ -135,7 +135,8 @@ export async function storeTraceExport(
         traceIds: [...new Set(spans.map((span) => span.traceId))],
       },
       context.organization,
-      deps.otlpRawCapture,
+      // An address is resolved and let go, so a body that holds one is not kept either.
+      persisted.addressed ? undefined : deps.otlpRawCapture,
       {
         logError: observers.logError,
         logWarn: observers.logWarn,

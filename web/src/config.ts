@@ -78,6 +78,7 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
+  customMonitoring: "FF_CUSTOM_MONITORING",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -172,6 +173,16 @@ const CONFIG_SCHEMA = schema({
     ),
     importsRunInWorker: setting("IMPORTS_RUN_IN_WORKER", one, D.jobs.importsRunInWorker),
     dataRetention: setting("DATA_RETENTION_ENABLED", one, D.jobs.dataRetention),
+  },
+  secrets: {
+    /** Seals the secrets the app reads back (`lib/platform/secret-box.ts`); unset, none is stored. */
+    key: optional("RATEL_SECRET_KEY", configured.pipe(z.string().min(32).optional()), {
+      sensitive: true,
+    }),
+  },
+  slack: {
+    /** Where Slack's consent page and API are: another address for GovSlack. */
+    url: setting("SLACK_URL", trimmed.pipe(z.url({ protocol: /^https?$/ })), D.slack.url),
   },
   logging: {
     /** Unset: `debug` in development, else `info`. */
@@ -280,6 +291,8 @@ const CONFIG_SCHEMA = schema({
     ),
     /** Stored raw OTLP bytes one project may add per UTC day; 0 stores nothing. */
     otlpRawDailyBytes: setting("OTLP_RAW_DAILY_BYTES", nonNegativeInt, D.ingest.otlpRawDailyBytes),
+    /** A DB-IP Lite file (MMDB): resolves IP addresses to a country and a region. Unset, they are not. */
+    geoDatabasePath: optional("GEO_DATABASE_PATH", trimmed),
     otlpRawRetentionDays: setting(
       "OTLP_RAW_RETENTION_DAYS",
       positive,

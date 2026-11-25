@@ -13,6 +13,10 @@ name: ci
 # check cannot deadlock a merge; marking the PR ready fires `ready_for_review`, which runs
 # the pipeline and posts `ci-gate`.
 #
+# A newer push to main cancels the older run (see `concurrency`). Its `ci-gate` then does
+# not run, because a superseded run is not a failure. PR and dispatch runs stay strict: a required
+# check that does not run can count as a pass.
+#
 # Skip-green: `changes` runs scripts/ci-filters.mjs on the pull-request file list so
 # untouched areas skip. Platform and design-system name packages/brand and
 # packages/design-system by name (never a packages catch-all). Every rule treats
@@ -403,6 +407,7 @@ jobs:
     needs: [changes, design-system, platform-build, platform-test, kafka-ingest, platform-compose, deploy, dependency-scan, secret-scan]
     if: >-
       always() &&
+      (github.event_name != 'push' || !cancelled()) &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:

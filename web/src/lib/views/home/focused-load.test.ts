@@ -79,6 +79,8 @@ const BASE: FocusedReads = {
   intents: async () => null,
   tasks: async () => null,
   dailyAggregates: async () => [],
+  alerting: async () => [],
+  dashboards: async () => ({}),
   context: async () => ({ split: null, suggestions: [], promptCacheHitRate: null }),
 };
 const ALWAYS = ["sdkLatestAt", "telemetry"];

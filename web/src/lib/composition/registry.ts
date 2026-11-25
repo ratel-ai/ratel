@@ -1,5 +1,6 @@
 import { composition } from "@/lib/composition/ports";
 import type { DrainStep, JobHandler, Registration, WorkerLane } from "@/lib/contracts/registry";
+import { geoIngest } from "@/lib/ingest/geo/ingest";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import {
   findStoredOtelSpans,
@@ -45,8 +46,10 @@ import { traceSignalsRegistration } from "@/lib/readings/trace-signals/register"
 import { qualityRegistration } from "@/lib/synthesis/quality/register";
 import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
+import { alertsRegistration } from "@/lib/views/alerts/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
+import { scorersRegistration } from "@/lib/views/scorers/register";
 import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
 import { taskEvalsRegistration } from "@/lib/views/task-evals/register";
 import { taskScorersRegistration } from "@/lib/views/task-scorers/register";
@@ -103,6 +106,7 @@ export function ingestPersistDeps(): IngestPersistDeps {
       },
       genAiLogs,
       otlpRawCapture,
+      locate: geoIngest.locate,
       modelPricing,
       trackServerEvent,
     },
@@ -159,6 +163,8 @@ const CORE: Registration[] = [
   sessionReplayRegistration,
   taskScorersRegistration,
   taskEvalsRegistration,
+  scorersRegistration,
+  alertsRegistration,
 ];
 
 export function collectRegistrations(

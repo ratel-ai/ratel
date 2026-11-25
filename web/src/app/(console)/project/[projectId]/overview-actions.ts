@@ -16,7 +16,12 @@ import {
   restoreOverviewLayout,
   undoOverviewChange,
 } from "@/lib/views/overview-layout/actions";
+import {
+  type OfferedDashboard,
+  offeredDashboardWidgets,
+} from "@/lib/views/overview-layout/dashboard-widgets";
 import { postedRevision } from "@/lib/views/overview-layout/domain/history";
+import { dashboardItemId } from "@/lib/views/overview-layout/domain/layout";
 import { webLayoutDeps } from "@/lib/views/overview-layout/readers";
 
 const logger = getLogger("overview-layout/actions");
@@ -31,6 +36,10 @@ export interface OverviewLayoutFailure {
 type SavedLayout = { ok: true; changed: string | null } & LayoutSnapshot;
 
 export type OverviewLayoutActionResult = SavedLayout | OverviewLayoutFailure;
+
+export type DashboardWidgetsResult =
+  | { ok: true; dashboards: OfferedDashboard[] }
+  | OverviewLayoutFailure;
 
 export type OverviewHistoryActionResult =
   | { ok: true; entries: LayoutHistoryEntry[]; snapshot: LayoutSnapshot }
@@ -49,6 +58,32 @@ export async function saveOverviewLayout(
   return saved("overview_layout_change", projectId, (id) =>
     changeOverviewLayout(id, change, webLayoutDeps, postedRevision(base)),
   );
+}
+
+/** From the menu of a dashboard's widget: made on what is there now, as the person sees no layout. */
+export async function addDashboardWidgetToOverview(
+  projectId: string,
+  dashboardId: string,
+  widgetId: string,
+): Promise<OverviewLayoutActionResult> {
+  return saved("overview_layout_add_dashboard_widget", projectId, (id) =>
+    changeOverviewLayout(
+      id,
+      { kind: "add", widget: dashboardItemId(String(dashboardId), String(widgetId)) },
+      webLayoutDeps,
+      null,
+    ),
+  );
+}
+
+/** What the Add widget dialog offers of the project's dashboards. */
+export async function loadOverviewDashboardWidgets(
+  projectId: string,
+): Promise<DashboardWidgetsResult> {
+  return run("overview_dashboard_widgets", projectId, async (id) => {
+    if (!(await webLayoutDeps.dashboardsOn(id))) return failure("dashboards_off");
+    return { ok: true, dashboards: await offeredDashboardWidgets(id) };
+  });
 }
 
 export async function undoOverviewLayout(

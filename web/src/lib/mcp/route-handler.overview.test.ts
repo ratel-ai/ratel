@@ -84,6 +84,7 @@ test("on, the tools are listed, with the widgets, and each has the view", async 
     "topology",
     "health",
     "attention",
+    "alerts",
   ]);
   const { resources } = (await call(true, "resources/list")).result;
   assert.ok(resources.some(({ uri }) => uri === "ui://ratel/overview"));

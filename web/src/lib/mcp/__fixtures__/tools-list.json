@@ -4027,6 +4027,489 @@
     }
   },
   {
+    "name": "list_scorers",
+    "title": "List scorers",
+    "description": "The project's own scorers: each gives every matching trace one stored result. Per scorer: what it checks, which traces it takes, whether it is on, and its pass rate or average of the last 7 days. A task's fix scorers are in get_task. Change one with change_scorer.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List scorers",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_scorer",
+    "title": "Get a scorer",
+    "description": "One scorer: its settings, its results of the last 7 days, 14 days day by day, and its latest results with their traces. Find scorer ids with list_scorers.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "scorerId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A scorer id from list_scorers."
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "scorerId"
+      ]
+    },
+    "annotations": {
+      "title": "Get a scorer",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_alerts",
+    "title": "List alerts",
+    "description": "The project's alert rules: each one's condition, state (ok, alerting, no_data), last value, whether it is paused and whether its stored query needs attention. get_alert has one rule's history; change_alert changes it.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List alerts",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_alert",
+    "title": "Get an alert",
+    "description": "One alert rule: its query, its condition, its state, where its messages go, and its history (each state change with its value, its message and the delivery). Find alert ids with list_alerts.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "alertId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "An alert id from list_alerts."
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "alertId"
+      ]
+    },
+    "annotations": {
+      "title": "Get an alert",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_alert_destinations",
+    "title": "List alert destinations",
+    "description": "Where the project's alerts can be sent: Slack channels and webhooks, and whether the organization's Slack workspace is connected (with the link to connect it when it is not). Never returns a webhook URL. Change them with change_alert_destination.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "List alert destinations",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_slack_channels",
+    "title": "List Slack channels",
+    "description": "The Slack channels the connected workspace offers as alert destinations: the public ones, and the private ones the app is in. Without a connection it returns the link an organization admin opens in a browser to connect Slack; a member gets no link.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "search": {
+          "description": "Part of the channel's name.",
+          "type": "string",
+          "maxLength": 80
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List Slack channels",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "describe_monitoring_schema",
+    "title": "Describe the monitoring schema",
+    "description": "How to write a query object and a dashboard document: their JSON Schemas, the measures with their aggregations and dimensions, the query kinds with one example each, and the charts. Call it before query_monitoring, change_dashboard, import_dashboard or change_alert.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "part": {
+          "default": "all",
+          "description": "catalog: without the two schemas. query or dashboard: one schema alone.",
+          "type": "string",
+          "enum": [
+            "all",
+            "catalog",
+            "query",
+            "dashboard"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "title": "Describe the monitoring schema",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "query_monitoring",
+    "title": "Query monitoring data",
+    "description": "Run one query object, or two to four side by side, over a time range: a metric (grouped or not), a flow, a step_flow (what traces do at each step, or before one node), a funnel, clusters or geography. The result's href opens the same in the web app's Explore page. The same query makes a widget or, as an ungrouped metric, an alert. Read plain spend with get_cost_by_day.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "query": {
+          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "queries": {
+          "description": "In place of query: two to four panels, shown side by side.",
+          "minItems": 2,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "description": "Empty: the query's own name.",
+                "type": "string",
+                "maxLength": 80
+              },
+              "query": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "chart": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "bar",
+                  "number",
+                  "table",
+                  "flow",
+                  "step_flow",
+                  "funnel",
+                  "clusters",
+                  "geography"
+                ],
+                "description": "line, bar, number or table for a metric; else the query's kind."
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "filters": {
+          "description": "On top of the query's own: environments, services, models, agents (lists).",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "chart": {
+          "description": "How a view draws the metric of query. Default: line.",
+          "type": "string",
+          "enum": [
+            "line",
+            "bar",
+            "number",
+            "table"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Query monitoring data",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_dashboards",
+    "title": "List dashboards",
+    "description": "The project's custom dashboards: name, widget count, saved filters and time range, and who changed it last. get_dashboard reads one with its numbers; import_dashboard makes one from a document.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List dashboards",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_dashboard",
+    "title": "Get a dashboard",
+    "description": "One dashboard: its document (the JSON that import_dashboard takes), each widget with its id, its place and its numbers in one line, and the widgets that need attention. query_monitoring reads one widget's numbers in full.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "dashboardId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A dashboard id from list_dashboards."
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "numbers": {
+          "default": true,
+          "description": "false: the document and the widgets alone, without a read of the numbers.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dashboardId"
+      ]
+    },
+    "annotations": {
+      "title": "Get a dashboard",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_location_attributes",
+    "title": "Get the location attributes",
+    "description": "The span attributes a project's traces carry their location in: an IP address, a country, a region and coordinates. change_location_attributes changes them; a geography query (query_monitoring) shows the result.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get the location attributes",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
     "name": "create_skill",
     "title": "Create skill",
     "description": "Add a skill to the project catalog. Subject to the organization's skills-per-project plan limit. Creates as a draft unless status is set to published.",
@@ -5411,6 +5894,833 @@
     },
     "_meta": {
       "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "test_scorer",
+    "title": "Test a scorer",
+    "description": "Run a scorer, a saved one or a draft, on the 5 newest matching traces, and count the matching traces of the last 7 days. It stores no result. A judge calls a model and spends from the daily budget. Save the draft with change_scorer.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "scorerId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A scorer id from list_scorers."
+        },
+        "scorer": {
+          "description": "A draft, instead of scorerId. Example: {\"name\":\"Fast\",\"kind\":\"check\",\"config\":{\"path\":\"duration_ms\",\"op\":\"lte\",\"value\":2000}}.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "check",
+                "judge"
+              ]
+            },
+            "config": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "duration_ms, cost_usd, input_tokens, output_tokens, total_tokens, error, models, tools, agents, mcp_servers, service, environment, or \"attributes.<key>\" of the root span."
+                    },
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "eq",
+                        "ne",
+                        "contains",
+                        "gt",
+                        "gte",
+                        "lt",
+                        "lte",
+                        "exists"
+                      ]
+                    },
+                    "value": {
+                      "description": "Absent for exists only.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "op"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "prompt": {
+                      "type": "string",
+                      "maxLength": 5000,
+                      "description": "A closed question on the trace's input and output."
+                    },
+                    "output": {
+                      "type": "string",
+                      "enum": [
+                        "boolean",
+                        "numeric"
+                      ],
+                      "description": "boolean: pass or fail. numeric: 1 to 5."
+                    }
+                  },
+                  "required": [
+                    "prompt",
+                    "output"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "A check's path, op and value, or a judge's prompt and output."
+            },
+            "filter": {
+              "description": "Which traces: models, tools, services, environments, agents, mcpServers (lists), status (failed or ok), minCostUsd, minTokens.",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "tasks": {
+              "description": "Task ids from list_tasks. Null: every trace.",
+              "anyOf": [
+                {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sampleRate": {
+              "description": "Percent of the matching traces.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "config"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "annotations": {
+      "title": "Test a scorer",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "change_scorer",
+    "title": "Change a scorer",
+    "description": "Create, update, enable, disable or delete a scorer, or attach it to a task or detach it. An update changes only the fields it gives. Delete removes every stored result. Try a draft with test_scorer first; read scorers with list_scorers.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "enable",
+            "disable",
+            "delete",
+            "attach",
+            "detach"
+          ]
+        },
+        "scorerId": {
+          "description": "Every action but create.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "scorer": {
+          "description": "For create (name, kind and config at least) and update. Example: {\"name\":\"Fast\",\"kind\":\"check\",\"config\":{\"path\":\"duration_ms\",\"op\":\"lte\",\"value\":2000}}.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "check",
+                "judge"
+              ]
+            },
+            "config": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "maxLength": 200,
+                      "description": "duration_ms, cost_usd, input_tokens, output_tokens, total_tokens, error, models, tools, agents, mcp_servers, service, environment, or \"attributes.<key>\" of the root span."
+                    },
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "eq",
+                        "ne",
+                        "contains",
+                        "gt",
+                        "gte",
+                        "lt",
+                        "lte",
+                        "exists"
+                      ]
+                    },
+                    "value": {
+                      "description": "Absent for exists only.",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "op"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "prompt": {
+                      "type": "string",
+                      "maxLength": 5000,
+                      "description": "A closed question on the trace's input and output."
+                    },
+                    "output": {
+                      "type": "string",
+                      "enum": [
+                        "boolean",
+                        "numeric"
+                      ],
+                      "description": "boolean: pass or fail. numeric: 1 to 5."
+                    }
+                  },
+                  "required": [
+                    "prompt",
+                    "output"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "A check's path, op and value, or a judge's prompt and output."
+            },
+            "filter": {
+              "description": "Which traces: models, tools, services, environments, agents, mcpServers (lists), status (failed or ok), minCostUsd, minTokens.",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "tasks": {
+              "description": "Task ids from list_tasks. Null: every trace.",
+              "anyOf": [
+                {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sampleRate": {
+              "description": "Percent of the matching traces.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "taskId": {
+          "description": "For attach and detach: from list_tasks.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "narrow": {
+          "description": "For attach: agree that a scorer of every trace becomes one of this task only.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change a scorer",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "change_alert",
+    "title": "Change an alert",
+    "description": "Create, update, pause, resume or delete an alert rule. A rule compares one metric query with a threshold over a window, with a message when it fires and recovers. A trace counts when it ends, a score when it is stored. A count or a sum of nothing is 0; any other aggregation of nothing is no_data. An update changes only the fields it gives. Read rules with list_alerts.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "pause",
+            "resume",
+            "delete"
+          ]
+        },
+        "alertId": {
+          "description": "Every action but create.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "alert": {
+          "description": "For create (all but destinationIds) and update. Example: {\"name\":\"Errors\",\"query\":{…},\"operator\":\"above\",\"threshold\":0.05,\"windowMinutes\":15}.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "query": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {},
+              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}."
+            },
+            "operator": {
+              "type": "string",
+              "enum": [
+                "above",
+                "below"
+              ]
+            },
+            "threshold": {
+              "type": "number",
+              "minimum": 0,
+              "description": "In the measure's unit: a rate from 0 to 1, latency in ms, cost in USD."
+            },
+            "windowMinutes": {
+              "type": "number",
+              "enum": [
+                5,
+                15,
+                60,
+                1440
+              ]
+            },
+            "destinationIds": {
+              "description": "From list_alert_destinations. Empty: it notifies nobody.",
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 36,
+                "maxLength": 36
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change an alert",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "change_alert_destination",
+    "title": "Change an alert destination",
+    "description": "Add a Slack channel or an incoming webhook as an alert destination, send a test message to one, delete one, or disconnect the organization's Slack workspace (admins only). A webhook URL is stored sealed and never read back. Find channels with list_slack_channels.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "add_channel",
+            "add_webhook",
+            "send_test",
+            "delete",
+            "disconnect_slack"
+          ]
+        },
+        "channelId": {
+          "description": "For add_channel: from list_slack_channels, such as C0123456789.",
+          "type": "string",
+          "maxLength": 30
+        },
+        "name": {
+          "description": "For add_webhook.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "webhookUrl": {
+          "description": "For add_webhook: a secret, https://hooks.slack.com/…",
+          "type": "string",
+          "maxLength": 1000
+        },
+        "destinationId": {
+          "description": "For send_test and delete.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change an alert destination",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "change_dashboard",
+    "title": "Change a dashboard",
+    "description": "Create, rename or delete a dashboard, set its filters and time range, or add, change, move or remove a widget. A scorer in a widget's query is its id. Make a whole dashboard in one call with import_dashboard; read widget ids with get_dashboard.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "create_starter",
+            "rename",
+            "delete",
+            "set_filters",
+            "add_widget",
+            "change_widget",
+            "move_widgets",
+            "remove_widget"
+          ]
+        },
+        "dashboardId": {
+          "description": "Every action but the two creates.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "name": {
+          "description": "For create and rename.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "filters": {
+          "description": "For set_filters: replaces them. {} removes them.",
+          "type": "object",
+          "properties": {
+            "environments": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "services": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "models": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "agents": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "range": {
+          "description": "For set_filters. Null: the console's default.",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "7d",
+                "14d",
+                "30d",
+                "3m",
+                "12m"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "widgetId": {
+          "description": "For change_widget and remove_widget.",
+          "type": "string",
+          "maxLength": 100
+        },
+        "widget": {
+          "description": "For add_widget (query and chart) and change_widget. Example: {\"title\":\"Speed\",\"chart\":\"line\",\"query\":{\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}]}}.",
+          "type": "object",
+          "properties": {
+            "title": {
+              "description": "Empty: the query's own name.",
+              "type": "string",
+              "maxLength": 80
+            },
+            "query": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "chart": {
+              "type": "string",
+              "enum": [
+                "line",
+                "bar",
+                "number",
+                "table",
+                "flow",
+                "step_flow",
+                "funnel",
+                "clusters",
+                "geography"
+              ],
+              "description": "line, bar, number or table for a metric; else the query's kind."
+            }
+          },
+          "additionalProperties": false
+        },
+        "layout": {
+          "description": "For add_widget: a place on 12 columns. Absent: the first free place.",
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "y": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 12
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 24
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "w",
+            "h"
+          ],
+          "additionalProperties": false
+        },
+        "layouts": {
+          "description": "For move_widgets: {\"<widgetId>\":{\"x\":0,\"y\":0,\"w\":6,\"h\":6}}.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "y": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "w": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 12
+              },
+              "h": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 24
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change a dashboard",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "import_dashboard",
+    "title": "Import a dashboard",
+    "description": "Make a dashboard, with all of its widgets, from one document: the JSON that get_dashboard returns, or one you write. A scorer is given by its name. A refusal names the widget that is wrong. describe_monitoring_schema has the document's schema.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "document": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {},
+          "description": "A dashboard document. Example: {\"type\":\"ratel.dashboard\",\"version\":1,\"name\":\"Board\",\"widgets\":[{\"chart\":\"number\",\"query\":{\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"trace_count\",\"aggregation\":\"count\"}]},\"layout\":{\"x\":0,\"y\":0,\"w\":6,\"h\":6}}]}."
+        }
+      },
+      "required": [
+        "document"
+      ]
+    },
+    "annotations": {
+      "title": "Import a dashboard",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "change_location_attributes",
+    "title": "Change the location attributes",
+    "description": "Change the span attributes a project's traces are located by (organization admins only). It changes only the fields it gives, for the traces that arrive about a minute later. An address or a coordinate attribute that spans store (gen_ai.*, ratel.*, server.address) is refused. Read them with get_location_attributes.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "address": {
+          "description": "IP address, resolved and never stored.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "country": {
+          "description": "Country code (ISO 3166-1).",
+          "type": "string",
+          "maxLength": 200
+        },
+        "region": {
+          "description": "Region code (ISO 3166-2).",
+          "type": "string",
+          "maxLength": 200
+        },
+        "latitude": {
+          "description": "Latitude in degrees.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "longitude": {
+          "description": "Longitude in degrees.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "reset": {
+          "description": "true: the defaults, but for the fields given.",
+          "type": "boolean"
+        }
+      }
+    },
+    "annotations": {
+      "title": "Change the location attributes",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
     }
   }
 ]

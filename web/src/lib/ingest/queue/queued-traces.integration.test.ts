@@ -69,6 +69,27 @@ test("a gzip body is kept as it came", async () => {
   await deployment.client.close();
 });
 
+test("a body that holds an address is located and stored, and its raw copy is not kept", async () => {
+  const body = loadFixture("vercel-ai")[0];
+  for (const addressed of [false, true]) {
+    let located = 0;
+    const deployment = await queued([body], {
+      traces: {
+        locate: async (projectId, _organization, spans) => {
+          assert.equal(projectId, PROJECT_ID);
+          located += spans.length;
+          return { addressed };
+        },
+      },
+    });
+    assert.ok(located > 0, "before any row is built");
+    const dump = await dumpTables(deployment);
+    assert.ok(dump.otel_spans.length > 0);
+    assert.equal(dump.otlp_raw_exports.length, addressed ? 0 : 1);
+    await deployment.client.close();
+  }
+});
+
 test("a storage failure is retried by the queue, and the client never sees it", async () => {
   const [body] = loadFixture("vercel-ai");
   let failures = 2;

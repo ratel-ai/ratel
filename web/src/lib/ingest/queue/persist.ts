@@ -74,7 +74,13 @@ export async function persistIngestBatch(
   const transport: OtlpTransport = batch.contentType === "application/json" ? "json" : "protobuf";
   const gzipped = isGzipEncoding(batch.contentEncoding) ? batch.body : undefined;
   const firstTry = batch.attempts <= 1;
-  const traces = firstTry ? deps.traces : { ...deps.traces, otlpRawCapture: undefined };
+  // The request located this batch: its body holds the codes, and not what gave them.
+  const { geo } = batch.context;
+  const traces = {
+    ...deps.traces,
+    ...(firstTry && !geo?.addressed ? {} : { otlpRawCapture: undefined }),
+    ...(geo ? { locate: undefined } : {}),
+  };
   const logs = firstTry ? deps.logs : { ...deps.logs, otlpRawCapture: undefined };
 
   if (batch.signal === "traces") {

@@ -63,6 +63,7 @@ export const CONFIG_DEFAULTS = {
   },
   anthropic: {},
   openai: {},
+  slack: { url: "https://slack.com" },
   models: {},
   evalGate: {
     mockModel: false,

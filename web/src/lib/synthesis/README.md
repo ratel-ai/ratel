@@ -5,6 +5,7 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | Path | Holds |
 |---|---|
 | `dashboard.ts` | the date-range presets and deltas the trace views share (the overview model rides along) |
+| [`metrics/`](metrics/README.md) | the metric catalog and its one query function, for dashboards and alerts |
 | `tool-corpus.ts` | the core's `toolCorpus` service (the match-quality corpus loader), lent to the edition at startup |
 | `traces/schema.ts` | `otel_trace_summaries` (with the filter columns `models`, `tools`, `service_name`, `environment` and their GIN indexes, migration `0038`; `agents` and `mcp_servers`, migration `0040`; `root_error`, the root span's own outcome, migration `0041`), `trace_summary_cursor` |
 | `traces/summary-refresh.ts`, `register.ts` | the drain step that folds new spans into one summary row per trace (and `recomputeTraceSummaries`, which a writer that changes stored spans in place calls itself), between the retention-only prunes of expired spans and logs (before it) and of expired summaries (after it) |

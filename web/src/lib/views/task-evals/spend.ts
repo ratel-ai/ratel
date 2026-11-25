@@ -4,6 +4,8 @@ import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
 import { taskEvalRuns, taskTestDrafts } from "@/lib/views/task-evals/schema";
 import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
+// The judge scorers share the same daily budget.
+import "@/lib/views/scorers/spend";
 
 /**
  * The task loop's share of the organization's one daily model budget, read through

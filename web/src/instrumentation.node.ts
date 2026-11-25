@@ -62,6 +62,7 @@ export async function registerNodeInstrumentation(
     { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
     { editionAnalyticsShutdown },
     { serverTracesProcessor },
+    { QuerylessExporter },
   ] = await Promise.all([
     import("@opentelemetry/api-logs"),
     import("@opentelemetry/context-async-hooks"),
@@ -83,6 +84,7 @@ export async function registerNodeInstrumentation(
     import("@/lib/mcp/telemetry/export"),
     import("@/lib/platform/edition-telemetry"),
     import("@/lib/platform/otel/server-traces"),
+    import("@/lib/platform/otel/queryless-exporter"),
   ]);
 
   const resource = resourceFromAttributes(
@@ -104,7 +106,7 @@ export async function registerNodeInstrumentation(
       ...(config
         ? [
             new FilteredSpanProcessor(
-              new BatchSpanProcessor(new OTLPTraceExporter(config.traces), {
+              new BatchSpanProcessor(new QuerylessExporter(new OTLPTraceExporter(config.traces)), {
                 exportTimeoutMillis: EXPORT_TIMEOUT_MS,
               }),
               (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
@@ -245,6 +247,7 @@ export async function assertComposition(): Promise<void> {
       const { createToolCorpus } = await import("@/lib/synthesis/tool-corpus");
       const { createImportedRuns } = await import("@/lib/ledger/imported-runs");
       const { createOnboardingService } = await import("@/lib/console/onboarding/core-service");
+      const { forgetOrganization } = await import("@/lib/views/slack/forget");
       const { getConfig } = await import("@/config");
       composition.connect({
         toolCorpus: createToolCorpus(),
@@ -252,6 +255,7 @@ export async function assertComposition(): Promise<void> {
         onboarding: createOnboardingService(),
         // The value the configuration forces for a core flag, for the edition's own flag reads.
         forcedFlag: (flag) => getConfig().flags[flag],
+        forgetOrganization: (organizationId) => forgetOrganization(organizationId),
       });
     }
     // An edition's MCP tools are checked now, so a bad one stops startup, not a client's call.

@@ -73,21 +73,26 @@ export function SearchInput({
 export function FilterChip({
   field,
   value,
+  title,
   onRemove,
 }: {
   field: string;
   value: ReactNode;
+  /** The whole value, for one that is cut on screen. Never captured text: it becomes an attribute. */
+  title?: string;
   onRemove: () => void;
 }) {
   return (
-    <span className="inline-flex h-7 items-center gap-1 rounded-md border border-line-strong bg-raised pr-0.5 pl-2 text-ui">
-      <span className="text-fg-subtle">{field}</span>
-      <span className="font-medium text-fg">{value}</span>
+    <span className="inline-flex h-7 max-w-full items-center gap-1 rounded-md border border-line-strong bg-raised pr-0.5 pl-2 text-ui">
+      <span className="shrink-0 text-fg-subtle">{field}</span>
+      <span className="max-w-96 truncate font-medium text-fg" title={title}>
+        {value}
+      </span>
       <button
         type="button"
         aria-label={`Remove ${field} filter`}
         onClick={onRemove}
-        className="inline-flex size-6 items-center justify-center rounded text-fg-subtle outline-none hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
+        className="inline-flex size-6 shrink-0 items-center justify-center rounded text-fg-subtle outline-none hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
       >
         <X className="size-3" aria-hidden />
       </button>

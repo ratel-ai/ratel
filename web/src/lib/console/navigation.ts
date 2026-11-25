@@ -85,6 +85,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   focusedConsole = false,
+  customMonitoring = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -104,6 +105,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
+  /** `customMonitoring` on for the shown organization: Scorers, Dashboards, Explore and Alerts under Overview. */
+  customMonitoring?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -381,7 +384,9 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole }) : core),
+    ...(root
+      ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole, customMonitoring })
+      : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -404,7 +409,11 @@ function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  { entityPages, focusedConsole }: { entityPages: boolean; focusedConsole: boolean },
+  {
+    entityPages,
+    focusedConsole,
+    customMonitoring,
+  }: { entityPages: boolean; focusedConsole: boolean; customMonitoring: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -484,7 +493,11 @@ function stageRailNav(
       }
     : classicTraces;
   return [
-    ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
+    ...stage("monitor", "Monitor", [
+      customMonitoring ? withMonitoringPages(root, pick("overview")) : pick("overview"),
+      health,
+      traces,
+    ]),
     ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
@@ -493,6 +506,54 @@ function stageRailNav(
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("settings"),
   ];
+}
+
+/**
+ * Overview with the `customMonitoring` pages. They fold under it because the rail is already at the
+ * 9 items DESIGN.md allows.
+ */
+function withMonitoringPages(root: string, overview: NavItem): NavItem {
+  return {
+    ...overview,
+    children: [
+      {
+        id: "overview-summary",
+        label: "Summary",
+        href: overview.href,
+        icon: "overview",
+        exact: true,
+        activeId: overview.id,
+      },
+      {
+        id: "scorers",
+        label: "Scorers",
+        href: `${root}/scorers`,
+        icon: "overview",
+        keywords: ["scores", "judge", "checks", "evaluation"],
+      },
+      {
+        id: "dashboards",
+        label: "Dashboards",
+        href: `${root}/dashboards`,
+        icon: "overview",
+        keywords: ["dashboards", "widgets", "charts", "metrics"],
+      },
+      {
+        id: "explore",
+        label: "Explore",
+        href: `${root}/explore`,
+        icon: "overview",
+        keywords: ["query", "analyze", "playground", "charts", "funnel", "flow"],
+      },
+      {
+        id: "alerts",
+        label: "Alerts",
+        href: `${root}/alerts`,
+        icon: "overview",
+        keywords: ["threshold", "notifications", "slack", "monitors"],
+      },
+    ],
+  };
 }
 
 export type CommandEntry = {

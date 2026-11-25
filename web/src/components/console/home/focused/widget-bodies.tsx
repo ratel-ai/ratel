@@ -5,6 +5,7 @@ import { ArrowRight, CircleCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AttentionList } from "@/components/console/home/AttentionList";
+import { AlertsWidget } from "@/components/console/home/focused/AlertsWidget";
 import { HealthWidget } from "@/components/console/home/focused/HealthWidget";
 import { focusedStats } from "@/components/console/home/overview-stats";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
@@ -14,7 +15,11 @@ import type {
   FocusedOverviewData,
   MetricsData,
 } from "@/lib/views/home/focused-load";
-import type { OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
+import type { OverviewItemId, OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
+
+/** Every widget of the Overview, and its dashboard widgets. */
+export type WidgetBodies = Readonly<Record<OverviewWidgetId, ReactNode>> &
+  Readonly<Partial<Record<OverviewItemId, ReactNode>>>;
 
 type PeekHref = (peek: string) => string;
 
@@ -25,7 +30,7 @@ export function widgetBodies(
   /** Where a Panel opens from somewhere other than the page (an MCP App view); absent, in place. */
   peekHref?: PeekHref,
 ): Record<OverviewWidgetId, ReactNode> {
-  const { metrics, topology, health, attention, root, rangeParam } = data;
+  const { metrics, topology, health, attention, alerts, root, rangeParam } = data;
   const reload = data.window === 7 ? root : `${root}?range=${rangeParam}`;
   return {
     metrics:
@@ -52,6 +57,12 @@ export function widgetBodies(
     attention: attention && (
       <NeedsAttention attention={attention} reload={reload} peekHref={peekHref} />
     ),
+    alerts:
+      alerts === "failed" ? (
+        <NotLoaded title="The alerts did not load." href={reload} />
+      ) : (
+        alerts && <AlertsWidget alerts={alerts} />
+      ),
   };
 }
 
@@ -123,7 +134,7 @@ function NeedsAttention({
   );
 }
 
-function NotLoaded({ title, href }: { title: string; href: string }) {
+export function NotLoaded({ title, href }: { title: string; href: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-auto p-4 text-center">
       <p className="text-sm text-danger">{title}</p>

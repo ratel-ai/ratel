@@ -1,6 +1,6 @@
 import type { LogError } from "@/lib/platform/logger";
 import type { NewIngestBatch } from "./queries";
-import type { IngestBatchSignal } from "./schema";
+import type { IngestBatchContext, IngestBatchSignal } from "./schema";
 
 /**
  * The request half of the ingest queue (RTL-314): store the accepted body durably and kick a
@@ -19,10 +19,11 @@ export interface OtlpBatchInput {
   projectId: string;
   signal: Extract<IngestBatchSignal, "traces" | "logs">;
   transport: "json" | "protobuf";
-  /** The body as it arrived, before any inflate. */
+  /** The body as it arrived, before any inflate, or a redacted one. */
   received: Uint8Array;
   contentEncoding: string | null;
   appendOnly: boolean;
+  geo?: IngestBatchContext["geo"];
 }
 
 export type EnqueueResult = { ok: true; id: string } | { ok: false };
@@ -43,7 +44,7 @@ export async function enqueueOtlpBatch(
       contentType: input.transport === "json" ? "application/json" : "application/x-protobuf",
       contentEncoding: storedEncoding(input.contentEncoding),
       body: input.received,
-      context: { appendOnly: input.appendOnly },
+      context: { appendOnly: input.appendOnly, ...(input.geo ? { geo: input.geo } : {}) },
     },
     deps,
     observers,

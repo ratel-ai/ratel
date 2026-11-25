@@ -199,6 +199,27 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
+  // Custom monitoring: scorers, alerts and where alerts go (RTL-211). A scorer test may call a
+  // model and spend from the budget, so it mutates.
+  ["list_scorers", false],
+  ["get_scorer", false],
+  ["test_scorer", true],
+  ["change_scorer", true],
+  ["list_alerts", false],
+  ["get_alert", false],
+  ["change_alert", true],
+  ["list_alert_destinations", false],
+  ["change_alert_destination", true],
+  ["list_slack_channels", false],
+  ["get_location_attributes", false],
+  ["change_location_attributes", true],
+  // Custom monitoring: dashboards and the query tool (RTL-212).
+  ["describe_monitoring_schema", false],
+  ["query_monitoring", false],
+  ["list_dashboards", false],
+  ["get_dashboard", false],
+  ["change_dashboard", true],
+  ["import_dashboard", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {
