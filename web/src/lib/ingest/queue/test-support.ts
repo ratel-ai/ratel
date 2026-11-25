@@ -25,15 +25,26 @@ import type { RetryPolicy } from "@/lib/ingest/queue/port/settle";
 import { createPostgresQueue } from "@/lib/ingest/queue/postgres/postgres-queue";
 import { createEnvelopeHandler } from "@/lib/ingest/queue/process";
 import { createQuotaGate } from "@/lib/ingest/queue/quota-gate";
-import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
+import { type ProcessEventsDeps, processEvents } from "@/lib/ingest/trace-events/process-events";
+import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
+import {
+  handleRuntimeEventsRequest,
+  type RuntimeEventsHandlerDeps,
+} from "@/lib/ingest/trace-events/route-handler";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
+import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import type { getDb } from "@/lib/platform/db/client";
 import * as tables from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { touchApiKeyAt } from "@/lib/platform/projects/queries";
 import { apiKeys } from "@/lib/platform/projects/schema";
+import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { enqueueClusterIntentsJob } from "@/lib/readings/intent-engine/jobs";
-import { enqueueFoldIntentGraphJob } from "@/lib/readings/intent-graph/queries";
+import {
+  enqueueFoldIntentGraphJob,
+  type IntentGraphDb,
+  syncIntentGraphLiveFromStatus,
+} from "@/lib/readings/intent-graph/queries";
 
 /** A deployment over PGlite, in direct mode and with a queue, for the queued-ingest tests. */
 
@@ -163,6 +174,7 @@ export function acceptOnto(queue: Pick<EnvelopeQueue, "publish">): AcceptDeps {
 export interface ProcessOverrides {
   traces?: Partial<ProcessTracesDeps>;
   logs?: Partial<ProcessLogsDeps>;
+  events?: Partial<ProcessEventsDeps>;
 }
 
 export function processTracesDeps(
@@ -208,11 +220,54 @@ export function processLogsDeps(
   return { ...logsStoreDeps(deployment), ...observeDeps(deployment), ...over };
 }
 
+function eventsStoreDeps({ db }: Deployment) {
+  return {
+    insertTraceEvents: (projectId, events, _db, options) =>
+      insertTraceEvents(projectId, events, db, {
+        ...options,
+        syncIntentGraphLive: (id, tx) => syncIntentGraphLiveFromStatus(id, tx as IntentGraphDb),
+      }),
+    insertTraceEventRejects: (projectId, rejects) =>
+      insertTraceEventRejects(projectId, rejects, db),
+    ...scheduleDeps(db),
+  } satisfies Partial<ProcessEventsDeps>;
+}
+
+export function eventsRouteDeps(
+  deployment: Deployment,
+  over: Partial<RuntimeEventsHandlerDeps> = {},
+): RuntimeEventsHandlerDeps {
+  const auth = authDeps(deployment);
+  // As the route: with a queue, the consumer stamps the key.
+  if (over.accept) auth.touchApiKey = async () => undefined;
+  return {
+    scope: "ingest:events",
+    resolveProjectFromBearer: (request, scope) => resolveProjectFromBearer(request, scope, auth),
+    getOrganizationByProjectId: auth.getOrganizationByProjectId,
+    rateLimiter: createTokenBucketRateLimiter({ limitPerMinute: 1_000, burst: 1_000 }),
+    ...eventsStoreDeps(deployment),
+    ...over,
+  };
+}
+
+export function processEventsDeps(
+  deployment: Deployment,
+  over: Partial<ProcessEventsDeps> = {},
+): ProcessEventsDeps {
+  const { logError, reportServerException, touchApiKeyAt: touch } = observeDeps(deployment);
+  return {
+    ...eventsStoreDeps(deployment),
+    logError,
+    reportServerException,
+    touchApiKeyAt: touch,
+    ...over,
+  };
+}
+
 export function envelopeHandler(
   deployment: Deployment,
   over: ProcessOverrides = {},
 ): EnvelopeHandler {
-  const unexpected = async (): Promise<never> => assert.fail("no process function for this signal");
   return createEnvelopeHandler({
     findProject: async (projectId) =>
       projectId === PROJECT_ID ? { organization: ORGANIZATION as never } : null,
@@ -220,7 +275,8 @@ export function envelopeHandler(
       processTraces(envelope, context, processTracesDeps(deployment, over.traces)),
     logs: (envelope, context) =>
       processLogs(envelope, context, processLogsDeps(deployment, over.logs)),
-    events: unexpected,
+    events: (envelope, context) =>
+      processEvents(envelope, context, processEventsDeps(deployment, over.events)),
   });
 }
 
@@ -296,6 +352,20 @@ export async function ingestLogs(
   }
 }
 
+export async function ingestEvents(
+  deployment: Deployment,
+  bodies: readonly IngestBody[],
+  accept?: AcceptDeps,
+): Promise<void> {
+  for (const body of bodies) {
+    const response = await handleRuntimeEventsRequest(
+      ingestRequest("events", body),
+      eventsRouteDeps(deployment, accept ? { accept } : {}),
+    );
+    assert.equal(response.status, 202, await response.text());
+  }
+}
+
 /** Columns that differ between two runs of the same input: random ids, and the time of the store. */
 const VOLATILE: Record<string, readonly string[]> = {
   "*": ["received_at", "created_at", "updated_at"],
@@ -306,7 +376,7 @@ const VOLATILE: Record<string, readonly string[]> = {
   otlp_raw_exports: ["id"],
   runtime_catalog_entries: ["first_seen_at"],
   runtime_event_sources: ["first_seen_at", "last_seen_at"],
-  trace_event_rejects: [],
+  trace_event_hits: ["id"],
 };
 
 /** Tables of the queue itself. */
@@ -417,4 +487,55 @@ export function logsBody(key = SECRET_KEY): IngestBody {
     { timeUnixNano: START_NANO, eventName: "app.log", body: { stringValue: "not kept" } },
   ];
   return { ...json({ resourceLogs: [{ scopeLogs: [{ logRecords }] }] }), key };
+}
+
+/** Runtime events of every kind that ingest treats on its own, and two that it rejects. */
+export function eventsBody(at: number, key = SECRET_KEY): IngestBody {
+  const base = { v: 2, ts: at, session_id: "session-1", source_id: "worker-a" };
+  return {
+    ...json({
+      events: [
+        {
+          ...base,
+          event_id: "search-1",
+          type: "search",
+          origin: "agent",
+          query: "weather",
+          top_k: 5,
+          hits: [{ tool_id: "get_weather", score: 1 }],
+          took_ms: 3,
+        },
+        {
+          ...base,
+          event_id: "start-1",
+          type: "invoke_start",
+          tool_id: "get_weather",
+          invocation_id: "i-1",
+          args_size_bytes: 10,
+        },
+        {
+          ...base,
+          event_id: "end-1",
+          type: "invoke_end",
+          tool_id: "get_weather",
+          invocation_id: "i-1",
+          took_ms: 12,
+          result_size_bytes: 20,
+        },
+        {
+          ...base,
+          event_id: "status-1",
+          type: "usage_ranking_status",
+          status: "active",
+          reason: "enabled",
+          rev: 1,
+        },
+        { ...base, event_id: "exp-1", type: "experiment_drop", experiment_id: "e", reason: "late" },
+        { ...base, event_id: "later-1", type: "sdk_added_later", extra: true },
+        { ...base, event_id: "bad-1", type: "search" },
+        { nonsense: true },
+      ],
+    }),
+    key,
+  };
 }

@@ -51,6 +51,20 @@ const defaultResolveDeps: ResolveProjectDeps = {
 };
 
 /**
+ * As {@link resolveProjectFromBearer}, without the last-used stamp: the queue's consumer stamps the
+ * key after it stored the request (ADR-0009).
+ */
+export function resolveProjectFromBearerUnstamped(
+  req: Request,
+  scope: ApiKeyScope,
+): Promise<ResolvedApiKeyProject> {
+  return resolveProjectFromBearer(req, scope, {
+    ...defaultResolveDeps,
+    touchApiKey: async () => undefined,
+  });
+}
+
+/**
  * Resolve the project a bearer key belongs to, if the key carries `scope`, so an
  * `@ratel-ai/cloud` host can act on ITS OWN project with no dashboard session.
  */

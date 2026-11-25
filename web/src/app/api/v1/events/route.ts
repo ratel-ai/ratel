@@ -1,8 +1,12 @@
+import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-handler";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
-import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import {
+  resolveProjectFromBearer,
+  resolveProjectFromBearerUnstamped,
+} from "@/lib/platform/api-key-bearer";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
@@ -31,9 +35,12 @@ const runtimeEventsRateLimiter = createTokenBucketRateLimiter({
 export const POST = withRequestLog(handlePost);
 
 async function handlePost(request: Request): Promise<Response> {
+  // With INGEST_QUEUE set, the request is only accepted (ADR-0009). Undefined in direct mode.
+  const accept = await ingestAccept();
   return handleRuntimeEventsRequest(request, {
     scope: BEARER_ROUTE_SCOPES["POST /api/v1/events"],
-    resolveProjectFromBearer,
+    resolveProjectFromBearer: accept ? resolveProjectFromBearerUnstamped : resolveProjectFromBearer,
+    accept,
     getOrganizationByProjectId,
     insertTraceEvents: (projectId, events, db, options) =>
       insertTraceEvents(projectId, events, db, {
