@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { SandboxView } from "@/components/console/sandboxes/SandboxView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
@@ -11,6 +11,7 @@ import { createDrizzleRunStore } from "@/lib/views/sandboxes/adapters/drizzle-ru
 import { createDrizzleSecretStore } from "@/lib/views/sandboxes/adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "@/lib/views/sandboxes/adapters/drizzle-version-store";
 import { sandboxProviderConfigured } from "@/lib/views/sandboxes/adapters/provider-from-env";
+import { sandboxesEnabledForProject } from "@/lib/views/sandboxes/gate";
 import { loadSandboxPage } from "@/lib/views/sandboxes/page-model";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export const metadata = { title: "Ratel sandbox" };
 /** The project's sandbox: versions, secrets and one run by hand (the `sandboxes` flag). */
 export default async function SandboxPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
+  // Next renders a page next to its layout: the layout's 404 does not stop this data.
+  if (!(await sandboxesEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Ratel sandbox">

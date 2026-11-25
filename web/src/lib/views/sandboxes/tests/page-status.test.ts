@@ -31,14 +31,21 @@ test("with the flag off the page answers 404: nothing streams before the flag is
   assert.match(String(error.digest), /;404$/);
 });
 
+test("with the flag off the page itself loads nothing: Next renders it next to its layout", async () => {
+  delete process.env.FF_SANDBOXES;
+  const { default: Page } = (await import(pathToFileURL(findPage()).href)) as {
+    default: (props: { params: Promise<{ projectId: string }> }) => Promise<ReactNode>;
+  };
+  await assert.rejects(
+    Page({ params: Promise.resolve({ projectId: PROJECT_ID }) }),
+    (error: { digest?: string }) => String(error.digest).endsWith(";404"),
+  );
+});
+
 /** The stream of the page inside its layouts. Rejects when no byte was sent before an error. */
 async function streamPage() {
-  const page = readdirSync(APP, { recursive: true, encoding: "utf8" }).find((file) =>
-    file.endsWith(join("project", "[projectId]", "sandbox", "page.tsx")),
-  );
-  assert.ok(page);
   let tree: ReactNode = PAGE_TEXT;
-  for (const folder of foldersAbove(dirname(join(APP, page)))) {
+  for (const folder of foldersAbove(dirname(findPage()))) {
     if (existsSync(join(folder, "loading.tsx"))) {
       tree = createElement(Suspense, { fallback: "loading" }, tree);
     }
@@ -52,6 +59,14 @@ async function streamPage() {
   return renderToReadableStream(tree, {
     onError: (error) => (error as { digest?: string }).digest,
   });
+}
+
+function findPage(): string {
+  const page = readdirSync(APP, { recursive: true, encoding: "utf8" }).find((file) =>
+    file.endsWith(join("project", "[projectId]", "sandbox", "page.tsx")),
+  );
+  assert.ok(page);
+  return join(APP, page);
 }
 
 /** From the folder of the page up to the app folder. */
