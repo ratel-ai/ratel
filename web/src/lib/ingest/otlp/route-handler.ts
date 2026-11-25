@@ -230,8 +230,8 @@ export async function handleTracesRequest(
     project_id: apiKey.projectId,
     ...(organization ? { org_id: organization.id } : {}),
   });
-  // A metered organization is never rejected here: over an allowance its traces are stored
-  // ingested-only or dropped, and the export still succeeds (no 429).
+  // The event cap does not reject a metered organization: over an allowance its traces are stored
+  // ingested-only or dropped. The edition's span bounds do, once the spans are decoded.
   const meterTraces =
     organization && deps.traceMetering
       ? await deps.traceMetering.isMetered({ organization, projectId: apiKey.projectId })
@@ -353,6 +353,16 @@ export async function handleTracesRequest(
       captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
     },
   );
+  if (!persisted.ok && persisted.stage === "refused") {
+    return rejectTraceRequest(
+      json({ error: "Span limit reached for this trace or this billing period." }, 429),
+      "quota",
+      startedAt,
+      deps,
+      apiKey.projectId,
+      organization?.id,
+    );
+  }
   if (!persisted.ok) {
     return rejectTraceRequest(
       json({ error: "Failed to store telemetry." }, 500),
@@ -415,6 +425,7 @@ export async function handleTracesRequest(
     accepted,
     calls,
     spans: spans.length,
+    ...(persisted.refused ? { refused: persisted.refused } : {}),
   });
 }
 

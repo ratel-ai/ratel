@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { TraceMeteringPort, TraceOutcome } from "@/lib/contracts/trace-metering";
+import type { IngestOutcome, TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
 import type { ApiKey } from "@/lib/platform/projects/schema";
 import { handleTracesRequest, type TracesHandlerDeps } from "./route-handler";
@@ -66,16 +66,21 @@ function body(traceIds: readonly string[]): string {
 }
 
 function setup(
-  over: Partial<TracesHandlerDeps> & { outcomes?: Record<string, TraceOutcome>; on?: boolean } = {},
+  over: Partial<TracesHandlerDeps> & {
+    outcomes?: Record<string, IngestOutcome>;
+    on?: boolean;
+  } = {},
 ) {
   const { outcomes = {}, on = true, ...rest } = over;
   const asked: string[][] = [];
+  const counted: number[][] = [];
   const errors: string[] = [];
   const stored = { calls: [] as string[], events: [] as string[], spans: [] as string[] };
   const traceMetering: TraceMeteringPort = {
     isMetered: async () => on,
-    meterTraceBatch: async (_scope, traceIds) => {
-      asked.push([...traceIds]);
+    meterTraceBatch: async (_scope, spansByTrace) => {
+      asked.push([...spansByTrace.keys()]);
+      counted.push([...spansByTrace.values()]);
       return new Map(Object.entries(outcomes));
     },
   };
@@ -118,7 +123,7 @@ function setup(
       }),
       deps,
     );
-  return { send, asked, errors, stored };
+  return { send, asked, counted, errors, stored };
 }
 
 const ids = (list: readonly string[]) => [...new Set(list)].sort();
@@ -188,4 +193,20 @@ test("a span without a trace id cannot be counted, so a metered organization sto
   const unmetered = setup({ on: false });
   await unmetered.send([""]);
   assert.equal(unmetered.stored.calls.length, 1);
+});
+
+test("a refused trace stores nothing: 429 when the whole export is refused, else the rest is stored", async () => {
+  const refused = setup({ outcomes: { [DROPPED]: "refused" } });
+  assert.equal((await refused.send([DROPPED])).status, 429);
+  assert.deepEqual(refused.stored, { calls: [], events: [], spans: [] });
+  assert.equal((await refused.send([DROPPED, DROPPED])).status, 429);
+  // The port counts spans, so one trace id cannot hide how many it brings.
+  assert.deepEqual(refused.counted, [[3], [6]]);
+
+  const mixed = setup({ outcomes: { [DROPPED]: "refused" } });
+  const response = await mixed.send([ANALYZED, DROPPED]);
+  assert.equal(response.status, 202);
+  assert.equal(response.headers.get("x-ratel-refused"), "3");
+  assert.deepEqual(ids(mixed.stored.spans), [ANALYZED]);
+  assert.deepEqual(ids(mixed.stored.calls), [ANALYZED]);
 });

@@ -9,17 +9,25 @@ import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 const SCOPE = { organization: { id: "org-1" }, projectId: "proj-1" };
 
 describe("trace metering default", () => {
-  it("meters nothing and analyzes every trace", async () => {
+  it("meters nothing, bounds no span and analyzes every trace", async () => {
     const { traceMetering } = createComposition("oss");
     assert.equal(await traceMetering.isMetered(SCOPE), false);
     assert.deepEqual(
-      [...(await traceMetering.meterTraceBatch(SCOPE, ["a", "b"]))],
+      [
+        ...(await traceMetering.meterTraceBatch(
+          SCOPE,
+          new Map([
+            ["a", 1],
+            ["b", 1_000_000_000],
+          ]),
+        )),
+      ],
       [
         ["a", "analyzed"],
         ["b", "analyzed"],
       ],
     );
-    assert.equal((await traceMetering.meterTraceBatch(SCOPE, [])).size, 0);
+    assert.equal((await traceMetering.meterTraceBatch(SCOPE, new Map())).size, 0);
   });
 });
 

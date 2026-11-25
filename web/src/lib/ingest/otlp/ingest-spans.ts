@@ -117,11 +117,12 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
 
 /**
  * `rows`: the model call rows stored. `events`: the LLM-call rows failed.
- * `derived`: a batch of only ledger rows failed. Either way, retry.
+ * `derived`: a batch of only ledger rows failed. Either way, retry. `refused`: every span is over
+ * a bound of the edition. `refused` of a stored batch: the spans that were.
  */
 export type PersistSpansResult =
-  | { ok: true; accepted: number; calls: number; rows: EventWithMetric[] }
-  | { ok: false; stage: "events" | "derived" };
+  | { ok: true; accepted: number; calls: number; rows: EventWithMetric[]; refused?: number }
+  | { ok: false; stage: "events" | "derived" | "refused" };
 
 export async function persistDecodedSpans(
   spans: DecodedSpan[],
@@ -158,18 +159,25 @@ export async function persistDecodedSpans(
   // batch is analyzed. A span without a trace id is in no trace, so it is never counted: OTLP calls
   // it invalid, and it is not stored.
   const skipAnalysis = new Set<string>();
+  let refused = 0;
   if (meterTraces && organization && deps.traceMetering) {
     spans = spans.filter((span) => span.traceId.length > 0);
     if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
     try {
       const outcomes = await deps.traceMetering.meterTraceBatch(
         { organization, projectId },
-        distinctTraceIds(spans),
+        spansByTrace(spans),
       );
       for (const [traceId, outcome] of outcomes)
         if (outcome !== "analyzed") skipAnalysis.add(traceId);
-      spans = spans.filter((span) => outcomes.get(span.traceId) !== "dropped");
-      if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
+      refused = spans.filter((span) => outcomes.get(span.traceId) === "refused").length;
+      spans = spans.filter(
+        (span) => !["dropped", "refused"].includes(outcomes.get(span.traceId) ?? ""),
+      );
+      if (spans.length === 0) {
+        if (refused > 0) return { ok: false, stage: "refused" };
+        return { ok: true, accepted: 0, calls: 0, rows: [] };
+      }
     } catch (err) {
       logError("trace meter write failed", err, {
         organization_id: organization.id,
@@ -346,12 +354,14 @@ export async function persistDecodedSpans(
 
   await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
 
-  return { ok: true, accepted, calls: calls.length, rows };
+  return { ok: true, accepted, calls: calls.length, rows, ...(refused > 0 ? { refused } : {}) };
 }
 
-/** The batch's trace ids, each once, in first-seen order. */
-function distinctTraceIds(spans: readonly DecodedSpan[]): string[] {
-  return [...new Set(spans.map((span) => span.traceId))];
+/** How many spans the batch brings for each trace, in first-seen order. */
+function spansByTrace(spans: readonly DecodedSpan[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { traceId } of spans) counts.set(traceId, (counts.get(traceId) ?? 0) + 1);
+  return counts;
 }
 
 /**

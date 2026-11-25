@@ -5,7 +5,7 @@ export const ossTraceMetering: TraceMeteringPort = {
   async isMetered() {
     return false;
   },
-  async meterTraceBatch(_scope, traceIds) {
-    return new Map(traceIds.map((id) => [id, "analyzed"]));
+  async meterTraceBatch(_scope, spansByTrace) {
+    return new Map([...spansByTrace.keys()].map((id) => [id, "analyzed"]));
   },
 };
