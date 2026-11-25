@@ -201,8 +201,12 @@ function toCatalogDefinition(
 }
 
 function occurredAt(record: DecodedLogRecord, receivedAt: Date | undefined): Date {
-  const unixMs = validTime(record.timeUnixMs) ?? validTime(record.observedTimeUnixMs);
-  return unixMs === null ? (receivedAt ?? new Date()) : new Date(unixMs);
+  const unixMs =
+    validTime(record.timeUnixMs) ??
+    validTime(record.observedTimeUnixMs) ??
+    receivedAt?.getTime() ??
+    Date.now();
+  return new Date(unixMs);
 }
 
 function validTime(value: number): number | null {
