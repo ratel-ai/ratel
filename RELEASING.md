@@ -62,6 +62,10 @@ and pushes `docker.io/ratelai/ratel-demo` with the same tags:
 | A push to `main` | `edge` |
 | A manual run (`gh workflow run image.yml -f tag=<tag>`) | `<tag>` only |
 
+The merge of a release PR cancels the older `edge` runs that are still in progress, because its own
+`edge` run replaces them. An ordinary push to `main` waits for the run in progress. Nothing cancels
+a release build, a tag build, a manual run or `release-please.yml`.
+
 Each image has OCI labels and annotations (source, revision, version, created, licenses), a
 provenance attestation (`mode=max`) and an SBOM. Read them with
 `docker buildx imagetools inspect ratelai/ratel:<tag> --format '{{ json .Provenance }}'` (or
