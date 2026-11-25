@@ -100,6 +100,7 @@ export async function loadPayloadCalls(
           .from(events)
           .where(
             and(
+              eq(events.projectId, projectId),
               inTrace,
               inArray(
                 events.id,
