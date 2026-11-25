@@ -24,7 +24,11 @@ import {
 } from "@/lib/readings/trace-signals/signals/integration-support";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
-import { changeOverviewLayout, readOverviewLayout } from "@/lib/views/overview-layout/actions";
+import {
+  changeOverviewLayout,
+  readOverviewHistory,
+  readOverviewLayout,
+} from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
 import {
   DEFAULT_LAYOUT,
@@ -33,7 +37,7 @@ import {
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
 import { webLayoutReader } from "@/lib/views/overview-layout/readers";
-import { overviewLayouts } from "@/lib/views/overview-layout/schema";
+import { overviewLayoutChanges, overviewLayouts } from "@/lib/views/overview-layout/schema";
 
 /** The Overview over MCP, against a database: one person's layout and one set of numbers with the web. */
 
@@ -201,6 +205,119 @@ test("a layout this build cannot read is refused a change, and reset replaces it
   assert.deepEqual(await store().read(key), { layout: { version: 2 }, entries: [] });
   assert.ok((await call("change_overview_layout", { change: "reset" })).ok);
   assert.ok((await call("change_overview_layout", remove)).ok);
+});
+
+test("an agent lists the changes, undoes and restores, and the web shows the result", async () => {
+  const { call, web } = await setup();
+  const none = dataOf(await call("list_overview_changes"));
+  assert.deepEqual([none.changes, none.layout.undoTakesBack], [[], null]);
+  await changeOverviewLayout(PROJECT_ID, { kind: "remove", widget: "metrics" }, web, null);
+  await call("change_overview_layout", { change: "remove", widget: "topology" });
+  const listed = dataOf(await call("list_overview_changes"));
+  assert.deepEqual(
+    listed.changes.map(
+      // biome-ignore lint/suspicious/noExplicitAny: a tool's JSON answer.
+      ({ id, what, source, client, author, current }: any) => [
+        id,
+        what,
+        source,
+        client,
+        author.personId,
+        current,
+      ],
+    ),
+    [
+      [2, "Removed Agents and MCP servers", "mcp", "claude-code", "user_ana", true],
+      [1, "Removed Metrics", "web", undefined, "user_ana", false],
+    ],
+  );
+  assert.equal(listed.layout.undoTakesBack, "Removed Agents and MCP servers");
+  assert.ok(listed.changes[0].at && listed.changes[0].layout.widgets.length === 4);
+  assert.equal(dataOf(await call("get_overview")).layout.revision, listed.layout.revision);
+
+  const { revision } = listed.layout;
+  const undone = dataOf(await call("undo_overview_change", { revision }));
+  assert.equal(undone.changed, "Took back: Removed Agents and MCP servers");
+  const stale = ["conflict", "stale"];
+  assert.deepEqual(refusal(await call("undo_overview_change", { revision })), stale);
+  assert.deepEqual(
+    refusal(await call("restore_overview_layout", { changeId: 2, revision })),
+    stale,
+  );
+  assert.deepEqual(
+    refusal(await call("change_overview_layout", { change: "reset", revision })),
+    stale,
+  );
+  const restored = dataOf(
+    await call("restore_overview_layout", { changeId: 2, revision: undone.layout.revision }),
+  );
+  const onWeb = await readOverviewHistory(PROJECT_ID, web);
+  assert.ok(onWeb.ok);
+  assert.equal(onWeb.snapshot.revision, restored.layout.revision);
+  assert.deepEqual(
+    onWeb.entries.map(({ kind, source }) => [kind, source.kind]),
+    [
+      ["restore", "mcp"],
+      ["undo", "mcp"],
+      ["change", "mcp"],
+      ["change", "web"],
+    ],
+  );
+  assert.deepEqual(
+    onWeb.snapshot.layout
+      .filter(({ removed }) => removed)
+      .map(({ id }) => id)
+      .toSorted(),
+    ["metrics", "topology"],
+  );
+  // And a page that was open before them is refused.
+  const page = await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, web, revision);
+  assert.ok(!page.ok && page.reason === "stale");
+  assert.equal(
+    refusal(
+      await call("restore_overview_layout", { changeId: 99, revision: restored.layout.revision }),
+    )?.[0],
+    "invalid_params",
+  );
+});
+
+test("the history, undo and restore are refused to an API key, a support session and a stranger", async () => {
+  let restricted = false;
+  const { call } = await setup({ restricted: async () => restricted });
+  await call("change_overview_layout", { change: "remove", widget: "metrics" });
+  const { revision } = dataOf(await call("list_overview_changes")).layout;
+  const calls = [
+    ["list_overview_changes", {}],
+    ["undo_overview_change", { revision }],
+    ["restore_overview_layout", { changeId: 1, revision }],
+  ] as const;
+  const stranger: McpAuthContext = { ...(ANA as { kind: "oauth" }), memberships: [] } as never;
+  for (const [id, params] of calls) {
+    assert.deepEqual(refusal(await call(id, params, KEY)), ["forbidden", "api_key"], id);
+    assert.equal(refusal(await call(id, params, stranger))?.[0], "not_found", id);
+    restricted = true;
+    assert.deepEqual(refusal(await call(id, params)), ["forbidden", "support_session"], id);
+    restricted = false;
+  }
+  assert.deepEqual(dataOf(await call("list_overview_changes", {}, person("user_ben"))).changes, []);
+  assert.equal(dataOf(await call("list_overview_changes")).changes.length, 1);
+});
+
+test("the history's own view is drawn from the same entries, and undo draws the Overview", async () => {
+  const { call } = await setup();
+  await call("change_overview_layout", { change: "remove", widget: "metrics" });
+  const listed = await call("list_overview_changes", {}, ANA, true);
+  assert.ok(listed.ok);
+  // biome-ignore lint/suspicious/noExplicitAny: the view's JSON.
+  const view = listed.view as any;
+  assert.equal(view.kind, "overview-history");
+  assert.deepEqual(
+    view.entries.map(({ summary }: { summary: string }) => summary),
+    dataOf(listed).changes.map(({ what }: { what: string }) => what),
+  );
+  const { revision } = dataOf(listed).layout;
+  const undone = await call("undo_overview_change", { revision }, ANA, true);
+  assert.ok(undone.ok && undone.view?.kind === "overview");
 });
 
 test("a low-confidence score says so to an agent too", async () => {
@@ -476,19 +593,24 @@ test("the flag off is off with the experimental features on", async () => {
 test("the flag off: neither operation is listed, and a project whose organization has it off refuses", async () => {
   const ids = (focusedConsole: boolean) =>
     assembleOperations({ focusedConsole }).map(({ id }) => id);
-  for (const id of ["get_overview", "change_overview_layout"]) {
+  const calls = [
+    ["get_overview", {}],
+    ["change_overview_layout", { change: "reset" }],
+    ["list_overview_changes", {}],
+    ["undo_overview_change", { revision: "0.0" }],
+    ["restore_overview_layout", { changeId: 1, revision: "0.0" }],
+  ] as const;
+  for (const [id] of calls) {
     assert.ok(!ids(false).includes(id));
     assert.ok(ids(true).includes(id));
   }
   assert.ok(ids(false).includes("get_project_overview"), "it stays");
-  assert.equal(agentToolCount({ focusedConsole: true }), agentToolCount() + 2);
+  assert.equal(agentToolCount({ focusedConsole: true }), agentToolCount() + calls.length);
 
-  const { call } = await setup({ focusedConsole: async () => false });
-  for (const [id, params] of [
-    ["get_overview", {}],
-    ["change_overview_layout", { change: "reset" }],
-  ] as const)
+  const { call, db } = await setup({ focusedConsole: async () => false });
+  for (const [id, params] of calls)
     assert.deepEqual(refusal(await call(id, params)), ["forbidden", "focused_console_off"], id);
+  assert.deepEqual(await db.select().from(overviewLayoutChanges), [], "no row");
 });
 
 test("a connection lists the tools when one of its organizations has the flag", async () => {

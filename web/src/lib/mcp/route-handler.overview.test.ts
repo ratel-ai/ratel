@@ -14,17 +14,24 @@ const auth: McpAuthContext = {
   scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
+const TOOLS = [
+  "get_overview",
+  "change_overview_layout",
+  "list_overview_changes",
+  "undo_overview_change",
+  "restore_overview_layout",
+];
 const HTML = "<!doctype html><html><head></head><body></body></html>";
 const catalog = buildMcpAppCatalog(
   [
     {
       view: "overview",
       html: HTML,
-      bindings: [{ tool: "get_overview" }, { tool: "change_overview_layout" }],
+      bindings: TOOLS.map((tool) => ({ tool })),
     },
     { view: "health", html: HTML, bindings: [{ tool: "get_agent_health" }] },
   ],
-  new Set(["get_overview", "change_overview_layout", "get_agent_health"]),
+  new Set([...TOOLS, "get_agent_health"]),
 );
 
 async function call(on: boolean, method: string, params: unknown = {}) {
@@ -62,15 +69,16 @@ async function call(on: boolean, method: string, params: unknown = {}) {
   };
 }
 
-test("on, the two tools are listed, with the widgets, and both have the view", async () => {
+test("on, the tools are listed, with the widgets, and each has the view", async () => {
   const { tools } = (await call(true, "tools/list")).result;
   const named = (name: string) => tools.find((tool) => tool.name === name);
-  assert.deepEqual(named("get_overview")?._meta?.ui, { resourceUri: "ui://ratel/overview" });
+  for (const tool of TOOLS)
+    assert.deepEqual(named(tool)?._meta?.ui, { resourceUri: "ui://ratel/overview" }, tool);
+  assert.equal(named("list_overview_changes")?.annotations.readOnlyHint, true);
+  for (const tool of ["undo_overview_change", "restore_overview_layout"])
+    assert.equal(named(tool)?.annotations.readOnlyHint, false);
   assert.equal(named("get_overview")?.annotations.readOnlyHint, true);
   assert.equal(named("change_overview_layout")?.annotations.readOnlyHint, false);
-  assert.deepEqual(named("change_overview_layout")?._meta?.ui, {
-    resourceUri: "ui://ratel/overview",
-  });
   assert.deepEqual(named("get_overview")?.inputSchema.properties.widget.enum, [
     "metrics",
     "topology",
@@ -81,17 +89,15 @@ test("on, the two tools are listed, with the widgets, and both have the view", a
   assert.ok(resources.some(({ uri }) => uri === "ui://ratel/overview"));
 });
 
-test("off, neither tool nor the view exists", async () => {
+test("off, no tool and no view of it exists", async () => {
   const { tools } = (await call(false, "tools/list")).result;
-  assert.ok(
-    !tools.some(({ name }) => name === "get_overview" || name === "change_overview_layout"),
-  );
+  assert.ok(!tools.some(({ name }) => TOOLS.includes(name)));
   const { resources } = (await call(false, "resources/list")).result;
   assert.deepEqual(
     resources.map(({ uri }) => uri),
     ["ui://ratel/health"],
   );
-  for (const name of ["get_overview", "change_overview_layout"]) {
+  for (const name of TOOLS) {
     const reply = await call(false, "tools/call", { name, arguments: { change: "reset" } });
     assert.ok(reply.error || reply.result.isError, name);
   }

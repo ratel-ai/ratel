@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
+import { projectRoot } from "@/lib/console/navigation";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
@@ -23,10 +24,16 @@ import {
 import {
   changeOverviewLayout,
   LAYOUT_REFUSALS,
+  type LayoutChangeResult,
   type LayoutDeps,
+  type LayoutHistoryEntry,
   type LayoutReader,
-  type LayoutRefusal,
+  type LayoutRefused,
+  type LayoutSnapshot,
+  readOverviewHistory,
   readOverviewLayout,
+  restoreOverviewLayout,
+  undoOverviewChange,
 } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
 import {
@@ -46,8 +53,10 @@ import type { Topology } from "@/lib/views/project-entities/topology";
 /**
  * The recap Overview over MCP (`focusedConsole`): `get_overview` reads what the person sees on the
  * web, through the page's own loader and layout, or one widget of it through the same loader, and
- * `change_overview_layout` arranges it through the web's own action. Both draw the overview view.
- * A later widget needs an entry in `WIDGET_DATA`, and no operation. With the flag off neither is
+ * `change_overview_layout` arranges it through the web's own action. `list_overview_changes`,
+ * `undo_overview_change` and `restore_overview_layout` are the web's History, Undo and Restore. All
+ * draw the overview view.
+ * A later widget needs an entry in `WIDGET_DATA`, and no operation. With the flag off none is
  * listed (`operations/index.ts`), and a caller that reaches a project whose organization has it off
  * is refused.
  */
@@ -97,6 +106,11 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
 };
 
 const CHANGES = ["move", "resize", "add", "remove", "reset"] as const;
+const REVISION = z
+  .string()
+  .describe(
+    "The revision of the layout that you read. If the layout changed after that, the call changes nothing.",
+  );
 const cell = (low: number, high: number) => z.number().int().min(low).max(high).optional();
 
 export function overviewOperations(
@@ -138,9 +152,10 @@ export function overviewOperations(
           params.widget === undefined
             ? null
             : requireWidget(params.widget, await deps.offeredWidgets(project.id));
-        const layout = widget
-          ? onlyWidget(widget)
-          : await wholeLayout(project.id, layoutDeps(deps, ctx.auth));
+        const saved = widget
+          ? { layout: onlyWidget(widget), revision: "", undo: null }
+          : await savedLayout(project.id, layoutDeps(deps, ctx.auth));
+        const { layout } = saved;
         const data = await load(deps, { project, organization }, layout, params.range);
         const view = ctx.forView
           ? { view: await overviewView(deps, organization, data, widget) }
@@ -163,7 +178,7 @@ export function overviewOperations(
                 ctx.auth.kind === "api-key" || (await deps.restricted())
                   ? ("default" as const)
                   : ("person" as const),
-              ...layoutView(layout),
+              ...snapshotView(saved),
             },
             ...Object.fromEntries(layout.map(({ id }) => [id, deps.widgetData[id](data)])),
           },
@@ -173,6 +188,48 @@ export function overviewOperations(
               }
             : {}),
           ...view,
+        };
+      },
+    }),
+    defineOperation({
+      id: "list_overview_changes",
+      domain: "observability",
+      title: "List the changes of the Overview layout",
+      description:
+        "Lists the last 25 changes of the signed-in person's Overview layout in one project, newest first. Each change has an ID, its time, where the person made it (web or an MCP client), what changed and the layout after it. The result has the revision that undo_overview_change and restore_overview_layout need. A person reads only their own changes. An API key has no changes.",
+      keywords: ["overview history", "layout history", "undo", "restore layout", "who changed"],
+      scope: "project",
+      mutates: false,
+      params: z.object({ ...projectScoped }),
+      async execute(ctx) {
+        const { project } = await requireOverview(deps, ctx.projectId);
+        const history = await readOverviewHistory(project.id, layoutDeps(deps, ctx.auth));
+        if (!history.ok) throw refused(history);
+        const { entries, snapshot } = history;
+        return {
+          data: {
+            project: { id: project.id, name: project.name },
+            href: projectRoot(project.id),
+            layout: snapshotView(snapshot),
+            changes: entries.map(changeView),
+          },
+          ...(ctx.forView
+            ? {
+                view: {
+                  kind: "overview-history",
+                  project: { id: project.id, name: project.name },
+                  root: projectRoot(project.id),
+                  now: deps.now().toISOString(),
+                  entries: entries.map(({ id, source, summary, current, at }) => ({
+                    id,
+                    source,
+                    summary,
+                    current,
+                    at: at.toISOString(),
+                  })),
+                },
+              }
+            : {}),
         };
       },
     }),
@@ -213,36 +270,71 @@ export function overviewWriteOperations(
         ),
         w: cell(1, 12).describe("The width in columns. Each widget has a minimum width."),
         h: cell(1, 24).describe("The height in rows. Each widget has a minimum height."),
+        revision: z
+          .string()
+          .optional()
+          .describe(
+            "The revision of the layout that you read. If the layout changed after that, the call changes nothing. Without it, the change applies to the latest layout.",
+          ),
       }),
       async execute(ctx, params) {
-        const { project, organization } = await requireOverview(deps, ctx.projectId);
+        const overview = await requireOverview(deps, ctx.projectId);
         const changed = await changeOverviewLayout(
-          project.id,
+          overview.project.id,
           layoutChange(params),
           layoutDeps(deps, ctx.auth),
-          null,
+          params.revision ?? null,
         );
-        if (!changed.ok) throw refused(changed.reason);
-        const { layout } = changed;
-        // The layout is saved: a drawing that fails never makes the change look refused.
-        const view = ctx.forView
-          ? await loadOrFallback({
-              operation: "overview_mcp_changed_view",
-              distinctId: `project:${project.id}`,
-              fallback: null,
-              load: async () =>
-                overviewView(
-                  deps,
-                  organization,
-                  await load(deps, { project, organization }, layout, "7d"),
-                ),
-            })
-          : null;
-        return {
-          data: { layout: layoutView(layout) },
-          hint: "The web page shows this layout when the person loads the Overview again.",
-          ...(view ? { view } : {}),
-        };
+        return changedResult(deps, overview, changed, ctx.forView);
+      },
+    }),
+    defineOperation({
+      id: "undo_overview_change",
+      domain: "writes",
+      title: "Undo the latest change of the Overview layout",
+      description:
+        "Takes back the latest change of the signed-in person's Overview layout in one project that is not taken back yet. Call it again to go further back. The undo is a new change in the history, so nothing is lost. Call list_overview_changes or get_overview first to read the revision. An API key cannot undo.",
+      keywords: ["undo layout", "take back", "revert overview"],
+      scope: "project",
+      mutates: true,
+      params: z.object({ ...projectScoped, revision: REVISION }),
+      async execute(ctx, params) {
+        const overview = await requireOverview(deps, ctx.projectId);
+        const changed = await undoOverviewChange(
+          overview.project.id,
+          layoutDeps(deps, ctx.auth),
+          params.revision,
+        );
+        return changedResult(deps, overview, changed, ctx.forView);
+      },
+    }),
+    defineOperation({
+      id: "restore_overview_layout",
+      domain: "writes",
+      title: "Restore an earlier Overview layout",
+      description:
+        "Restores the signed-in person's Overview layout in one project to the layout after one change in the history. The restore is a new change in the history, so nothing is lost. Call list_overview_changes first to read the change ID and the revision. An API key cannot restore.",
+      keywords: ["restore layout", "go back", "earlier layout", "revert overview"],
+      scope: "project",
+      mutates: true,
+      params: z.object({
+        ...projectScoped,
+        changeId: z
+          .number()
+          .int()
+          .min(1)
+          .describe("The ID of the change, from list_overview_changes."),
+        revision: REVISION,
+      }),
+      async execute(ctx, params) {
+        const overview = await requireOverview(deps, ctx.projectId);
+        const changed = await restoreOverviewLayout(
+          overview.project.id,
+          params.changeId,
+          layoutDeps(deps, ctx.auth),
+          params.revision,
+        );
+        return changedResult(deps, overview, changed, ctx.forView);
       },
     }),
   ];
@@ -311,10 +403,10 @@ function requireWidget(id: string, offered: OfferedWidgets): OverviewWidget {
   throw invalidParams(message, [{ path: "widget", message: "Not a widget of this project." }]);
 }
 
-async function wholeLayout(projectId: string, deps: LayoutDeps): Promise<OverviewLayout> {
+async function savedLayout(projectId: string, deps: LayoutDeps): Promise<LayoutSnapshot> {
   const read = await readOverviewLayout(projectId, deps);
-  if (!read.ok) throw refused(read.reason);
-  return read.layout;
+  if (!read.ok) throw refused(read);
+  return read;
 }
 
 const MAX_CLIENT_NAME = 60;
@@ -357,10 +449,52 @@ async function overviewView(
   };
 }
 
-function refused(reason: LayoutRefusal): McpOperationError {
+function refused({ reason }: LayoutRefused): McpOperationError {
   if (reason === "not_found") return notFound("project");
   if (reason === "invalid") return invalidParams(LAYOUT_REFUSALS.invalid);
-  return new McpOperationError("forbidden", LAYOUT_REFUSALS[reason], { reason });
+  if (reason === "not_kept")
+    return invalidParams(LAYOUT_REFUSALS.not_kept, [
+      { path: "changeId", message: "Not a change in the history." },
+    ]);
+  if (reason === "stale")
+    return new McpOperationError(
+      "conflict",
+      `${LAYOUT_REFUSALS.stale} Call list_overview_changes to read the latest changes and the revision.`,
+      { reason },
+    );
+  const code = reason === "nothing_to_undo" ? "conflict" : "forbidden";
+  return new McpOperationError(code, LAYOUT_REFUSALS[reason], { reason });
+}
+
+/** What a change, an undo and a restore answer. */
+async function changedResult(
+  deps: OverviewOperationDeps,
+  overview: Awaited<ReturnType<typeof requireOverview>>,
+  changed: LayoutChangeResult,
+  forView: boolean | undefined,
+) {
+  if (!changed.ok) throw refused(changed);
+  // The layout is saved: a drawing that fails never makes the change look refused.
+  const view = forView
+    ? await loadOrFallback({
+        operation: "overview_mcp_changed_view",
+        distinctId: `project:${overview.project.id}`,
+        fallback: null,
+        load: async () =>
+          overviewView(
+            deps,
+            overview.organization,
+            await load(deps, overview, changed.layout, "7d"),
+          ),
+      })
+    : null;
+  return {
+    data: { changed: changed.changed, layout: snapshotView(changed) },
+    hint: changed.changed
+      ? "The web page shows this layout when the person loads the Overview again."
+      : "The layout was that one already. Nothing changed.",
+    ...(view ? { view } : {}),
+  };
 }
 
 interface ChangeParams {
@@ -401,6 +535,25 @@ function pageData(data: FocusedOverviewData) {
     range: data.rangeParam,
     lastEventAt: data.lastEventAt?.toISOString() ?? null,
     hasTelemetry: data.hasTelemetry,
+  };
+}
+
+function snapshotView({ layout, revision, undo }: LayoutSnapshot) {
+  return { ...layoutView(layout), revision, undoTakesBack: undo };
+}
+
+function changeView(entry: LayoutHistoryEntry) {
+  const { id, kind, personId, source, at, summary, layout, current } = entry;
+  return {
+    id,
+    kind,
+    what: summary,
+    at: at.toISOString(),
+    author: { personId },
+    source: source.kind,
+    ...(source.kind === "mcp" ? { client: source.client } : {}),
+    current,
+    layout: layout && layoutView(layout),
   };
 }
 
