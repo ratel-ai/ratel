@@ -212,6 +212,15 @@ const CONFIG_SCHEMA = schema({
     projectId: optional("RATEL_SELF_TELEMETRY_PROJECT_ID", configured),
   },
   ingest: {
+    /**
+     * Where accept puts a request (ADR-0009). `direct`: nowhere, the request stores it. `postgres`
+     * or `kafka`: that queue, which the worker consumes.
+     */
+    queue: setting(
+      "INGEST_QUEUE",
+      z.preprocess(lower, z.enum(["direct", "postgres", "kafka"])),
+      D.ingest.queue,
+    ),
     publishableKeyLimitPerMinute: setting(
       "RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE",
       positiveInt,

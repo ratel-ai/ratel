@@ -36,6 +36,7 @@ test("defaults when nothing is set", () => {
   assert.equal(config.database.poolMax, 10);
   assert.equal(config.database.readTimeoutMs, 15_000);
   assert.equal(config.jobs.runningPerProject, 1);
+  assert.equal(config.ingest.queue, "direct");
   assert.equal(config.traceTurns.stepCap, 40);
   assert.equal(config.traceSignals.floors.magnet.minTop3Low, 0.05);
   assert.equal(config.experimentalFeatures, false);
@@ -54,6 +55,17 @@ test("env only", () => {
   assert.equal(config.database.poolMax, 25);
   assert.equal(config.app.role, "worker");
   assert.equal(config.traceSignals.floors.magnet.minImpressions, 80);
+});
+
+test("INGEST_QUEUE names a known queue, from the environment or the file", () => {
+  const queue = (value: string) => resolveConfig({ env: { INGEST_QUEUE: value } }).ingest.queue;
+  assert.equal(queue(" Postgres "), "postgres");
+  assert.equal(queue("kafka"), "kafka");
+  assert.equal(queue("  "), "direct");
+  const configPath = configFile("ingest-queue.json", { ingest: { queue: "postgres" } });
+  assert.equal(resolveConfig({ configPath }).ingest.queue, "postgres");
+  const error = configErrorOf(() => queue("memory"));
+  assert.match(error.message, /INGEST_QUEUE/);
 });
 
 test("file only", () => {

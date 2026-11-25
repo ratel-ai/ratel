@@ -44,6 +44,7 @@ export const CONFIG_DEFAULTS = {
   },
   selfTelemetry: {},
   ingest: {
+    queue: "direct",
     publishableKeyLimitPerMinute: 6_000,
     publishableSourceLimitPerMinute: 120,
     successSampleRate: 100,
