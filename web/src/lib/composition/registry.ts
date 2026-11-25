@@ -1,5 +1,6 @@
 import { composition } from "@/lib/composition/ports";
 import type { DrainStep, JobHandler, Registration } from "@/lib/contracts/registry";
+import { ingestSpoolRegistration } from "@/lib/ingest/queue/postgres/register";
 import { ingestTraceEventsRegistration } from "@/lib/ingest/trace-events/register";
 import { ledgerRegistration } from "@/lib/ledger/register";
 import { intentEngineRegistration } from "@/lib/readings/intent-engine/register";
@@ -24,6 +25,7 @@ import { taskScorersRegistration } from "@/lib/views/task-scorers/register";
  */
 const CORE: Registration[] = [
   ingestTraceEventsRegistration,
+  ingestSpoolRegistration,
   ledgerRegistration,
   queryIntentsRegistration,
   intentGraphRegistration,

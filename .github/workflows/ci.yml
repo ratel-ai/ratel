@@ -198,6 +198,57 @@ jobs:
           TEST_SHARD: ${{ matrix.shard }}/4
         run: pnpm --filter @ratel/platform test
 
+  # The ingest queue drivers on real servers (ADR-0009): the same conformance suite on Postgres
+  # and on Kafka. platform-test runs the Postgres one on PGlite, which is a single connection.
+  queue-conformance:
+    needs: changes
+    if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ratel
+          POSTGRES_DB: spool
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ratel -d spool" --health-interval 2s --health-retries 30
+      kafka:
+        image: apache/kafka:3.9.1
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+          KAFKA_MESSAGE_MAX_BYTES: 8388608
+        ports: ["9092:9092"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
+      - name: Migrate
+        env:
+          DATABASE_URL: postgres://ratel@localhost:5432/spool
+        run: pnpm --filter @ratel/platform migrate
+      - name: Conformance
+        env:
+          TEST_POSTGRES_URL: postgres://ratel@localhost:5432/spool
+          TEST_KAFKA_BROKERS: localhost:9092
+        run: >
+          pnpm --filter @ratel/platform exec tsx --no-wasm-code-gc --test --test-force-exit
+          --test-concurrency=1 "src/lib/ingest/queue/**/*-queue.integration.test.ts"
+
   # The cloud deployer: deploy.sh and the modules under deploy/terraform, checked with both
   # engines (format, init, validate). It logs in to no cloud: nothing is planned or created.
   deploy:
@@ -359,7 +410,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, design-system, platform-build, platform-test, platform-compose, deploy, dependency-scan, secret-scan]
+    needs: [changes, design-system, platform-build, platform-test, queue-conformance, platform-compose, deploy, dependency-scan, secret-scan]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -367,7 +418,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} deploy=${{ needs.deploy.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }}"
+          echo "changes=${{ needs.changes.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} queue-conformance=${{ needs.queue-conformance.result }} platform-compose=${{ needs.platform-compose.result }} deploy=${{ needs.deploy.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||

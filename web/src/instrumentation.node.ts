@@ -1,5 +1,6 @@
 import type { Config } from "@/config";
 import type { RequestErrorContext, RequestErrorRequest } from "@/lib/contracts/telemetry";
+import type { EnvelopeConsumer } from "@/lib/ingest/queue/port/envelope-queue";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 import type { TelemetryShutdown } from "@/lib/platform/otel/shutdown";
 
@@ -56,7 +57,7 @@ export async function registerNodeInstrumentation(
     { createSelfTelemetrySampler },
     { SelfTimeSpanProcessor },
     { createTelemetryShutdown, registerTelemetryShutdownHandlers },
-    { appRole },
+    { appRole, consumesIngestQueue },
     { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
     { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
     { editionAnalyticsShutdown },
@@ -180,7 +181,10 @@ export async function registerNodeInstrumentation(
   // termination: it flushes buffered telemetry, then exits explicitly. The worker is the
   // exception: its own handler waits for the step in flight, so it runs this flush itself
   // (`bootBackground` hands it over) instead of being cut short by an exit from here.
-  if (appRole(settings) !== "worker") registerTelemetryShutdownHandlers(registeredShutdown);
+  // So is a process that reads the ingest queue: it finishes the message in hand first.
+  if (appRole(settings) !== "worker" && !consumesIngestQueue(settings)) {
+    registerTelemetryShutdownHandlers(registeredShutdown);
+  }
   registered = true;
   return registeredShutdown;
 }
@@ -272,8 +276,11 @@ export async function assertComposition(): Promise<void> {
  * failure or an external scheduler with no `jobs.cronSecret` exits, like a bad composition:
  * never serve a misconfigured server. Nothing here runs without a `database.url`.
  *
+ * With `ingest.queue` set, the process that runs background work (the worker, or the single `all`
+ * process) also reads the ingest queue (ADR-0009). A queue that cannot be opened exits.
+ *
  * `flushTelemetry` is what `registerNodeInstrumentation` returned: the worker runs it after its
- * last step, before it exits.
+ * last step, before it exits, and so does an `all` process that reads the ingest queue.
  */
 export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promise<void> {
   const { getConfig } = await import("@/config");
@@ -310,8 +317,38 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
         console.error("[cron] tick failed", error instanceof Error ? error.message : error),
     });
   }
+  const consumer = await startIngestConsumer();
   if (plan.tick === "worker") {
     const { startBackgroundWorker } = await import("@/lib/jobs/worker-start");
-    startBackgroundWorker(undefined, { beforeExit: flushTelemetry });
+    startBackgroundWorker(undefined, {
+      beforeExit: flushTelemetry,
+      ...(consumer ? { beside: consumer } : {}),
+    });
+  } else if (consumer) {
+    const { stopConsumerOnSignal } = await import("@/lib/ingest/queue/consumer");
+    stopConsumerOnSignal(consumer, {
+      on: (signal, listener) => process.on(signal, listener),
+      exit: (code) => process.exit(code),
+      ownsExit: Boolean(process.env.NEXT_MANUAL_SIG_HANDLE),
+      beforeExit: flushTelemetry,
+    });
+  }
+}
+
+/** The ingest queue's consumer, or null where this process has none. */
+async function startIngestConsumer(): Promise<EnvelopeConsumer | null> {
+  const { getConfig } = await import("@/config");
+  if (getConfig().ingest.queue === "direct") return null;
+  try {
+    // An API-only process publishes: a queue it cannot open stops it here, not at the first request.
+    const { ingestQueue } = await import("@/lib/ingest/queue/ingest-queue");
+    await ingestQueue();
+    const { consumesIngestQueue } = await import("@/lib/jobs/role");
+    if (!consumesIngestQueue()) return null;
+    const { startConfiguredIngestConsumer } = await import("./ingest-consumer");
+    return await startConfiguredIngestConsumer();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
   }
 }

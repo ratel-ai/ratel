@@ -31,3 +31,11 @@ export function importsRunInWorker(config: Pick<Config, "jobs"> = getConfig()): 
 export function runsJobsAfterResponse(config: Pick<Config, "app"> = getConfig()): boolean {
   return appRole(config) === "all";
 }
+
+/**
+ * Whether this process reads the ingest queue (ADR-0009): the one that runs background work, when
+ * a queue is configured. An API-only process publishes and never consumes.
+ */
+export function consumesIngestQueue(config: Pick<Config, "app" | "ingest"> = getConfig()): boolean {
+  return config.ingest.queue !== "direct" && appRole(config) !== "api";
+}

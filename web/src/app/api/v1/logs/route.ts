@@ -3,6 +3,7 @@ import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
+import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
@@ -35,5 +36,7 @@ async function handlePost(req: Request) {
         loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
       },
     },
+    // With INGEST_QUEUE set, the request is only accepted (ADR-0009). Undefined in direct mode.
+    accept: await ingestAccept(),
   });
 }

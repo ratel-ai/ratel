@@ -78,6 +78,16 @@ export interface PersistSpansContext {
    * Omitted or false, no trace is metered (the importer leaves it off).
    */
   meterTraces?: boolean;
+  /**
+   * When a queued export was accepted (ADR-0009): the clock for a span without a usable time, so
+   * that a later or repeated run gives the same rows. Absent, now.
+   */
+  receivedAt?: Date;
+  /**
+   * The caller delivers the same batch again after a failure, so every failed write fails the
+   * batch. Without it, the writes after the model calls are best effort.
+   */
+  redelivers?: boolean;
 }
 
 export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
@@ -120,11 +130,19 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
 
 /**
  * `rows`: the model call rows stored. `events`: the LLM-call rows failed.
- * `derived`: a batch of only ledger rows failed. Either way, retry. `refused`: every span is over
- * a bound of the edition. `refused` of a stored batch: the spans that were.
+ * `derived`: a batch of only ledger rows failed, or with `redelivers` any write after the LLM-call
+ * rows. Either way, retry. `refused`: every span is over a bound of the edition. `refused` of a
+ * stored batch: the spans that were. `dropped`: the spans of dropped traces.
  */
 export type PersistSpansResult =
-  | { ok: true; accepted: number; calls: number; rows: EventWithMetric[]; refused?: number }
+  | {
+      ok: true;
+      accepted: number;
+      calls: number;
+      rows: EventWithMetric[];
+      refused?: number;
+      dropped?: number;
+    }
   | { ok: false; stage: "events" | "derived" | "refused" };
 
 /** An OTLP trace id has 32 characters. Some exporters send their own, longer ones. */
@@ -199,6 +217,8 @@ async function storeDecodedSpans(
     foldIntentGraph = false,
     spanConflict = "ignore",
     meterTraces = false,
+    receivedAt,
+    redelivers = false,
   }: PersistSpansContext,
   deps: PersistSpansDeps,
   batch: MeteredBatch,
@@ -226,6 +246,7 @@ async function storeDecodedSpans(
   // oversized id breaks the count of its whole batch. OTLP calls both invalid: they are not stored.
   const skipAnalysis = new Set<string>();
   let refused = 0;
+  let dropped = 0;
   if (meterTraces && organization && deps.traceMetering) {
     spans = spans.filter(
       (span) => span.traceId.length > 0 && span.traceId.length <= MAX_METERED_TRACE_ID,
@@ -241,13 +262,14 @@ async function storeDecodedSpans(
       const over = spans.filter((span) => outcomes.get(span.traceId) === "refused");
       // A resend of the export that filled the bound: what is stored is not refused, it is done.
       refused = over.length - (await countStored(over, projectId, deps));
+      dropped = spans.filter((span) => outcomes.get(span.traceId) === "dropped").length;
       spans = spans.filter(
         (span) => !["dropped", "refused"].includes(outcomes.get(span.traceId) ?? ""),
       );
       batch.admitted = spansByTrace(spans);
       if (spans.length === 0) {
         if (refused > 0) return { ok: false, stage: "refused" };
-        return { ok: true, accepted: 0, calls: 0, rows: [] };
+        return { ok: true, accepted: 0, calls: 0, rows: [], ...(dropped > 0 ? { dropped } : {}) };
       }
     } catch (err) {
       logError("trace meter write failed", err, {
@@ -307,7 +329,7 @@ async function storeDecodedSpans(
   const calls = groupSpans(spans, dedupe);
   // RC-280: each call's payload keeps its own reply and settings for the session chat.
   const prices = await batchPrices(spans, projectId, deps);
-  const rows = toRows(projectId, calls, { captureReply: true }, prices);
+  const rows = toRows(projectId, calls, { captureReply: true }, prices, receivedAt);
 
   let accepted = 0;
   if (rows.length > 0) {
@@ -321,12 +343,23 @@ async function storeDecodedSpans(
     }
   }
 
+  // Count the accepted events toward the monthly cap (best-effort; the boundary
+  // batch is allowed and the next one is gated out, the same tolerance as embeddings).
+  if (quotaOrgId && deps.incrementEventUsage && accepted > 0) {
+    await deps.incrementEventUsage(quotaOrgId, accepted).catch((err) => {
+      logError("event usage increment failed", err, {
+        organization_id: quotaOrgId,
+        project_id: projectId,
+      });
+    });
+  }
+
   // Bridge OTel hosts into the intents pipeline: lift the search_capabilities
   // queries captured in message content into gateway_search trace events, and the
   // SDK funnel's anchor-less `ratel.search` spans into native search events (those
   // batches carry no LLM calls at all, so this must not hide behind rows.length).
   // Idempotent: every derived row's id is deterministic.
-  const ratelDerived = deriveRatelSearches(analyzedSpans);
+  const ratelDerived = deriveRatelSearches(analyzedSpans, receivedAt);
   // When the SDK's spans ride the same trace as the host's LLM call (capture on
   // for both), the same search appears twice in one batch: as a captured
   // search_capabilities tool_call AND as a ratel.search span. Keep the span row
@@ -358,17 +391,21 @@ async function storeDecodedSpans(
         logError,
       },
       dimensions,
+      receivedAt,
     )),
   ];
   if (derived.length > 0) {
     try {
       const stored = await deps.insertTraceEvents(projectId, derived);
-      batch.newRows += stored?.accepted ?? derived.length;
+      const added = stored?.accepted ?? derived.length;
+      batch.newRows += added;
+      // A delivery that stored these rows can have ended before their jobs were queued.
+      const starting = redelivers ? derived.length : added;
       // What the Cloud-built intent graph learns from: a plain agent trace's
       // ask or tool call, or a runtime's own search span exported this way.
       if (
         foldIntentGraph &&
-        (stored?.accepted ?? derived.length) > 0 &&
+        starting > 0 &&
         derived.some((event) => FOLD_TRIGGER_TYPES.has(event.type) || isOtlpFoldTrigger(event))
       ) {
         await scheduleIntentGraphFold(deps, projectId, endpoint);
@@ -377,7 +414,7 @@ async function storeDecodedSpans(
         projectId: projectId,
         organization,
         eventTypes: derived.map((event) => event.type),
-        accepted: stored?.accepted ?? derived.length,
+        accepted: starting,
         endpoint,
         logError,
       });
@@ -390,21 +427,10 @@ async function storeDecodedSpans(
       // queries, so a backfill can recover). But an anchor-less batch persists
       // ONLY these rows: fail loud so the exporter retries (inserts are
       // idempotent); swallowing would lose those searches forever.
-      if (rows.length === 0) {
+      if (rows.length === 0 || redelivers) {
         return { ok: false, stage: "derived" };
       }
     }
-  }
-
-  // Count the accepted events toward the monthly cap (best-effort; the boundary
-  // batch is allowed and the next one is gated out, the same tolerance as embeddings).
-  if (quotaOrgId && deps.incrementEventUsage && accepted > 0) {
-    await deps.incrementEventUsage(quotaOrgId, accepted).catch((err) => {
-      logError("event usage increment failed", err, {
-        organization_id: quotaOrgId,
-        project_id: projectId,
-      });
-    });
   }
 
   // Raw spans are an additive observability tap. They do not count toward the
@@ -426,11 +452,27 @@ async function storeDecodedSpans(
       project_id: projectId,
     });
     deps.captureFailure(err);
+    if (redelivers) return { ok: false, stage: "derived" };
   }
 
-  await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
+  const rejoined = await rejoinLateGenAiLogs(
+    spans,
+    genAiLogsRead,
+    projectId,
+    organization,
+    deps,
+    receivedAt,
+  );
+  if (!rejoined && redelivers) return { ok: false, stage: "derived" };
 
-  return { ok: true, accepted, calls: calls.length, rows, ...(refused > 0 ? { refused } : {}) };
+  return {
+    ok: true,
+    accepted,
+    calls: calls.length,
+    rows,
+    ...(refused > 0 ? { refused } : {}),
+    ...(dropped > 0 ? { dropped } : {}),
+  };
 }
 
 /** How many of these spans are stored already. Zero when they cannot be looked up. */
@@ -466,7 +508,7 @@ function spansByTrace(spans: readonly DecodedSpan[]): Map<string, number> {
  * `otel_spans` yet, and this batch read no logs. Both sides store first and
  * read after, so at least one of them sees the other: here, more log records
  * than the first read means the export missed the call, so restate it.
- * Fails open, like the first read.
+ * Fails open, like the first read: false when it failed.
  */
 async function rejoinLateGenAiLogs(
   spans: DecodedSpan[],
@@ -474,20 +516,24 @@ async function rejoinLateGenAiLogs(
   projectId: string,
   organization: Organization | null,
   deps: PersistSpansDeps,
-): Promise<void> {
+  receivedAt: Date | undefined,
+): Promise<boolean> {
   const { findLogs, findSpans, restateCalls } = deps.genAiLogs ?? {};
-  if (logsRead === null || !findLogs || !findSpans || !restateCalls) return;
+  if (logsRead === null || !findLogs || !findSpans || !restateCalls) return true;
   try {
     const logs = await findLogs(projectId, distinctSpanKeys(spans));
-    if (logs.length <= logsRead) return;
+    if (logs.length <= logsRead) return true;
     await rejoinStoredModelCalls(projectId, organization, distinctSpanKeys(logs), {
       store: { findLogs, findSpans, restateCalls },
       ...(deps.modelPricing ? { modelPricing: deps.modelPricing } : {}),
       captureFailure: deps.captureFailure,
+      ...(receivedAt ? { receivedAt } : {}),
     });
+    return true;
   } catch (err) {
     deps.logError("gen_ai log rejoin failed", err, { project_id: projectId });
     deps.captureFailure(err);
+    return false;
   }
 }
 

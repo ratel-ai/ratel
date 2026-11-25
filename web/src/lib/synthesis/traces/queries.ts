@@ -24,6 +24,7 @@ import { events, type OtelSpan, otelLogs, otelSpans } from "@/lib/ingest/otlp/sc
 import { OTLP_RAW_PRUNE_BATCH_SIZE, otlpRawRetentionDays } from "@/lib/ingest/otlp-raw/domain";
 import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
 import {
   type AgentDimension,
@@ -1335,7 +1336,7 @@ export async function pruneExpiredOtelSpans(
   const expiredIds = db
     .select({ id: otelSpans.id })
     .from(otelSpans)
-    .where(lt(otelSpans.receivedAt, cutoff))
+    .where(and(lt(otelSpans.receivedAt, cutoff), notOnHold(otelSpans.projectId)))
     .orderBy(asc(otelSpans.receivedAt), asc(otelSpans.id))
     .limit(OTEL_SPAN_PRUNE_BATCH_SIZE);
   const deleted = await db
@@ -1363,7 +1364,7 @@ export async function pruneExpiredOtelLogs(
   const expiredIds = db
     .select({ id: otelLogs.id })
     .from(otelLogs)
-    .where(lt(otelLogs.receivedAt, cutoff))
+    .where(and(lt(otelLogs.receivedAt, cutoff), notOnHold(otelLogs.projectId)))
     .orderBy(asc(otelLogs.receivedAt), asc(otelLogs.id))
     .limit(OTEL_LOG_PRUNE_BATCH_SIZE);
   const deleted = await db
@@ -1391,7 +1392,7 @@ export async function pruneExpiredOtlpRawExports(
   const expiredIds = db
     .select({ id: otlpRawExports.id })
     .from(otlpRawExports)
-    .where(lt(otlpRawExports.receivedAt, cutoff))
+    .where(and(lt(otlpRawExports.receivedAt, cutoff), notOnHold(otlpRawExports.projectId)))
     .orderBy(asc(otlpRawExports.receivedAt), asc(otlpRawExports.id))
     .limit(options.batchSize ?? OTLP_RAW_PRUNE_BATCH_SIZE);
   const deleted = await db
@@ -1424,7 +1425,12 @@ export async function pruneExpiredTraceSummaries(
       traceId: otelTraceSummaries.traceId,
     })
     .from(otelTraceSummaries)
-    .where(lt(otelTraceSummaries.spansMaxReceivedAt, cutoff))
+    .where(
+      and(
+        lt(otelTraceSummaries.spansMaxReceivedAt, cutoff),
+        notOnHold(otelTraceSummaries.projectId),
+      ),
+    )
     .orderBy(
       asc(otelTraceSummaries.spansMaxReceivedAt),
       asc(otelTraceSummaries.projectId),

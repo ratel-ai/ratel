@@ -4,19 +4,16 @@ import {
   publishableIngestLimits,
 } from "@/lib/ingest/ingest-limits";
 import {
-  FOLD_TRIGGER_TYPES,
-  type IntentGraphFoldScheduleDeps,
-  scheduleIntentGraphFold,
-} from "@/lib/ingest/trace-events/fold-schedule";
-import { contentHash, parseTraceEvents } from "@/lib/ingest/trace-events/parse";
+  type AcceptDeps,
+  publishRequest,
+  queueUnavailableResponse,
+} from "@/lib/ingest/queue/accept";
+import type { IntentGraphFoldScheduleDeps } from "@/lib/ingest/trace-events/fold-schedule";
 import type {
   insertTraceEventRejects as insertTraceEventRejectsFn,
   insertTraceEvents as insertTraceEventsFn,
 } from "@/lib/ingest/trace-events/queries";
-import {
-  scheduleTraceTurnBuild,
-  type TraceTurnsIngestDeps,
-} from "@/lib/ingest/trace-events/turns-schedule";
+import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
 import type { resolveProjectFromBearer as resolveProjectFromBearerFn } from "@/lib/platform/api-key-bearer";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
@@ -26,9 +23,16 @@ import type { TokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import type { trackServerEvent as trackServerEventFn } from "@/lib/platform/telemetry";
 import { reportServerException } from "@/lib/platform/telemetry";
+import {
+  followRuntimeEvents,
+  MAX_BATCH_EVENTS,
+  parseRuntimeEvents,
+  readEventsBody,
+  storeRuntimeEvents,
+} from "./ingest-events";
 
 export const MAX_BODY_BYTES = 4_000_000;
-export const MAX_BATCH_EVENTS = 5_000;
+export { MAX_BATCH_EVENTS } from "./ingest-events";
 
 export interface RuntimeEventsHandlerDeps extends IntentGraphFoldScheduleDeps {
   /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
@@ -45,9 +49,10 @@ export interface RuntimeEventsHandlerDeps extends IntentGraphFoldScheduleDeps {
   traceTurns?: TraceTurnsIngestDeps;
   setRequestLogContext?: typeof setRequestLogContextFn;
   trackServerEvent?: typeof trackServerEventFn;
+  /** Accept onto the queue (ADR-0009) instead of storing in the request. Absent, direct mode. */
+  accept?: AcceptDeps;
+  now?: () => Date;
 }
-
-type RuntimeEventsBody = { events: unknown[] };
 
 const logger = getLogger("trace-events/route-handler");
 const defaultLogError: LogError = (message, error, fields) =>
@@ -58,6 +63,7 @@ export async function handleRuntimeEventsRequest(
   request: Request,
   deps: RuntimeEventsHandlerDeps,
 ): Promise<Response> {
+  const receivedAt = deps.now?.().getTime() ?? Date.now();
   if (!isJson(request.headers.get("content-type"))) {
     return json({ error: "Unsupported Content-Type. Send application/json." }, 415);
   }
@@ -69,11 +75,20 @@ export async function handleRuntimeEventsRequest(
   const resolved = await deps.resolveProjectFromBearer(request, deps.scope);
   if (!resolved.ok) return resolved.response;
 
-  const organization = await deps.getOrganizationByProjectId(resolved.projectId);
+  const organization = deps.accept
+    ? null
+    : await deps.getOrganizationByProjectId(resolved.projectId);
+  const organizationId = deps.accept
+    ? await deps.accept.findOrganizationId(resolved.projectId)
+    : organization?.id;
   deps.setRequestLogContext?.(request, {
     project_id: resolved.projectId,
-    ...(organization ? { org_id: organization.id } : {}),
+    ...(organizationId ? { org_id: organizationId } : {}),
   });
+  if (deps.accept && !organizationId) {
+    // The project was deleted after the key was read, and its keys with it.
+    return json({ error: "Invalid or revoked API key." }, 401);
+  }
   // An ingest-only key is shared by every install of an app, so it gets the
   // shared-key budget (higher per key, plus per source) instead of the
   // per-client one a secret key has always had.
@@ -102,18 +117,16 @@ export async function handleRuntimeEventsRequest(
     return tooLarge(`Request body too large (max ${MAX_BODY_BYTES} bytes).`);
   }
 
-  let body: RuntimeEventsBody;
-  try {
-    const decoded = JSON.parse(new TextDecoder().decode(read.bytes)) as unknown;
-    if (!isRuntimeEventsBody(decoded)) {
-      return json({ error: "Malformed runtime-events payload: expected { events: [] }." }, 400);
+  const body = readEventsBody(read.bytes);
+  if (!body.ok) {
+    switch (body.reason) {
+      case "not_json":
+        return json({ error: "Malformed JSON payload." }, 400);
+      case "shape":
+        return json({ error: "Malformed runtime-events payload: expected { events: [] }." }, 400);
+      case "too_many":
+        return tooLarge(`Too many events in one batch (max ${MAX_BATCH_EVENTS}).`);
     }
-    body = decoded;
-  } catch {
-    return json({ error: "Malformed JSON payload." }, 400);
-  }
-  if (body.events.length > MAX_BATCH_EVENTS) {
-    return tooLarge(`Too many events in one batch (max ${MAX_BATCH_EVENTS}).`);
   }
   // An ingest-only key's budget counts events too, not only requests (RC-585).
   if (resolved.policy.sharedKeyLimits) {
@@ -125,70 +138,36 @@ export async function handleRuntimeEventsRequest(
     if (!items.allowed) return ingestRateLimitedResponse(items);
   }
 
-  const parsed = parseTraceEvents(body.events);
-  const rejected = parsed.rejected.map(({ index, error }) => {
-    const raw = body.events[index];
-    return {
-      index,
-      event_id: metadataString(raw, "event_id"),
-      reason: error,
-    };
-  });
-  const rejectRows = parsed.rejected.map(({ index, error }) => {
-    const raw = body.events[index];
-    return {
-      eventId: metadataString(raw, "event_id"),
-      type: metadataString(raw, "type"),
-      reason: error,
-      sizeBytes: Buffer.byteLength(JSON.stringify(raw ?? null), "utf8"),
-      sourceId: metadataString(raw, "source_id"),
-      // Distinguishes anonymous rejects in the ledger; identical retries collide.
-      payloadHash: contentHash(raw ?? null),
-    };
-  });
-
-  try {
-    const { accepted } = await deps.insertTraceEvents(
-      resolved.projectId,
-      parsed.valid.map((event) => ({ ...event, ingestSource: "runtime" })),
-      undefined,
-      // The ranking-status row and the live sync serve the Cloud-built graph.
-      {
-        intentGraphRuntimeStatus: parsed.valid.some(
-          (event) => event.type === "usage_ranking_status",
-        ),
-        // A shippable key only adds rows (RC-590): see ApiKeyPolicy.appendOnlyIngest.
-        appendOnly: resolved.policy.appendOnlyIngest,
-      },
-    );
-    await deps.insertTraceEventRejects(resolved.projectId, rejectRows);
-    const duplicates = parsed.valid.length - accepted;
-    if (accepted > 0 && parsed.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
-      await scheduleIntentGraphFold(deps, resolved.projectId, "/api/v1/events");
-    }
-    await deps.trackServerEvent?.(
-      "runtime_events_ingested",
+  if (deps.accept && organizationId) {
+    const published = await publishRequest(
       {
         projectId: resolved.projectId,
-        ...(organization ? { orgId: organization.id } : {}),
+        organizationId,
+        keyId: resolved.apiKeyId,
+        policy: resolved.policy,
+        signal: "events",
+        contentType: "application/json",
+        contentEncoding: "identity",
+        receivedAt,
+        body: read.bytes,
       },
-      {
-        object_action: "runtime_events_ingested",
-        received: body.events.length,
-        accepted,
-        duplicates,
-        rejected: rejected.length,
-      },
+      deps.accept,
     );
-    await scheduleTraceTurnBuild(deps.traceTurns, {
-      projectId: resolved.projectId,
-      organization,
-      eventTypes: parsed.valid.map((event) => event.type),
-      accepted,
-      logError: deps.logError,
-      reportServerException: deps.reportServerException,
-    });
-    return acceptedResponse(accepted, duplicates, rejected);
+    // Nothing is parsed or stored yet: every event counts as accepted.
+    return published ? acceptedResponse(body.events.length, 0, []) : queueUnavailableResponse();
+  }
+
+  const batch = parseRuntimeEvents(body.events);
+  try {
+    const accepted = await storeRuntimeEvents(
+      resolved.projectId,
+      batch,
+      { appendOnly: resolved.policy.appendOnlyIngest },
+      deps.insertTraceEvents,
+    );
+    await deps.insertTraceEventRejects(resolved.projectId, batch.rejectRows);
+    await followRuntimeEvents(resolved.projectId, organization, batch, accepted, deps);
+    return acceptedResponse(accepted, batch.valid.length - accepted, batch.rejected);
   } catch (error) {
     (deps.logError ?? defaultLogError)("runtime event insert failed", error, {
       project_id: resolved.projectId,
@@ -206,18 +185,6 @@ function acceptedResponse(
   rejected: Array<{ index: number; event_id: string | null; reason: string }>,
 ): Response {
   return json({ accepted, duplicates, rejected }, 202);
-}
-
-function isRuntimeEventsBody(value: unknown): value is RuntimeEventsBody {
-  return (
-    !!value && typeof value === "object" && Array.isArray((value as { events?: unknown }).events)
-  );
-}
-
-function metadataString(raw: unknown, key: string): string | null {
-  if (!raw || typeof raw !== "object") return null;
-  const value = (raw as Record<string, unknown>)[key];
-  return typeof value === "string" ? value.slice(0, 512) : null;
 }
 
 function isJson(contentType: string | null): boolean {

@@ -290,6 +290,7 @@ describe("registry root", () => {
         "before:task_scores_enqueue",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",
+        "after:ingest_dead_letters_prune",
         "after:intent_graph_revisions_prune:retention",
         "after:intent_engine_expire:retention",
         "after:trace_signal_sweep",

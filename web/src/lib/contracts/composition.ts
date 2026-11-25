@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { AnalysisFilterPort } from "@/lib/contracts/analysis-filter";
+import type { ApiKeyCreationPort } from "@/lib/contracts/api-key-creation";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
@@ -282,6 +283,11 @@ export type CompositionPorts = {
    */
   apiKeySecrets?: ApiKeySecretsPort;
   /**
+   * Absent in the open-source edition, where a new API key is never refused. With it, the edition
+   * may refuse an organization new keys until a date; existing keys keep working.
+   */
+  apiKeyCreation?: ApiKeyCreationPort;
+  /**
    * How the edition names the product in copy. `full` opens the MCP server's instructions and,
    * as a slug, names the server and its 401 realm ("Ratel", `ratel`); `short` is the
    * service doing the work in a sentence ("Ratel builds one once searches arrive", "Ratel
@@ -301,6 +307,12 @@ export type CompositionPorts = {
    * default: nothing is metered and every trace is analyzed.
    */
   traceMetering?: TraceMeteringPort;
+  /**
+   * Kafka topics the worker consumes besides the configured ones (`INGEST_KAFKA_TOPICS`), read
+   * again every few seconds while it runs, so that a topic can come or go without a restart. A
+   * list, never a pattern. Absent in the open-source edition.
+   */
+  ingestTopics?: () => Promise<readonly string[]>;
   /**
    * What keeps analysis off a trace that was stored but not analyzed. Absent, the composition uses
    * the open-source default: no filter.
