@@ -5,7 +5,7 @@ import { cn } from "@ratel/design-system/cn";
 import { CodeBlock } from "@ratel/design-system/code";
 import { Disclosure } from "@ratel/design-system/disclosure";
 import { Callout } from "@ratel/design-system/states";
-import type { TraceContentView, TraceMessageView } from "@/lib/synthesis/traces/content-view";
+import type { TraceContentView, TraceMessageView } from "@/lib/ingest/otlp/content-view";
 import { formatAttributeValue } from "@/lib/synthesis/traces/format";
 import { conversationMessages, ROLE_LABEL } from "@/lib/synthesis/traces/v2/conversation";
 import { formatDuration } from "@/lib/synthesis/traces/v2/format";

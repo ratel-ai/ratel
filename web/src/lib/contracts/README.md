@@ -11,7 +11,7 @@ edition names the product in copy (`full` for the MCP server, `short` for the se
 sentence); without it the copy keeps its neutral words.
 
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
-`rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`) and the optional
+`rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `sentimentAnalysis`, `focusedConsole`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
 force each one on or off; only that file knows the environment variable of each. Without the port
 each switch is its configured value for the deployment, off when unset (in the open-source
@@ -89,6 +89,14 @@ nobody with an account. Its optional `launchAccess` is the console's allowlist f
 for a later reveal. The core hands it every key it issues (`store`, after the key's row exists) and
 its copy says "reveal it later" when `revealable()`; the reveal itself is on the edition's pages. The
 open-source edition has none: keys are stored as hash and prefix only and shown once.
+
+`closedQuestions` (`closed-questions.ts`) is an optional port: an edition's question engine, which
+answers closed questions (yes/no, choice) about one piece of content with a probability. The file
+holds the request, answer and usage types, the failure (`ClosedQuestionError`, one class on both
+sides of the boundary), the request sizing (`estimate*`, `packBatches`) and the port:
+`configured()` and `client({ feature, projectId })`. The outcome reading behind Sentiment analysis
+(`readings/trace-signals/outcomes`) asks it; the edition's client records each call through the
+model-call seam. The open-source edition has none: nothing is asked and the reading is rule-only.
 
 `trace-metering.ts` and `analysis-filter.ts` are optional ports with an open-source default, so
 `composition.traceMetering` and `composition.analysisFilter` are always there. The first decides

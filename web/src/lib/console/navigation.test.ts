@@ -716,6 +716,72 @@ test("the shell's organization: the project's own, else the route's, else the ac
   assert.equal(shellOrganization([], projects, "/org/acme", "acme"), undefined);
 });
 
+test("Sentiment analysis sits under Traces only with sentimentAnalysis on, and Root cause analysis is in no menu", () => {
+  const root = `/project/${P1}`;
+  const off = consoleNav({ projectId: P1, additions: [] });
+  const flat = (items: ReturnType<typeof consoleNav>) =>
+    items.flatMap((item) => [item, ...(item.children ?? [])]);
+  assert.ok(
+    !flat(off).some((item) => item.href.endsWith("/sentiment")),
+    "off by default: no rail item",
+  );
+  const commandsOff = commandEntries({
+    items: off,
+    projectId: P1,
+    projects: PROJECTS,
+    pathname: root,
+  });
+  assert.ok(!commandsOff.some((entry) => entry.href.endsWith("/sentiment")), "and nothing in ⌘K");
+  assert.equal(
+    off.find((item) => item.id === "traces")?.children,
+    undefined,
+    "Traces stays one row",
+  );
+
+  const nav = consoleNav({ projectId: P1, additions: [], sentiment: true });
+  assert.deepEqual(
+    nav.find((item) => item.id === "traces")?.children?.map((child) => [child.label, child.href]),
+    [
+      ["All traces", `${root}/traces`],
+      ["Sentiment analysis", `${root}/traces/sentiment`],
+    ],
+  );
+  assert.deepEqual(
+    nav.find((item) => item.id === "health")?.children?.map((child) => child.label),
+    ["Summary", "Self-corrections"],
+  );
+  assert.equal(activeNavItemId(`${root}/traces/sentiment`, nav), "traces-sentiment");
+  // Owned: "All traces" lights the Traces row, as it does beside Agents and MCP servers.
+  assert.equal(activeNavItemId(`${root}/traces`, nav), "traces");
+  assert.equal(
+    activeNavItemId(`${root}/traces/abc`, nav),
+    "traces",
+    "one trace is still All traces",
+  );
+  assert.equal(shortcutHref(nav, "t"), `${root}/traces`);
+  assert.equal(nav.length, off.length, "a child, so the rail keeps its budget");
+  const commands = commandEntries({
+    items: nav,
+    projectId: P1,
+    projects: PROJECTS,
+    pathname: root,
+  });
+  assert.ok(commands.some((entry) => entry.href === `${root}/traces/sentiment`));
+
+  // Root cause analysis opens from task completion on Agent health alone, and lights it.
+  assert.ok(!flat(nav).some((item) => item.href.includes("root-causes")));
+  assert.ok(!commands.some((entry) => entry.href.includes("root-causes")));
+  assert.equal(activeNavItemId(`${root}/health/root-causes`, nav), "health");
+  assert.notEqual(activeNavItemId(`${root}/health/root-causes`, off), "health");
+
+  // Beside the entity pages: Sentiment analysis right after All traces.
+  const both = consoleNav({ projectId: P1, additions: [], sentiment: true, entityPages: true });
+  assert.deepEqual(
+    both.find((item) => item.id === "traces")?.children?.map((child) => child.label),
+    ["All traces", "Sentiment analysis", "Agents", "MCP servers"],
+  );
+});
+
 test("focusedConsole on: Self-corrections is an insight and Agent health has no sub-page", () => {
   const items = consoleNav({ projectId: P1, additions: [], focusedConsole: true });
   assert.deepEqual(

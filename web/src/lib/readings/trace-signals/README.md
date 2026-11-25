@@ -5,7 +5,8 @@ walks the ledger's closed turns through the detectors, builds claims and persist
 `trace_signals` (open, resolved, acknowledged) with the finished `trace_signal_runs` row;
 **workflows** are the recurring tool sequences mined from those turns, named by a model when a
 key is set and placed by the judge; **self-corrections** are the moments the agent backtracked
-inside a turn, stored per turn and read as issues by the run. Everything here is derived data:
+inside a turn, stored per turn and read as issues by the run; **outcomes** are what each turn,
+session and task came to, read behind the `sentimentAnalysis` switch. Everything here is derived data:
 the next run rewrites it, and nothing stores query text, error text or an end-user id.
 
 | Folder | Holds | Writes |
@@ -13,6 +14,7 @@ the next run rewrites it, and nothing stores query text, error text or an end-us
 | `signals/` | the detectors (`detect-*`), accumulators, pairs, prerequisites, journey and flow models, the OpenTelemetry facts, the compute pass (`compute.ts`, `compute-job.ts`), the run and signal queries, the analysis context a run reads besides turns | `trace_signal_runs`, `trace_signals`, `trace_turns.workflow_id` |
 | `workflows/` | mining (`itemsets`, `mine`, `assign`, `order`, `health`, `detect`), placement (`place`), model names (`label*`), judge decisions (`decide*`) | `trace_workflow_labels`, `trace_workflow_verdicts`, `trace_workflow_insights` |
 | `self-corrections/` | the one definition of a retry, switch, give-up, repeated search or repeated ask (`detect`), reply phrases, the per-run reading (`run`, `run-job`, `run-queries`) | `trace_self_corrections` |
+| `outcomes/` | Sentiment analysis's reading (ratel-cloud #553, RC-357), run with each signal run when `sentimentAnalysis` is on for the project's organization: the rule layer reads the trace (`read`, `followed`, `search-runs`, `error-cause`, `tasks`, `rows`, `run`, `run-job`, `run-queries`, `summary`); the model layer puts closed questions about the person's words to an edition's question engine (`questions`, `task-question`, `question-content`, `ask`, `ask-queries`, `model-read`, `reply-reading`, `text-queries`), capped per run and cached by content in `trace_workflow_verdicts`; `fusion` sets the result. `gate.ts` and `questions-gate.ts` are the switch (the page's and the job's). Without `composition.closedQuestions`, or with one that is not configured, nothing is asked and the rows are the rules' and the sentiment lexicon's | `trace_turn_outcomes`, `trace_session_outcomes`, `trace_task_outcomes` |
 | root | the view-model vocabulary the signals are stored in (`view.ts`), claims and their templates (with the shared figures, `figures.ts`), the Health score and its pillar math (`health-score.ts`, `health-outcomes.ts`, `health-pillars.ts`), setup facts, the sweep policy and service, `schema.ts`, `register.ts` | — |
 
 **How a run happens.** `compute_trace_signals` is enqueued three ways: the daily sweep
@@ -44,7 +46,9 @@ after itself, and a failed enqueue never fails the run.
 their tests; `view.ts`, `workflows/decide.ts` and `workflows/label-queries.integration.test.ts`
 (a comment or fixture named a private engine; back to copies once upstream rewords them);
 `workflows/place.ts` and `self-corrections/detect.ts` (a comment named a confidential word);
-`signals/compute-job.ts` (no retired flag gate; the follow-on enqueues are seams);
+`signals/compute-job.ts` (no retired flag gate; the follow-on enqueues are seams; the outcome
+reading runs only with `sentimentAnalysis` on, `outcomesEnabled`, where upstream reads it with
+every run);
 `signals/analysis-context.ts` (the L4 half of upstream's signals ledger module; the closed-turn
 readers are `lib/ledger/closed-turns.ts`); `sweep-service.ts` (no gate, no organization read);
 `workflows/decide-job.ts` and `decide.test.ts` (OpenAI only; the corpus from the runtime
@@ -56,3 +60,14 @@ compose-candidate case lands with the tool crafter); `signals/task-scores.integr
 `signals/story`, the self-corrections page files) are `lib/views/health`; `turn-detail*`,
 `turn-linked` and `linked-copy.test` (the turn page of Traces) are `lib/views/traces`; `replay*`
 and `share/` are not part of this edition.
+
+In `outcomes/`: `gate.ts`, `questions-gate.ts` and their tests (the switch is the core's
+`sentimentAnalysis`, read through `featureEnabled`, with upstream's names and arguments);
+`run-job.ts` (the engine is `composition.closedQuestions`, `lib/contracts/closed-questions.ts`,
+where upstream built its client from the environment); `ask.ts`, `question-content.ts`,
+`search-runs.ts` (their limits are `traceOutcomes.*` in `web/src/config.ts`); `questions.ts` (a
+comment); `ask.test.ts`, `ask-queries.integration.test.ts`, `model-read.test.ts`,
+`model.integration.test.ts` (a neutral model id for the fake engine); `run.test.ts` (the ledger's
+page type); `switch.integration.test.ts` (new: the job with the switch off and on). The page
+files (`page-*`, `overview`, `example`, `completion-card`) are `lib/views/traces/sentiment` and
+`lib/views/health/root-causes`.

@@ -84,6 +84,7 @@ export function consoleNav({
   organizationAdditions = [],
   projectGroups = [],
   entityPages = false,
+  sentiment = false,
   focusedConsole = false,
 }: {
   projectId: string | undefined;
@@ -102,6 +103,8 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
+  /** `sentimentAnalysis` on for the shown organization (RC-357): Sentiment analysis under Traces. */
+  sentiment?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
 }): NavItem[] {
@@ -381,7 +384,9 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole }) : core),
+    ...(root
+      ? stageRailNav(root, core, setupRows, { entityPages, sentiment, focusedConsole })
+      : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -404,7 +409,11 @@ function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  { entityPages, focusedConsole }: { entityPages: boolean; focusedConsole: boolean },
+  {
+    entityPages,
+    sentiment,
+    focusedConsole,
+  }: { entityPages: boolean; sentiment: boolean; focusedConsole: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -421,6 +430,8 @@ function stageRailNav(
   const healthPages = (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks");
   const health: NavItem = {
     ...classicHealth,
+    // Root cause analysis is no rail or ⌘K destination: task completion on the Summary opens it.
+    also: [...(classicHealth.also ?? []), ...(sentiment ? [`${root}/health/root-causes`] : [])],
     children: focusedConsole
       ? undefined
       : healthPages.map((item) => ({ ...item, activeId: classicHealth.id })),
@@ -455,34 +466,23 @@ function stageRailNav(
   };
   // Upstream's entities (RC-775, RC-777) fold under Traces, so the rail keeps its budget.
   const classicTraces = pick("traces");
-  const traces: NavItem = entityPages
-    ? {
-        ...classicTraces,
-        children: [
-          {
-            id: "traces-all",
-            label: "All traces",
-            href: classicTraces.href,
-            icon: "traces",
-            activeId: classicTraces.id,
-          },
-          {
-            id: "agents",
-            label: "Agents",
-            href: `${root}/agents`,
-            icon: "traces",
-            keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
-          },
-          {
-            id: "mcp-servers",
-            label: "MCP servers",
-            href: `${root}/mcp`,
-            icon: "traces",
-            keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
-          },
-        ],
-      }
-    : classicTraces;
+  const traces: NavItem =
+    entityPages || sentiment
+      ? {
+          ...classicTraces,
+          children: [
+            {
+              id: "traces-all",
+              label: "All traces",
+              href: classicTraces.href,
+              icon: "traces",
+              activeId: classicTraces.id,
+            },
+            ...(sentiment ? [sentimentItem(root)] : []),
+            ...(entityPages ? entityItems(root) : []),
+          ],
+        }
+      : classicTraces;
   return [
     ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
     ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
@@ -492,6 +492,37 @@ function stageRailNav(
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("settings"),
+  ];
+}
+
+/** Sentiment analysis (`sentimentAnalysis`, RC-357), a child of Traces. */
+function sentimentItem(root: string): NavItem {
+  return {
+    id: "traces-sentiment",
+    label: "Sentiment analysis",
+    href: `${root}/traces/sentiment`,
+    icon: "traces",
+    keywords: ["satisfaction", "sentiment", "satisfied", "unsatisfied", "how people took it"],
+  };
+}
+
+/** Agents and MCP servers, children of Traces. */
+function entityItems(root: string): NavItem[] {
+  return [
+    {
+      id: "agents",
+      label: "Agents",
+      href: `${root}/agents`,
+      icon: "traces",
+      keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
+    },
+    {
+      id: "mcp-servers",
+      label: "MCP servers",
+      href: `${root}/mcp`,
+      icon: "traces",
+      keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
+    },
   ];
 }
 

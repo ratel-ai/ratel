@@ -15,6 +15,7 @@ export const CORE_FLAGS = [
   "mcpApps",
   "agentsPages",
   "toolRunInsights",
+  "sentimentAnalysis",
   "focusedConsole",
 ] as const;
 

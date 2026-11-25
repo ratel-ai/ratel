@@ -65,6 +65,8 @@ export type DataTableProps<T> = {
   empty?: ReactNode;
   density?: "default" | "compact";
   className?: string;
+  /** Extra classes for one row, e.g. a group's heading row in a grouped list. */
+  rowClassName?: (row: T) => string | undefined;
 };
 
 const INTERACTIVE = "a, button, input, select, textarea, label, [role='button'], [role='checkbox']";
@@ -83,6 +85,7 @@ export function DataTable<T>({
   empty,
   density = "default",
   className,
+  rowClassName,
 }: DataTableProps<T>) {
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const [focusIndex, setFocusIndex] = useState(0);
@@ -243,6 +246,7 @@ export function DataTable<T>({
                       "outline-none transition-colors duration-120 focus-visible:bg-hover focus-visible:shadow-[inset_2px_0_0_var(--ds-focus)]",
                       onRowOpen && "cursor-pointer hover:bg-hover",
                       selected && "bg-selected hover:bg-selected",
+                      rowClassName?.(row),
                     )}
                   >
                     {columns.map((column) => (

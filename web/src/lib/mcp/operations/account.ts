@@ -66,6 +66,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     note: "tool-run insights: Tasks from small projects, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns",
   },
   {
+    key: "sentimentAnalysis",
+    note: "The console's Sentiment analysis page under Traces, and task completion with its root causes on Agent health. No tool reads them yet.",
+  },
+  {
     key: "focusedConsole",
     note: "the simplified console: Overview as a recap, Agent health as the score and its categories, Self-corrections under Insights",
   },

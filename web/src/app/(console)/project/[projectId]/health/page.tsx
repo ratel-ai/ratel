@@ -27,6 +27,7 @@ import {
   loadInferredToolShare,
   toolCallsInferred,
 } from "@/lib/readings/trace-signals/inferred-tools-query";
+import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { type PartialReading, partialReading } from "@/lib/readings/trace-signals/partial-reading";
 import { loadPartialFacts } from "@/lib/readings/trace-signals/partial-reading-query";
 import { toolRunInsightsEnabled } from "@/lib/readings/trace-signals/tool-run-insights";
@@ -43,6 +44,10 @@ import { turnsPerIssue } from "@/lib/views/health/issue-examples";
 import { loadHealthPageModel, pendingHealthModel } from "@/lib/views/health/page-model";
 import { loadHealthPageState } from "@/lib/views/health/page-state-load";
 import { healthReportHref } from "@/lib/views/health/report-href";
+import {
+  loadTaskCompletionCard,
+  type TaskCompletionCard,
+} from "@/lib/views/health/root-causes/completion-card";
 import {
   loadSelfCorrectionsCard,
   unavailableSelfCorrectionsCard,
@@ -89,45 +94,59 @@ export default async function AgentHealthPage({
   const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
     ? LOW_CONFIDENCE_FLOOR
     : undefined;
-  const [loaded, imports, share, inSupportSession, tasks, fixes, corrections] = await Promise.all([
-    loadOrFallback({
-      operation: "agent_health_model",
-      distinctId,
-      fallback: fallbackModel,
-      // Example turns are not read with the page: an issue reads its own when opened.
-      load: () =>
-        loadHealthPageModel(
-          { projectId: project.id, windowDays, lowConfidenceFloor },
-          process.env.NODE_ENV,
-          {
-            getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
-          },
-        ),
-    }),
-    loadImportState(project.id, importsSlot),
-    loadShareState(project.id, editionUi?.HealthShare, limits.agentHealthWindowDays),
-    isRestrictedBySupportSession(),
-    loadOrFallback<TaskListModel | null>({
-      operation: "agent_health_tasks",
-      distinctId,
-      fallback: null,
-      load: async () => buildTaskList(await loadTasksInputs(project.id)),
-    }),
-    loadOrFallback<Pick<FixesModel, "open" | "applied"> | null>({
-      operation: "agent_health_fixes",
-      distinctId,
-      fallback: null,
-      load: () => loadFixes({ projectId: project.id, organization, topics: false }),
-    }),
-    focused
-      ? null
-      : loadOrFallback({
-          operation: "agent_health_self_corrections_card",
-          distinctId,
-          fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
-          load: () => loadSelfCorrectionsCard(project.id, windowDays),
-        }),
-  ]);
+  const [loaded, imports, share, inSupportSession, tasks, fixes, corrections, taskCompletion] =
+    await Promise.all([
+      loadOrFallback({
+        operation: "agent_health_model",
+        distinctId,
+        fallback: fallbackModel,
+        // Example turns are not read with the page: an issue reads its own when opened.
+        load: () =>
+          loadHealthPageModel(
+            { projectId: project.id, windowDays, lowConfidenceFloor },
+            process.env.NODE_ENV,
+            {
+              getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
+            },
+          ),
+      }),
+      loadImportState(project.id, importsSlot),
+      loadShareState(project.id, editionUi?.HealthShare, limits.agentHealthWindowDays),
+      isRestrictedBySupportSession(),
+      loadOrFallback<TaskListModel | null>({
+        operation: "agent_health_tasks",
+        distinctId,
+        fallback: null,
+        load: async () => buildTaskList(await loadTasksInputs(project.id)),
+      }),
+      loadOrFallback<Pick<FixesModel, "open" | "applied"> | null>({
+        operation: "agent_health_fixes",
+        distinctId,
+        fallback: null,
+        load: () => loadFixes({ projectId: project.id, organization, topics: false }),
+      }),
+      focused
+        ? null
+        : loadOrFallback({
+            operation: "agent_health_self_corrections_card",
+            distinctId,
+            fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
+            load: () => loadSelfCorrectionsCard(project.id, windowDays),
+          }),
+      // Behind `sentimentAnalysis`, with Root cause analysis it leads to; on the classic Summary only. A
+      // failed read hides the row.
+      focused
+        ? null
+        : loadOrFallback<TaskCompletionCard | null>({
+            operation: "agent_health_task_completion",
+            distinctId,
+            fallback: null,
+            load: async () =>
+              (await sentimentAnalysisEnabled(organization))
+                ? loadTaskCompletionCard(project.id, windowDays)
+                : null,
+          }),
+    ]);
   // The example allowance, kept for when an issue is opened (the model carries none).
   const model = {
     ...applyPlanLimits(loaded, limits),
@@ -212,7 +231,7 @@ export default async function AgentHealthPage({
   return focused ? (
     <FocusedHealthView {...view} />
   ) : (
-    <SummaryView {...view} corrections={corrections} />
+    <SummaryView {...view} corrections={corrections} taskCompletion={taskCompletion} />
   );
 }
 

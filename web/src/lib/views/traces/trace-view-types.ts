@@ -1,4 +1,4 @@
-import type { TraceContentView } from "@/lib/synthesis/traces/content-view";
+import type { TraceContentView } from "@/lib/ingest/otlp/content-view";
 import type { AgentSubtree } from "@/lib/synthesis/traces/v2/agent-rollup";
 import type { RunMetrics } from "@/lib/synthesis/traces/v2/run-metrics";
 import type { RunTotals } from "@/lib/synthesis/traces/v2/run-summary";

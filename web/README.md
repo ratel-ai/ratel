@@ -71,9 +71,9 @@ Next reads, `next.config.ts`'s build-time variables and the variables a third-pa
 stay outside it (listed at the top of `config.ts`).
 
 Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`,
-`toolRunInsights`, `focusedConsole`): in the file `flags.<key>`, in the environment `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS` and
-`FF_FOCUSED_CONSOLE`. A flag
+`toolRunInsights`, `sentimentAnalysis`, `focusedConsole`): in the file `flags.<key>`, in the environment `FF_EVAL_GATE`,
+`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`,
+`FF_SENTIMENT_ANALYSIS` and `FF_FOCUSED_CONSOLE`. A flag
 takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
@@ -90,8 +90,10 @@ published catalog dropped, closable warnings, gone tools pruned on rebuild), MCP
 server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), and tool-run
 insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
-confidence). Cloud ignores it and reads each flag (`evalGate`, `rankingCatalogDrift`, `mcpApps`,
-`toolRunInsights`) on its own. The eval gate's pages live in the
+confidence), and Sentiment analysis (the page under Traces, task completion on Agent health with
+its Root cause analysis, a turn's User / Agent chat; read by rules and the sentiment lexicon, since
+this edition has no question engine). Cloud ignores it and reads each flag (`evalGate`,
+`rankingCatalogDrift`, `mcpApps`, `toolRunInsights`, `sentimentAnalysis`) on its own. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,

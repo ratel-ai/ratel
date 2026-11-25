@@ -7,6 +7,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -14,10 +15,12 @@ import {
 } from "drizzle-orm/pg-core";
 import { traceTurns } from "@/lib/ledger/schema";
 import { projects } from "@/lib/platform/projects/schema";
+import type { StoredFailureStreak } from "./outcomes/kinds";
 
 /**
  * The Agent health reading's tables: signal runs and the signals they open, the workflow
- * names and decisions, and the self-corrections read from each window. Owned fragment of
+ * names and decisions, the self-corrections read from each window, and the outcomes behind
+ * Sentiment analysis (a turn's, a session's, a task's). Owned fragment of
  * the upstream schema (ADR-0004). Everything here is derived from the turn ledger and is
  * rewritten by the next run; nothing stores query text, error text or an end-user id.
  */
@@ -250,6 +253,156 @@ export const traceSelfCorrections = pgTable(
   (t) => [
     index("trace_self_corrections_project_time_idx").on(t.projectId, t.occurredAt),
     index("trace_self_corrections_turn_idx").on(t.turnId),
+  ],
+);
+
+/**
+ * Sentiment analysis (Agent health): what one closed turn came to, one row per
+ * turn. Three writers, each with its own columns, so a reading never erases
+ * another's: the rule layer (`outcomes/`, with every signal
+ * run, no model) reads the trace; the model layer fills the closed answers
+ * where user text was captured; the fusion sets `result`.
+ *
+ * `rule_version` and `model_version` are the versions of the rules and of the
+ * questions a row was read with: a row of an older version is read again.
+ *
+ * PRIVACY: closed values, counts, catalog ids and times only. No message,
+ * reply or error text is ever stored here.
+ */
+export const traceTurnOutcomes = pgTable(
+  "trace_turn_outcomes",
+  {
+    turnId: uuid("turn_id")
+      .primaryKey()
+      .references(() => traceTurns.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    // The turn's session and times, copied so a session rolls up without a join.
+    sessionId: text("session_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    // Fusion: the turn's result and what it was decided from ("rule" | "model"). Null until fused.
+    result: text("result"),
+    resultSource: text("result_source"),
+    // Why the turn's leading failure happened (OUTCOME_CAUSES) and who decided it
+    // ("rule" | "model"); null when no call failed or no error message could be read.
+    cause: text("cause"),
+    causeSource: text("cause_source"),
+    // Rule layer. What followed the leading failure streak (FAILURE_FOLLOWED): the
+    // worst of the turn's streaks, the earliest on a tie. Null when no call failed.
+    followed: text("followed"),
+    // Every failure streak of the turn, in step order.
+    failures: jsonb("failures").$type<StoredFailureStreak[]>().notNull().default([]),
+    okCalls: integer("ok_calls").notNull().default(0),
+    failedCalls: integer("failed_calls").notNull().default(0),
+    // Failed calls whose error message was gone (pruned) or never sent.
+    errorsUnread: integer("errors_unread").notNull().default(0),
+    // Search runs with no call after them, and those long enough to be a catalog listing.
+    unmetSearches: integer("unmet_searches").notNull().default(0),
+    catalogListings: integer("catalog_listings").notNull().default(0),
+    ruleVersion: integer("rule_version").notNull(),
+    // Model layer: closed answers, null until asked. Never the text they were read from.
+    satisfaction: text("satisfaction"),
+    reaction: text("reaction"),
+    claimedDone: boolean("claimed_done"),
+    // Whether the user's message asked for something.
+    request: boolean("request"),
+    modelVersion: integer("model_version"),
+    // How the person took the turn, inferred from the agent's NEXT reply where their own message was not read
+    // (`outcomes/reply-reading.ts`): a closed value, and whether a rule or the model read it ("rule" | "model").
+    replyReaction: text("reply_reaction"),
+    replyReactionSource: text("reply_reaction_source"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // When the rule layer last read the turn.
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trace_turn_outcomes_project_ended_idx").on(t.projectId, t.endedAt),
+    index("trace_turn_outcomes_project_session_idx").on(t.projectId, t.sessionId, t.startedAt),
+  ],
+);
+
+/**
+ * Sentiment analysis (Agent health): what one session came to, one row per
+ * (project, session), rolled up from its `trace_turn_outcomes` rows by the
+ * rule layer after each signal run. The fusion sets `outcome`.
+ *
+ * PRIVACY: closed values, counts, ids and times only; no text.
+ */
+export const traceSessionOutcomes = pgTable(
+  "trace_session_outcomes",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    // Fusion: the session's outcome and what it was decided from ("rule" | "model"). Null until fused.
+    outcome: text("outcome"),
+    outcomeSource: text("outcome_source"),
+    // Failure streaks plus search runs with no call after them, over the session's turns.
+    frictionCount: integer("friction_count").notNull().default(0),
+    turnCount: integer("turn_count").notNull().default(0),
+    // No foreign keys: the row is rewritten with each reading and a turn's rows go with the turn.
+    firstTurnId: uuid("first_turn_id").notNull(),
+    lastTurnId: uuid("last_turn_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    // The last turn got no successful call.
+    openRequest: boolean("open_request").notNull().default(false),
+    unmetSearches: integer("unmet_searches").notNull().default(0),
+    catalogListings: integer("catalog_listings").notNull().default(0),
+    ruleVersion: integer("rule_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.sessionId] }),
+    index("trace_session_outcomes_project_ended_idx").on(t.projectId, t.endedAt),
+  ],
+);
+
+/**
+ * Sentiment analysis (Agent health): what one task came to, one row per task.
+ * A task is a goal (the person's request, or the agent's own tool search) and
+ * the turns after it until the next goal (`outcomes/tasks.ts`).
+ * The row is rewritten with its session's fold; its key is its first turn.
+ *
+ * `tier` says how much the result could be read from (t0 trace only to t3 the
+ * person's words), `checked` whether anything read the goal, and `answer` the
+ * task question's closed answer, kept so a fold without it reuses it.
+ *
+ * PRIVACY: closed values, ids and times only. No goal, message or query text.
+ */
+export const traceTaskOutcomes = pgTable(
+  "trace_task_outcomes",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    // The first turn's id. No foreign key: the row is rewritten with each fold.
+    taskId: uuid("task_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    turnIds: uuid("turn_ids").array().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    goalSource: text("goal_source").notNull(),
+    tier: text("tier").notNull(),
+    result: text("result").notNull(),
+    reason: text("reason"),
+    cause: text("cause"),
+    checked: boolean("checked").notNull().default(false),
+    resultSource: text("result_source").notNull(),
+    answer: text("answer"),
+    answerProbability: real("answer_probability"),
+    ruleVersion: integer("rule_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.taskId] }),
+    index("trace_task_outcomes_project_ended_idx").on(t.projectId, t.endedAt),
+    index("trace_task_outcomes_project_session_idx").on(t.projectId, t.sessionId),
   ],
 );
 

@@ -7,9 +7,8 @@ import { traceTurns } from "@/lib/ledger/schema";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
-import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { runIsInEvalSet } from "@/lib/views/task-evals/run-to-test";
-import { loadTurnDetail } from "@/lib/views/traces/turn-detail";
+import { loadTurnView } from "@/lib/views/traces/turn-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Turn" };
@@ -39,10 +38,9 @@ export default async function TurnTracePage({
 
   const { project, organization } = await requireProjectScope(projectId);
 
-  const turn = await withStatementTimeout((db) => loadTurnDetail(project.id, turnId, db), {
-    operation: "trace_turn_detail",
-  });
-  if (!turn) notFound();
+  const focus = (Array.isArray(search.focus) ? search.focus[0] : search.focus)?.trim() || null;
+  const view = await loadTurnView(project.id, turnId, organization);
+  if (!view) notFound();
 
   const testAction = (await evalGateEnabledFor(organization))
     ? await withStatementTimeout(
@@ -70,16 +68,15 @@ export default async function TurnTracePage({
         { operation: "trace_turn_test" },
       )
     : null;
-  const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
-  const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (
     <>
       {testAction ? <div className="mb-4 flex justify-end">{testAction}</div> : null}
       <TurnDetailView
         projectId={project.id}
-        turn={turn}
-        focusEventId={focus?.trim() || null}
-        sessionHref={sessionHref}
+        turn={view.turn}
+        focusEventId={focus}
+        sessionHref={view.sessionHref}
+        conversation={view.conversation}
       />
     </>
   );

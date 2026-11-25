@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, HeartPulse, History } from "lucide
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { StepGlyph } from "@/components/console/health/kinds";
+import { TurnAfter, TurnAsked } from "@/components/console/traces/TurnConversation";
 import { TurnLinkedPanel } from "@/components/console/traces/TurnLinkedPanel";
 import { formatDuration } from "@/lib/readings/trace-signals/claims";
 import {
@@ -11,6 +12,7 @@ import {
   turnEventAnchor,
   turnTracesHref,
 } from "@/lib/readings/trace-signals/view";
+import type { TurnConversation as Conversation } from "@/lib/views/traces/sentiment/example";
 import type { TurnDetail, TurnDetailCall } from "@/lib/views/traces/turn-detail";
 
 /**
@@ -43,6 +45,10 @@ export interface TurnDetailViewProps {
   focusEventId: string | null;
   /** The session replay of this turn's session. */
   sessionHref?: string | null;
+  /** What was asked, replied and said next; null while `sentimentAnalysis` is off or nothing was read. */
+  conversation?: Conversation | null;
+  /** Inside a Panel: without the page's own navigation, which would leave the list. */
+  embedded?: boolean;
 }
 
 export function TurnDetailView({
@@ -50,6 +56,8 @@ export function TurnDetailView({
   turn,
   focusEventId,
   sessionHref = null,
+  conversation = null,
+  embedded = false,
 }: TurnDetailViewProps) {
   const started = new Date(turn.startedAt);
   const spanMs = Math.max(0, new Date(turn.endedAt).getTime() - started.getTime());
@@ -58,8 +66,13 @@ export function TurnDetailView({
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6" data-turn-detail={turn.id}>
       <header className="pixel-header flex flex-wrap items-end justify-between gap-4 border-b border-forest-300 pb-6">
         <div className="min-w-0">
-          <div className="eyebrow">Traces · Turn</div>
-          <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-cream">
+          {embedded ? null : <div className="eyebrow">Traces · Turn</div>}
+          <h1
+            className={cn(
+              "mt-1 font-display font-bold tracking-tight text-cream",
+              embedded ? "text-lg" : "text-2xl",
+            )}
+          >
             A turn on {DAY.format(started)}, {TIME.format(started)} UTC
           </h1>
           <p className="mt-2 text-sm text-warm-muted">
@@ -82,11 +95,17 @@ export function TurnDetailView({
           </p>
         </div>
         <nav aria-label="Turn navigation" className="flex flex-wrap items-center gap-2 text-[12px]">
-          <NavLink href={agentHealthHref(projectId)}>
-            <HeartPulse className="size-3.5" aria-hidden />
-            Agent health
-          </NavLink>
-          <NavLink href={`/project/${encodeURIComponent(projectId)}/traces`}>All traces</NavLink>
+          {embedded ? null : (
+            <>
+              <NavLink href={agentHealthHref(projectId)}>
+                <HeartPulse className="size-3.5" aria-hidden />
+                Agent health
+              </NavLink>
+              <NavLink href={`/project/${encodeURIComponent(projectId)}/traces`}>
+                All traces
+              </NavLink>
+            </>
+          )}
           {sessionHref && (
             <NavLink href={sessionHref}>
               <History className="size-3.5" aria-hidden />
@@ -96,7 +115,10 @@ export function TurnDetailView({
         </nav>
       </header>
 
-      {turn.linked && <TurnLinkedPanel linked={turn.linked} />}
+      {turn.linked && <TurnLinkedPanel linked={turn.linked} hideAsked={conversation != null} />}
+      {conversation && (
+        <TurnAsked conversation={conversation} fallback={turn.linked?.asked ?? null} />
+      )}
 
       <ol aria-label="Calls in this turn" className="flex flex-col gap-2.5">
         {turn.calls.map((call) => (
@@ -113,8 +135,10 @@ export function TurnDetailView({
           No calls were kept for this turn.
         </p>
       )}
+      {/* After the calls, as it happened: the reply, then what came next. */}
+      {conversation && <TurnAfter conversation={conversation} />}
 
-      {(turn.previousTurnId || turn.nextTurnId) && (
+      {!embedded && (turn.previousTurnId || turn.nextTurnId) && (
         <nav
           aria-label="Same session"
           className="flex items-center justify-between gap-3 border-t border-forest-300 pt-4 text-[13px]"

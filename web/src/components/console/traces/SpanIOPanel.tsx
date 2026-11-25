@@ -6,8 +6,8 @@ import { CodeBlock } from "@ratel/design-system/code";
 import { Callout } from "@ratel/design-system/states";
 import { SegmentedControl, Tabs } from "@ratel/design-system/tabs";
 import { useMemo, useState } from "react";
+import type { TraceContentView } from "@/lib/ingest/otlp/content-view";
 import type { RawSpanView } from "@/lib/ingest/otlp-raw/trace-raw-route";
-import type { TraceContentView } from "@/lib/synthesis/traces/content-view";
 import { ROLE_LABEL } from "@/lib/synthesis/traces/v2/conversation";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import {

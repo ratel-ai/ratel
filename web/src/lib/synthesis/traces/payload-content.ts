@@ -1,5 +1,12 @@
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { CloudEvent, CloudMessage } from "@/lib/ingest/cloud-schema";
+import {
+  messageText,
+  type TraceContentView,
+  type TraceMessageView,
+  type TraceToolCallView,
+  toolResults,
+} from "@/lib/ingest/otlp/content-view";
 import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { events } from "@/lib/ingest/otlp/schema";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
@@ -7,13 +14,6 @@ import { getDb } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
-import {
-  messageText,
-  type TraceContentView,
-  type TraceMessageView,
-  type TraceToolCallView,
-  toolResults,
-} from "./content-view";
 
 /**
  * A trace's captured content read from `events.payload` (RC-393). OTLP ingest

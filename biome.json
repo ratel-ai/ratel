@@ -492,7 +492,6 @@
         "web/src/lib/readings/topics/place.test.ts",
         "web/src/lib/readings/topics/place-turns.test.ts",
         "web/src/lib/readings/topics/queries.ts",
-        "web/src/lib/readings/topics/sentiment.ts",
         "web/src/lib/readings/topics/sentiment.test.ts",
         "web/src/lib/readings/topics/stats.ts",
         "web/src/lib/readings/topics/stats.test.ts",
@@ -542,8 +541,6 @@
         "web/src/lib/views/traces/turn-detail-linked.ts",
         "web/src/lib/views/traces/turn-linked.ts",
         "web/src/lib/views/traces/linked-copy.test.ts",
-        "web/src/components/console/traces/TurnDetailView.tsx",
-        "web/src/components/console/traces/TurnLinkedPanel.tsx",
         "web/src/lib/views/health/signals/claims-model.ts",
         "web/src/lib/views/health/signals/claims-model.test.ts",
         "web/src/lib/views/health/signals/claims-kit.ts",
@@ -960,6 +957,7 @@
         "web/src/lib/synthesis/dashboard.test.ts",
         "web/src/lib/synthesis/dashboard-prompt-cache.test.ts",
         "web/src/lib/synthesis/traces/**",
+        "!web/src/lib/synthesis/traces/payload-content.ts",
         "!web/src/lib/synthesis/traces/queries.ts",
         "!web/src/lib/synthesis/traces/trace-filters.integration.test.ts",
         "!web/src/lib/synthesis/traces/summary-refresh.ts",
@@ -969,7 +967,11 @@
         "!web/src/lib/synthesis/traces/schema.ts",
         "!web/src/lib/synthesis/traces/register.ts",
         "!web/src/lib/synthesis/traces/register.test.ts",
+        "web/src/lib/ingest/otlp/content-view.ts",
         "web/src/components/console/traces/**",
+        "!web/src/components/console/traces/TurnDetailView.tsx",
+        "!web/src/components/console/traces/TurnLinkedPanel.tsx",
+        "!web/src/components/console/traces/TurnConversation.tsx",
         "web/src/components/console/stale-build-callout.tsx",
         "web/src/lib/console/stale-build.ts",
         "web/src/lib/console/stale-build.test.ts",
@@ -1348,7 +1350,38 @@
         "!web/src/lib/views/agents/schema.ts",
         "web/src/lib/views/mcp-servers/**",
         "!web/src/lib/views/mcp-servers/queries.integration.test.ts",
-        "web/src/app/api/projects/\\[projectId\\]/agents/overrides/route.ts"
+        "web/src/app/api/projects/\\[projectId\\]/agents/overrides/route.ts",
+        "web/src/app/(console)/project/\\[projectId\\]/health/root-causes/loading.tsx",
+        "web/src/app/(console)/project/\\[projectId\\]/traces/sentiment/loading.tsx",
+        "web/src/components/console/health/v2/TaskCompletionRow.tsx",
+        "web/src/components/console/sentiment/FoldGroup.tsx",
+        "web/src/components/console/sentiment/ReasonBars.tsx",
+        "web/src/components/console/sentiment/ReasonTable.tsx",
+        "web/src/components/console/sentiment/RootCauseFilters.tsx",
+        "web/src/components/console/sentiment/RootCausePanel.tsx",
+        "web/src/components/console/sentiment/RootCauseView.tsx",
+        "web/src/components/console/sentiment/SatisfactionFace.tsx",
+        "web/src/components/console/sentiment/SentimentFilters.tsx",
+        "web/src/components/console/sentiment/SentimentSkeleton.tsx",
+        "web/src/lib/readings/trace-signals/outcomes/ask-queries.ts",
+        "web/src/lib/views/health/root-causes/completion-card.test.ts",
+        "web/src/lib/views/health/root-causes/completion-card.ts",
+        "web/src/lib/readings/trace-signals/outcomes/error-cause.test.ts",
+        "web/src/lib/readings/trace-signals/outcomes/error-cause.ts",
+        "web/src/lib/readings/trace-signals/outcomes/followed.ts",
+        "web/src/lib/readings/trace-signals/outcomes/fusion.test.ts",
+        "web/src/lib/readings/trace-signals/outcomes/fusion.ts",
+        "web/src/lib/readings/trace-signals/outcomes/kinds.ts",
+        "web/src/lib/readings/trace-signals/outcomes/questions.test.ts",
+        "web/src/lib/readings/trace-signals/outcomes/read.test.ts",
+        "web/src/lib/readings/trace-signals/outcomes/read.ts",
+        "web/src/lib/readings/trace-signals/outcomes/reply-reading.test.ts",
+        "web/src/lib/readings/trace-signals/outcomes/reply-reading.ts",
+        "web/src/lib/readings/trace-signals/outcomes/rows.ts",
+        "web/src/lib/readings/trace-signals/outcomes/summary.ts",
+        "web/src/lib/readings/trace-signals/outcomes/task-question.ts",
+        "web/src/lib/readings/trace-signals/outcomes/tasks.test.ts",
+        "web/src/lib/readings/trace-signals/outcomes/tasks.ts"
       ],
       "linter": {
         "rules": {
@@ -1369,6 +1402,7 @@
         "web/src/components/console/tasks/**",
         "web/src/components/console/playground/**",
         "web/src/components/console/self-corrections/**",
+        "web/src/components/console/sentiment/**",
         "web/src/components/console/session-replay/**",
         "web/src/components/console/session-chat/**",
         "web/src/components/console/traces-sessions/**",
@@ -1466,6 +1500,19 @@
         "rules": {
           "a11y": {
             "useValidAnchor": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "web/src/lib/views/traces/sentiment/page-links.ts",
+        "web/src/lib/views/traces/sentiment/page-model.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noShadowRestrictedNames": "off"
           }
         }
       }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildTraceContentView, preferSpanContent } from "@/lib/ingest/otlp/content-view";
 import type { OtelSpan } from "@/lib/ingest/otlp/schema";
 import { invalidParams, notFound } from "@/lib/mcp/errors";
 import {
@@ -24,7 +25,6 @@ import {
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { summarizeTraceForComparison } from "@/lib/synthesis/traces/comparison";
-import { buildTraceContentView, preferSpanContent } from "@/lib/synthesis/traces/content-view";
 import {
   type ListProjectEventsOptions,
   listProjectEvents,

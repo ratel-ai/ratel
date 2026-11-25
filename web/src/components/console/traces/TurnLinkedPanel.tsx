@@ -8,8 +8,15 @@ import { linkedModelText, type TurnLinked } from "@/lib/views/traces/turn-linked
  * run linked to model calls; "Asked" and "Searched" sit side by side when
  * both were captured.
  */
-export function TurnLinkedPanel({ linked }: { linked: TurnLinked }) {
-  const pair = linked.asked !== null && linked.searched !== null;
+export function TurnLinkedPanel({
+  linked,
+  hideAsked = false,
+}: {
+  linked: TurnLinked /** The ask shows in the conversation instead (`TurnConversation.tsx`). */;
+  hideAsked?: boolean;
+}) {
+  const asked = hideAsked ? null : linked.asked;
+  const pair = asked !== null && linked.searched !== null;
   return (
     <section
       aria-label="What the model saw"
@@ -18,11 +25,12 @@ export function TurnLinkedPanel({ linked }: { linked: TurnLinked }) {
     >
       {pair && (
         <div className="grid gap-3 sm:grid-cols-2">
-          <Quote label="Asked" text={linked.asked!} />
+          <Quote label="Asked" text={asked!} />
           <Quote label="Searched" text={linked.searched!} />
         </div>
       )}
-      {!pair && linked.asked !== null && <Quote label="Asked" text={linked.asked} />}
+      {!pair && asked !== null && <Quote label="Asked" text={asked} />}
+      {hideAsked && linked.searched !== null && <Quote label="Searched" text={linked.searched} />}
       <p
         className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-cream-dim"
         data-turn-linked-model="true"

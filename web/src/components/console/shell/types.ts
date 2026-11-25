@@ -28,6 +28,8 @@ export type ShellData = {
   projectNav: ProjectNavGroup[];
   /** The organizations with `agentsPages` on: their rail shows Agents and MCP servers under Traces. */
   entityPagesOrganizations?: readonly string[];
+  /** `sentimentAnalysis` (RC-357): the organizations whose projects show Sentiment analysis under Traces. */
+  sentimentOrganizations?: readonly string[];
   /** The organizations with `focusedConsole` on (`lib/console/focused-console`). */
   focusedConsoleOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
