@@ -294,8 +294,10 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
       console.error(error instanceof Error ? error.message : error);
       process.exit(1);
     }
-  } else if (plan.role === "worker" || plan.role === "ingest" || plan.role === "persist") {
-    console.log(`[migrate] skipped: the ${plan.role} process never migrates, the web process does`);
+  } else {
+    const { skippedMigrationMessage } = await import("@/lib/jobs/boot-plan");
+    const skipped = skippedMigrationMessage(plan.role);
+    if (skipped) console.log(skipped);
   }
   const { assertCronConfig, startInProcessScheduler } = await import("@/lib/jobs/scheduler");
   try {

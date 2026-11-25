@@ -37,3 +37,15 @@ export function bootPlan(config: Config = getConfig()): BootPlan {
   if (role === "api") return { role, migrate, tick: "none" };
   return { role, migrate, tick: inProcessCronEnabled(config) ? "scheduler" : "external" };
 }
+
+/**
+ * The boot line of a process that never migrates, or null for one that may. The worker's wording
+ * is a contract: CI's compose check greps the worker's log for "the worker never migrates".
+ */
+export function skippedMigrationMessage(role: AppRole): string | null {
+  if (role === "worker")
+    return "[migrate] skipped: the worker never migrates, the web process does";
+  if (role === "ingest" || role === "persist")
+    return `[migrate] skipped: the ${role} process never migrates, the web process does`;
+  return null;
+}
