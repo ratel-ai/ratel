@@ -4,16 +4,20 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
+import { CompareView } from "@/components/console/evals/CompareView";
 import { EvalsView } from "@/components/console/evals/EvalsView";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
+import { compare } from "../domain/compare";
 import type { Experiment, Trial } from "../domain/experiment";
+import type { TrialResult } from "../domain/score";
 import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
 import {
   type CaseEditorModel,
   type CaseVersionView,
+  comparePageModel,
   experimentPageModel,
   readyVersions,
 } from "../page-model";
@@ -65,6 +69,7 @@ test("the list shows which version counts", () => {
   const row = { id: "c1", name: "Late refund", labels: ["task: refunds"], createdAt: NOW };
   const html = render(
     createElement(EvalsView, {
+      baselineId: null,
       projectId: PROJECT_ID,
       canEdit: true,
       now: NOW,
@@ -174,7 +179,9 @@ test("the experiment page shows the raw counts of each case, and links each tria
     }),
     trial({ index: 2, result: "invalid", reason: "timed_out: no result", traceId: null }),
   ]);
-  const html = render(createElement(ExperimentView, { model, now: NOW }));
+  const html = render(
+    createElement(ExperimentView, { model, baseline: "none", canEdit: true, now: NOW }),
+  );
   const text = visibleText(html);
   assert.equal(text.match(/1 pass/g)?.length, 2, "the total and the case");
   for (const part of ["1 fail", "1 invalid", "Late refund", "timed_out: no result", "sv1"]) {
@@ -209,6 +216,7 @@ test("Run evals lists ready versions only, and is not there in a support session
     visibleText(
       render(
         createElement(EvalsView, {
+          baselineId: null,
           projectId: PROJECT_ID,
           canEdit,
           now: NOW,
@@ -220,4 +228,109 @@ test("Run evals lists ready versions only, and is not there in a support session
     );
   assert.ok(view(true).includes("No case is approved yet."));
   assert.ok(!view(false).includes("Run evals"));
+});
+
+const compared = (id: string, cases: Record<string, TrialResult>) => {
+  const experiment: Experiment = {
+    id,
+    projectId: PROJECT_ID,
+    organizationId: "o1",
+    sandboxVersionId: "sv1",
+    sandboxName: "support-demo",
+    gitCommit: id.repeat(40),
+    gitDirty: false,
+    params: {},
+    trialsPerCase: 1,
+    caseVersions: Object.keys(cases).map((name) => ({
+      caseId: name,
+      versionId: name,
+      number: 1,
+      name,
+    })),
+    scorerSnapshots: {},
+    startedBy: "u",
+    state: "completed",
+    createdAt: new Date(NOW),
+    finishedAt: new Date(NOW),
+  };
+  const trials = Object.entries(cases).map(
+    ([name, result]): Trial => ({
+      id: `${id}-${name}`,
+      experimentId: id,
+      caseVersionId: name,
+      index: 0,
+      state: "done",
+      result,
+      reason: null,
+      scorers: [],
+      costUsd: 0.0123,
+      durationMs: 1_500,
+      traceId: null,
+      sandboxRunId: null,
+    }),
+  );
+  return { experiment, trials };
+};
+
+test("the comparison page: the verdict and its rule, the changed cases, then the others", () => {
+  const baseline = compared("a", { better: "fail", same: "pass", worse: "pass" });
+  const candidate = compared("b", { better: "pass", same: "pass", worse: "fail" });
+  const comparison = compare(baseline, candidate);
+  assert.ok(comparison.ok);
+  const pin = { experimentId: "a", pinnedBy: "user_1", pinnedAt: new Date(NOW) };
+  const ids = { projectId: PROJECT_ID, experimentId: "b" };
+  const result = { ok: true as const, pin, baseline, candidate, comparison };
+  const model = comparePageModel(ids, result, "user_1");
+  const text = visibleText(render(createElement(CompareView, { model, now: NOW })));
+  const order = ["Regressed", comparison.rule, "Changed cases", "worse", "better", "Other cases"];
+  const at = order.map((part) => text.indexOf(part));
+  assert.ok(!at.includes(-1), text);
+  assert.deepEqual(
+    at,
+    [...at].sort((left, right) => left - right),
+  );
+  for (const part of ["1 regressed", "pinned by you", "1 pass", "1.5 s mean", "$0.0123 total"]) {
+    assert.ok(text.includes(part), part);
+  }
+  const asOther = comparePageModel(
+    ids,
+    { ...result, pin: { ...pin, pinnedBy: "key:1" } },
+    "user_2",
+  );
+  assert.equal(asOther.ok && asOther.pinnedBy, "a project key");
+});
+
+test("a refused comparison shows the reason and the scorers that differ", () => {
+  const scorers = [
+    { caseId: "c1", caseName: "Late refund", name: "No refund", difference: "changed" as const },
+  ];
+  const model = comparePageModel(
+    { projectId: PROJECT_ID, experimentId: "b" },
+    { ok: false, refusal: { reason: "scorers_differ", message: "The scorers differ.", scorers } },
+    "u",
+  );
+  const text = visibleText(render(createElement(CompareView, { model, now: NOW })));
+  for (const part of ["the scorers differ", "No refund", "Late refund", "The definition changed"]) {
+    assert.ok(text.includes(part), part);
+  }
+});
+
+test("a completed experiment can be pinned, and compared when another one is the baseline", () => {
+  const { experiment, trials } = compared("b", { one: "pass" });
+  const text = (baseline: "this" | "other" | "none", canEdit = true) =>
+    visibleText(
+      render(
+        createElement(ExperimentView, {
+          model: experimentPageModel(experiment, trials),
+          baseline,
+          canEdit,
+          now: NOW,
+        }),
+      ),
+    );
+  assert.match(text("none"), /Pin as baseline/);
+  assert.doesNotMatch(text("none"), /Compare with baseline/);
+  assert.match(text("other"), /Pin as baseline\s*Compare with baseline/);
+  assert.match(text("this"), /Unpin baseline/);
+  assert.doesNotMatch(text("other", false), /Pin as baseline/);
 });

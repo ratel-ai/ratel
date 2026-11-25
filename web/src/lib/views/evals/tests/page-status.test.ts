@@ -14,7 +14,12 @@ import { renderToReadableStream } from "react-dom/server.edge";
 const APP = fileURLToPath(new URL("../../../../app", import.meta.url));
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const PAGE_TEXT = "the page";
-const PAGES = ["evals", "evals/cases/[caseId]", "evals/experiments/[experimentId]"];
+const PAGES = [
+  "evals",
+  "evals/cases/[caseId]",
+  "evals/experiments/[experimentId]",
+  "evals/experiments/[experimentId]/compare",
+];
 
 type Layout = (props: {
   children: ReactNode;

@@ -7,6 +7,7 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
+import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import { emptyCounts } from "@/lib/views/evals/domain/experiment";
@@ -34,7 +35,7 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const [cases, experiments, versions] = await withFeatureSpan(
+  const [cases, experiments, versions, baseline] = await withFeatureSpan(
     "evals",
     "load_page",
     async () => {
@@ -51,6 +52,7 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
         (await sandboxesEnabledForProject(project.id))
           ? listSandboxVersions(project.id, VERSIONS)
           : [],
+        createDrizzleBaselineStore(db).get(project.id),
       ]);
     },
     { attributes: { "project.id": project.id } },
@@ -62,6 +64,7 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
       canEdit={!(await isRestrictedBySupportSession())}
       cases={cases.map(caseRow)}
       experiments={experiments}
+      baselineId={baseline?.experimentId ?? null}
       versions={readyVersions(versions)}
       now={new Date().toISOString()}
     >
