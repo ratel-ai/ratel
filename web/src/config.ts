@@ -78,6 +78,7 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   sentimentAnalysis: "FF_SENTIMENT_ANALYSIS",
+  hallucinationDetection: "FF_HALLUCINATION_DETECTION",
   focusedConsole: "FF_FOCUSED_CONSOLE",
 } as const satisfies Record<CoreFlag, string>;
 

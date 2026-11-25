@@ -1,66 +1,80 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
-import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { type StatProps, StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { ChartBarBig, CircleCheck, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import {
   money,
   percent,
   plural,
   READ_BY_MEANING,
-  ROOT_CAUSE_DESCRIPTION,
   tokensLabel,
 } from "@/components/console/sentiment/copy";
 import { ReasonBars } from "@/components/console/sentiment/ReasonBars";
 import { ReasonTable } from "@/components/console/sentiment/ReasonTable";
 import { RootCauseFilters } from "@/components/console/sentiment/RootCauseFilters";
-import { RootCausePanel } from "@/components/console/sentiment/RootCausePanel";
-import { LinkSwitch, type LinkSwitchOption } from "@/components/console/settings/LinkSwitch";
+import { RootCausesHost } from "@/components/console/sentiment/RootCausesHost";
+import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
-import { agentHealthHref, windowPhrase } from "@/lib/readings/trace-signals/view";
+import { type WindowDays, windowPhrase } from "@/lib/readings/trace-signals/view";
 import { formatDuration } from "@/lib/synthesis/traces/v2/format";
 import { type SentimentLinks, sentimentLinks } from "@/lib/views/traces/sentiment/page-links";
 import type { SentimentPageModel } from "@/lib/views/traces/sentiment/page-model";
+import type { RootCauseHost } from "@/lib/views/traces/sentiment/page-paths";
 import { MAX_PAGE_TURNS } from "@/lib/views/traces/sentiment/page-queries";
 
 /**
- * Root cause analysis (Agent health): why tasks were not completed, and what
- * got in the way of the ones completed after friction. Top to bottom: the
- * filters, four numbers (not completed, completed after friction, the
- * cost of failure and the cost of friction), the reasons as bars to pick from, and the root causes under each
- * reason in one table, ordered by tasks, cost or time, each opening its
- * sessions. Task completion on Agent health's Summary opens it.
+ * Root cause analysis: why tasks were not completed, and what got in the way
+ * of the ones completed after friction. It is a panel over its host page;
+ * this wraps the page, and reads nothing until the address opens it.
  */
-export function RootCauseView({
+export function RootCauses({
+  projectId,
+  windowDays,
   model,
-  windows,
+  host,
+  otherParam,
   now,
+  turn,
+  children,
 }: {
-  model: SentimentPageModel;
-  /** The time windows the plan allows, as links. */
-  windows: readonly LinkSwitchOption[];
+  projectId: string;
+  windowDays: WindowDays;
+  /** Null while the panel is closed. */
+  model: SentimentPageModel | null;
+  host: RootCauseHost;
+  /** The parameter of the host page's own panel. */
+  otherParam: string;
   /** The request's time, so relative times match between server and client. */
   now: string;
+  turn: PanelTurn | null;
+  children: ReactNode;
 }) {
-  const links = sentimentLinks(model, "root-causes");
+  const links = model ? sentimentLinks(model, "root-causes", host) : null;
   return (
-    <Page>
-      <PageHeader
-        title="Root cause analysis"
-        crumbs={[{ label: "Agent health", href: agentHealthHref(model.projectId) }]}
-        description={ROOT_CAUSE_DESCRIPTION}
-        actions={windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
-      />
-      <PageBody wide>
-        <Body model={model} links={links} now={now} />
-      </PageBody>
-    </Page>
+    <RootCausesHost
+      content={model && links ? <Body model={model} links={links} now={now} /> : null}
+      groups={links?.reasonGroups ?? []}
+      subtitle={`Why tasks were not completed, or only after friction, ${windowPhrase(windowDays)}`}
+      now={now}
+      turn={turn}
+      otherParam={otherParam}
+      key={projectId}
+    >
+      {children}
+    </RootCausesHost>
   );
 }
 
+/**
+ * Top to bottom: four numbers (not completed, completed after friction, the
+ * cost of failure and the cost of friction), the reasons as bars to pick
+ * from, and the root causes under each reason in one table, ordered by tasks,
+ * cost or time, each opening in the same panel.
+ */
 function Body({
   model,
   links,
@@ -85,24 +99,13 @@ function Body({
         emblem
         title={`No tasks read ${span}`}
         description="Tasks show up after the next reading of your agent's runs. Pick a longer window, or check that your agent is sending traces."
-        action={
-          <Link
-            href={agentHealthHref(model.projectId)}
-            className={buttonVariants({ variant: "secondary" })}
-          >
-            Open Agent health
-          </Link>
-        }
       />
     );
   }
   return (
-    <>
-      <StatRow stats={headline(model, links)} />
-      <Section
-        title={<NounTitle icon={ChartBarBig}>Reasons</NounTitle>}
-        description="Why tasks were not completed, and what got in the way of the tasks completed after friction. Pick a reason to see its root causes."
-      >
+    <div className="flex flex-col gap-8">
+      <StatRow stats={headline(model, links)} className="lg:grid-cols-2" />
+      <Section title={<NounTitle icon={ChartBarBig}>Reasons</NounTitle>}>
         {overview.failure.tasks + overview.friction.tasks === 0 ? (
           <EmptyState
             icon={CircleCheck}
@@ -114,10 +117,7 @@ function Body({
         )}
       </Section>
       {overview.failure.tasks + overview.friction.tasks > 0 ? (
-        <Section
-          title={<NounTitle icon={TriangleAlert}>Root causes by reason</NounTitle>}
-          description="Each reason, then what went wrong under it: a cause and the tool it happened on. A task counts once per root cause. Tokens and time: a task not completed counts whole; a task completed after friction counts only its friction, its extra turns and its retried calls (an estimate). Click a reason to open it, a root cause to see where it happened."
-        >
+        <Section title={<NounTitle icon={TriangleAlert}>Root causes by reason</NounTitle>}>
           {/* The filters sit on the table they narrow: a reason picked above shows here, removable. */}
           <RootCauseFilters
             filters={links.filters}
@@ -135,8 +135,7 @@ function Body({
           <Footnotes model={model} />
         </Section>
       ) : null}
-      <RootCausePanel groups={links.reasonGroups} now={now} />
-    </>
+    </div>
   );
 }
 

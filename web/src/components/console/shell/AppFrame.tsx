@@ -95,6 +95,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     organization && data.entityPagesOrganizations?.includes(organization.id),
   );
   const sentiment = Boolean(organization && data.sentimentOrganizations?.includes(organization.id));
+  const hallucinations = Boolean(
+    organization && data.hallucinationOrganizations?.includes(organization.id),
+  );
   const focusedConsole = Boolean(
     organization && data.focusedConsoleOrganizations?.includes(organization.id),
   );
@@ -108,6 +111,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         projectGroups: data.projectNav,
         entityPages,
         sentiment,
+        hallucinations,
         focusedConsole,
       }),
     [
@@ -118,6 +122,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       data.projectNav,
       entityPages,
       sentiment,
+      hallucinations,
       focusedConsole,
     ],
   );

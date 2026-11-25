@@ -29,6 +29,7 @@ import {
   windowOptionsForPlan,
 } from "@/lib/readings/trace-signals/view";
 import type { Fix } from "@/lib/views/fixes/types";
+import type { HallucinationRateCard } from "@/lib/views/health/hallucinations/rate-card";
 import { issueRows, rowOfIssue } from "@/lib/views/health/issue-rows";
 import { MOCK_HEALTH_MODEL, MOCK_NO_TELEMETRY } from "@/lib/views/health/mock-fixture";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
@@ -1098,6 +1099,37 @@ test("the page leads with the Health score, and each issue says what fixing it w
     html,
     /score-beat|score-wave|data-health-calculating|data-health-still-reading/,
   );
+});
+
+const RATE: HallucinationRateCard = {
+  rate: 0.011,
+  turnsAffected: 4,
+  turns: 369,
+  occurrences: 4,
+  read: true,
+  checked: true,
+  byNameOnly: false,
+  groups: [
+    { group: "tool", occurrences: 0, checked: true },
+    { group: "input", occurrences: 4, checked: true },
+    { group: "completion", occurrences: 0, checked: true },
+  ],
+  href: `${ROOT}/health/hallucinations?days=7`,
+};
+
+test("the hallucination rate shows on its own when task completion is off", () => {
+  const html = page({ taskCompletion: null, hallucinationRate: RATE });
+  assertHouseStyle(html, "hallucination rate alone");
+  assert.doesNotMatch(
+    html,
+    /data-health-task-completion=/,
+    "no task completion without its switch",
+  );
+  assert.match(
+    html,
+    /data-health-hallucination-rate=""[^]*1\.1%[^]*4 of 369 turns had at least one/,
+  );
+  assert.match(html, /data-health-hallucination-open=""/);
 });
 
 test("reads that failed cost their part, not the page", () => {

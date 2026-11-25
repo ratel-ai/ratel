@@ -85,6 +85,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   sentiment = false,
+  hallucinations = false,
   focusedConsole = false,
 }: {
   projectId: string | undefined;
@@ -105,6 +106,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `sentimentAnalysis` on for the shown organization (RC-357): Sentiment analysis under Traces. */
   sentiment?: boolean;
+  /** `hallucinationDetection` on for the shown organization: Hallucinations under Agent health. */
+  hallucinations?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
 }): NavItem[] {
@@ -207,6 +210,25 @@ export function consoleNav({
               icon: "health",
               keywords: ["retries", "apologies", "sorry", "tried again", "gave up", "backtracks"],
             },
+            ...(hallucinations
+              ? [
+                  {
+                    id: "health-hallucinations",
+                    label: "Hallucinations",
+                    href: `${root}/health/hallucinations`,
+                    icon: "health" as const,
+                    keywords: [
+                      "hallucination",
+                      "made up",
+                      "wrong tool",
+                      "tool that doesn't exist",
+                      "not found",
+                      "false done",
+                      "claimed done",
+                    ],
+                  },
+                ]
+              : []),
           ],
         },
         {
@@ -385,7 +407,12 @@ export function consoleNav({
     : [];
   return [
     ...(root
-      ? stageRailNav(root, core, setupRows, { entityPages, sentiment, focusedConsole })
+      ? stageRailNav(root, core, setupRows, {
+          entityPages,
+          sentiment,
+          focusedConsole,
+          hallucinations,
+        })
       : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
@@ -400,7 +427,8 @@ export function consoleNav({
 
 /**
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
- * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
+ * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item
+ * (each of its pages lights its own row once Hallucinations is among them);
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
  * Ship is new. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
  * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
@@ -413,7 +441,8 @@ function stageRailNav(
     entityPages,
     sentiment,
     focusedConsole,
-  }: { entityPages: boolean; sentiment: boolean; focusedConsole: boolean },
+    hallucinations,
+  }: { entityPages: boolean; sentiment: boolean; focusedConsole: boolean; hallucinations: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -432,9 +461,13 @@ function stageRailNav(
     ...classicHealth,
     // Root cause analysis is no rail or ⌘K destination: task completion on the Summary opens it.
     also: [...(classicHealth.also ?? []), ...(sentiment ? [`${root}/health/root-causes`] : [])],
+    // Lit as one item; with Hallucinations among its pages, each page lights its own row instead.
+    // With focusedConsole, Agent health has no sub-page.
     children: focusedConsole
       ? undefined
-      : healthPages.map((item) => ({ ...item, activeId: classicHealth.id })),
+      : healthPages.map((item) =>
+          hallucinations ? item : { ...item, activeId: classicHealth.id },
+        ),
   };
   const selfCorrections: NavItem[] = focusedConsole
     ? healthPages

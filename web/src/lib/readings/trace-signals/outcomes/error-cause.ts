@@ -34,7 +34,7 @@ const NUMBER = /\d+(?:[.,]\d+)*/g;
 const MESSAGE_FIELDS = ["message", "error", "detail", "code", "type"] as const;
 
 /** The text of an error as sent: the string, or the message fields of a JSON object in it. */
-function messageOf(raw: string): string {
+export function messageOf(raw: string): string {
   const text = raw.trim();
   if (!text.startsWith("{")) return text;
   try {

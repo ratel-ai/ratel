@@ -15,6 +15,7 @@ import { recordOutcomes, type StoredOutcomes } from "@/lib/readings/trace-signal
 import { outcomeRunDeps } from "@/lib/readings/trace-signals/outcomes/run-job";
 import {
   loadErrorMessages,
+  loadLastCalls,
   loadSessionTurns,
   loadTaskVerdicts,
   replaceSessionOutcomes,
@@ -70,7 +71,7 @@ interface Said {
 /**
  * s-a: a request that goes well, a second request, then a thanks with no call.
  * s-b: a comment that fails on "Task not found" while the reply says done; the person objects.
- * s-c: no turn scope and no message: three searches and no call.
+ * s-c: no turn scope and no message: three searches that list nothing, and no call.
  * s-d: one clean request, nothing after it.
  */
 function fixtures() {
@@ -84,9 +85,9 @@ function fixtures() {
     .invoke("add_task_comment")
     .error("add_task_comment");
   const c1 = fresh({ session: "s-c", start: BASE + 1_200_000 })
-    .search(["list_tasks"], { query: "export project to csv" })
-    .search(["list_tasks"], { query: "csv export of all tasks" })
-    .search(["list_tasks"], { query: "download project data" });
+    .search([], { query: "export project to csv" })
+    .search([], { query: "csv export of all tasks" })
+    .search([], { query: "download project data" });
   const d1 = fresh({
     session: "s-d",
     turnId: "d1",
@@ -264,6 +265,8 @@ async function run(
           listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, db, limit),
           loadBasis: async (p, w) => chooseRunBasis(await loadRunBasisCounts(p, w, db)),
           loadErrors: (p, ids) => loadErrorMessages(p, ids, db),
+          loadSearchQueries: (p, ids) => loadSearchQueries(p, ids, db),
+          loadLastCalls: (p, ids) => loadLastCalls(p, ids, db),
           replaceTurnRows: (p, range, rows, when) => replaceTurnOutcomes(p, range, rows, when, db),
           loadSessionTurns: (p, ids) => loadSessionTurns(p, ids, db),
           replaceSessionRows: (p, ids, rows, when) =>

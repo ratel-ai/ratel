@@ -26,6 +26,7 @@ import {
 } from "@/lib/readings/trace-signals/outcomes/run";
 import {
   loadErrorMessages,
+  loadLastCalls,
   loadSessionTurns,
   loadTaskVerdicts,
   replaceSessionOutcomes,
@@ -128,6 +129,8 @@ export function outcomeRunDeps(
     loadBasis: async (projectId, window) =>
       chooseRunBasis(await loadRunBasisCounts(projectId, window)),
     loadErrors: (projectId, eventIds) => loadErrorMessages(projectId, eventIds),
+    loadSearchQueries: (projectId, eventIds) => loadSearchQueries(projectId, eventIds),
+    loadLastCalls: (projectId, sessionIds) => loadLastCalls(projectId, sessionIds),
     replaceTurnRows: (projectId, range, rows, at) =>
       replaceTurnOutcomes(projectId, range, rows, at),
     loadSessionTurns: (projectId, sessionIds) => loadSessionTurns(projectId, sessionIds),

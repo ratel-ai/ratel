@@ -158,7 +158,7 @@ export function outcomeLines(stored: StoredOutcomes): string[] {
     `outcomes: ${n(stored.turns)} turns and ${n(stored.sessions)} sessions read (rules v${stored.ruleVersion}, ${q ? "questions on" : stored.questionsOff ? OFF_WORDS[stored.questionsOff] : "no model"})`,
     `failed calls ${n(stored.failedCalls)} by cause: ${causes}${unknown}; ${n(stored.errorsUnread)} without a readable message`,
     `failure streaks ${n(stored.streaks)}: ${followed}`,
-    `search runs with no call after ${n(stored.unmetSearches)}, catalog listings ${n(stored.catalogListings)}, sessions left with an open request ${n(stored.openRequests)}`,
+    `searches no tool fits ${n(stored.unmetSearches)}, catalog listings ${n(stored.catalogListings)}, sessions left with an open request ${n(stored.openRequests)}`,
     `turn results: ${TURN_RESULTS.map((result) => `${RESULT_WORDS[result]} ${n(stored.fusion.results[result])}`).join(", ")}; said done over an error ${n(stored.fusion.falseCompletions)}`,
     `session outcomes: ${SESSION_OUTCOMES.map((outcome) => `${OUTCOME_WORDS[outcome]} ${n(stored.fusion.sessions[outcome])}`).join(", ")} (${n(stored.fusion.ruleOnlySessions)} from the trace alone)`,
     ...questions,

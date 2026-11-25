@@ -9,7 +9,7 @@ import {
   type TurnResult,
 } from "@/lib/readings/trace-signals/outcomes/kinds";
 import { satisfactionOf, type TurnAnswers } from "@/lib/readings/trace-signals/outcomes/questions";
-import { leftOpen } from "@/lib/readings/trace-signals/outcomes/read";
+import { leftOpen, searchedOnly } from "@/lib/readings/trace-signals/outcomes/read";
 
 /**
  * The fusion: what a turn came to and what a session came to, decided in
@@ -48,7 +48,9 @@ import { leftOpen } from "@/lib/readings/trace-signals/outcomes/read";
  * - With the rules alone (`rule`): only the classes the trace can support
  *   (`RULE_SESSION_OUTCOMES`). `blocked` or `gave_up` when the last request
  *   was left open, by the same test; else resolved, after friction when a
- *   call failed or a search run met nothing on the way. Never `escalated`.
+ *   call failed or no tool fit a search on the way. Never `escalated`.
+ * - Turns that only searched (`searchedOnly`) say nothing: a session of
+ *   nothing else has no outcome.
  */
 
 /** The rule facts of a turn the fusion reads. */
@@ -145,6 +147,9 @@ export interface FusionSessionTurn {
   satisfaction?: string | null;
   reaction?: string | null;
   cause?: string | null;
+  searches?: number;
+  calls?: number;
+  request?: boolean | null;
 }
 
 export interface FusedSession {
@@ -164,7 +169,7 @@ const wentWrong = (turn: FusionSessionTurn): boolean =>
 function blocked(turn: FusionSessionTurn): boolean {
   if (turn.result === "refused") return true;
   if ((BLOCKING_CAUSES as readonly string[]).includes(turn.cause ?? "")) return true;
-  // A search run nothing was run for, with no failed call: a missing tool.
+  // A search no listed tool fits, with no failed call: a missing tool.
   return turn.failedCalls === 0 && turn.unmetSearches > 0 && turn.okCalls === 0;
 }
 
@@ -174,8 +179,9 @@ const readByModel = (turn: FusionSessionTurn): boolean =>
   (turn.satisfaction ?? null) !== null ||
   (turn.reaction ?? null) !== null;
 
-/** One session's outcome from its turns, oldest first; null when it has none. */
-export function sessionOutcome(turns: readonly FusionSessionTurn[]): FusedSession | null {
+/** One session's outcome from its turns, oldest first; null when it has none but searches. */
+export function sessionOutcome(all: readonly FusionSessionTurn[]): FusedSession | null {
+  const turns = all.filter((turn) => !searchedOnly(turn));
   const last = turns.at(-1);
   if (!last) return null;
   if (!turns.some(readByModel)) {

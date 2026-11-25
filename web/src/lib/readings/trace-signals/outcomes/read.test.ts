@@ -12,6 +12,7 @@ import {
   readSession,
   readTurnOutcome,
   type SessionTurn,
+  searchedOnly,
 } from "@/lib/readings/trace-signals/outcomes/read";
 import {
   SEARCH_RUN_MAX_SEARCHES,
@@ -209,11 +210,11 @@ test("a search run with a call after it is answered", () => {
   assert.deepEqual(runsOf(fresh().search(["a"]).search(["a", "b"]).invoke("a")), ["answered@1x2"]);
 });
 
-test("a search run with no call after it is unmet", () => {
-  assert.deepEqual(runsOf(fresh().search(["a"])), ["unmet@1x1"]);
+test("a search run with no call after it had nothing run for it", () => {
+  assert.deepEqual(runsOf(fresh().search(["a"])), ["not_run@1x1"]);
   assert.deepEqual(runsOf(fresh().search(["a"]).invoke("a").search(["q"]).search(["r"])), [
     "answered@1x1",
-    "unmet@3x2",
+    "not_run@3x2",
   ]);
 });
 
@@ -223,7 +224,7 @@ test("a failed call after a search run still answers it: the run found something
 
 test("a run longer than the cap is a catalog listing, with or without a call after it", () => {
   assert.equal(SEARCH_RUN_MAX_SEARCHES, 5);
-  assert.deepEqual(runsOf(searches(fresh(), 5)), ["unmet@1x5"]);
+  assert.deepEqual(runsOf(searches(fresh(), 5)), ["not_run@1x5"]);
   assert.deepEqual(runsOf(searches(fresh(), 6)), ["catalog_listing@1x6"]);
   assert.deepEqual(runsOf(searches(fresh(), 6).invoke("t0")), ["catalog_listing@1x6"]);
   assert.deepEqual(runsOf(searches(fresh(), 3), 2), ["catalog_listing@1x3"]);
@@ -233,7 +234,7 @@ test("a run longer than the cap is a catalog listing, with or without a call aft
 
 test("a turn's reading counts its calls, streaks and search runs", () => {
   const turn = one(
-    fresh().search(["a"]).invoke("a").error("a").invoke("a").error("a").invoke("b").search(["q"]),
+    fresh().search(["a"]).invoke("a").error("a").invoke("a").error("a").invoke("b").search([]),
   );
   const reading = readTurnOutcome(turn.steps);
   assert.deepEqual(
@@ -318,6 +319,26 @@ test("open request: the last turn asked for something and no call in it worked",
       ?.openRequest,
     false,
   );
+});
+
+test("a turn only searched when it made no call, no search of it was unmet and nothing else was read", () => {
+  const search = { okCalls: 0, failedCalls: 0, unmetSearches: 0, searches: 2 };
+  assert.equal(searchedOnly(search), true);
+  for (const over of [
+    { searches: 0 },
+    { okCalls: 1 },
+    { failedCalls: 1 },
+    // A call that never reported an end is still a call.
+    { calls: 1 },
+    { unmetSearches: 1 },
+    { request: true },
+    { request: false },
+    { result: "completed" },
+    { satisfaction: "satisfied" },
+    { reaction: "corrects" },
+    { replyReaction: "satisfied" },
+  ])
+    assert.equal(searchedOnly({ ...search, ...over }), false, JSON.stringify(over));
 });
 
 test("a last turn that only listed the catalog, or whose calls never ended, is not an open request", () => {

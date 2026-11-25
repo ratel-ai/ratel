@@ -2,6 +2,7 @@ import { type Config, getConfig } from "@/config";
 import { composition } from "@/lib/composition/ports";
 import type { ClosedQuestionsPort } from "@/lib/contracts/closed-questions";
 import { getDb } from "@/lib/platform/db/client";
+import { loadOrFallback } from "@/lib/platform/resilient-read";
 import type { WindowDays } from "@/lib/readings/trace-signals/view";
 import {
   buildSentimentPage,
@@ -24,6 +25,7 @@ import {
   loadTurnUsage,
   type PageDb,
 } from "@/lib/views/traces/sentiment/page-queries";
+import { loadUnmetSearches, withUnmetSearches } from "@/lib/views/traces/sentiment/unmet-search";
 
 /**
  * The Sentiment analysis page for one project and window: the stored outcome
@@ -189,4 +191,20 @@ export async function loadSentimentPage(
   options: LoadSentimentPageOptions,
 ): Promise<SentimentPageModel> {
   return buildSentimentPage(await readSentimentPageInput(options), options.query);
+}
+
+/** Root cause analysis: the page, with what was searched on the examples no tool fitted. */
+export async function loadRootCauses(
+  options: LoadSentimentPageOptions,
+): Promise<SentimentPageModel> {
+  const model = await loadSentimentPage(options);
+  return loadOrFallback({
+    operation: "sentiment_unmet_searches",
+    distinctId: `project:${options.projectId}`,
+    fallback: model,
+    load: () =>
+      withUnmetSearches(model, (turnIds) =>
+        loadUnmetSearches(options.projectId, turnIds, options.db),
+      ),
+  });
 }

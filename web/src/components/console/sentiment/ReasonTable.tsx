@@ -5,9 +5,9 @@ import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { usePeek } from "@ratel/design-system/panel";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { ChevronRight } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
 import { money, NO_CAUSE_LABEL, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
-import { ROOT_CAUSE_PEEK, rootCauseKey } from "@/components/console/sentiment/RootCausePanel";
+import { rootCauseKey } from "@/components/console/sentiment/RootCauseDetail";
+import { REVEAL_ROW, Reveal, useReveal } from "@/components/console/sentiment/reveal";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import {
   formatCompact,
@@ -17,7 +17,7 @@ import {
 } from "@/lib/synthesis/traces/v2/format";
 import { CAUSE_LABEL, CAUSE_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
 import type { ReasonGroupView, ReasonRowView } from "@/lib/views/traces/sentiment/page-links";
-import type { SentimentSort } from "@/lib/views/traces/sentiment/page-paths";
+import { ROOT_CAUSE_PEEK, type SentimentSort } from "@/lib/views/traces/sentiment/page-paths";
 
 /**
  * Why tasks were not completed, and what got in the way of the ones completed
@@ -26,7 +26,7 @@ import type { SentimentSort } from "@/lib/views/traces/sentiment/page-paths";
  * what the trouble cost and took (a task not completed whole, a task completed
  * after friction only its friction). A column header orders the reasons and
  * their root causes alike. A heading row folds its reason; a root cause opens
- * in the Panel (`?open=`), with its sessions and the way to them in Traces.
+ * in this same panel (`?rc_open=`), with its sessions and the way to them in Traces.
  */
 
 const QUIET = "text-fg-subtle";
@@ -40,9 +40,6 @@ const COLUMN: Record<SentimentSort, string> = {
   time: "time",
   recent: "lastSeen",
 };
-
-/** How long a reason folds or a root cause's sessions open, in ms; the CSS uses the same. */
-const REVEAL_MS = 200;
 
 /**
  * Lines that open and close with a reveal: `shown` is what the eye sees
@@ -206,9 +203,7 @@ export function ReasonTable({
       rowClassName={(line) =>
         cn(
           line.kind === "group" && "bg-raised",
-          // Revealed lines take their content's height, so it can animate; a closed one drops its rule too.
-          line.kind !== "group" &&
-            "[&>td]:h-auto [&>td]:transition-[border-color] [&>td]:duration-200",
+          line.kind !== "group" && REVEAL_ROW,
           line.kind !== "group" && !line.shown && "[&>td]:border-b-transparent",
         )
       }
@@ -302,63 +297,5 @@ function Cause({ row }: { row: ReasonRowView }) {
         </span>
       ) : null}
     </span>
-  );
-}
-
-/**
- * Which lines are open, and which are still in the table: opening mounts a
- * line closed and opens it on the next frame, so it animates in; closing
- * animates it out and takes it away once `REVEAL_MS` has passed (unless it
- * was opened again meanwhile).
- */
-function useReveal(defaultOpen: boolean) {
-  const [open, setOpen] = useState<ReadonlyMap<string, boolean>>(new Map());
-  const [mounted, setMounted] = useState<ReadonlyMap<string, boolean>>(new Map());
-  // The close each line is waiting to finish: opening it again cancels the removal.
-  const closing = useRef(new Map<string, number>());
-  const set = (setter: typeof setOpen, key: string, value: boolean) =>
-    setter((current) => new Map(current).set(key, value));
-  const isOpen = (key: string) => open.get(key) ?? defaultOpen;
-  const isMounted = (key: string) => mounted.get(key) ?? defaultOpen;
-  const toggle = (key: string) => {
-    if (isOpen(key)) {
-      const token = (closing.current.get(key) ?? 0) + 1;
-      closing.current.set(key, token);
-      set(setOpen, key, false);
-      window.setTimeout(() => {
-        if (closing.current.get(key) === token) set(setMounted, key, false);
-      }, REVEAL_MS);
-    } else {
-      closing.current.set(key, (closing.current.get(key) ?? 0) + 1);
-      set(setMounted, key, true);
-      requestAnimationFrame(() => requestAnimationFrame(() => set(setOpen, key, true)));
-    }
-  };
-  return { isOpen, isMounted, toggle };
-}
-
-/** A cell's content, grown from no height to its own (and back) as its line opens and closes. */
-function Reveal({
-  shown,
-  align,
-  children,
-}: {
-  shown: boolean;
-  align?: "left" | "right";
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
-        shown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-      )}
-    >
-      <div className="min-h-0 overflow-hidden">
-        <div className={cn("flex min-h-9 items-center", align === "right" && "justify-end")}>
-          {children}
-        </div>
-      </div>
-    </div>
   );
 }

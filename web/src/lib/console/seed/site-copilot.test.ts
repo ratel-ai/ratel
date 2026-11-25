@@ -21,6 +21,7 @@ import { deriveToolInvocations } from "@/lib/ingest/otlp/derive-tools";
 import { groupSpans } from "@/lib/ingest/otlp/group";
 import { toRow } from "@/lib/ingest/otlp/reconstruct";
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
+import { claimsCompletion } from "@/lib/readings/trace-signals/hallucinations/claims";
 
 const ANCHOR = Date.UTC(2026, 9, 20, 15, 0, 0);
 const DAY_MS = 86_400_000;
@@ -263,4 +264,14 @@ test("each model call's events row is keyed the way the trace id backfill expect
       "the output (a tool call or the reply) closes the captured messages",
     );
   }
+});
+
+test("a few RFI drafts plant a hallucination: the call failed, nothing retried it, and the reply says it went out", () => {
+  const planted = turns.filter((t) => {
+    const rfi = t.calls.filter((call) => call.tool === "create_rfi");
+    return rfi.length > 0 && rfi.every((call) => call.outcome === "error");
+  });
+  assert.ok(planted.length > 0, "at least one");
+  assert.ok(planted.length < 10, "a few, not a pattern");
+  for (const t of planted) assert.ok(claimsCompletion(t.reply), t.reply);
 });

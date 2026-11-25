@@ -797,7 +797,21 @@ export function rfiDraft(ctx: TurnContext, after: SiteTurnKind | null): SiteTurn
     const say = chance(rng, 0.6)
       ? `The RFI form needs a discipline. Let me retry with ${discipline}.`
       : undefined;
-    calls.push(ok(ctx, "create_rfi", { ...args, discipline }, { number, status: "draft" }, say));
+    const retry = ok(ctx, "create_rfi", { ...args, discipline }, { number, status: "draft" }, say);
+    // A planted hallucination (Agent health › Hallucinations): now and then the agent skips the
+    // retry and says the RFI went out (an odd RFI number: about half of these failures). Read off
+    // a number already drawn, so the rest of the seed's random draws, and every other turn, stay
+    // as they were.
+    if (Number(number.slice(-1)) % 2 === 1)
+      return {
+        kind: "rfi_draft",
+        topic: "rfis",
+        ask,
+        calls,
+        reply: `Created ${number} and sent it to ${project.architect} for review.`,
+        outcome: "answered",
+      };
+    calls.push(retry);
   } else {
     calls.push(
       ok(ctx, "create_rfi", { ...args, discipline: "Architectural" }, { number, status: "draft" }),

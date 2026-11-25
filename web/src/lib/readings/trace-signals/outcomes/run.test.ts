@@ -101,7 +101,7 @@ function harness(
   return { store, deps, run: () => recordOutcomes("project", { window: WINDOW }, deps) };
 }
 
-/** Five runs, each its own session: fixed on the next try, switched, gave up, searched and ran nothing, clean. */
+/** Five runs, each its own session: fixed on the next try, switched, gave up, searched and found nothing, clean. */
 function fiveTurns(): SignalTurn[] {
   return signalTurns([
     fresh({ session: "fixed" })
@@ -116,7 +116,7 @@ function fiveTurns(): SignalTurn[] {
       .search(["send_invoice"])
       .invoke("send_invoice")
       .error("send_invoice"),
-    fresh({ session: "searched" }).search(["a", "b"]),
+    fresh({ session: "searched" }).search([]),
     fresh({ session: "clean" }).search(["a"]).invoke("a"),
   ]);
 }
@@ -201,6 +201,36 @@ test("a window's turns become rows: each streak with its cause and what followed
       .sort(),
     ["gave-up", "searched"],
   );
+});
+
+test("the words and later calls of a search are loaded only for turns that ran nothing after it, and later calls only where sessions are one person's", async () => {
+  const turns = signalTurns([
+    fresh({ session: "open" }).search(["create_task"], { query: "delete task" }),
+    fresh({ session: "ran" }).search(["create_task"]).invoke("create_task"),
+  ]);
+  const event = turns[0]!.steps[0]!.traceEventId;
+  const asked: unknown[] = [];
+  const deps = {
+    loadSearchQueries: async (_projectId: string, ids: readonly string[]) => {
+      asked.push(ids);
+      return new Map([[event, "delete task"]]);
+    },
+    loadLastCalls: async (_projectId: string, ids: readonly string[]) => {
+      asked.push(ids);
+      return new Map<string, Map<string, Date>>();
+    },
+  };
+  const trusted = harness(turns, deps);
+  assert.equal((await trusted.run()).stored.unmetSearches, 1);
+  assert.deepEqual(asked.splice(0), [[event], ["open"]]);
+
+  const mixed = harness(turns, { ...deps, basis: { mixed: true } });
+  assert.equal((await mixed.run()).stored.unmetSearches, 0);
+  assert.deepEqual(asked.splice(0), [[event]]);
+
+  const none = harness([turns[1]!], deps);
+  await none.run();
+  assert.deepEqual(asked, []);
 });
 
 test("a streak takes its most common cause; an unknown message is other, a missing one is unread", async () => {
@@ -349,7 +379,7 @@ test("the stored counts read back and print as lines, counts only", async () => 
     `outcomes: 5 turns and 5 sessions read (rules v${OUTCOME_RULE_VERSION}, no model: no Sage key)`,
     "failed calls 3 by cause: bad arguments 1, wrong reference 1, tool fault 0, not allowed 0, other 1 in 1 unknown shape; 0 without a readable message",
     "failure streaks 3: fixed on the next try 1, fixed after a detour 0, switched tool 1, nothing followed 1",
-    "search runs with no call after 1, catalog listings 0, sessions left with an open request 2",
+    "searches no tool fits 1, catalog listings 0, sessions left with an open request 2",
     "turn results: completed 3, completed wrong 0, failed 2, refused 0; said done over an error 0",
     "session outcomes: resolved cleanly 1, resolved after friction 2, gave up 1, blocked 1, escalated 0 (5 from the trace alone)",
   ]);

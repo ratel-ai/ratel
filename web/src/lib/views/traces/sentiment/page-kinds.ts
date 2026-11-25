@@ -83,7 +83,7 @@ export const DISSATISFACTION_GROUP_MEANING: Record<DissatisfactionGroup, string>
   agent:
     "The agent got it wrong: it misread the request, ignored an instruction, left work unfinished or said it was done when it was not. Improve the agent.",
   system:
-    "The agent was fine, but what it runs on was not: a tool failed, access was refused, or no tool could do the job.",
+    "The agent was fine, but what it runs on was not: a tool failed, access was refused, or no tool it was offered fits.",
   other:
     "Everything else: an error nothing could read, a request too unclear to act on, a correct refusal, and turns where no cause was found.",
 };
@@ -140,7 +140,7 @@ export const CAUSE_LABEL: Record<RootCause, string> = {
   other: "Unknown error",
   misread_request: "Misread request",
   ignored_instruction: "Ignored instruction",
-  missing_capability: "No tool for it",
+  missing_capability: "No fitting tool",
   incomplete: "Left incomplete",
   false_success: "False success",
   over_asking: "Asked too much",
@@ -161,7 +161,7 @@ export const CAUSE_MEANING: Record<RootCause, string> = {
   misread_request: "The agent did something other than what was asked.",
   ignored_instruction: "The agent left out something the person told it to do.",
   missing_capability:
-    "The agent had no tool for what was asked: it searched the catalog and ran nothing, or said it could not.",
+    "The agent searched, and no tool it was offered does that kind of action, or it said it had no way to do it.",
   incomplete: "The agent did part of the work and stopped.",
   false_success: "The reply said the work was done while the last call failed.",
   over_asking: "The agent asked questions it could have answered itself.",
@@ -257,7 +257,7 @@ export const TASK_REASON_LABEL: Record<TaskReason, string> = {
   took_over: "Person did it themselves",
   refused: "Agent refused, rightly",
   failed_call: "Ended on a failed call",
-  no_tool: "No tool for it",
+  no_tool: "No fitting tool",
   wrong_action: "Did the wrong thing",
   did_part: "Did only part",
   goal_missed: "Work missed the goal",
@@ -269,7 +269,6 @@ export const FRICTION_REASON_LABEL: Record<FrictionReason, string> = {
   corrected: "Wrong first, then corrected",
   repeated: "Person asked again",
   recovered_call: "A call failed, then worked",
-  searched_again: "Agent searched again",
 };
 
 export const FRICTION_REASON_MEANING: Record<FrictionReason, string> = {
@@ -277,8 +276,6 @@ export const FRICTION_REASON_MEANING: Record<FrictionReason, string> = {
     "A turn did the wrong thing, or the person objected to it, and the task was done after.",
   repeated: "The person asked for the same thing again, and the task was done after.",
   recovered_call: "A call failed and a later call worked.",
-  searched_again:
-    "The agent searched its tools and ran nothing at least once before the task was done.",
 };
 
 export const TASK_REASON_MEANING: Record<TaskReason, string> = {
@@ -287,7 +284,7 @@ export const TASK_REASON_MEANING: Record<TaskReason, string> = {
   took_over: "The person said they would do it themselves or elsewhere.",
   refused: "The agent declined, and was right to: not held against it.",
   failed_call: "The task's last turn ended with a call that failed and nothing after it worked.",
-  no_tool: "The agent searched its tools and ran nothing: no tool fit.",
+  no_tool: "The agent searched, and no tool it was offered does that kind of action.",
   wrong_action: "The calls worked, but did the wrong thing.",
   did_part: "Part of what was asked was done.",
   goal_missed: "The calls worked, and the model read that they did not achieve the goal.",

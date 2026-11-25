@@ -10,6 +10,7 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
+import { hallucinationOrganizationIds } from "@/lib/readings/trace-signals/hallucinations/gate";
 import { sentimentOrganizationIds } from "@/lib/readings/trace-signals/outcomes/gate";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 
@@ -29,12 +30,17 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
   // Decided per organization: a flag read that fails keeps the item out of the rail.
-  const [entityPagesOrganizations, focusedConsoleOrganizations, sentimentOrganizations] =
-    await Promise.all([
-      entityPagesOrganizationIds(organizations),
-      focusedConsoleOrganizationIds(organizations),
-      sentimentOrganizationIds(organizations).catch(() => []),
-    ]);
+  const [
+    entityPagesOrganizations,
+    focusedConsoleOrganizations,
+    sentimentOrganizations,
+    hallucinationOrganizations,
+  ] = await Promise.all([
+    entityPagesOrganizationIds(organizations),
+    focusedConsoleOrganizationIds(organizations),
+    sentimentOrganizationIds(organizations).catch(() => []),
+    hallucinationOrganizationIds(organizations).catch(() => []),
+  ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -64,6 +70,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           projectNav: composition.projectNav,
           entityPagesOrganizations,
           sentimentOrganizations,
+          hallucinationOrganizations,
           focusedConsoleOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher

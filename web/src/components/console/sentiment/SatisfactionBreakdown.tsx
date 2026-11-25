@@ -1,10 +1,9 @@
-import { DotMeter } from "@ratel/design-system/dot-matrix";
 import { Section } from "@ratel/design-system/section";
-import { Smile } from "lucide-react";
+import { Target } from "lucide-react";
 import Link from "next/link";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
-import { percent, plural } from "@/components/console/sentiment/copy";
-import { SatisfactionFace } from "@/components/console/sentiment/SatisfactionFace";
+import { plural } from "@/components/console/sentiment/copy";
+import { SatisfactionScore } from "@/components/console/sentiment/SatisfactionScore";
 import type { IntentScoreView, SentimentLinks } from "@/lib/views/traces/sentiment/page-links";
 
 const LINK =
@@ -21,7 +20,7 @@ export function SatisfactionBreakdown({ links }: { links: SentimentLinks }) {
   const scores = links.intentScores;
   if (!scores) return null;
   return (
-    <Section title={<NounTitle icon={Smile}>Satisfaction by intent</NounTitle>}>
+    <Section title={<NounTitle icon={Target}>Satisfaction by intent</NounTitle>}>
       <div
         className="grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-2"
         data-sentiment-satisfaction=""
@@ -94,8 +93,7 @@ function Score({
   if (score === null) return <span className="text-xs text-fg-subtle">No answers</span>;
   return (
     <span className="flex shrink-0 items-center gap-3">
-      <DotMeter value={score} cells={8} label={`${percent(score)} satisfied`} />
-      <SatisfactionFace score={score} className="w-16 justify-end text-ui" />
+      <SatisfactionScore score={score} className="text-ui" />
       <span
         className="w-24 text-right text-xs text-fg-subtle tabular-nums"
         title={few ? "Few answers: read this score as a hint" : undefined}

@@ -5,6 +5,7 @@ import { Panel, usePeek } from "@ratel/design-system/panel";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { NO_CAUSE_LABEL, percent, plural } from "@/components/console/sentiment/copy";
+import { SeeMoreList } from "@/components/console/turn-panel/SeeMoreList";
 import { type PanelTurn, useTurnPanel } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { turnTracesHref } from "@/lib/readings/trace-signals/view";
@@ -81,12 +82,14 @@ export function CausePanel({
                   : plural(problem.examples.length, "turn")}
               </span>
             </div>
-            <ul className="flex flex-col border-t border-line" data-cause-where="">
-              {problem.examples.map((example) => (
-                <li
-                  key={example.turnId}
-                  className="flex min-h-10 items-center justify-between gap-3 border-b border-line"
-                >
+            <SeeMoreList
+              key={problemPeekId(problem)}
+              items={problem.examples}
+              itemKey={(example) => example.turnId}
+              data-cause-where=""
+            >
+              {(example) => (
+                <div className="flex min-h-10 items-center justify-between gap-3 border-b border-line">
                   {example.endedAt ? (
                     <time
                       dateTime={example.endedAt}
@@ -107,9 +110,9 @@ export function CausePanel({
                     Open in Traces
                     <ArrowRight aria-hidden />
                   </Link>
-                </li>
-              ))}
-            </ul>
+                </div>
+              )}
+            </SeeMoreList>
           </section>
         </div>
       ) : null}

@@ -16,6 +16,7 @@ export const CORE_FLAGS = [
   "agentsPages",
   "toolRunInsights",
   "sentimentAnalysis",
+  "hallucinationDetection",
   "focusedConsole",
 ] as const;
 

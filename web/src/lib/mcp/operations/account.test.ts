@@ -298,6 +298,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["agentsPages", false],
       ["toolRunInsights", false],
       ["sentimentAnalysis", false],
+      ["hallucinationDetection", false],
       ["focusedConsole", true],
     ],
   );
@@ -309,6 +310,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["agentsPages", subject],
     ["toolRunInsights", subject],
     ["sentimentAnalysis", subject],
+    ["hallucinationDetection", subject],
   ]);
   assert.deepEqual(askedFocused, [{ id: "org-1" }], "as the rail and the pages ask it");
 });

@@ -26,7 +26,7 @@ export async function loadPanelTurn({
     operation,
     distinctId: `project:${projectId}`,
     fallback: null,
-    load: () => loadTurnView(projectId, peek.turnId, organization),
+    load: () => loadTurnView(projectId, peek.turnId, organization, peek.eventId),
   });
   return {
     id: peek.turnId,
@@ -38,6 +38,8 @@ export async function loadPanelTurn({
         focusEventId={peek.eventId}
         sessionHref={view.sessionHref}
         conversation={view.conversation}
+        hallucinations={view.hallucinations}
+        afterSearch={view.afterSearch}
         embedded
       />
     ) : null,

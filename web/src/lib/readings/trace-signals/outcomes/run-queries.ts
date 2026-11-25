@@ -1,6 +1,6 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, max, sql } from "drizzle-orm";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
-import { traceTurns } from "@/lib/ledger/schema";
+import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import type {
   FusionSource,
@@ -107,6 +107,17 @@ export async function replaceTurnOutcomes(
   db: OutcomesDb = getDb(),
 ): Promise<{ written: number; sessions: string[] }> {
   return db.transaction(async (tx) => {
+    // Rows read under older rules mean something else now: drop those outside the window too (the
+    // window's own are written again below). Their sessions' rows are older too, and go with them.
+    await tx
+      .delete(traceTurnOutcomes)
+      .where(
+        and(
+          eq(traceTurnOutcomes.projectId, projectId),
+          lt(traceTurnOutcomes.ruleVersion, OUTCOME_RULE_VERSION),
+          sql`${traceTurnOutcomes.turnId} not in (select ${traceTurns.id} from ${traceTurns} where ${traceTurns.projectId} = ${projectId} and ${traceTurns.status} = 'closed' and ${traceTurns.endedAt} >= ${range.from} and ${traceTurns.endedAt} < ${range.to})`,
+        ),
+      );
     const window = tx
       .select({ id: traceTurns.id })
       .from(traceTurns)
@@ -280,14 +291,52 @@ export async function loadSessionTurns(
         replyReaction: traceTurnOutcomes.replyReaction,
         replyReactionSource: traceTurnOutcomes.replyReactionSource,
         searches: traceTurns.searchCount,
+        calls: traceTurns.invokeCount,
       })
       .from(traceTurnOutcomes)
       .leftJoin(traceTurns, eq(traceTurns.id, traceTurnOutcomes.turnId))
       .where(
         and(eq(traceTurnOutcomes.projectId, projectId), inArray(traceTurnOutcomes.sessionId, ids)),
       );
-    for (const { sessionId, searches, ...turn } of rows)
-      out.set(sessionId, [...(out.get(sessionId) ?? []), { ...turn, searches: searches ?? 0 }]);
+    for (const { sessionId, searches, calls, ...turn } of rows)
+      out.set(sessionId, [
+        ...(out.get(sessionId) ?? []),
+        { ...turn, searches: searches ?? 0, calls: calls ?? 0 },
+      ]);
+  }
+  return out;
+}
+
+/** When each tool or skill was last called in each of these sessions, by session id. */
+export async function loadLastCalls(
+  projectId: string,
+  sessionIds: readonly string[],
+  db: Pick<OutcomesDb, "select"> = getDb(),
+): Promise<Map<string, Map<string, Date>>> {
+  const out = new Map<string, Map<string, Date>>();
+  for (const ids of chunks([...new Set(sessionIds)])) {
+    const rows = await db
+      .select({
+        sessionId: traceTurns.sessionId,
+        target: traceTurnSteps.targetId,
+        at: max(traceTurnSteps.occurredAt),
+      })
+      .from(traceTurnSteps)
+      .innerJoin(traceTurns, eq(traceTurns.id, traceTurnSteps.turnId))
+      .where(
+        and(
+          eq(traceTurns.projectId, projectId),
+          inArray(traceTurns.sessionId, ids),
+          eq(traceTurnSteps.projectId, projectId),
+          eq(traceTurnSteps.kind, "invoke"),
+        ),
+      )
+      .groupBy(traceTurns.sessionId, traceTurnSteps.targetId);
+    for (const { sessionId, target, at } of rows) {
+      if (target === null || at === null) continue;
+      const calls = out.get(sessionId) ?? new Map<string, Date>();
+      out.set(sessionId, calls.set(target, at));
+    }
   }
   return out;
 }
@@ -308,6 +357,15 @@ export async function replaceSessionOutcomes(
   const kept = new Set(rows.map((row) => row.sessionId));
   const gone = [...new Set(sessionIds)].filter((id) => !kept.has(id));
   return db.transaction(async (tx) => {
+    // Rows read under older rules mean something else now: drop them, wherever they are.
+    await tx
+      .delete(traceSessionOutcomes)
+      .where(
+        and(
+          eq(traceSessionOutcomes.projectId, projectId),
+          lt(traceSessionOutcomes.ruleVersion, OUTCOME_RULE_VERSION),
+        ),
+      );
     for (const ids of chunks(gone)) {
       await tx
         .delete(traceSessionOutcomes)
@@ -405,6 +463,15 @@ export async function replaceTaskOutcomes(
   db: OutcomesDb = getDb(),
 ): Promise<number> {
   return db.transaction(async (tx) => {
+    // Rows read under older rules mean something else now: drop them, wherever they are.
+    await tx
+      .delete(traceTaskOutcomes)
+      .where(
+        and(
+          eq(traceTaskOutcomes.projectId, projectId),
+          lt(traceTaskOutcomes.ruleVersion, TASK_RULE_VERSION),
+        ),
+      );
     for (const ids of chunks([...new Set(sessionIds)])) {
       await tx
         .delete(traceTaskOutcomes)

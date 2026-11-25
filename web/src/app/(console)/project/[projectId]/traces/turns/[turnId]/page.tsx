@@ -39,7 +39,7 @@ export default async function TurnTracePage({
   const { project, organization } = await requireProjectScope(projectId);
 
   const focus = (Array.isArray(search.focus) ? search.focus[0] : search.focus)?.trim() || null;
-  const view = await loadTurnView(project.id, turnId, organization);
+  const view = await loadTurnView(project.id, turnId, organization, focus);
   if (!view) notFound();
 
   const testAction = (await evalGateEnabledFor(organization))
@@ -77,6 +77,8 @@ export default async function TurnTracePage({
         focusEventId={focus}
         sessionHref={view.sessionHref}
         conversation={view.conversation}
+        hallucinations={view.hallucinations}
+        afterSearch={view.afterSearch}
       />
     </>
   );

@@ -17,6 +17,14 @@ import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/li
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicConfigured } from "@/lib/readings/anthropic/client";
 import { decisionEngineConfigured } from "@/lib/readings/decisions/engine";
+import type {
+  HallucinationRunInput,
+  HallucinationRunResult,
+} from "@/lib/readings/trace-signals/hallucinations/run";
+import {
+  type HallucinationBudget,
+  recordHallucinationsForRun,
+} from "@/lib/readings/trace-signals/hallucinations/run-job";
 import { outcomePillars, type PillarReading } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   HEALTH_SCORE_VERSION,
@@ -165,6 +173,16 @@ export interface ComputeJobDeps {
    * outcome row. Absent (a test's deps), the reading runs.
    */
   outcomesEnabled?: (projectId: string) => Promise<boolean>;
+  /**
+   * The window's hallucinations (`hallucinations/run.ts`): rewrites its
+   * `trace_hallucinations` rows. Null when its switch is off for the
+   * project's organization (`hallucinationDetection`).
+   */
+  recordHallucinations?: (
+    projectId: string,
+    input: HallucinationRunInput,
+    budget: HallucinationBudget,
+  ) => Promise<HallucinationRunResult | null>;
   /** Queue the topic reading that follows every run; a seam the topics registration fills. */
   enqueueTopics?: (projectId: string) => Promise<unknown>;
   /** Queue the tool-explorer run that reads this run's ledger window; a seam its registration fills. */
@@ -242,6 +260,7 @@ function defaultDeps(config: Config): ComputeJobDeps {
     recordSelfCorrections: recordSelfCorrectionsForRun,
     recordOutcomes: recordOutcomesForRun,
     outcomesEnabled: (projectId) => sentimentQuestionsEnabled(projectId),
+    recordHallucinations: recordHallucinationsForRun,
     ...computeSeams,
     // Imports are the edition's: without an importer, no import is ever running.
     importRunning: (projectId) => editionImportRunning(projectId),
@@ -418,6 +437,7 @@ export async function computeProjectTraceSignals(
       deps,
     );
     const outcomes = await outcomesFor(projectId, window, startedAt, deps);
+    const hallucinations = await hallucinationsFor(projectId, window, startedAt, deps);
     const finishedAt = deps.now();
     const partial = missedBacklog(unbuiltAtStart, result.turnsScanned);
     const earlyReading =
@@ -443,6 +463,11 @@ export async function computeProjectTraceSignals(
         ...(earlyReading ? { earlyReading } : {}),
         ...(corrections ? { selfCorrections: corrections.stored } : {}),
         ...(outcomes ? { outcomes: outcomes.stored } : {}),
+        ...(hallucinations === "partial"
+          ? { hallucinations: { partial: true } }
+          : hallucinations
+            ? { hallucinations: hallucinations.stored }
+            : {}),
       },
       turnsScanned: result.turnsScanned,
       turnSourceMix: result.turnSourceMix,
@@ -468,6 +493,11 @@ export async function computeProjectTraceSignals(
       outcome_failed_calls: outcomes?.stored.failedCalls ?? null,
       outcome_errors_unread: outcomes?.stored.errorsUnread ?? null,
       outcome_other_causes: outcomes?.stored.causes.other ?? null,
+      hallucinations:
+        hallucinations === "partial" ? null : (hallucinations?.stored.findings ?? null),
+      hallucination_turns:
+        hallucinations === "partial" ? null : (hallucinations?.stored.turnsAffected ?? null),
+      hallucinations_partial: hallucinations === "partial",
       duration_ms: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
     };
     if (result.queriesEvicted > 0) {
@@ -605,6 +635,39 @@ async function outcomesFor(
     }
     logger.error({ err, project_id: projectId }, "outcome reading failed");
     reportServerException(err, `project:${projectId}`, { operation: "trace_signals_outcomes" });
+    return null;
+  }
+}
+
+/**
+ * Best-effort, last, and behind its own switch: one more reading of the same
+ * window under the same budget. It writes nothing until its walk is done, so
+ * a failure or an overrun leaves the window's earlier rows and never fails
+ * the run. An overrun is said in the run summary (`hallucinations.partial`),
+ * so the pages can tell the last full check from this one.
+ */
+async function hallucinationsFor(
+  projectId: string,
+  window: { start: Date; end: Date },
+  startedAt: Date,
+  deps: Pick<ComputeJobDeps, "recordHallucinations" | "now" | "timeBudgetMs">,
+): Promise<HallucinationRunResult | "partial" | null> {
+  if (!deps.recordHallucinations) return null;
+  try {
+    return await deps.recordHallucinations(
+      projectId,
+      { window: { start: window.start, end: window.end } },
+      { startedAt: startedAt.getTime(), now: deps.now, timeBudgetMs: deps.timeBudgetMs },
+    );
+  } catch (err) {
+    if (err instanceof TimeBudgetError) {
+      logger.warn({ project_id: projectId }, "hallucination reading over time budget");
+      return "partial";
+    }
+    logger.error({ err, project_id: projectId }, "hallucination reading failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_hallucinations",
+    });
     return null;
   }
 }

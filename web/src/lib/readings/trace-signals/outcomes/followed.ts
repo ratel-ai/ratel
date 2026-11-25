@@ -1,5 +1,4 @@
 import type { StepDraft } from "@/lib/ledger/types";
-import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import {
   FAILURE_FOLLOWED,
   type FailureFollowed,
@@ -9,6 +8,7 @@ import {
   type SelfCorrection,
   type SelfCorrectionKind,
 } from "@/lib/readings/trace-signals/self-corrections/detect";
+import { type StepCall, stepCalls } from "@/lib/readings/trace-signals/step-calls";
 
 /**
  * What followed a failure, per failure streak of one turn. Pure.
@@ -44,17 +44,7 @@ export interface FailureStreak {
   recovered: boolean;
 }
 
-interface Call {
-  step: StepDraft;
-  node: string;
-}
-
-function callsOf(steps: readonly StepDraft[]): Call[] {
-  return steps.flatMap((step) => {
-    const node = nodeIdOf(step);
-    return node === null ? [] : [{ step, node }];
-  });
-}
+type Call = StepCall;
 
 /** Maximal runs of consecutive failed calls of one tool, as index ranges into `calls`. */
 function streakRanges(calls: readonly Call[]): { from: number; to: number }[] {
@@ -93,7 +83,7 @@ function followedOf(
 
 /** The failure streaks of one turn, from its steps in ordinal order. */
 export function failureStreaks(steps: readonly StepDraft[]): FailureStreak[] {
-  const calls = callsOf(steps);
+  const calls = stepCalls(steps);
   const events = new Map<number, SelfCorrection[]>();
   for (const event of detectAfterErrors(steps)) {
     if (event.toolOrdinal === null) continue;

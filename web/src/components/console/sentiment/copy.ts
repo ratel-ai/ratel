@@ -6,10 +6,6 @@ import type { TaskFilter } from "@/lib/views/traces/sentiment/page-paths";
 export const SENTIMENT_DESCRIPTION =
   "How people took your agent's work: satisfaction overall, by task status, by intent and day by day.";
 
-/** The one sentence under Root cause analysis's title. */
-export const ROOT_CAUSE_DESCRIPTION =
-  "Why tasks were not completed, what got in the way of the ones completed after friction, and what it cost.";
-
 export const READ_BY_MEANING: Record<ReadBy, string> = {
   rule: "Read from the trace by rules. No model.",
   model: "Read from people's messages by a model.",

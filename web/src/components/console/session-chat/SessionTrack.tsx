@@ -2,8 +2,10 @@
 
 import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
+import { Tooltip } from "@ratel/design-system/tooltip";
 import { ArrowRight, Pause, Play, ScanSearch, TriangleAlert } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import type { TrackBookmark } from "@/lib/views/health/hallucinations/session-bookmarks";
 import {
   formatStepTime,
   type SessionChat,
@@ -46,6 +48,8 @@ export interface SessionTrackProps {
   onInspect: () => void;
   /** A line at one step, with its words (an eval run: where it differs from the last run). */
   marker?: TrackMarker;
+  /** The session's hallucinations, each a dot over its step; a click goes there. */
+  bookmarks?: readonly TrackBookmark[];
 }
 
 export interface TrackMarker {
@@ -87,6 +91,7 @@ export function SessionTrack({
   onOpenStep,
   onInspect,
   marker,
+  bookmarks = [],
 }: SessionTrackProps) {
   const total = chat.trackTotalMs;
   const view = zoomWindow(total, zoom, t);
@@ -237,68 +242,109 @@ export function SessionTrack({
           </Button>
         </div>
       </div>
-      <div
-        ref={viewport}
-        role="slider"
-        tabIndex={0}
-        aria-label="Playhead"
-        aria-valuemin={0}
-        aria-valuemax={total}
-        aria-valuenow={Math.round(t)}
-        aria-valuetext={`${formatStepTime(t)} of ${formatStepTime(total)}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => (drag.current = null)}
-        className="relative h-6 cursor-ew-resize touch-none overflow-hidden rounded-md outline-none select-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        {chat.segments.map((segment, i) => {
-          const left = percent(segment.trackStartMs);
-          const w = width > 0 ? (segment.trackMs / width) * 100 : 0;
-          if (left + w < 0 || left > 100) return null;
-          const label =
-            segment.kind === "wait"
-              ? segment.label
-              : segment.measured && segment.realMs !== null && segment.kind !== "ask"
-                ? formatStepTime(segment.realMs)
-                : "";
-          return (
+      <div className={cn("relative", bookmarks.length > 0 && "pt-2.5")}>
+        <div
+          ref={viewport}
+          role="slider"
+          tabIndex={0}
+          aria-label="Playhead"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={Math.round(t)}
+          aria-valuetext={`${formatStepTime(t)} of ${formatStepTime(total)}`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => (drag.current = null)}
+          className="relative h-6 cursor-ew-resize touch-none overflow-hidden rounded-md outline-none select-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {chat.segments.map((segment, i) => {
+            const left = percent(segment.trackStartMs);
+            const w = width > 0 ? (segment.trackMs / width) * 100 : 0;
+            if (left + w < 0 || left > 100) return null;
+            const label =
+              segment.kind === "wait"
+                ? segment.label
+                : segment.measured && segment.realMs !== null && segment.kind !== "ask"
+                  ? formatStepTime(segment.realMs)
+                  : "";
+            return (
+              <div
+                key={`${segment.stepIndex ?? "wait"}-${i}`}
+                data-segment={segment.kind}
+                data-step={segment.stepIndex ?? undefined}
+                title={
+                  segment.kind === "wait"
+                    ? segment.label
+                    : `${stepWords(segment)} · ${segment.measured ? formatStepTime(segment.realMs ?? 0) : "time not measured"}`
+                }
+                className={cn(
+                  "absolute inset-y-0.5 flex items-center justify-center overflow-hidden rounded-sm border-r-2 border-raised text-[11px] tabular-nums",
+                  SEGMENT_CLASS[segment.kind],
+                  segment.problem && "ring-1 ring-warning ring-inset",
+                  segment.kind === "wait" ? "text-fg-subtle" : "text-fg",
+                  !segment.measured && "opacity-60",
+                )}
+                style={{ left: `${left}%`, width: `${w}%` }}
+              >
+                {w >= LABEL_MIN_PERCENT ? <span className="truncate px-1">{label}</span> : null}
+              </div>
+            );
+          })}
+          {marker &&
+          markerAt !== undefined &&
+          percent(markerAt) >= 0 &&
+          percent(markerAt) <= 100 ? (
             <div
-              key={`${segment.stepIndex ?? "wait"}-${i}`}
-              data-segment={segment.kind}
-              data-step={segment.stepIndex ?? undefined}
-              title={
-                segment.kind === "wait"
-                  ? segment.label
-                  : `${stepWords(segment)} · ${segment.measured ? formatStepTime(segment.realMs ?? 0) : "time not measured"}`
-              }
-              className={cn(
-                "absolute inset-y-0.5 flex items-center justify-center overflow-hidden rounded-sm border-r-2 border-raised text-[11px] tabular-nums",
-                SEGMENT_CLASS[segment.kind],
-                segment.problem && "ring-1 ring-warning ring-inset",
-                segment.kind === "wait" ? "text-fg-subtle" : "text-fg",
-                !segment.measured && "opacity-60",
-              )}
-              style={{ left: `${left}%`, width: `${w}%` }}
-            >
-              {w >= LABEL_MIN_PERCENT ? <span className="truncate px-1">{label}</span> : null}
-            </div>
+              data-track-marker={marker.stepIndex}
+              title={marker.label}
+              className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-info"
+              style={{ left: `${percent(markerAt)}%` }}
+            />
+          ) : null}
+          <div
+            data-playhead
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-accent-mark"
+            style={{ left: `${Math.min(Math.max(percent(t), 0), 100)}%` }}
+          />
+        </div>
+        {bookmarks.map((bookmark) => {
+          const at = chat.segments.find((s) => s.stepIndex === bookmark.stepIndex)?.trackStartMs;
+          if (at === undefined) return null;
+          const left = percent(at);
+          if (left < 0 || left > 100) return null;
+          return (
+            <Tooltip key={bookmark.stepIndex} content={bookmark.label}>
+              {/* A dot over the bar and a line down to its step; only the dot takes clicks, so the bar still drags. */}
+              <button
+                type="button"
+                aria-label={`Hallucination. ${bookmark.label}. Go there`}
+                data-track-bookmark={bookmark.stepIndex}
+                data-current={bookmark.current ? "true" : undefined}
+                onClick={() => {
+                  onPlayingChange(false);
+                  onSeek(at);
+                  onOpenStep(bookmark.stepIndex);
+                }}
+                className="group absolute top-0 flex size-5 -translate-x-1/2 -translate-y-1 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                style={{ left: `${left}%` }}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "rounded-full bg-danger transition-transform duration-120 group-hover:scale-125 motion-reduce:transition-none",
+                    bookmark.current ? "size-2.5" : "size-2",
+                  )}
+                />
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute top-2.5 left-1/2 h-[1.625rem] w-0.5 -translate-x-1/2 bg-danger"
+                />
+              </button>
+            </Tooltip>
           );
         })}
-        {marker && markerAt !== undefined && percent(markerAt) >= 0 && percent(markerAt) <= 100 ? (
-          <div
-            data-track-marker={marker.stepIndex}
-            title={marker.label}
-            className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-info"
-            style={{ left: `${percent(markerAt)}%` }}
-          />
-        ) : null}
-        <div
-          data-playhead
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-accent-mark"
-          style={{ left: `${Math.min(Math.max(percent(t), 0), 100)}%` }}
-        />
       </div>
       <div aria-hidden className="relative mt-0.5 h-4 text-[11px] tabular-nums text-fg-subtle">
         {ticks.map((tick) => (
@@ -322,6 +368,12 @@ export function SessionTrack({
           <span className="inline-flex items-center gap-1.5 text-info">
             <span aria-hidden className="h-2.5 border-l-2 border-dashed border-info" />
             {marker.label}
+          </span>
+        ) : null}
+        {bookmarks.length > 0 ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2 rounded-full bg-danger" />
+            Hallucination
           </span>
         ) : null}
         <span className="ml-auto">Drag, scroll or use ← → to move through it</span>

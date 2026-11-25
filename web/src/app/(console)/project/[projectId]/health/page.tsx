@@ -2,10 +2,12 @@ import { FocusedHealthView } from "@/components/console/health/focused/FocusedHe
 import {
   type SummaryImports,
   SummaryNoDatabase,
+  type SummaryRootCauses,
   type SummaryShare,
   SummaryView,
   type SummaryViewProps,
 } from "@/components/console/health/v2/SummaryView";
+import { loadPanelTurn } from "@/components/console/turn-panel/load";
 import { composition } from "@/lib/composition";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
@@ -22,6 +24,7 @@ import {
   isRestrictedBySupportSession,
 } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
+import { hallucinationDetectionEnabled } from "@/lib/readings/trace-signals/hallucinations/gate";
 import {
   type InferredToolShare,
   loadInferredToolShare,
@@ -40,6 +43,10 @@ import {
 } from "@/lib/readings/trace-signals/view";
 import { loadFixes } from "@/lib/views/fixes/load";
 import type { FixesModel } from "@/lib/views/fixes/types";
+import {
+  type HallucinationRateCard,
+  loadHallucinationRateCard,
+} from "@/lib/views/health/hallucinations/rate-card";
 import { turnsPerIssue } from "@/lib/views/health/issue-examples";
 import { loadHealthPageModel, pendingHealthModel } from "@/lib/views/health/page-model";
 import { loadHealthPageState } from "@/lib/views/health/page-state-load";
@@ -55,6 +62,9 @@ import {
 import { shareLinkOnPlan } from "@/lib/views/health/share-window";
 import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
+import { loadRootCauses } from "@/lib/views/traces/sentiment/page-load";
+import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
+import { parseRootCauseQuery } from "@/lib/views/traces/sentiment/page-paths";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Agent health" };
@@ -82,7 +92,10 @@ export default async function AgentHealthPage({
 
   const { project, organization, user } = await requireProjectScope(projectId);
   const limits = getAgentHealthLimits(organization);
-  const windowDays = parseWindowDays((await searchParams).days, limits.agentHealthWindowDays);
+  const search = await searchParams;
+  const windowDays = parseWindowDays(search.days, limits.agentHealthWindowDays);
+  // Root cause analysis, opened over this page (from task completion): read only then.
+  const rootCauseQuery = parseRootCauseQuery(search);
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
@@ -94,59 +107,108 @@ export default async function AgentHealthPage({
   const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
     ? LOW_CONFIDENCE_FLOOR
     : undefined;
-  const [loaded, imports, share, inSupportSession, tasks, fixes, corrections, taskCompletion] =
-    await Promise.all([
-      loadOrFallback({
-        operation: "agent_health_model",
-        distinctId,
-        fallback: fallbackModel,
-        // Example turns are not read with the page: an issue reads its own when opened.
-        load: () =>
-          loadHealthPageModel(
-            { projectId: project.id, windowDays, lowConfidenceFloor },
-            process.env.NODE_ENV,
-            {
-              getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
-            },
-          ),
-      }),
-      loadImportState(project.id, importsSlot),
-      loadShareState(project.id, editionUi?.HealthShare, limits.agentHealthWindowDays),
-      isRestrictedBySupportSession(),
-      loadOrFallback<TaskListModel | null>({
-        operation: "agent_health_tasks",
-        distinctId,
-        fallback: null,
-        load: async () => buildTaskList(await loadTasksInputs(project.id)),
-      }),
-      loadOrFallback<Pick<FixesModel, "open" | "applied"> | null>({
-        operation: "agent_health_fixes",
-        distinctId,
-        fallback: null,
-        load: () => loadFixes({ projectId: project.id, organization, topics: false }),
-      }),
-      focused
-        ? null
-        : loadOrFallback({
-            operation: "agent_health_self_corrections_card",
-            distinctId,
-            fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
-            load: () => loadSelfCorrectionsCard(project.id, windowDays),
-          }),
-      // Behind `sentimentAnalysis`, with Root cause analysis it leads to; on the classic Summary only. A
-      // failed read hides the row.
-      focused
-        ? null
-        : loadOrFallback<TaskCompletionCard | null>({
-            operation: "agent_health_task_completion",
-            distinctId,
-            fallback: null,
-            load: async () =>
-              (await sentimentAnalysisEnabled(organization))
-                ? loadTaskCompletionCard(project.id, windowDays)
-                : null,
-          }),
-    ]);
+  const [
+    loaded,
+    imports,
+    share,
+    inSupportSession,
+    tasks,
+    fixes,
+    corrections,
+    taskCompletion,
+    hallucinationRate,
+    rootCauses,
+  ] = await Promise.all([
+    loadOrFallback({
+      operation: "agent_health_model",
+      distinctId,
+      fallback: fallbackModel,
+      // Example turns are not read with the page: an issue reads its own when opened.
+      load: () =>
+        loadHealthPageModel(
+          { projectId: project.id, windowDays, lowConfidenceFloor },
+          process.env.NODE_ENV,
+          {
+            getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
+          },
+        ),
+    }),
+    loadImportState(project.id, importsSlot),
+    loadShareState(project.id, editionUi?.HealthShare, limits.agentHealthWindowDays),
+    isRestrictedBySupportSession(),
+    loadOrFallback<TaskListModel | null>({
+      operation: "agent_health_tasks",
+      distinctId,
+      fallback: null,
+      load: async () => buildTaskList(await loadTasksInputs(project.id)),
+    }),
+    loadOrFallback<Pick<FixesModel, "open" | "applied"> | null>({
+      operation: "agent_health_fixes",
+      distinctId,
+      fallback: null,
+      load: () => loadFixes({ projectId: project.id, organization, topics: false }),
+    }),
+    focused
+      ? null
+      : loadOrFallback({
+          operation: "agent_health_self_corrections_card",
+          distinctId,
+          fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
+          load: () => loadSelfCorrectionsCard(project.id, windowDays),
+        }),
+    // The rows below are the classic Summary's: with focusedConsole, Agent health is the score and
+    // its categories, and none of them is read.
+    // Behind `sentimentAnalysis`, with Root cause analysis it leads to. A failed read hides the row.
+    focused
+      ? null
+      : loadOrFallback<TaskCompletionCard | null>({
+          operation: "agent_health_task_completion",
+          distinctId,
+          fallback: null,
+          load: async () =>
+            (await sentimentAnalysisEnabled(organization))
+              ? loadTaskCompletionCard(project.id, windowDays)
+              : null,
+        }),
+    // Behind `hallucinationDetection`, beside task completion. A failed read hides the tile.
+    focused
+      ? null
+      : loadOrFallback<HallucinationRateCard | null>({
+          operation: "agent_health_hallucination_rate",
+          distinctId,
+          fallback: null,
+          load: async () =>
+            (await hallucinationDetectionEnabled(organization))
+              ? loadHallucinationRateCard(project.id, windowDays)
+              : null,
+        }),
+    rootCauseQuery && !focused
+      ? loadOrFallback<SummaryRootCauses | null>({
+          operation: "agent_health_root_causes",
+          distinctId,
+          fallback: {
+            model: unavailableSentimentPage(project.id, windowDays, rootCauseQuery),
+            turn: null,
+          },
+          load: async () =>
+            (await sentimentAnalysisEnabled(organization))
+              ? {
+                  model: await loadRootCauses({
+                    projectId: project.id,
+                    windowDays,
+                    query: rootCauseQuery,
+                  }),
+                  turn: await loadPanelTurn({
+                    projectId: project.id,
+                    organization,
+                    search,
+                    operation: "agent_health_root_cause_turn",
+                  }),
+                }
+              : null,
+        })
+      : null,
+  ]);
   // The example allowance, kept for when an issue is opened (the model carries none).
   const model = {
     ...applyPlanLimits(loaded, limits),
@@ -231,7 +293,13 @@ export default async function AgentHealthPage({
   return focused ? (
     <FocusedHealthView {...view} />
   ) : (
-    <SummaryView {...view} corrections={corrections} taskCompletion={taskCompletion} />
+    <SummaryView
+      {...view}
+      corrections={corrections}
+      taskCompletion={taskCompletion}
+      hallucinationRate={hallucinationRate}
+      rootCauses={rootCauses}
+    />
   );
 }
 

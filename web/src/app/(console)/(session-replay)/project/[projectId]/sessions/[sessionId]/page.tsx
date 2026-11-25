@@ -9,9 +9,14 @@ import { SessionTraceView } from "@/components/console/session-chat/SessionTrace
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { hallucinationDetectionEnabled } from "@/lib/readings/trace-signals/hallucinations/gate";
 import { firstParam } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
 import { loadFixes } from "@/lib/views/fixes/load";
+import {
+  loadSessionFindings,
+  trackBookmarks,
+} from "@/lib/views/health/hallucinations/session-bookmarks";
 import { loadSessionChat } from "@/lib/views/session-chat/load";
 import type { SessionChat } from "@/lib/views/session-chat/model";
 import {
@@ -55,6 +60,7 @@ export default async function SessionReplayPage({
     trace?: string | string[];
     tab?: string | string[];
     span?: string | string[];
+    focus?: string | string[];
   }>;
 }) {
   const { projectId, sessionId } = await params;
@@ -151,6 +157,13 @@ export default async function SessionReplayPage({
   );
   if (!loaded) notFound();
   const { chat } = loaded;
+  // Behind `hallucinationDetection`: the session's hallucinations on the replay bar. A failed read leaves the replay as it was.
+  const findings = (await hallucinationDetectionEnabled(organization).catch(() => false))
+    ? await withStatementTimeout((db) => loadSessionFindings(db, project.id, sessionId), {
+        operation: "session_hallucinations",
+      }).catch(() => [])
+    : [];
+  const bookmarks = trackBookmarks(chat.segments, findings, firstParam(query.focus) ?? null);
   // Fixes read with their own statement timeouts, outside the page's read.
   const whatIf = {
     projectId: project.id,
@@ -190,6 +203,7 @@ export default async function SessionReplayPage({
           settingsHref={`${projectHref}/settings`}
           synced
           whatIf={whatIf}
+          bookmarks={bookmarks}
         />
       </PageBody>
     </Page>

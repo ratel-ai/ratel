@@ -1,4 +1,5 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
+import { PEEK_PARAM } from "@ratel/design-system/peek";
 import { Callout } from "@ratel/design-system/states";
 import type { ComponentType, ReactNode } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
@@ -27,11 +28,16 @@ import {
   summaryState,
   taskLookups,
 } from "@/components/console/health/v2/summary-model";
-import { TaskCompletionRow } from "@/components/console/health/v2/TaskCompletionRow";
+import {
+  HallucinationRateRow,
+  TaskCompletionRow,
+} from "@/components/console/health/v2/TaskCompletionRow";
 import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLook";
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
 import { WindowSwitch } from "@/components/console/health/v2/WindowSwitch";
+import { RootCauses } from "@/components/console/sentiment/RootCauses";
+import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import type {
   HealthImporterProps,
   HealthShareLink,
@@ -47,6 +53,7 @@ import {
 } from "@/lib/readings/trace-signals/view";
 import type { FixesModel } from "@/lib/views/fixes/types";
 import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
+import type { HallucinationRateCard } from "@/lib/views/health/hallucinations/rate-card";
 import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { lowConfidenceCopy } from "@/lib/views/health/low-confidence-copy";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
@@ -55,6 +62,7 @@ import type { TaskCompletionCard } from "@/lib/views/health/root-causes/completi
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
+import type { SentimentPageModel } from "@/lib/views/traces/sentiment/page-model";
 
 /**
  * Agent health's Summary, the hub of Agent health. One question above the
@@ -84,6 +92,12 @@ export interface SummaryShare {
   Dialog: ComponentType<HealthShareProps>;
 }
 
+/** Root cause analysis as the address opens it over the page, with the turn open in it. */
+export interface SummaryRootCauses {
+  model: SentimentPageModel;
+  turn: PanelTurn | null;
+}
+
 export interface SummaryViewProps {
   projectId: string;
   projectName: string;
@@ -108,6 +122,10 @@ export interface SummaryViewProps {
   imports: SummaryImports | null;
   /** `sentimentAnalysis`: task completion right above the issues; null hides it (off, or its read failed). */
   taskCompletion?: TaskCompletionCard | null;
+  /** `hallucinationDetection`: the hallucination rate beside task completion; null hides it. */
+  hallucinationRate?: HallucinationRateCard | null;
+  /** Root cause analysis, opened from task completion; null while closed. */
+  rootCauses?: SummaryRootCauses | null;
   /** Null when sharing is not offered (no edition dialog, or its read failed). */
   share?: SummaryShare | null;
   /**
@@ -152,7 +170,7 @@ export function SummaryView({
         }
       />
     ) : null;
-  return (
+  const page = (
     <Page>
       <PageHeader
         title={SUMMARY_TITLE}
@@ -208,6 +226,25 @@ export function SummaryView({
       </PageBody>
     </Page>
   );
+  // Task completion opens its root causes in a panel over this page.
+  return props.taskCompletion ? (
+    <RootCauses
+      projectId={projectId}
+      windowDays={model.windowDays}
+      model={props.rootCauses?.model ?? null}
+      host={{
+        path: `/project/${encodeURIComponent(projectId)}/health`,
+        query: `days=${model.windowDays}`,
+      }}
+      otherParam={PEEK_PARAM}
+      now={(props.now ?? new Date()).toISOString()}
+      turn={props.rootCauses?.turn ?? null}
+    >
+      {page}
+    </RootCauses>
+  ) : (
+    page
+  );
 }
 
 /** Before a reading: the state block where the reading would be, then the readings as dashes while it fills. */
@@ -262,6 +299,7 @@ function Ready({
   imports,
   inferredTools = false,
   taskCompletion = null,
+  hallucinationRate = null,
 }: SummaryViewProps) {
   const { gap, lane, runLabel, rows, taskSteps, score, line } = readyReading({
     projectId,
@@ -271,7 +309,11 @@ function Ready({
   });
   const issues = (
     <>
-      {taskCompletion ? <TaskCompletionRow card={taskCompletion} /> : null}
+      {taskCompletion ? (
+        <TaskCompletionRow card={taskCompletion} hallucinations={hallucinationRate} />
+      ) : hallucinationRate ? (
+        <HallucinationRateRow card={hallucinationRate} windowDays={model.windowDays} />
+      ) : null}
       <IssuesSection
         projectId={projectId}
         rows={rows}

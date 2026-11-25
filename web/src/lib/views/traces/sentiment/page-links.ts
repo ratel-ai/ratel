@@ -24,6 +24,7 @@ import type { TaskFilter } from "@/lib/views/traces/sentiment/page-paths";
 import {
   NO_SENTIMENT_FILTERS,
   type OutcomeSurface,
+  type RootCauseHost,
   SENTIMENT_SORTS,
   type SentimentFilters,
   type SentimentSort,
@@ -174,9 +175,10 @@ const FILTER_LABEL: Record<keyof SentimentFilters, string> = {
 export function sentimentLinks(
   model: SentimentPageModel,
   surface: OutcomeSurface = "sentiment",
+  host?: RootCauseHost,
 ): SentimentLinks {
   const { projectId, windowDays: days, query } = model;
-  const base = { days, sort: query.sort, surface };
+  const base = { days, sort: query.sort, surface, host };
   const here = (filters: Partial<SentimentFilters>) =>
     sentimentHref(projectId, { ...base, filters: { ...query.filters, ...filters } });
 

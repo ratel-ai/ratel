@@ -7,9 +7,10 @@
 /**
  * The version of the rules (the cause patterns, the streak and search-run
  * readings). Stored on every row; raise it when a rule changes what it would
- * write, so rows of an older version are told apart and read again.
+ * write: the next reading rewrites its window and drops older rows elsewhere
+ * (`run-queries.ts`), so no page shows an older meaning.
  */
-export const OUTCOME_RULE_VERSION = 1;
+export const OUTCOME_RULE_VERSION = 3;
 
 /** Why a call failed, sorted from its error message (`error-cause.ts`). */
 export const OUTCOME_CAUSES = [
@@ -205,7 +206,7 @@ export type TaskResult = (typeof TASK_RESULTS)[number];
  *   took_over       the person said they would do it themselves
  *   refused         the agent refused, rightly: not held against it
  *   failed_call     the task ended on a failed call (`cause` says why)
- *   no_tool         the agent searched and found nothing to run
+ *   no_tool         the agent searched, and no tool it was offered fits (`search-fit.ts`)
  *   wrong_action    the work ran and was the wrong thing (`cause` says why when a model named it)
  *   did_part        only part of the goal was done
  *   goal_missed     the calls worked, and the model says they did not achieve the goal
@@ -233,19 +234,13 @@ export type TaskReason = (typeof TASK_REASONS)[number];
  *   corrected       the person corrected the agent, or the work was wrong on the way
  *   repeated        the person had to ask again
  *   recovered_call  a call failed and a later one worked
- *   searched_again  a search found nothing to run, then the agent found its tool
  */
-export const FRICTION_REASONS = [
-  "corrected",
-  "repeated",
-  "recovered_call",
-  "searched_again",
-] as const;
+export const FRICTION_REASONS = ["corrected", "repeated", "recovered_call"] as const;
 
 export type FrictionReason = (typeof FRICTION_REASONS)[number];
 
 /** The version of the task rules (segmentation and fusion): stored on every task row. */
-export const TASK_RULE_VERSION = 2;
+export const TASK_RULE_VERSION = 4;
 
 /**
  * What the agent's next reply shows about the message it answers, where the

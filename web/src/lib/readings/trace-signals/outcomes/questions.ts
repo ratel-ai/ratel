@@ -396,7 +396,7 @@ export function wentWrong(answers: TurnAnswers): boolean {
 
 /**
  * The rules decided why the turn failed: a failed call whose error has a
- * known cause, or a search run nothing was run for (a missing tool). The
+ * known cause, or a search no listed tool fits (a missing tool). The
  * writers agree: a cause the rules decided is never replaced by a model's.
  */
 export function ruleDecidesCause(rule: QuestionRuleFacts): boolean {

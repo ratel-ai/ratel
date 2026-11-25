@@ -782,6 +782,47 @@ test("Sentiment analysis sits under Traces only with sentimentAnalysis on, and R
   );
 });
 
+test("Hallucinations sits under Agent health only with hallucinationDetection on", () => {
+  const root = `/project/${P1}`;
+  const flat = (items: ReturnType<typeof consoleNav>) =>
+    items.flatMap((item) => [item, ...(item.children ?? [])]);
+  const commands = (items: ReturnType<typeof consoleNav>) =>
+    commandEntries({ items, projectId: P1, projects: PROJECTS, pathname: root });
+  const off = consoleNav({ projectId: P1, additions: [] });
+  assert.ok(
+    !flat(off).some((item) => item.id === "health-hallucinations"),
+    "off by default: no rail item",
+  );
+  assert.ok(
+    !flat(consoleNav({ projectId: P1, additions: [], sentiment: true })).some(
+      (item) => item.id === "health-hallucinations",
+    ),
+    "its own flag, not Sentiment analysis's",
+  );
+  assert.ok(
+    !commands(off).some((entry) => entry.href === `${root}/health/hallucinations`),
+    "and nothing in ⌘K",
+  );
+
+  const nav = consoleNav({ projectId: P1, additions: [], hallucinations: true });
+  const health = nav.find((item) => item.id === "health");
+  assert.deepEqual(
+    health?.children?.map((child) => child.label),
+    ["Summary", "Self-corrections", "Hallucinations"],
+  );
+  assert.equal(health?.children?.at(-1)?.href, `${root}/health/hallucinations`);
+  // With Hallucinations in it, each Agent health page lights its own row, so the reader sees which one is open.
+  assert.equal(
+    activeNavItemId(`${root}/health/hallucinations`, nav),
+    "health-hallucinations",
+    "the page lights its own row",
+  );
+  assert.equal(activeNavItemId(`${root}/health`, nav), "health-summary");
+  assert.equal(activeNavItemId(`${root}/health/self-corrections`, nav), "health-self-corrections");
+  assert.equal(nav.length, off.length, "a child, so the rail keeps its budget");
+  assert.ok(commands(nav).some((entry) => entry.href === `${root}/health/hallucinations`));
+});
+
 test("focusedConsole on: Self-corrections is an insight and Agent health has no sub-page", () => {
   const items = consoleNav({ projectId: P1, additions: [], focusedConsole: true });
   assert.deepEqual(

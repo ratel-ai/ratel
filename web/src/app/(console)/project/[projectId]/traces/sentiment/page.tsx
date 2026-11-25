@@ -4,9 +4,10 @@ import { loadPanelTurn } from "@/components/console/turn-panel/load";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
-import { loadSentimentPage } from "@/lib/views/traces/sentiment/page-load";
+import { loadRootCauses, loadSentimentPage } from "@/lib/views/traces/sentiment/page-load";
 import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
 import {
+  parseRootCauseQuery,
   parseSentimentQuery,
   parseSentimentWindow,
   sentimentHref,
@@ -61,6 +62,17 @@ export default async function SentimentAnalysisPage({
       active: option.days === windowDays,
     }));
 
+  // Root cause analysis, opened over this page: read only then.
+  const rootCauseQuery = parseRootCauseQuery(search);
+  const rootCauses = rootCauseQuery
+    ? await loadOrFallback({
+        operation: "sentiment_root_causes",
+        distinctId: `project:${project.id}`,
+        fallback: unavailableSentimentPage(project.id, windowDays, rootCauseQuery),
+        load: () =>
+          loadRootCauses({ projectId: project.id, windowDays, query: rootCauseQuery, now }),
+      })
+    : null;
   const turn = await loadPanelTurn({
     projectId: project.id,
     organization,
@@ -68,5 +80,13 @@ export default async function SentimentAnalysisPage({
     operation: "sentiment_turn",
   });
 
-  return <SentimentView model={model} windows={windows} now={now.toISOString()} turn={turn} />;
+  return (
+    <SentimentView
+      model={model}
+      windows={windows}
+      now={now.toISOString()}
+      turn={turn}
+      rootCauses={rootCauses}
+    />
+  );
 }
