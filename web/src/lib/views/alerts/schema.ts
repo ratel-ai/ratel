@@ -7,12 +7,15 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 import type {
+  AlertDestinationKind,
   AlertNoticeKind,
   AlertOperator,
   AlertState,
@@ -53,6 +56,54 @@ export const alertRules = pgTable(
   ],
 );
 
+/**
+ * Where a project's messages go: a channel of the organization's Slack workspace, or a webhook,
+ * whose URL is sealed (`platform/secret-box`) for this row's id.
+ */
+export const alertDestinations = pgTable(
+  "alert_destinations",
+  {
+    id: uuid("id").primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    kind: text("kind").$type<AlertDestinationKind>().notNull().default("webhook"),
+    sealedUrl: text("sealed_url"),
+    lastFour: text("last_four"),
+    teamId: text("team_id"),
+    channelId: text("channel_id"),
+    // Slack's code of why the app could not post there the last time; null when it could.
+    accessError: text("access_error"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("alert_destinations_project_idx").on(t.projectId, t.createdAt),
+    uniqueIndex("alert_destinations_channel_idx").on(t.projectId, t.teamId, t.channelId),
+    check(
+      "alert_destinations_kind_check",
+      sql`(${t.kind} = 'webhook' and ${t.sealedUrl} is not null and ${t.lastFour} is not null) or (${t.kind} = 'slack_channel' and ${t.teamId} is not null and ${t.channelId} is not null)`,
+    ),
+  ],
+);
+
+export const alertRuleDestinations = pgTable(
+  "alert_rule_destinations",
+  {
+    ruleId: uuid("rule_id")
+      .notNull()
+      .references(() => alertRules.id, { onDelete: "cascade" }),
+    destinationId: uuid("destination_id")
+      .notNull()
+      .references(() => alertDestinations.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ruleId, t.destinationId] }),
+    index("alert_rule_destinations_destination_idx").on(t.destinationId),
+  ],
+);
+
 /** One row per state change, with the condition of that time. A row with a notice is also its outbox. */
 export const alertEvents = pgTable(
   "alert_events",
@@ -90,4 +141,5 @@ export const alertEvents = pgTable(
 );
 
 export type AlertRuleRow = typeof alertRules.$inferSelect;
+export type AlertDestinationRow = typeof alertDestinations.$inferSelect;
 export type AlertEventRow = typeof alertEvents.$inferSelect;

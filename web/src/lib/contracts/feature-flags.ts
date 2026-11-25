@@ -16,7 +16,7 @@ export const CORE_FLAGS = [
   "agentsPages",
   "toolRunInsights",
   "focusedConsole",
-  // Owner: rstagi. Scorers, dashboards and alerts. Remove with the stacked
+  // Owner: rstagi. Scorers, dashboards, alerts and Slack delivery. Remove with the stacked
   // flag-removal PR, once on for all users.
   "customMonitoring",
 ] as const;

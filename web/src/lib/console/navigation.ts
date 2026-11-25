@@ -550,7 +550,7 @@ function withMonitoringPages(root: string, overview: NavItem): NavItem {
         label: "Alerts",
         href: `${root}/alerts`,
         icon: "overview",
-        keywords: ["threshold", "monitors"],
+        keywords: ["threshold", "notifications", "slack", "monitors"],
       },
     ],
   };

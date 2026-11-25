@@ -4,6 +4,7 @@ import { isValidElement } from "react";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { resetConfigForTests } from "@/config";
 import type { FeaturePageDeps } from "../feature-page";
+import NotificationsPage from "../settings/notifications/page";
 import AlertPage from "./[ruleId]/page";
 import { resolveAlertsPage } from "./context";
 import NewAlertPage from "./new/page";
@@ -18,6 +19,7 @@ const PAGES = [
   ["Alerts", () => AlertsPage(params())],
   ["New alert", () => NewAlertPage(params())],
   ["Alert", () => AlertPage(params())],
+  ["Notifications", () => NotificationsPage(params())],
 ] as const;
 const SWITCHES = [
   "CONFIG_PATH",

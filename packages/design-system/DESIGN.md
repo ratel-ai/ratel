@@ -284,7 +284,7 @@ Intents, then Tasks, then Issues and Self-corrections, then Fixes: one word per 
 | **Issue** | Something going wrong, with numbers and a fix | `CircleAlert` | Agent health |
 | **Self-correction** | The agent retried, switched tools, gave up or apologized | `RotateCcw` | Agent health › Self-corrections |
 | **Fix** | A concrete change that resolves an issue | `Hammer` | Improvements › Fixes |
-| **Alert** | A metric with a threshold that fires and recovers | `Bell` | Alerts |
+| **Alert** | A metric with a threshold that sends a message when it fires and when it recovers | `Bell` | Alerts |
 | **Scorer** | A check, or a question a model answers, that gives each matching trace one score | | Scorers |
 
 An intent opens onto **What they ask for**, then **Ways people ask it**. Nouns appear as pins
