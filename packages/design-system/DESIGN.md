@@ -225,7 +225,8 @@ address. An edit bar over the header has `Undo` and `History` (icons), `Reset`, 
 shows its border, whose width is always reserved, and a toolbar that floats over its top edge: its
 name, the menu with the steps for the keyboard, and Remove. No content moves between the modes. A
 widget's body takes no press in edit mode: a mouse drags the whole widget, a finger its name, and the
-corner resizes. Remove is at once, with Undo in the toast. `Add widget` is a Dialog with every widget.
+corner resizes. A held widget follows the pointer, lifted (`shadow-overlay`, 85% opacity), over a dashed
+placeholder at its landing place. Remove is at once, with Undo in the toast. `Add widget` is a Dialog with every widget.
 `Undo` takes back the latest change, and the toast's Undo is the same action. `History` is a Dialog with the
 last changes, what, who, where and when, and Restore on each. A layout that changed in another place is
 shown, never overwritten, and a toast says so. Focus goes from Edit to Done and back, from Remove to the next widget or Add widget, and from the
