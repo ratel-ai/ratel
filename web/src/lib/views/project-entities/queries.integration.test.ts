@@ -10,6 +10,7 @@ import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import {
   agentDailyRunsQuery,
+  agentMcpCallsQuery,
   agentMcpServerCountsQuery,
   agentToolsQuery,
   type EntityWindow,
@@ -198,6 +199,7 @@ test("read budget: every query reads otel_spans through an entity index, bounded
       agentDaily: agentDailyRunsQuery(PROJECT_ID, WINDOW, new Map([["Explore", "claude"]])),
       agentServers: agentMcpServerCountsQuery(PROJECT_ID, WINDOW),
       agentTools: agentToolsQuery(PROJECT_ID, ["claude"], WINDOW),
+      mcpCallsByAgent: agentMcpCallsQuery(PROJECT_ID, WINDOW, new Map([["Explore", "claude"]])),
       mcpDaily: mcpDailyCallsQuery(PROJECT_ID, WINDOW),
       mcpReach: mcpReachQuery(PROJECT_ID, WINDOW),
       mcpReachOne: mcpReachQuery(PROJECT_ID, WINDOW, ref),

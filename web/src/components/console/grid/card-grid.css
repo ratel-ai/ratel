@@ -1,0 +1,67 @@
+/* react-grid-layout's marks, in the console's tokens. */
+.react-grid-layout {
+  position: relative;
+}
+.react-grid-item {
+  transition: transform 160ms ease;
+}
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 2;
+}
+.react-grid-item [data-grid-exact] {
+  height: 100%;
+}
+.react-grid-item:not(.resizing) > [data-grid-exact] {
+  width: var(--exact-width);
+  margin-left: var(--exact-left);
+}
+.react-grid-item [data-grid-handle] {
+  cursor: grab;
+  touch-action: none;
+}
+@media (hover: hover) {
+  .react-grid-item [data-grid-surface] {
+    cursor: grab;
+  }
+}
+.react-grid-item.react-draggable-dragging :is([data-grid-handle], [data-grid-surface]) {
+  cursor: grabbing;
+}
+.react-grid-item.resizing,
+.react-grid-item.react-draggable-dragging,
+.react-grid-item > .react-resizable-handle {
+  /* A selection that starts here would scroll the page. */
+  user-select: none;
+}
+.react-grid-item.react-grid-placeholder {
+  border: 1px dashed var(--ds-line-strong);
+  border-radius: 8px;
+  background: var(--ds-hover);
+}
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  cursor: se-resize;
+  touch-action: none;
+}
+.react-grid-item > .react-resizable-handle::after {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--ds-fg-subtle);
+  border-bottom: 2px solid var(--ds-fg-subtle);
+  border-bottom-right-radius: 3px;
+  content: "";
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-grid-item {
+    transition: none;
+  }
+}

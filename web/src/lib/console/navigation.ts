@@ -84,6 +84,7 @@ export function consoleNav({
   organizationAdditions = [],
   projectGroups = [],
   entityPages = false,
+  focusedConsole = false,
   sandboxPage = false,
 }: {
   projectId: string | undefined;
@@ -102,6 +103,8 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
+  /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
+  focusedConsole?: boolean;
   /** `sandboxes` on for the shown organization: Ratel sandbox before Catalog and Settings. */
   sandboxPage?: boolean;
 }): NavItem[] {
@@ -381,7 +384,9 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxPage) : core),
+    ...(root
+      ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole, sandboxPage })
+      : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -397,14 +402,18 @@ export function consoleNav({
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
+ * Ship is new. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
+ * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
  */
 function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  entityPages: boolean,
-  sandboxPage: boolean,
+  {
+    entityPages,
+    focusedConsole,
+    sandboxPage,
+  }: { entityPages: boolean; focusedConsole: boolean; sandboxPage: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -418,12 +427,24 @@ function stageRailNav(
       ...(index === 0 ? { sectionLabel: label } : {}),
     }));
   const classicHealth = pick("health");
+  const healthPages = (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks");
   const health: NavItem = {
     ...classicHealth,
-    children: (classicHealth.children ?? [])
-      .filter((item) => item.id !== "health-tasks")
-      .map((item) => ({ ...item, activeId: classicHealth.id })),
+    children: focusedConsole
+      ? undefined
+      : healthPages.map((item) => ({ ...item, activeId: classicHealth.id })),
   };
+  const selfCorrections: NavItem[] = focusedConsole
+    ? healthPages
+        .filter((item) => item.id === "health-self-corrections")
+        .map((item) => ({
+          ...item,
+          id: "self-corrections",
+          href: `${root}/self-corrections`,
+          icon: "self-corrections",
+          also: [item.href],
+        }))
+    : [];
   const tasks: NavItem = {
     id: "tasks",
     label: "Tasks",
@@ -473,7 +494,7 @@ function stageRailNav(
     : classicTraces;
   return [
     ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
-    ...stage("insights", "Insights", [tasks, pick("intents")]),
+    ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),

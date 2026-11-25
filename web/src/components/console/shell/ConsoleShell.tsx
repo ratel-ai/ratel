@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/console/shell/AppFrame";
 import { composition } from "@/lib/composition";
+import { focusedConsoleOrganizationIds } from "@/lib/console/focused-console";
 import { getConsoleScope } from "@/lib/console/shell-data";
 import {
   parseSidebarCollapsedCookie,
@@ -27,8 +28,12 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   // Every organization the reader belongs to and their projects: the frame picks the one shown.
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
-  const entityPagesOrganizations = await entityPagesOrganizationIds(organizations);
-  const sandboxOrganizations = await sandboxOrganizationIds(organizations);
+  const [entityPagesOrganizations, focusedConsoleOrganizations, sandboxOrganizations] =
+    await Promise.all([
+      entityPagesOrganizationIds(organizations),
+      focusedConsoleOrganizationIds(organizations),
+      sandboxOrganizationIds(organizations),
+    ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -57,6 +62,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           hiddenOrganizationNav: hidden,
           projectNav: composition.projectNav,
           entityPagesOrganizations,
+          focusedConsoleOrganizations,
           sandboxOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher

@@ -33,7 +33,7 @@ export type ImportedSpan = {
 /** `events`: the LLM-call rows failed. `derived`: a batch of only ledger rows failed. */
 export type ImportedSpansResult =
   | { ok: true; accepted: number; calls: number }
-  | { ok: false; stage: "events" | "derived" };
+  | { ok: false; stage: "events" | "derived" | "refused" };
 
 /** Where a storing failure is reported: the edition's own logger and error tracker. */
 export type ImportReport = {

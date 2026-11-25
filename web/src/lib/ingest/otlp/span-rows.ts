@@ -198,7 +198,7 @@ export function toOtelSpanRows(
     const links = storedSpanLinks(span);
 
     return {
-      id: deterministicEventId(projectId, `span:${span.traceId}:${span.spanId}`),
+      id: otelSpanRowId(projectId, span),
       projectId,
       traceId: span.traceId,
       spanId: span.spanId,
@@ -286,6 +286,14 @@ function isAgentAskRoot(span: DecodedSpan): boolean {
 
 function normalizeParentSpanId(span: DecodedSpan): DecodedSpan {
   return span.parentSpanId === ZERO_SPAN_ID ? { ...span, parentSpanId: null } : span;
+}
+
+/** The id of a span's row: storage dedupes a resent span by it. */
+export function otelSpanRowId(
+  projectId: string,
+  span: Pick<DecodedSpan, "traceId" | "spanId">,
+): string {
+  return deterministicEventId(projectId, `span:${span.traceId}:${span.spanId}`);
 }
 
 function isPersistableSpan(span: DecodedSpan): boolean {
