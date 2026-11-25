@@ -1,10 +1,12 @@
 import { eeComposition as seamEe } from "#ee-composition";
 import { getConfig } from "@/config";
+import { ossAnalysisFilter } from "@/lib/adapters/oss/analysis-filter";
 import { ossEmbeddingProvider } from "@/lib/adapters/oss/embedding-provider";
 import { ossEntitlements } from "@/lib/adapters/oss/entitlements";
 import { ossRegistry } from "@/lib/adapters/oss/registry";
 import { ossSession } from "@/lib/adapters/oss/session";
 import { ossTelemetry } from "@/lib/adapters/oss/telemetry";
+import { ossTraceMetering } from "@/lib/adapters/oss/trace-metering";
 import { type CompositionPorts, PORT_NAMES } from "@/lib/contracts/composition";
 
 /**
@@ -88,18 +90,27 @@ export type ProjectNavGroup = {
   row?: ProjectNavRow;
 };
 
-export type Composition = CompositionPorts & {
-  edition: string;
-  nav: NavItem[];
-  organizationNav: OrganizationNavItem[];
-  projectNav: ProjectNavGroup[];
-};
+/** Ports an edition may leave out: the composition then holds the open-source default. */
+type DefaultedPorts = Required<Pick<CompositionPorts, "traceMetering" | "analysisFilter">>;
+
+export type Composition = CompositionPorts &
+  DefaultedPorts & {
+    edition: string;
+    nav: NavItem[];
+    organizationNav: OrganizationNavItem[];
+    projectNav: ProjectNavGroup[];
+  };
 
 const VALID_EDITIONS = "oss, cloud";
 
 export type CreateCompositionOptions = {
   ports?: Partial<CompositionPorts>;
   eeComposition?: CompositionPorts | null;
+};
+
+const DEFAULTED_PORTS: DefaultedPorts = {
+  traceMetering: ossTraceMetering,
+  analysisFilter: ossAnalysisFilter,
 };
 
 const OSS_PORTS: CompositionPorts = {
@@ -190,7 +201,14 @@ export function createComposition(
   }
 
   // The edition's own fields last: a ports object never overrides the edition's nav.
-  return { ...(ports as CompositionPorts), edition, nav, organizationNav, projectNav };
+  return {
+    ...DEFAULTED_PORTS,
+    ...(ports as CompositionPorts & Partial<DefaultedPorts>),
+    edition,
+    nav,
+    organizationNav,
+    projectNav,
+  };
 }
 
 export const composition = createComposition(getConfig().app.composition);
