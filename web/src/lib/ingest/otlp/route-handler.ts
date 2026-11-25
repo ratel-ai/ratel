@@ -1,4 +1,3 @@
-import { gunzipSync, inflateSync } from "node:zlib";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import {
   ingestRateLimitedResponse,
@@ -11,6 +10,8 @@ import type {
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
 import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import type { AcceptDeps } from "@/lib/ingest/queue/accept";
+import { ingestQuotaGate, type QuotaGate } from "@/lib/ingest/queue/quota-gate";
 import type { IntentGraphFoldScheduleDeps } from "@/lib/ingest/trace-events/fold-schedule";
 import type { insertTraceEvents as insertTraceEventsFn } from "@/lib/ingest/trace-events/queries";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
@@ -19,7 +20,6 @@ import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import type { EventQuotaResult, OrgLimitView } from "@/lib/platform/entitlements";
-import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { getLogger, type LogError, type LogWarn } from "@/lib/platform/logger";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import type {
@@ -28,14 +28,21 @@ import type {
 } from "@/lib/platform/projects/queries";
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { acceptOtlpRequest } from "./accept-otlp";
+import {
+  admitOtlpKey,
+  checkOtlpHeaders,
+  inflateRefusal,
+  otlpRejecter,
+  readOtlpBody,
+} from "./admit";
 import type { AgentSpanDedupeDeps } from "./agent-span-dedupe";
+import { inflateBody, isGzipEncoding, MAX_SPANS } from "./body";
 import { decodeOtlp, OtlpDecodeError } from "./decode";
-import { otlpSuccessResponse, transportFor } from "./http";
+import { otlpSuccessResponse } from "./http";
 import { type IngestLogDeps, logTracesIngested } from "./ingest-log";
 import {
   type IngestObservabilityDeps,
-  type IngestRejectionReason,
-  rejectIngestRequest,
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
@@ -62,31 +69,15 @@ type ReportServerException = typeof reportServerException;
  * normalized rows into `otel_spans`.
  */
 
-/** Reject bodies above this size, before decoding. */
-export const MAX_BODY_BYTES = 4_000_000;
-/** A compressed body may expand to this much, and no further (a small zip bomb stops here). */
-export const MAX_INFLATED_BYTES = 4 * MAX_BODY_BYTES;
+export {
+  type InflateResult,
+  inflateBody,
+  isGzipEncoding,
+  MAX_BODY_BYTES,
+  MAX_INFLATED_BYTES,
+  MAX_SPANS,
+} from "./body";
 
-export type InflateResult =
-  | { ok: true; bytes: Uint8Array }
-  | { ok: false; reason: "unsupported" | "malformed" | "too_large" };
-
-/** The body as sent, gunzipped or inflated when `Content-Encoding` says so, under {@link MAX_INFLATED_BYTES}. */
-export function inflateBody(bytes: Uint8Array, contentEncoding: string | null): InflateResult {
-  const encoding = (contentEncoding ?? "").trim().toLowerCase();
-  if (encoding === "" || encoding === "identity") return { ok: true, bytes };
-  if (encoding !== "gzip" && encoding !== "x-gzip" && encoding !== "deflate")
-    return { ok: false, reason: "unsupported" };
-  try {
-    const options = { maxOutputLength: MAX_INFLATED_BYTES };
-    const out = encoding === "deflate" ? inflateSync(bytes, options) : gunzipSync(bytes, options);
-    return { ok: true, bytes: new Uint8Array(out.buffer, out.byteOffset, out.byteLength) };
-  } catch (err) {
-    return { ok: false, reason: err instanceof RangeError ? "too_large" : "malformed" };
-  }
-}
-/** Cap spans decoded from one export so a giant batch can't stall the request. */
-export const MAX_SPANS = 5_000;
 const logger = getLogger("otlp/traces");
 const defaultLogError: LogError = (message, error, fields) =>
   logger.error({ ...fields, err: error }, message);
@@ -130,6 +121,10 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   modelPricing?: PersistSpansDeps["modelPricing"];
   /** Where the Datadog ingest lines go; absent, the app log and the cached project lookup. */
   ingestLog?: IngestLogDeps;
+  /** Accept onto the queue (ADR-0009) instead of storing in the request. Absent, direct mode. */
+  accept?: AcceptDeps;
+  /** The cached answer of the monthly cap for accept; the process-wide one when absent. */
+  quotaGate?: QuotaGate;
 }
 
 export async function handleTracesRequest(
@@ -138,89 +133,25 @@ export async function handleTracesRequest(
 ): Promise<Response> {
   const logError = deps.logError ?? defaultLogError;
   const startedAt = (deps.now?.() ?? new Date()).getTime();
-  // 1. Authenticate via the project API key (no DB needed to reject a missing key).
-  const authz = req.headers.get("authorization") ?? "";
-  const match = authz.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return rejectTraceRequest(
-      json({ error: "Missing or malformed Authorization: Bearer <key>." }, 401),
-      "invalid_key",
-      startedAt,
-      deps,
-    );
-  }
-
-  const contentType = req.headers.get("content-type") ?? "";
-  const transport = transportFor(contentType);
-  if (!transport) {
-    return rejectTraceRequest(
-      json(
-        {
-          error:
-            "Unsupported Content-Type. Send OTLP as application/x-protobuf or application/json.",
-        },
-        415,
-      ),
-      "unsupported_media",
-      startedAt,
-      deps,
-    );
-  }
-
-  const declaredLen = Number(req.headers.get("content-length") ?? "");
-  if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
-    return rejectTraceRequest(
-      json({ error: `Request body too large (max ${MAX_BODY_BYTES} bytes).` }, 413),
-      "oversized",
-      startedAt,
-      deps,
-    );
-  }
-
-  if (!deps.isDbConfigured()) {
-    return rejectTraceRequest(
-      json({ error: "Ingestion is not available. Database not configured." }, 503),
-      "unavailable",
-      startedAt,
-      deps,
-    );
-  }
-
+  const reject = otlpRejecter("/v1/traces", startedAt, deps);
+  // 1. Content type, size, API key and the shared-key limits.
+  const headers = checkOtlpHeaders(req, deps);
+  if (!headers.ok) return reject(headers.refusal);
+  const { transport } = headers;
   const auth = await authenticateApiKey(req.headers.get("authorization"), deps.scope, deps);
-  if (!auth.ok) {
-    return rejectTraceRequest(
-      json(
-        auth.reason === "forbidden"
-          ? {
-              error: "forbidden",
-              reason: "missing_scope",
-              scope: deps.scope,
-              message: auth.message,
-            }
-          : { error: auth.message },
-        auth.status,
-      ),
-      auth.reason === "forbidden"
-        ? "missing_scope"
-        : auth.reason === "unavailable"
-          ? "unavailable"
-          : "invalid_key",
-      startedAt,
-      deps,
+  const admission = admitOtlpKey(req, auth, deps);
+  if (!admission.ok) return reject(admission.refusal, admission.projectId);
+  const { apiKey, policy } = admission;
+  if (deps.accept) {
+    return acceptOtlpRequest(
+      req,
+      { signal: "traces", startedAt, reject, transport, admission, maxItems: MAX_SPANS },
+      {
+        ...deps,
+        accept: deps.accept,
+        quota: (organizationId) => acceptQuota(organizationId, apiKey.projectId, deps),
+      },
     );
-  }
-  const apiKey = auth.apiKey;
-  if (auth.policy.sharedKeyLimits) {
-    const limit = (deps.publishableLimits ?? publishableIngestLimits).check(req, apiKey);
-    if (!limit.allowed) {
-      return rejectTraceRequest(
-        ingestRateLimitedResponse(limit),
-        "rate_limited",
-        startedAt,
-        deps,
-        apiKey.projectId,
-      );
-    }
   }
 
   // 1b. Plan cap: reject once the org is over its monthly trace-event allotment. The
@@ -243,52 +174,20 @@ export async function handleTracesRequest(
     quotaOrgId = organization.id;
     const quota = await deps.checkEventQuota(organization);
     if (!meterTraces && !quota.ok) {
-      return rejectTraceRequest(
-        json({ error: quota.message }, 429),
-        "quota",
-        startedAt,
-        deps,
+      return reject(
+        { response: json({ error: quota.message }, 429), reason: "quota" },
         apiKey.projectId,
         organization.id,
       );
     }
   }
 
-  // 2. Read + decode the OTLP body, streaming under the byte cap so a chunked
-  // request can never buffer past it.
-  const read = await readBodyWithCap(req, MAX_BODY_BYTES);
-  if (!read.ok) {
-    return rejectTraceRequest(
-      json({ error: `Request body too large (max ${MAX_BODY_BYTES} bytes).` }, 413),
-      "oversized",
-      startedAt,
-      deps,
-      apiKey.projectId,
-      organization?.id,
-    );
-  }
+  // 2. Read + decode the OTLP body.
+  const read = await readOtlpBody(req);
+  if (!read.ok) return reject(read.refusal, apiKey.projectId, organization?.id);
   // The OpenTelemetry Collector's otlphttp exporter gzips by default.
   const inflated = inflateBody(read.bytes, req.headers.get("content-encoding"));
-  if (!inflated.ok) {
-    return rejectTraceRequest(
-      inflated.reason === "too_large"
-        ? json({ error: `Decompressed body too large (max ${MAX_INFLATED_BYTES} bytes).` }, 413)
-        : inflated.reason === "unsupported"
-          ? json(
-              {
-                error:
-                  "Unsupported Content-Encoding. Send OTLP uncompressed, or with gzip or deflate.",
-              },
-              415,
-            )
-          : json({ error: "Malformed compressed body." }, 400),
-      inflated.reason === "too_large" ? "oversized" : "malformed",
-      startedAt,
-      deps,
-      apiKey.projectId,
-      organization?.id,
-    );
-  }
+  if (!inflated.ok) return reject(inflateRefusal(inflated), apiKey.projectId, organization?.id);
   const bytes = inflated.bytes;
 
   let spans: ReturnType<typeof decodeOtlp>;
@@ -296,11 +195,11 @@ export async function handleTracesRequest(
     spans = decodeOtlp(transport === "json" ? "application/json" : "application/x-protobuf", bytes);
   } catch (err) {
     if (err instanceof OtlpDecodeError) {
-      return rejectTraceRequest(
-        json({ error: `Malformed OTLP payload: ${err.message}` }, 400),
-        "malformed",
-        startedAt,
-        deps,
+      return reject(
+        {
+          response: json({ error: `Malformed OTLP payload: ${err.message}` }, 400),
+          reason: "malformed",
+        },
         apiKey.projectId,
         organization?.id,
       );
@@ -309,29 +208,26 @@ export async function handleTracesRequest(
   }
 
   if (spans.length > MAX_SPANS) {
-    return rejectTraceRequest(
-      json({ error: `Too many spans in one export (max ${MAX_SPANS}).` }, 413),
-      "oversized",
-      startedAt,
-      deps,
+    return reject(
+      {
+        response: json({ error: `Too many spans in one export (max ${MAX_SPANS}).` }, 413),
+        reason: "oversized",
+      },
       apiKey.projectId,
       organization?.id,
     );
   }
 
   // An ingest-only key's budget counts spans too, not only requests (RC-585).
-  if (auth.policy.sharedKeyLimits) {
+  if (policy.sharedKeyLimits) {
     const items = (deps.publishableLimits ?? publishableIngestLimits).chargeItems(
       req,
       apiKey,
       spans.length,
     );
     if (!items.allowed) {
-      return rejectTraceRequest(
-        ingestRateLimitedResponse(items),
-        "rate_limited",
-        startedAt,
-        deps,
+      return reject(
+        { response: ingestRateLimitedResponse(items), reason: "rate_limited" },
         apiKey.projectId,
         organization?.id,
       );
@@ -356,21 +252,18 @@ export async function handleTracesRequest(
     },
   );
   if (!persisted.ok && persisted.stage === "refused") {
-    return rejectTraceRequest(
-      json({ error: "Span limit reached for this trace or this billing period." }, 429),
-      "quota",
-      startedAt,
-      deps,
+    return reject(
+      {
+        response: json({ error: "Span limit reached for this trace or this billing period." }, 429),
+        reason: "quota",
+      },
       apiKey.projectId,
       organization?.id,
     );
   }
   if (!persisted.ok) {
-    return rejectTraceRequest(
-      json({ error: "Failed to store telemetry." }, 500),
-      "storage",
-      startedAt,
-      deps,
+    return reject(
+      { response: json({ error: "Failed to store telemetry." }, 500), reason: "storage" },
       apiKey.projectId,
       organization?.id,
     );
@@ -433,30 +326,27 @@ export async function handleTracesRequest(
   });
 }
 
-export function isGzipEncoding(contentEncoding: string | null): boolean {
-  const encoding = (contentEncoding ?? "").trim().toLowerCase();
-  return encoding === "gzip" || encoding === "x-gzip";
+/**
+ * The monthly event cap as accept asks it. A metered organization is not rejected by it: the trace
+ * meter decides when the spans are processed.
+ */
+function acceptQuota(
+  organizationId: string,
+  projectId: string,
+  deps: TracesHandlerDeps,
+): Promise<EventQuotaResult> {
+  const { getOrganizationByProjectId, checkEventQuota, traceMetering } = deps;
+  return (deps.quotaGate ?? ingestQuotaGate).check(organizationId, async () => {
+    const organization = await getOrganizationByProjectId?.(projectId);
+    if (!organization || !checkEventQuota) return { ok: true };
+    const metered = (await traceMetering?.isMetered({ organization, projectId })) ?? false;
+    const quota = await checkEventQuota(organization);
+    return metered ? { ok: true } : quota;
+  });
 }
 
 function json(body: unknown, status: number): Response {
   return Response.json(body, { status });
-}
-
-async function rejectTraceRequest(
-  response: Response,
-  reason: IngestRejectionReason,
-  startedAt: number,
-  deps: TracesHandlerDeps,
-  projectId?: string,
-  organizationId?: string,
-): Promise<Response> {
-  return rejectIngestRequest(response, reason, {
-    endpoint: "/v1/traces",
-    startedAt,
-    deps,
-    projectId,
-    organizationId,
-  });
 }
 
 function captureProcessingFailure(

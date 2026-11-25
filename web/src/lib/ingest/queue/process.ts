@@ -1,0 +1,95 @@
+import type { IngestResult } from "@/lib/contracts/ingest-queue";
+import { inflateBody, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/body";
+import type { Envelope, EnvelopeSignal } from "@/lib/ingest/queue/envelope";
+import type { EnvelopeHandler } from "@/lib/ingest/queue/port/envelope-queue";
+import { storeFailure } from "@/lib/ingest/queue/port/store-failure";
+import type { Organization } from "@/lib/platform/organizations";
+
+/** The current rows of an envelope's project, which process reads for every delivery. */
+export interface ProcessContext {
+  projectId: string;
+  organization: Organization | null;
+  /** The clock of process: when accept took the request. */
+  receivedAt: Date;
+}
+
+/** How a delivery ended, with what it stored. */
+export interface Processed {
+  result: IngestResult;
+  counts: Record<string, number>;
+}
+
+export type ProcessSignal = (envelope: Envelope, context: ProcessContext) => Promise<Processed>;
+
+export interface EnvelopeHandlerDeps extends Record<EnvelopeSignal, ProcessSignal> {
+  /** Null for a project that does not exist. */
+  findProject: (projectId: string) => Promise<{ organization: Organization | null } | null>;
+}
+
+/** The consumer's handler: process (ADR-0009) for one envelope. */
+export function createEnvelopeHandler(deps: EnvelopeHandlerDeps): EnvelopeHandler {
+  return async (envelope) => {
+    try {
+      const project = await deps.findProject(envelope.projectId);
+      if (!project) return { outcome: "dead-letter", reason: "project does not exist" };
+      const { result } = await deps[envelope.signal](envelope, {
+        projectId: envelope.projectId,
+        organization: project.organization,
+        receivedAt: new Date(envelope.receivedAt),
+      });
+      return result;
+    } catch (error) {
+      return storeFailure(error);
+    }
+  };
+}
+
+export const STORED: IngestResult = { outcome: "ack" };
+
+export function deadLetter(reason: string): Processed {
+  return { result: { outcome: "dead-letter", reason }, counts: {} };
+}
+
+export function failed(error: unknown): Processed {
+  return { result: storeFailure(error), counts: {} };
+}
+
+/**
+ * The items of an OTLP envelope. A body that does not inflate or decode, or holds too many items,
+ * can never pass. The reasons quote nothing of the body: a decoder's own message does.
+ */
+export function readOtlpItems<Item>(
+  envelope: Envelope,
+  {
+    decode,
+    maxItems,
+    itemName,
+  }: {
+    decode: (contentType: string, bytes: Uint8Array) => Item[];
+    maxItems: number;
+    itemName: string;
+  },
+): { ok: true; items: Item[]; bytes: Uint8Array } | { ok: false; processed: Processed } {
+  const inflated = inflateBody(envelope.body, envelope.contentEncoding);
+  if (!inflated.ok) {
+    return refuse(
+      inflated.reason === "too_large"
+        ? `body is over ${MAX_INFLATED_BYTES} bytes decompressed`
+        : `body is not valid ${envelope.contentEncoding}`,
+    );
+  }
+  let items: Item[];
+  try {
+    items = decode(envelope.contentType, inflated.bytes);
+  } catch {
+    return refuse(`body does not decode as OTLP ${envelope.signal}`);
+  }
+  if (items.length > maxItems) {
+    return refuse(`body has ${items.length} ${itemName} (max ${maxItems})`);
+  }
+  return { ok: true, items, bytes: inflated.bytes };
+}
+
+function refuse(reason: string): { ok: false; processed: Processed } {
+  return { ok: false, processed: deadLetter(reason) };
+}
