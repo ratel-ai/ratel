@@ -8,9 +8,10 @@ import {
 } from "../actions";
 import { DEFAULT_LAYOUT, sameLayout, WIDGET_CATALOG } from "../domain/layout";
 import type { OverviewLayoutStore } from "../ports/store";
-import { webLayoutReader } from "../readers";
+import { pageLayout, webLayoutReader } from "../readers";
 
 const REMOVE = { kind: "remove", widget: "topology" };
+const WIDGET = { id: "metrics", x: 0, y: 0, w: 4, h: 3, hidden: false };
 const PERSON: LayoutReader = {
   kind: "person",
   projectId: "p1",
@@ -31,10 +32,11 @@ function memory() {
     },
     async update(key, next) {
       calls.push(`update ${at(key)}`);
-      rows.set(at(key), next(rows.get(at(key))));
+      const layout = next(rows.get(at(key)));
+      if (layout) rows.set(at(key), layout);
     },
   };
-  return { store, calls };
+  return { store, calls, rows };
 }
 
 const deps = (reader: LayoutReader | null, { store }: ReturnType<typeof memory>): LayoutDeps => ({
@@ -119,4 +121,39 @@ test("an offered list comes in: the default, the refusal and the kept entry foll
   assert.ok((await changeOverviewLayout("p1", { kind: "remove", widget: "health" }, without)).ok);
   const again = await readOverviewLayout("p1", deps(PERSON, db));
   assert.ok(again.ok && again.layout.find(({ id }) => id === "topology")?.removed);
+});
+
+test("a stored row this build cannot read stays as it is, until the person resets", async () => {
+  const whole = { version: 1, widgets: [] };
+  for (const stored of [
+    { ...whole, version: 2 },
+    { version: 1, widgets: "?" },
+    { version: 1, widgets: [WIDGET, WIDGET] },
+  ]) {
+    const db = memory();
+    db.rows.set("p1/user_1", stored);
+    const at = deps(PERSON, db);
+    assert.deepEqual(await readOverviewLayout("p1", at), { ok: true, layout: DEFAULT_LAYOUT });
+    const move = { kind: "move", widget: "attention", x: 0, y: 0 };
+    for (const change of [REMOVE, move, { kind: "arrange", places: [] }])
+      assert.deepEqual(await changeOverviewLayout("p1", change, at), {
+        ok: false,
+        reason: "unreadable",
+      });
+    assert.equal(db.rows.get("p1/user_1"), stored, "not overwritten");
+    assert.ok((await changeOverviewLayout("p1", { kind: "reset" }, at)).ok);
+    assert.ok((await changeOverviewLayout("p1", REMOVE, at)).ok, "readable again");
+  }
+});
+
+test("the page offers no save when the layout was not read", async () => {
+  const db = memory();
+  const thrown = deps(PERSON, {
+    ...db,
+    store: { ...db.store, read: () => Promise.reject(new Error("statement timeout")) },
+  });
+  const unsaved = { layout: DEFAULT_LAYOUT, read: false };
+  assert.deepEqual(await pageLayout("p1", thrown), unsaved);
+  assert.deepEqual(await pageLayout("p1", deps(null, db)), unsaved);
+  assert.deepEqual(await pageLayout("p1", deps(PERSON, db)), { ...unsaved, read: true });
 });

@@ -17,7 +17,9 @@ export function createDrizzleOverviewLayoutStore(db: LayoutWriteDb): OverviewLay
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtext(${`overview_layouts:${key.projectId}:${key.personId}`}))`,
         );
-        const stored = { layout: next(await read(tx, key)), updatedAt: new Date() };
+        const layout = next(await read(tx, key));
+        if (!layout) return;
+        const stored = { layout, updatedAt: new Date() };
         await tx
           .insert(overviewLayouts)
           .values({ ...key, ...stored })

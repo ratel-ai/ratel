@@ -74,11 +74,9 @@ export function layoutChangeSchema(offered: OfferedWidgets): z.ZodType<OverviewL
  * not parse, or that names a widget twice, reads as the default.
  */
 export function readArrangement(stored: unknown, offered: OfferedWidgets): OverviewArrangement {
-  const parsed = storedSchema.safeParse(stored);
-  if (!parsed.success) return { layout: defaultLayout(offered), kept: [] };
-  const entries = parsed.data.widgets;
+  const entries = storedWidgets(stored);
+  if (!entries) return { layout: defaultLayout(offered), kept: [] };
   const named = new Set(entries.map(({ id }) => id));
-  if (named.size !== entries.length) return { layout: defaultLayout(offered), kept: [] };
   const ids = new Set<string>(offered.map(({ id }) => id));
   const known = entries
     .filter(({ id }) => ids.has(id))
@@ -107,6 +105,11 @@ export function readArrangement(stored: unknown, offered: OfferedWidgets): Overv
   };
 }
 
+/** There is a stored value, and this build cannot read it: a later version's, or a broken one. */
+export function isUnreadable(stored: unknown): boolean {
+  return stored !== undefined && storedWidgets(stored) === null;
+}
+
 /** Reset is the only change that forgets the kept entries. */
 export function changeArrangement(
   { layout, kept }: OverviewArrangement,
@@ -128,6 +131,13 @@ export function storeArrangement({ layout, kept }: OverviewArrangement): StoredO
       ...layout.map(({ id, x, y, w, h, removed }) => ({ id, x, y, w, h, hidden: removed })),
     ],
   };
+}
+
+function storedWidgets(stored: unknown): readonly StoredWidget[] | null {
+  const parsed = storedSchema.safeParse(stored);
+  if (!parsed.success) return null;
+  const { widgets } = parsed.data;
+  return new Set(widgets.map(({ id }) => id)).size === widgets.length ? widgets : null;
 }
 
 /**

@@ -5,13 +5,10 @@ import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOv
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
 import { BASE_URL } from "@/lib/platform/app-config";
-import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import { CONTEXT_PEEK, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
-import { readOverviewLayout } from "@/lib/views/overview-layout/actions";
-import { DEFAULT_LAYOUT } from "@/lib/views/overview-layout/domain/layout";
-import { webLayoutDeps } from "@/lib/views/overview-layout/readers";
+import { pageLayout } from "@/lib/views/overview-layout/readers";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 type LoadOrganization = Parameters<typeof loadFocusedOverview>[0]["organization"];
@@ -34,15 +31,7 @@ export async function FocusedOverviewPage({
 }) {
   const window = parseOverviewWindow(range);
   const now = new Date();
-  const layout = await loadOrFallback({
-    operation: "overview_layout",
-    distinctId: `project:${project.id}`,
-    fallback: DEFAULT_LAYOUT,
-    load: async () => {
-      const read = await readOverviewLayout(project.id, webLayoutDeps);
-      return read.ok ? read.layout : DEFAULT_LAYOUT;
-    },
-  });
+  const { layout, read } = await pageLayout(project.id);
   const [data, linked] = await Promise.all([
     loadFocusedOverview({
       project,
@@ -59,7 +48,7 @@ export async function FocusedOverviewPage({
       data={data}
       now={now}
       linked={linked}
-      save={inSupportSession ? null : saveOverviewLayout.bind(null, project.id)}
+      save={inSupportSession || !read ? null : saveOverviewLayout.bind(null, project.id)}
       actions={
         // The tour points at the rail, which is a drawer below md.
         <span className="max-md:hidden">

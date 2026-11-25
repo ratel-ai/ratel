@@ -66,15 +66,15 @@ test("two changes both apply, in one row", async () => {
   await pg.close();
 });
 
-test("a row nobody can read is the default, and the next change replaces it", async () => {
+test("a row nobody can read is the default, and an update that gives null leaves it", async () => {
   const { pg, store } = await setup();
   const key = { projectId: P1, personId: "ana" };
   await pg.exec(
     `insert into overview_layouts (project_id, person_id, layout) values ('${P1}', 'ana', '{"version": 99}')`,
   );
   assert.deepEqual(layoutOf(await store.read(key)), DEFAULT_LAYOUT);
-  await store.update(key, changed(REMOVE));
-  assert.equal(layoutOf(await store.read(key)).filter(({ removed }) => removed).length, 1);
+  await store.update(key, () => null);
+  assert.deepEqual(await store.read(key), { version: 99 });
   await pg.close();
 });
 

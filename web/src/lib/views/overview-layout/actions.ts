@@ -1,6 +1,7 @@
 import { defaultLayout, type OfferedWidgets, type OverviewLayout } from "./domain/layout";
 import {
   changeArrangement,
+  isUnreadable,
   layoutChangeSchema,
   readArrangement,
   storeArrangement,
@@ -26,7 +27,7 @@ export interface LayoutDeps {
   offered: (projectId: string) => Promise<OfferedWidgets>;
 }
 
-export type LayoutRefusal = "not_found" | "api_key" | "support_session" | "invalid";
+export type LayoutRefusal = "not_found" | "api_key" | "support_session" | "invalid" | "unreadable";
 
 export type LayoutResult =
   | { ok: true; layout: OverviewLayout }
@@ -38,6 +39,8 @@ export const LAYOUT_REFUSALS: Readonly<Record<LayoutRefusal, string>> = {
     "An API key has no Overview layout. Sign in to the MCP server as a person to change the layout.",
   support_session: "A support session cannot change the Overview.",
   invalid: "That is not a change the Overview can make.",
+  unreadable:
+    "This version of Ratel cannot read the saved layout, so it stays as it is. Reset the layout to start again from the default.",
 };
 
 export async function readOverviewLayout(
@@ -64,13 +67,15 @@ export async function changeOverviewLayout(
   const offered = await deps.offered(projectId);
   const parsed = layoutChangeSchema(offered).safeParse(change);
   if (!parsed.success) return { ok: false, reason: "invalid" };
-  let layout = defaultLayout(offered);
+  let layout: OverviewLayout | null = null;
   await deps
     .store()
     .update({ projectId: reader.projectId, personId: reader.personId }, (current) => {
+      // Only a reset, which asks for it, replaces what cannot be read.
+      if (isUnreadable(current) && parsed.data.kind !== "reset") return null;
       const next = changeArrangement(readArrangement(current, offered), parsed.data, offered);
       layout = next.layout;
       return storeArrangement(next);
     });
-  return { ok: true, layout };
+  return layout ? { ok: true, layout } : { ok: false, reason: "unreadable" };
 }

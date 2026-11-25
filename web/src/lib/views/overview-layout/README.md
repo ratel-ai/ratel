@@ -8,7 +8,7 @@ Where each person put the Overview's widgets, and which ones they removed, per p
 | `domain/stored.ts` | pure: the stored row (`readArrangement`, `changeArrangement`, `storeArrangement`) and the schema of a change from outside |
 | `ports/store.ts`, `adapters/drizzle-store.ts`, `schema.ts` | `overview_layouts`: one versioned `jsonb` layout per project and person, deleted with the project. No row is the default layout. An update runs under a per-person lock |
 | `actions.ts` | `readOverviewLayout` and `changeOverviewLayout`, which the web and MCP both call. Somebody without access gets `not_found`; an API key and a support session read the default with no read of the store, and cannot write |
-| `readers.ts` | who asks on the web: the console's project scope. MCP's reader is in `lib/mcp/operations/overview.ts` |
+| `readers.ts` | who asks on the web: the console's project scope, and `pageLayout`, which offers no save when the read failed. MCP's reader is in `lib/mcp/operations/overview.ts` |
 
 A person is the session port's `externalId`, the same id as an OAuth MCP caller's `externalUserId`,
 so both surfaces show one layout. The open-source edition has one operator. The module has no
@@ -25,6 +25,7 @@ MCP: `OverviewOperationDeps.offeredWidgets`). Nobody's layout is reset, and noth
   drawn. When the widget is offered again, it has its place and state. Two builds at once during a
   deploy work the same way.
 - Reset is the default of the offered widgets, and the only change that forgets the kept entries.
-- Only a value that does not parse, or that names a widget twice, reads as the default.
+- Only a value that does not parse, or that names a widget twice, reads as the default. It is not
+  overwritten: every change but reset is refused with `unreadable`.
 
 A removed widget is stored as `hidden: true`.
