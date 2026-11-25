@@ -180,7 +180,9 @@ export async function registerNodeInstrumentation(
   // termination: it flushes buffered telemetry, then exits explicitly. The worker is the
   // exception: its own handler waits for the step in flight, so it runs this flush itself
   // (`bootBackground` hands it over) instead of being cut short by an exit from here.
-  if (appRole(settings) !== "worker") registerTelemetryShutdownHandlers(registeredShutdown);
+  const role = appRole(settings);
+  if (role !== "worker" && role !== "persist")
+    registerTelemetryShutdownHandlers(registeredShutdown);
   registered = true;
   return registeredShutdown;
 }
@@ -292,8 +294,10 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
       console.error(error instanceof Error ? error.message : error);
       process.exit(1);
     }
-  } else if (plan.role === "worker") {
-    console.log("[migrate] skipped: the worker never migrates, the web process does");
+  } else {
+    const { skippedMigrationMessage } = await import("@/lib/jobs/boot-plan");
+    const skipped = skippedMigrationMessage(plan.role);
+    if (skipped) console.log(skipped);
   }
   const { assertCronConfig, startInProcessScheduler } = await import("@/lib/jobs/scheduler");
   try {
@@ -313,5 +317,10 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
   if (plan.tick === "worker") {
     const { startBackgroundWorker } = await import("@/lib/jobs/worker-start");
     startBackgroundWorker(undefined, { beforeExit: flushTelemetry });
+  }
+  // A persist-only process (RTL-314): the ingest queue's lane and nothing else.
+  if (plan.tick === "persist") {
+    const { startBackgroundWorker } = await import("@/lib/jobs/worker-start");
+    startBackgroundWorker(undefined, { beforeExit: flushTelemetry, lanesOnly: true });
   }
 }

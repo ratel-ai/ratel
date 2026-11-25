@@ -125,7 +125,11 @@ const CONFIG_SCHEMA = schema({
     publicUrl: optional("APP_PUBLIC_URL", trimmed),
     environment: setting("APP_ENV", trimmed, D.app.environment),
     organizationName: optional("RATEL_ORG_NAME", trimmed),
-    role: setting("APP_ROLE", z.preprocess(lower, z.enum(["all", "api", "worker"])), D.app.role),
+    role: setting(
+      "APP_ROLE",
+      z.preprocess(lower, z.enum(["all", "api", "worker", "ingest", "persist"])),
+      D.app.role,
+    ),
   },
   /** Open-source edition only: every experimental flag on. */
   experimentalFeatures: setting("RATEL_EXPERIMENTAL_FEATURES", flagValue, D.experimentalFeatures),
@@ -246,6 +250,22 @@ const CONFIG_SCHEMA = schema({
       positive,
       D.ingest.otlpRawRetentionDays,
     ),
+    /** Queue accepted batches and persist them from workers (RTL-314, `lib/ingest/queue`). */
+    experimentalQueue: setting("EXPERIMENTAL_INGEST_QUEUE", one, D.ingest.experimentalQueue),
+    /** Batches one project may have persisting at once, across every process. 0 turns the cap off. */
+    persistPerProject: setting(
+      "INGEST_PERSIST_PER_PROJECT",
+      nonNegativeInt,
+      D.ingest.persistPerProject,
+    ),
+    /** Batches one process persists at once. */
+    persistConcurrency: setting(
+      "INGEST_PERSIST_CONCURRENCY",
+      positiveInt,
+      D.ingest.persistConcurrency,
+    ),
+    /** Tries before a batch is marked failed. */
+    batchMaxAttempts: setting("INGEST_BATCH_MAX_ATTEMPTS", positiveInt, D.ingest.batchMaxAttempts),
   },
   anthropic: {
     /** `bedrock`, or unset for the API; any other value turns Claude off. */
