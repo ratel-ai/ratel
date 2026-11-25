@@ -17,6 +17,7 @@ export const CORE_FLAGS = [
   "toolRunInsights",
   "sentimentAnalysis",
   "hallucinationDetection",
+  "focusedConsole",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

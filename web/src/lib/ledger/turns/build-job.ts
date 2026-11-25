@@ -224,12 +224,13 @@ export async function buildProjectTraceTurns(
   let caughtUp = false;
 
   while (pages < deps.maxPages && deps.now().getTime() - startedAt.getTime() < deps.timeBudgetMs) {
-    const rows = await deps.listEvents(projectId, since, undefined, deps.pageLimit, types);
-    if (rows.length === 0) {
+    const page = await deps.listEvents(projectId, since, undefined, deps.pageLimit, types);
+    if (page.length === 0) {
       caughtUp = true;
       break;
     }
     pages += 1;
+    const rows = page.filter((row) => !row.analysisSkipped);
     events += rows.length;
 
     const searchIds = rows
@@ -248,7 +249,7 @@ export async function buildProjectTraceTurns(
     const now = deps.now();
     const built = buildTurns({ stored, events: normalized, now, config: deps.config });
 
-    const last = rows[rows.length - 1];
+    const last = page[page.length - 1];
     if (!last) break;
     const written = await deps.writePage({
       projectId,
@@ -261,7 +262,7 @@ export async function buildProjectTraceTurns(
     stepsWritten += written.stepsWritten;
     since = last.receivedAtRaw;
 
-    if (rows.length < deps.pageLimit) {
+    if (page.length < deps.pageLimit) {
       caughtUp = true;
       break;
     }

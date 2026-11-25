@@ -22,6 +22,7 @@ import {
 } from "@/lib/console/navigation";
 import { serializeSidebarCollapsedCookie } from "@/lib/console/sidebar-cookie";
 import { type CommandAction, CommandMenu } from "./CommandMenu";
+import { FocusedConsoleProvider } from "./focused-console-context";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { SidebarContent } from "./Sidebar";
 import type { ShellData } from "./types";
@@ -97,6 +98,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
   const hallucinations = Boolean(
     organization && data.hallucinationOrganizations?.includes(organization.id),
   );
+  const focusedConsole = Boolean(
+    organization && data.focusedConsoleOrganizations?.includes(organization.id),
+  );
   const items = useMemo(
     () =>
       consoleNav({
@@ -108,6 +112,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         entityPages,
         sentiment,
         hallucinations,
+        focusedConsole,
       }),
     [
       project,
@@ -118,6 +123,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       entityPages,
       sentiment,
       hallucinations,
+      focusedConsole,
     ],
   );
   const activeId = activeNavItemId(pathname, items);
@@ -253,7 +259,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
             <IconButton label="Search" icon={<Search />} onClick={() => setCommandOpen(true)} />
           </div>
           <main id="main-content" tabIndex={-1} className={MAIN_CLASS_NAME}>
-            {children}
+            <FocusedConsoleProvider value={focusedConsole}>{children}</FocusedConsoleProvider>
           </main>
         </div>
       </div>

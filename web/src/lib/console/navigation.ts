@@ -86,6 +86,7 @@ export function consoleNav({
   entityPages = false,
   sentiment = false,
   hallucinations = false,
+  focusedConsole = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -107,6 +108,8 @@ export function consoleNav({
   sentiment?: boolean;
   /** `hallucinationDetection` on for the shown organization: Hallucinations under Agent health. */
   hallucinations?: boolean;
+  /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
+  focusedConsole?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -403,7 +406,14 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sentiment, hallucinations) : core),
+    ...(root
+      ? stageRailNav(root, core, setupRows, {
+          entityPages,
+          sentiment,
+          focusedConsole,
+          hallucinations,
+        })
+      : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -420,15 +430,19 @@ export function consoleNav({
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item
  * (each of its pages lights its own row once Hallucinations is among them);
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
+ * Ship is new. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
+ * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
  */
 function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  entityPages: boolean,
-  sentiment: boolean,
-  hallucinations: boolean,
+  {
+    entityPages,
+    sentiment,
+    focusedConsole,
+    hallucinations,
+  }: { entityPages: boolean; sentiment: boolean; focusedConsole: boolean; hallucinations: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -442,15 +456,30 @@ function stageRailNav(
       ...(index === 0 ? { sectionLabel: label } : {}),
     }));
   const classicHealth = pick("health");
+  const healthPages = (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks");
   const health: NavItem = {
     ...classicHealth,
     // Root cause analysis is no rail or ⌘K destination: task completion on the Summary opens it.
     also: [...(classicHealth.also ?? []), ...(sentiment ? [`${root}/health/root-causes`] : [])],
     // Lit as one item; with Hallucinations among its pages, each page lights its own row instead.
-    children: (classicHealth.children ?? [])
-      .filter((item) => item.id !== "health-tasks")
-      .map((item) => (hallucinations ? item : { ...item, activeId: classicHealth.id })),
+    // With focusedConsole, Agent health has no sub-page.
+    children: focusedConsole
+      ? undefined
+      : healthPages.map((item) =>
+          hallucinations ? item : { ...item, activeId: classicHealth.id },
+        ),
   };
+  const selfCorrections: NavItem[] = focusedConsole
+    ? healthPages
+        .filter((item) => item.id === "health-self-corrections")
+        .map((item) => ({
+          ...item,
+          id: "self-corrections",
+          href: `${root}/self-corrections`,
+          icon: "self-corrections",
+          also: [item.href],
+        }))
+    : [];
   const tasks: NavItem = {
     id: "tasks",
     label: "Tasks",
@@ -489,7 +518,7 @@ function stageRailNav(
       : classicTraces;
   return [
     ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
-    ...stage("insights", "Insights", [tasks, pick("intents")]),
+    ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),

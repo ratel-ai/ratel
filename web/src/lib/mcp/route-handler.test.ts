@@ -339,6 +339,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "agentsPages",
     "evalGate",
     "hallucinationDetection",
+    "focusedConsole",
     "mcpApps",
     "rankingCatalogDrift",
     "sentimentAnalysis",

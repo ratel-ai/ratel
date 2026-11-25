@@ -24,6 +24,7 @@ npm packages.
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
 | `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request; `membershipIn` and `membershipBySlug` (the reader's membership in one organization, which is what authorizes a project or an organization page, as upstream) and upstream's `sessionForOrganization` for actions that name an organization |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port; `planSummary`, `planWithWindow`, `fullAgentHealthPlanName`, `planName`, `planLabel` and `billingSelfServe` over its optional `plans` (no summary, no plan named and no self-serve billing without them) |
+| `analysis-filter.ts` | `analyzedTraceCondition` and `andAnalyzedTrace` (the same as the tail of a raw `where`) over the analysis filter port; no condition in the open-source edition |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
 | `edition-telemetry.ts` | what the instrumentation hands the telemetry port: an uncaught request error (`onRequestError`) and the analytics flush at shutdown, the port loaded only when called; the open-source port has neither, so nothing happens |
 | `track-client.ts` | the browser's `track` and `captureClientException` over the browser seam (`contracts/client-analytics.ts`): silent until an edition installs its client, never throwing |
@@ -44,6 +45,6 @@ npm packages.
 | `api-keys/` | scoped keys (ratel-cloud #428): `scopes.ts` (every scope and the Full, read-only, ingest and custom presets), `policy.ts` (`apiKeyPolicy`, the one place that decides what a key may do), `authenticate.ts` (`authenticateApiKey`, the bearer decision every key route shares: 401, 403 with the missing scope, or the key and its policy) and `routes.ts` (`BEARER_ROUTE_SCOPES`, the scope each bearer route needs; `routes.test.ts` fails a route that authenticates a key without its entry) |
 | `format.ts` | `fmtCount`, `fmtCost`: the shared numeric display formatters |
 
-Owned here rather than synced (see `scripts/platform-sync/map.json`): the client, the schema and
+These differ from their `ratel-cloud` origin: the client, the schema and
 query fragments, session, entitlements, telemetry, environment, the OTel config and shutdown, and
 the tests that upstream wrote against Cloud-only fixtures.
