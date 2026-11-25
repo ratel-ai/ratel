@@ -7,6 +7,7 @@ import { Section } from "@ratel/design-system/section";
 import { EmptyState } from "@ratel/design-system/states";
 import { ListChecks } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { formatRelativeTime } from "@/lib/synthesis/traces/v2/format";
 import type { CaseRow, ExperimentRow, ReadyVersion } from "@/lib/views/evals/page-model";
 import { caseHref } from "@/lib/views/evals/paths";
@@ -21,6 +22,7 @@ export function EvalsView({
   experiments,
   versions,
   now,
+  children,
 }: {
   projectId: string;
   canEdit: boolean;
@@ -29,6 +31,8 @@ export function EvalsView({
   versions: ReadyVersion[];
   /** ISO time the page was rendered, so relative times agree on server and client. */
   now: string;
+  /** What the edition adds at the foot. */
+  children?: ReactNode;
 }) {
   return (
     <Page>
@@ -89,6 +93,7 @@ export function EvalsView({
             </ul>
           )}
         </Section>
+        {children}
       </PageBody>
     </Page>
   );

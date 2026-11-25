@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { EvalsView } from "@/components/console/evals/EvalsView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { composition } from "@/lib/composition/ports";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
@@ -44,6 +45,7 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
     },
     { attributes: { "project.id": project.id } },
   );
+  const JudgeSettings = (await composition.ui?.())?.EvalJudgeSettings;
   return (
     <EvalsView
       projectId={project.id}
@@ -52,6 +54,8 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
       experiments={experiments.map(experimentRow)}
       versions={readyVersions(versions)}
       now={new Date().toISOString()}
-    />
+    >
+      {JudgeSettings ? <JudgeSettings projectId={project.id} /> : null}
+    </EvalsView>
   );
 }

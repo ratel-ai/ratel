@@ -166,6 +166,8 @@ export type EditionUi = {
    * project Overview's skeleton (the nearest loading state otherwise). Nothing without it.
    */
   ProjectPageSkeleton?: ComponentType;
+  /** A section at the foot of the Evals page: who judges, and the project's own key. Absent otherwise. */
+  EvalJudgeSettings?: ComponentType<{ projectId: string }>;
   /** Organization settings > General, read-only otherwise. */
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */
