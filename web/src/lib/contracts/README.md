@@ -31,6 +31,10 @@ it used with a reference, or reads a daily budget, and never sees a plan or a pr
 hard limits. `usage-limits.contract.ts` is the test every adapter passes and
 `usage-limits.fake.ts` the in-memory adapter for tests. The composition port is optional.
 
+`eval-judge.ts` is the judge of evals: one yes or no question about a trial, with a reason from a
+fixed list. The port supplies the model and says who pays. `eval-judge.contract.ts` is the test every
+adapter passes. The composition port is optional.
+
 `CoreServices` (`composition.ts`) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool

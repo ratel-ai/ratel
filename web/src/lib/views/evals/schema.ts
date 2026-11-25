@@ -1,9 +1,12 @@
 import { sql } from "drizzle-orm";
 import {
+  date,
+  doublePrecision,
   index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -61,4 +64,15 @@ export const evalCaseVersions = pgTable(
     uniqueIndex("eval_case_versions_case_number_idx").on(t.caseId, t.number),
     uniqueIndex("eval_case_versions_one_draft_idx").on(t.caseId).where(sql`${t.state} = 'draft'`),
   ],
+);
+
+/** What the judge that Ratel pays spent, for each organization and UTC day, with what is held. */
+export const evalJudgeSpend = pgTable(
+  "eval_judge_spend",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    day: date("day").notNull(),
+    usd: doublePrecision("usd").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.day] })],
 );

@@ -3,6 +3,7 @@ import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { BundleStore } from "@/lib/contracts/bundle-store";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
+import type { EvalJudgePort } from "@/lib/contracts/eval-judge";
 import type { CoreFlag, FeatureFlagsPort } from "@/lib/contracts/feature-flags";
 import type {
   ImportedRunsPort,
@@ -305,6 +306,11 @@ export type CompositionPorts = {
    * (`sandboxes.bundleDir`), which the web and the worker process must share.
    */
   sandboxBundles?: BundleStore;
+  /**
+   * The judge of evals. Absent, the core asks its configured decision engine
+   * (`lib/views/evals/adapters/decision-judge.ts`).
+   */
+  evalJudge?: EvalJudgePort;
 };
 
 export const PORT_NAMES = [
