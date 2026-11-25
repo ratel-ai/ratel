@@ -155,9 +155,12 @@ export async function persistDecodedSpans(
   // Trace meters before anything is stored: a trace's first batch decides it for every later one.
   // A dropped trace stores nothing; an ingested-only one stores its spans and calls but writes no
   // analysis ledger rows, so no analysis job reads it. Best-effort: when the meter fails, the
-  // batch is analyzed.
+  // batch is analyzed. A span without a trace id is in no trace, so it is never counted: OTLP calls
+  // it invalid, and it is not stored.
   const skipAnalysis = new Set<string>();
   if (meterTraces && organization && deps.traceMetering) {
+    spans = spans.filter((span) => span.traceId.length > 0);
+    if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
     try {
       const outcomes = await deps.traceMetering.meterTraceBatch(
         { organization, projectId },
@@ -346,9 +349,9 @@ export async function persistDecodedSpans(
   return { ok: true, accepted, calls: calls.length, rows };
 }
 
-/** The batch's trace ids, each once, in first-seen order. An empty id is not a trace. */
+/** The batch's trace ids, each once, in first-seen order. */
 function distinctTraceIds(spans: readonly DecodedSpan[]): string[] {
-  return [...new Set(spans.map((span) => span.traceId).filter((id) => id.length > 0))];
+  return [...new Set(spans.map((span) => span.traceId))];
 }
 
 /**

@@ -177,3 +177,15 @@ test("the event cap rejects only an organization that is not metered", async () 
   assert.equal((await setup({ ...over, on: false }).send(ALL)).status, 429);
   assert.equal((await setup({ ...over, on: true }).send(ALL)).status, 202);
 });
+
+test("a span without a trace id cannot be counted, so a metered organization stores none", async () => {
+  const metered = setup();
+  assert.equal((await metered.send([""])).status, 202);
+  assert.deepEqual(metered.stored, { calls: [], events: [], spans: [] });
+  const mixed = setup();
+  await mixed.send(["", ANALYZED]);
+  assert.deepEqual(ids(mixed.stored.calls), [ANALYZED]);
+  const unmetered = setup({ on: false });
+  await unmetered.send([""]);
+  assert.equal(unmetered.stored.calls.length, 1);
+});
