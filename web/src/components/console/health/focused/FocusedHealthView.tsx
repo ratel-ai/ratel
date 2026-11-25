@@ -47,8 +47,8 @@ function FocusedReading(props: SummaryViewProps) {
       <IssueCategories
         projectId={projectId}
         categories={issueCategories(rows, score)}
-        // Without a score, what a plan or a gap hides could be in any category.
-        complete={score !== null || (model.lockedCount === 0 && gap === null)}
+        // What a plan or a gap hides could be in any category, and the score counts what a plan hides.
+        complete={model.lockedCount === 0 && gap === null}
         line={line}
         windowLabel={runLabel}
         examplesAllowed={model.evidenceTurnsPerSignal > 0}

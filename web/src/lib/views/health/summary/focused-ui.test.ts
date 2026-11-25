@@ -229,6 +229,37 @@ test("without a score, what a plan hides is never called healthy", () => {
   for (const category of categories(html)) assert.match(category.text, /Nothing to show/);
 });
 
+test("with a score, what a plan hides is never called healthy or counted as none", () => {
+  const hidden = (kind: "dead_tool" | "magnet", severity: number, totalTurns: number) =>
+    scoredIssues([{ id: `locked-${kind}`, kind, severity, totalTurns }]);
+  const locked = (issues: ReturnType<typeof scoredIssues>, pillars: PillarReading[] = []) => {
+    const score = healthScoreView(issues, 200, [], pillars);
+    const html = page({ model: { ...MODEL, signals: [], tooEarly: [], lockedCount: 1, score } });
+    assertHouseStyle(html);
+    for (const { text } of categories(html))
+      assert.doesNotMatch(text, /Healthy|0 issues|No issues here/);
+    assert.doesNotMatch(html, /lucide-circle-check/);
+    return categories(html);
+  };
+  const tidying = locked(hidden("dead_tool", 1, 0)).find(({ level }) => level === "tidies");
+  assert.ok(tidying && tidying.lost > 0);
+  assert.match(tidying.text, /Issues not shown/);
+  assert.match(tidying.text, /Nothing to list here/);
+  const rates = locked(hidden("magnet", 0.5, 2), [{ pillar: "ended", good: 0.91, n: 400 }]);
+  assert.match(rates.find(({ level }) => level === "wastes")?.text ?? "", /Nothing to show/);
+});
+
+test("points that only a measured rate costs say so, not 0 issues", () => {
+  const score = healthScoreView([], 100, [], [{ pillar: "ended", good: 0.8, n: 100 }]);
+  const html = page({ model: { ...MODEL, signals: [], tooEarly: [], score } });
+  assertHouseStyle(html);
+  const breaks = categories(html)[0];
+  assert.equal(breaks?.lost, 12);
+  assert.match(breaks?.text ?? "", /Measured rates/);
+  assert.match(breaks?.text ?? "", /The points come from the rates above\./);
+  assert.doesNotMatch(breaks?.text ?? "", /0 issues|No issues here in/);
+});
+
 test("a gap in the data: no score, the issues that stand, and how to close it", () => {
   const html = page({
     model: {

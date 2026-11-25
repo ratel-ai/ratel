@@ -169,7 +169,7 @@ function Category({
             </span>
           ) : (
             <span className="flex shrink-0 items-center gap-3 text-ui text-fg-muted tabular-nums">
-              <span>{countLine(category)}</span>
+              <span>{countLine(category, complete)}</span>
               {category.lost ? (
                 <span className="font-medium text-fg">
                   <span aria-hidden>{"\u2212"}</span>
@@ -195,7 +195,7 @@ function Category({
               onRowOpen={onRowOpen}
             />
           ) : (
-            <p className="text-ui text-fg-subtle">No issues here in the latest reading.</p>
+            <p className="text-ui text-fg-subtle">{emptyLine(category, complete)}</p>
           )}
         </div>
       </div>
@@ -203,12 +203,24 @@ function Category({
   );
 }
 
-/** "3 issues", "1 issue, 2 too early to call". */
-function countLine({ issues, early }: IssueCategory): string {
+/** "3 issues", "1 issue, 2 too early to call"; with nothing listed, where the points come from. */
+function countLine({ issues, early, rates }: IssueCategory, complete: boolean): string {
+  if (issues === 0 && early === 0) {
+    if (!complete) return "Issues not shown";
+    if (rates.length > 0) return "Measured rates";
+  }
   const count = `${issues.toLocaleString("en-US")} ${issues === 1 ? "issue" : "issues"}`;
   const later = `${early.toLocaleString("en-US")} too early to call`;
   if (early === 0) return count;
   return issues === 0 ? later : `${count}, ${later}`;
+}
+
+/** Why a category lists no issue. */
+function emptyLine({ lost, rates }: IssueCategory, complete: boolean): string {
+  if (!complete) return "Nothing to list here.";
+  if (lost && rates.length > 0)
+    return "No issues in the latest reading. The points come from the rates above.";
+  return "No issues here in the latest reading.";
 }
 
 /** The measured rates of the category: how often it went well. */
