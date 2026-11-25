@@ -59,6 +59,8 @@ export type HealthCard =
       kind: "score";
       score: NonNullable<HealthPageModel["score"]>;
       early: boolean;
+      /** Read below the usual floor (`toolRunInsights`): a first look, which claims no change. */
+      lowConfidence: HealthPageModel["lowConfidence"] | null;
       /** The points each level of the score costs. */
       lost: readonly Pick<IssueCategory, "level" | "label" | "lost">[];
     }
@@ -187,6 +189,7 @@ export function healthCard(model: HealthPageModel | null): HealthCard {
       kind: "score",
       score: model.score,
       early: !!model.earlyReading,
+      lowConfidence: model.lowConfidence ?? null,
       lost: issueCategories([], model.score).map(({ level, label, lost }) => ({
         level,
         label,

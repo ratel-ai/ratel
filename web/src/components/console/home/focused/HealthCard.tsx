@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { ScoreChange, ScoreRing } from "@/components/console/health/v2/HealthScore";
 import { scoreCopy } from "@/components/console/health/v2/health-score-model";
+import { lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
 import type { FocusedHealth, HealthCard as HealthCardModel } from "@/lib/views/home/focused-load";
 
 /** The Health score on Overview: the ring, its change and where the points go. The whole card opens Agent health. */
@@ -49,7 +50,9 @@ function Score({ card }: { card: Extract<HealthCardModel, { kind: "score" }> }) 
       <div className="flex w-full min-w-0 flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 sm:justify-start">
           <p className="text-xl font-semibold tracking-tight text-fg">{copy.headline}</p>
-          {card.early ? (
+          {card.lowConfidence ? (
+            <span className="text-ui text-fg-subtle">{lowConfidenceCopy(card.lowConfidence)}</span>
+          ) : card.early ? (
             <span className="text-ui text-fg-subtle">A first look, still calculating</span>
           ) : (
             <ScoreChange change={copy.change} />

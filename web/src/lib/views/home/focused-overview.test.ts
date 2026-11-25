@@ -2,10 +2,12 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { PathParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
+import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
 import { FocusedConsoleProvider } from "@/components/console/shell/focused-console-context";
 import { TOUR_STEPS, tourSteps } from "@/lib/console/onboarding/tour-steps";
 import {
@@ -210,6 +212,23 @@ test("without a score, the card says why in one line", () => {
     assert.match(line({ ...MODEL, workflows: { ...workflows, blocked } }), words);
 });
 
+test("a low-confidence score says so and claims no change", async () => {
+  const html = page(
+    await load({
+      health: async () => ({
+        ...MODEL,
+        turns: 12,
+        floor: 10,
+        lowConfidence: { turns: 12, firmsUpAt: 50 },
+      }),
+    }),
+  );
+  const text = visibleText(html);
+  assert.match(html, /data-overview-health="score"/);
+  assert.match(text, /Low confidence: read from 12 turns\. It firms up at 50\./);
+  assert.doesNotMatch(text, /since the last reading/);
+});
+
 test("nothing yet is the setup guide, and an SDK-only project is not", async () => {
   const empty = page(
     await load({ telemetry: NO_SPANS, health: async () => pendingHealthModel(7) }),
@@ -243,6 +262,25 @@ test("each failed read costs its own part only", async () => {
     assert.doesNotMatch(html, /SETUP GUIDE|No data yet/, "unread is not empty");
     assert.match(html, /data-topology-node="agent"/);
   }
+});
+
+test("the Self-corrections skeleton has the crumb only where the page has one", () => {
+  const skeleton = (on: boolean) =>
+    visibleText(
+      render(
+        createElement(
+          PathParamsContext.Provider,
+          { value: { projectId: PROJECT_ID } },
+          createElement(
+            FocusedConsoleProvider,
+            { value: on },
+            createElement(SelfCorrectionsSkeleton),
+          ),
+        ),
+      ),
+    );
+  assert.doesNotMatch(skeleton(true), /Agent health/);
+  assert.match(skeleton(false), /Agent health/);
 });
 
 test("the skeleton and the tour say the recap with the flag, today's Overview without", () => {
