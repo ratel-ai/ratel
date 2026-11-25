@@ -57,8 +57,9 @@ export const SECRET_KEY = "rtl_secret";
 export const SHARED_KEY = "rtl_shared";
 
 export type Db = ReturnType<typeof getDb>;
-export type Usage = Map<string, number>;
 
+/** Stands for the edition's counter (`incrementEventUsage`), which the core does not store. */
+const USAGE_TABLE = "test_event_usage";
 const ORGANIZATION = { id: ORGANIZATION_ID, name: "Acme", slug: "acme" };
 const FAST_POLICY: RetryPolicy = {
   waitsMs: [5, 5, 5, 5],
@@ -68,14 +69,14 @@ const FAST_POLICY: RetryPolicy = {
 export interface Deployment {
   client: PGlite;
   db: Db;
-  /** What the edition's counter holds, per organization. */
-  usage: Usage;
   logs: { message: string; fields?: Record<string, unknown> }[];
 }
 
 export async function setupDeployment(): Promise<Deployment> {
   const client = await createMigratedPGlite();
   await client.exec(`
+    create table ${USAGE_TABLE} (n integer not null);
+    insert into ${USAGE_TABLE} values (0);
     insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
     insert into projects (id, organization_id, name, slug)
     values ('${PROJECT_ID}', '${ORGANIZATION_ID}', 'Agent', 'agent');
@@ -84,14 +85,24 @@ export async function setupDeployment(): Promise<Deployment> {
       ('${SHARED_KEY_ID}', '${PROJECT_ID}', 'hashed:${SHARED_KEY}', 'rtl_p',
        '{ingest:traces,ingest:logs,ingest:events}');
   `);
-  const db = drizzle(client, { schema: tables }) as unknown as Db;
-  return { client, db, usage: new Map(), logs: [] };
+  return deploymentOver(client);
+}
+
+/** Another process of the deployment, over the same database or a connection of it that can end. */
+export function deploymentOver(client: PGlite): Deployment {
+  return { client, db: drizzle(client, { schema: tables }) as unknown as Db, logs: [] };
+}
+
+/** What the edition's monthly counter holds. */
+export async function usageOf({ client }: Deployment): Promise<number> {
+  const { rows } = await client.query<{ n: number }>(`select n from ${USAGE_TABLE}`);
+  return rows[0].n;
 }
 
 const silent = { logWarn: () => undefined, shouldSampleSuccess: () => false };
 
 /** What a trace store needs, the same in both modes. */
-function storeDeps({ db, usage }: Deployment) {
+function storeDeps({ client, db }: Deployment) {
   return {
     insertEventsWithMetrics: (projectId, rows) => insertEventsWithMetrics(projectId, rows, db),
     insertTraceEvents: (projectId, events, _db, options) =>
@@ -99,8 +110,8 @@ function storeDeps({ db, usage }: Deployment) {
     insertOtelSpans: (projectId, rows, _db, options) =>
       insertOtelSpans(projectId, rows, db, options),
     findStoredOtelSpans: (projectId, spans) => findStoredOtelSpans(projectId, spans, db),
-    incrementEventUsage: async (organizationId, n) => {
-      usage.set(organizationId, (usage.get(organizationId) ?? 0) + n);
+    incrementEventUsage: async (_organizationId, n) => {
+      await client.query(`update ${USAGE_TABLE} set n = n + $1`, [n]);
     },
     findRuntimeInvokes: (projectId, probe) => findRuntimeInvokes(projectId, probe, db),
     agentRunsEnabled: async () => true,
@@ -538,4 +549,51 @@ export function eventsBody(at: number, key = SECRET_KEY): IngestBody {
     }),
     key,
   };
+}
+
+/** What a killed process' statements throw. */
+export class Killed extends Error {
+  override name = "Killed";
+}
+
+/**
+ * A connection whose process dies at its `at`-th statement: that one and every later one throw, and
+ * an open transaction rolls back. A commit counts as a statement.
+ */
+export function killableClient(
+  client: PGlite,
+  at: number,
+): { client: PGlite; dead: () => boolean; statements: () => number } {
+  let statements = 0;
+  let dead = false;
+  const step = () => {
+    if (!dead) statements += 1;
+    dead ||= statements >= at;
+    if (dead) throw new Killed("the process is gone");
+  };
+  const wrap = <Target extends object>(target: Target): Target =>
+    new Proxy(target, {
+      get(object, name) {
+        const value = Reflect.get(object, name);
+        if (typeof value !== "function") return value;
+        if (name === "query" || name === "exec") {
+          return async (...args: unknown[]) => {
+            step();
+            return value.apply(object, args);
+          };
+        }
+        if (name === "transaction") {
+          return async (run: (tx: object) => Promise<unknown>) => {
+            step();
+            return value.call(object, async (tx: object) => {
+              const result = await run(wrap(tx));
+              step();
+              return result;
+            });
+          };
+        }
+        return value.bind(object);
+      },
+    });
+  return { client: wrap(client), dead: () => dead, statements: () => statements };
 }
