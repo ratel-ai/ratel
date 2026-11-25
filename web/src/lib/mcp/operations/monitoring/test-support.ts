@@ -51,7 +51,6 @@ export interface Monitoring {
   deps: MonitoringDeps;
   /** The state a test changes. */
   set: {
-    on: boolean;
     channels: Awaited<ReturnType<MonitoringDeps["slack"]["listChannels"]>>;
     access: Awaited<ReturnType<MonitoringDeps["slack"]["channelAccess"]>>;
     post: Awaited<ReturnType<MonitoringDeps["slack"]["post"]>>;
@@ -76,7 +75,6 @@ export async function monitoring(
   `);
   const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
   const set: Monitoring["set"] = {
-    on: true,
     channels: { ok: true, channels: [], partial: false },
     access: { ok: true, teamId: "T1", name: "alerts" },
     post: { ok: true },
@@ -91,7 +89,6 @@ export async function monitoring(
     judge: async () => [],
   };
   const deps: MonitoringDeps = {
-    enabled: async () => set.on,
     db: () => db,
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),

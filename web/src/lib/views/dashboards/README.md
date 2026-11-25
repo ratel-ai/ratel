@@ -1,6 +1,6 @@
 # Dashboards
 
-A project's custom dashboards, behind the `customMonitoring` flag. A dashboard is a name and
+A project's custom dashboards. A dashboard is a name and
 widgets on a grid. A widget is one query object
 (`lib/contracts/query.ts`) and how it is drawn.
 
@@ -25,7 +25,7 @@ widgets on a grid. A widget is one query object
 | `clusters.ts` | the clusters kind: `selectClusters` picks a part of the stored intent map by name and size; it fills `metricSeams.clusters` |
 | `geography-model.ts` | what the map widget draws: five steps of one color, from 0 to the highest value |
 | `links.ts` | the addresses, and the Traces page with a widget's filter and time range |
-| `actions.ts` | `changeDashboard`: one change by a person, after membership, the flag and a support-session check (the pages' server action calls it) |
+| `actions.ts` | `changeDashboard`: one change by a person, after membership and a support-session check (the pages' server action calls it) |
 
 Chart rules: a table needs a group-by, a number has none, a line and a bar take both. Every other
 query kind has the one chart of its name. A move of a flow opens the Traces page for the traces of

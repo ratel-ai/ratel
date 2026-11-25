@@ -228,7 +228,6 @@ test("get_overview has the attention rows of the web loader for a small project"
         getOrganization: async () => ORGANIZATION,
         focusedConsole: async () => true,
         offeredWidgets: async () => WIDGET_CATALOG,
-        dashboardsOn: async () => false,
         loadOverview: (input) => loadFocusedOverview({ ...input, db }),
         now: () => NOW,
       });

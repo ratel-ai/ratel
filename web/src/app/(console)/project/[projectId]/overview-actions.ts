@@ -80,10 +80,10 @@ export async function addDashboardWidgetToOverview(
 export async function loadOverviewDashboardWidgets(
   projectId: string,
 ): Promise<DashboardWidgetsResult> {
-  return run("overview_dashboard_widgets", projectId, async (id) => {
-    if (!(await webLayoutDeps.dashboardsOn(id))) return failure("dashboards_off");
-    return { ok: true, dashboards: await offeredDashboardWidgets(id) };
-  });
+  return run("overview_dashboard_widgets", projectId, async (id) => ({
+    ok: true,
+    dashboards: await offeredDashboardWidgets(id),
+  }));
 }
 
 export async function undoOverviewLayout(

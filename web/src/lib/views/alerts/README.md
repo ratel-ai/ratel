@@ -1,6 +1,6 @@
 # Alerts
 
-A project's alert rules, behind the `customMonitoring` flag. A rule is one query object (a widget's,
+A project's alert rules. A rule is one query object (a widget's,
 without dimensions), an operator, a threshold and a window. Core-owned.
 
 | Table | Holds |
@@ -19,7 +19,7 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 | `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each |
 | `deliver.ts` | `deliverAlerts`: claims and sends the pending messages |
 | `notifier.ts` | the `AlertNotifier` port, with `memoryNotifier` for tests |
-| `actions.ts` | `changeAlert`: one change by a person, after membership, the flag and a support-session check |
+| `actions.ts` | `changeAlert`: one change by a person, after membership and a support-session check |
 | `destinations.ts` | the reads and writes of destinations; only `webhookOf` opens a URL |
 | `destination-actions.ts` | `changeDestination`: add a channel or a webhook, test and remove, after the same checks as `changeAlert` |
 | `slack-url.ts` | `parseSlackWebhook`: the one address check, on save and again before each send |

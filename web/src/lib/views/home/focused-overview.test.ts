@@ -159,7 +159,7 @@ const ACTIONS: LayoutActions = {
   undo: SAVED,
   restore: SAVED,
   history: async () => ({ ok: true, entries: [], snapshot: SNAPSHOT }),
-  dashboardWidgets: null,
+  dashboardWidgets: async () => ({ ok: true, dashboards: [] }),
 };
 
 function page(

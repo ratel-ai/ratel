@@ -31,7 +31,6 @@ const changed =
       record,
       changeArrangement(readArrangement(record.layout, WIDGET_CATALOG), change, WIDGET_CATALOG),
       WIDGET_CATALOG,
-      false,
       { kind: "change", source: { kind: "web" }, summary: change.kind },
     );
 const height = (n: number): OverviewLayoutChange => ({
@@ -180,7 +179,6 @@ test("two writers with one base: the first is stored, the second is refused and 
     reader: async () => ({ kind: "person", projectId: P1, personId: "ana", restricted: false }),
     store: () => store,
     offered: async () => WIDGET_CATALOG,
-    dashboardsOn: async () => false,
     dashboardWidget: async () => null,
     source: async () => ({ kind: "web" }),
   };

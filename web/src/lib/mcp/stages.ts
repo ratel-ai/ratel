@@ -132,7 +132,6 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   get_selection: "improve",
   list_task_simulations: "improve",
   get_fix_eval_set: "improve",
-  change_task_scorer: "improve",
   change_task_eval_set: "improve",
   draft_task_test: "improve",
   change_task_simulation: "improve",

@@ -36,8 +36,8 @@ run completes, workflows keep their tool-order names, and the label job reports 
 **Seams.** `register.ts` fills the ledger's `ledgerSeams` (`enqueueReading`,
 `onBacklogDrained`) when the registry loads. `signals/compute-job.ts` exports `computeSeams`:
 `enqueueTopics` (the topics registration fills it), `enqueueExplore` (the tool-explorer
-reading), `enqueueFixDrafts` (fix drafts, `views/fix-drafts`) and `enqueueTaskScores` (live task
-scores, `views/task-scorers`); unset, a run queues nothing
+reading), `enqueueFixDrafts` (fix drafts, `views/fix-drafts`) and `enqueueTaskEvalSets` (due eval
+sets, `views/task-evals`); unset, a run queues nothing
 after itself, and a failed enqueue never fails the run.
 
 **Owned files** (they differ from their `ratel-cloud` origin, "upstream"): `schema.ts`, `register.ts` and

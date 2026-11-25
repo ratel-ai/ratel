@@ -1347,7 +1347,7 @@
         "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/loading.tsx",
         "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/page.tsx",
         "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/\\[fixId\\]/page.tsx",
-        "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/ScoreChart.tsx",
+        "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/scorer-labels.test.ts",
         "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/ShipmentResults.tsx",
         "!web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/TaskScoring.tsx",
         "web/src/components/console/tasks/RunToTest.tsx",

@@ -5,7 +5,7 @@ import { Select } from "@ratel/design-system/select";
 import type { ReactNode } from "react";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import type { Aggregation, MeasureId, MetricQuery } from "@/lib/contracts/query";
-import { getMetric, offeredMetrics } from "@/lib/synthesis/metrics/catalog";
+import { getMetric, METRICS } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   type TraceFilterBarFacets,
@@ -26,8 +26,7 @@ export function MetricFields({
   children,
 }: {
   query: Pick<MetricQuery, "measures" | "filters">;
-  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   /** Only the metrics of traces that a trace filter applies to. */
   filterableOnly?: boolean;
   onChange: (change: QueryChange) => void;
@@ -43,9 +42,9 @@ export function MetricFields({
           <Select
             {...control}
             className="w-full"
-            options={offeredMetrics({ customMonitoring: scorers !== null })
-              .filter(({ filterable }) => filterable || !filterableOnly)
-              .map(({ id, label }) => ({ value: id, label }))}
+            options={METRICS.filter(({ filterable }) => filterable || !filterableOnly).map(
+              ({ id, label }) => ({ value: id, label }),
+            )}
             value={measure}
             onValueChange={(value) => onChange({ measure: value as MeasureId })}
           />
@@ -75,7 +74,7 @@ export function MetricFields({
               className="w-full"
               options={[
                 { value: ALL_SCORERS, label: "All scorers" },
-                ...scorersOfMetric(measure, scorers ?? []).map(({ id, name }) => ({
+                ...scorersOfMetric(measure, scorers).map(({ id, name }) => ({
                   value: id,
                   label: name,
                 })),

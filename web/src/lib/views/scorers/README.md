@@ -1,8 +1,8 @@
 # Scorers
 
 A project's own scorers: each one gives every matching trace (or a sample) one stored result,
-soon after ingest. Behind the `customMonitoring` flag. Core-owned; not the task scorers of
-`views/task-scorers`, which score a task's runs per day.
+soon after ingest. Core-owned; not the scorer core of
+`views/task-scorers`, which grades a simulated run.
 
 | Table | Holds |
 |---|---|
@@ -18,10 +18,10 @@ soon after ingest. Behind the `customMonitoring` flag. Core-owned; not the task 
 | `config.ts` | `parseScorerDraft`: a person's settings, checked |
 | `schema.ts` | the tables |
 | `store.ts` | scorers and results: reads and writes |
-| `actions.ts` | `changeScorer`, `testScorer`, `authorizeScorers`: membership, the flag, no support session, then the change. A scorer keeps its kind and its answer scale. `attach` to a task narrows a scorer of every trace only with `narrow`; `detach` keeps stored results |
+| `actions.ts` | `changeScorer`, `testScorer`, `authorizeScorers`: membership, no support session, then the change. A scorer keeps its kind and its answer scale. `attach` to a task narrows a scorer of every trace only with `narrow`; `detach` keeps stored results |
 | `sample.ts` | `inSample`: the stable hash of scorer and trace against the sample rate |
 | `traces.ts` | the traces as a scorer reads them, the newest matching ones, and their count. A task's traces are those of its turns (`trace_turns.workflow_id`): the turn's `otlp:<trace id>` key, and the `trace_events.trace_id` of its steps |
-| `sweep.ts` | `sweepScorers`: per enabled scorer, the trace summaries that settled (45 s without a change) after its cursor: filtered, sampled, scored, stored, and the cursor advanced, in one transaction. Off with the flag; a trace received before the scorer was created is not scored. A scorer of tasks scores only up to the latest completed signal run, less the idle window, because that run writes each turn's task. A judge without an engine waits. A judge batch whose every call fails puts the cursor back and is asked again after a wait that doubles from a minute to an hour, `MAX_JUDGE_ATTEMPTS` (24) times in all; then its traces get no result |
+| `sweep.ts` | `sweepScorers`: per enabled scorer, the trace summaries that settled (45 s without a change) after its cursor: filtered, sampled, scored, stored, and the cursor advanced, in one transaction. A trace received before the scorer was created is not scored. A scorer of tasks scores only up to the latest completed signal run, less the idle window, because that run writes each turn's task. A judge without an engine waits. A judge batch whose every call fails puts the cursor back and is asked again after a wait that doubles from a minute to an hour, `MAX_JUDGE_ATTEMPTS` (24) times in all; then its traces get no result |
 | `conversation.ts` | a trace's input and output, read as `get_trace_conversation` reads them; null without captured content, or when the project does not let the product read it |
 | `judge.ts` | `judgeTraces`: one closed question per trace to the decision engine (`readings/decisions`), behind `JudgeEngine`. Input and output are cut to 8,000 characters each. The worst cost of a batch is held on the organization's daily budget before any call, then settled. No content, no budget or no answer: the trace gets no result. A failed call is `call_failed`, at its full cost |
 | `preview.ts` | `previewScorer`: a draft run on the 5 newest matching traces, nothing stored; `countLastWeek` |

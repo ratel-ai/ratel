@@ -37,7 +37,6 @@ import { decodePanels, encodePanels } from "@/lib/views/explore/state";
 
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const ORG = "22222222-2222-4222-8222-222222222222";
-const FEATURES = { customMonitoring: true };
 
 const NOON = "2026-11-24T12:00:00.000Z";
 const HOUR = {
@@ -247,10 +246,7 @@ test("Create alert opens the form with the panel's metric and filter", () => {
 function alertOf(href: string): MetricQuery {
   const { searchParams, hash } = new URL(href, "https://x.test");
   const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
-  const parsed = parseAlertQuery(
-    alertQueryOf(value === IN_FRAGMENT ? hash.slice(1) : value),
-    FEATURES,
-  );
+  const parsed = parseAlertQuery(alertQueryOf(value === IN_FRAGMENT ? hash.slice(1) : value));
   assert.ok(parsed.ok);
   return parsed.query;
 }
@@ -321,8 +317,6 @@ async function change(input: object): Promise<string> {
       user: { id: "u", externalId: "u", name: "Ada", username: null, email: null },
     }),
     findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
-    enabled: async () => true,
-    features: async () => FEATURES,
     scorers: async () => [],
     isRestricted: async () => false,
     store: {

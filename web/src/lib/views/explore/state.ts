@@ -114,12 +114,11 @@ const stateSchema = z
 
 /** A panel, also one with a text a person has not written yet: it is kept as it is. */
 function parsePanel(raw: { title?: string; chart: string; query: Record<string, unknown> }) {
-  const features = { customMonitoring: true };
-  const parsed = parseWidget(raw, features);
+  const parsed = parseWidget(raw);
   if (parsed.ok) return parsed;
   const query = completed(raw.query);
   if (!query) return parsed;
-  const filled = parseWidget({ ...raw, query }, features);
+  const filled = parseWidget({ ...raw, query });
   if (!filled.ok) return filled;
   const { widget } = filled;
   const own = raw.query as { steps: FunnelStep[]; target?: string };

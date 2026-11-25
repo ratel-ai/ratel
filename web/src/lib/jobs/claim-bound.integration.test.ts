@@ -108,7 +108,7 @@ test("queue lag leaves out the jobs that wait on purpose: tier 2 sweeps, kinds i
 test("queue lag still counts a job that a per-project cap holds back: no column says why a job waits", async () => {
   const db = await setup();
   await db.execute(sql`
-    insert into jobs (project_id, kind, status, started_at, created_at) values (${PROJ}, 'score_tasks', 'running', now(), now());
+    insert into jobs (project_id, kind, status, started_at, created_at) values (${PROJ}, 'label_workflows', 'running', now(), now());
     `);
   await db.execute(
     sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'assign_topics', 'queued', now() - interval '4 minutes')`,
@@ -135,7 +135,7 @@ for (const finished of [20_000, 100_000]) {
       insert into jobs (project_id, kind, status, created_at)
       select ${PROJ}, 'categorize_queries', 'queued', now() - (g || ' seconds')::interval from generate_series(1, 3000) g`);
     await db.execute(
-      sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'score_tasks', 'queued', now() - interval '1 minute')`,
+      sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'label_workflows', 'queued', now() - interval '1 minute')`,
     );
     await db.execute(sql`analyze jobs`);
 

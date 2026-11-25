@@ -56,8 +56,8 @@ export function WidgetFields({
 }: {
   widget: WidgetInput;
   onChange: (change: (current: WidgetInput) => WidgetInput) => void;
-  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
-  scorers: readonly ScorerOption[] | null;
+  /** The project's scorers. */
+  scorers: readonly ScorerOption[];
   facets: TraceFilterBarFacets;
   /** The last result read, for the names it offers. */
   result: QueryResult | null;
@@ -97,7 +97,7 @@ export function WidgetFields({
           scorers={scorers}
           onChange={(change) =>
             setQuery((current) =>
-              current.kind === "metric" ? changeQuery(current, change, scorers ?? []) : current,
+              current.kind === "metric" ? changeQuery(current, change, scorers) : current,
             )
           }
         />
@@ -121,9 +121,7 @@ export function WidgetFields({
           scorers={scorers}
           onMeasure={(change) =>
             setQuery((current) =>
-              current.kind === "geography"
-                ? changeGeography(current, change, scorers ?? [])
-                : current,
+              current.kind === "geography" ? changeGeography(current, change, scorers) : current,
             )
           }
           onChange={(next) => set({ query: next })}
@@ -133,7 +131,7 @@ export function WidgetFields({
         <FunnelFields
           query={query}
           facets={facets}
-          scorers={scorers ?? []}
+          scorers={scorers}
           onChange={(next) => set({ query: next })}
         />
       ) : null}
@@ -190,7 +188,7 @@ function MetricForm({
 }: {
   query: MetricQuery;
   chart: WidgetChart;
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   onChange: (change: QueryChange) => void;
 }) {
   const metric = queryMetric(query);

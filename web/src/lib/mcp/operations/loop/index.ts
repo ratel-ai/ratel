@@ -65,7 +65,7 @@ import type { LineageRef } from "@/lib/views/lineage/types";
 import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
 import { taskEvalViewFor } from "@/lib/views/task-evals/store";
-import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
+import { scorersFor } from "@/lib/views/task-scorers/store";
 import type { TaskListModel } from "@/lib/views/tasks/model";
 import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 // The shipment record of the task loop (`fixSeams.recordShipment`): mark_fix_shipped queues
@@ -103,7 +103,6 @@ export interface LoopOperationDeps {
   taskShipmentsFor: (projectId: string, taskId: string) => ReturnType<typeof taskShipmentsFor>;
   latestFixDraft: (projectId: string, fixId: string) => ReturnType<typeof latestFixDraft>;
   scorersFor: (projectId: string, taskId: string) => ReturnType<typeof scorersFor>;
-  dailyScoresFor: (projectId: string, taskId: string) => ReturnType<typeof dailyScoresFor>;
   taskEvalViewFor: (projectId: string, taskId: string) => ReturnType<typeof taskEvalViewFor>;
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
   /** Agent health's Issues rows (one per kind of issue), for list_insights' view; null when they cannot be read. */
@@ -149,7 +148,6 @@ export const defaultLoopDeps: LoopOperationDeps = {
   taskShipmentsFor: (projectId, taskId) => taskShipmentsFor(projectId, taskId),
   latestFixDraft: (projectId, fixId) => latestFixDraft(projectId, fixId),
   scorersFor: (projectId, taskId) => scorersFor(projectId, taskId),
-  dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId),
   taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId),
   loadOpenInsights,
   // Only for a view, so a failed read costs the view its grouping, never the agent its result.
@@ -531,7 +529,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "observability",
       title: "Get task",
       description:
-        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
       keywords: ["get task", "task scorers", "task eval set"],
       scope: "project",
       mutates: false,
@@ -545,21 +543,19 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
         const task = read.row;
         const tracker = new TruncationTracker();
         const enabled = await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId));
-        const [scorers, scores, evalSet, shipments] = enabled
+        const [scorers, evalSet, shipments] = enabled
           ? await Promise.all([
               deps.scorersFor(ctx.projectId, task.id),
-              deps.dailyScoresFor(ctx.projectId, task.id),
               deps.taskEvalViewFor(ctx.projectId, task.id),
               deps.taskShipmentsFor(ctx.projectId, task.id),
             ])
-          : [[], [], null, null];
+          : [[], null, null];
         return {
           data: {
             task: {
               ...task,
               href: topLevelTasksHref(ctx.projectId, task.id),
               scorers,
-              scoreSeries: tracker.take(capRows(scores, 200)),
               evalSet: evalSet
                 ? {
                     ...evalSet,
@@ -577,7 +573,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
             },
           },
           truncated: tracker.value,
-          hint: "change_task_scorer and change_task_eval_set edit how the task is scored and tested; list_task_simulations shows its fixes' simulations.",
+          hint: "change_task_eval_set edits what the task is tested on; change_scorer (attach) scores its live runs; list_task_simulations shows its fixes' simulations.",
         };
       },
     }),

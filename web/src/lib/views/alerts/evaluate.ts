@@ -2,7 +2,6 @@ import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { MetricQuery } from "@/lib/contracts/query";
 import { getDb } from "@/lib/platform/db/client";
 import { supplementaryReadTimeoutMs } from "@/lib/platform/db/statement-timeout";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { runQuery } from "@/lib/synthesis/metrics/query";
@@ -25,7 +24,6 @@ export interface EvaluateOptions {
   now?: () => Date;
   /** Wall-clock the evaluation may spend before it yields to the next tick. */
   timeBudgetMs?: number;
-  flagOn?: (projectId: string) => Promise<boolean>;
 }
 
 export interface StateChange {
@@ -54,7 +52,7 @@ const ALERTS_ADVISORY_LOCK_KEY = 823_100_132;
 const logger = getLogger("alerts/evaluate");
 
 /**
- * Evaluate the due rules of the projects with the flag on, the one that waited longest first. Each
+ * Evaluate the due rules, the one that waited longest first. Each
  * rule is one transaction under an advisory lock and its row lock: the state, its history row and
  * the message to send commit together, so a change is recorded, and sent, once. A rule that fails
  * waits for its next turn and does not stop the others; one whose stored query is malformed is skipped.
@@ -74,7 +72,7 @@ export async function evaluateAlerts(
     lockContended: false,
   };
 
-  const due = await dueRules(db, now(), options.flagOn ?? flagOn);
+  const due = await dueRules(db, now());
   for (const rule of due) {
     if (Date.now() - startedAt >= timeBudgetMs) return result;
     try {
@@ -96,20 +94,12 @@ export async function evaluateAlerts(
   return result;
 }
 
-async function dueRules(
-  db: Db,
-  now: Date,
-  on: (projectId: string) => Promise<boolean>,
-): Promise<{ id: string; projectId: string }[]> {
-  const rows = await db
+async function dueRules(db: Db, now: Date): Promise<{ id: string; projectId: string }[]> {
+  return db
     .select({ id: alertRules.id, projectId: alertRules.projectId })
     .from(alertRules)
     .where(dueAt(now))
     .orderBy(sql`${alertRules.lastEvaluatedAt} asc nulls first`, asc(alertRules.id));
-  const flags = new Map<string, boolean>();
-  for (const { projectId } of rows)
-    if (!flags.has(projectId)) flags.set(projectId, await on(projectId));
-  return rows.filter(({ projectId }) => flags.get(projectId));
 }
 
 async function evaluateOne(
@@ -203,10 +193,6 @@ function dueAt(now: Date) {
       ),
     ),
   );
-}
-
-function flagOn(projectId: string): Promise<boolean> {
-  return featureEnabled("customMonitoring", { projectId });
 }
 
 function firstRow<T>(result: unknown): T | undefined {

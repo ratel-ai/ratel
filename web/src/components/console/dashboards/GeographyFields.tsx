@@ -25,7 +25,7 @@ export function GeographyFields({
   onChange,
 }: {
   query: GeographyQuery;
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   onMeasure: (change: QueryChange) => void;
   onChange: (query: GeographyQuery) => void;
 }) {

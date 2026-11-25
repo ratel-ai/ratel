@@ -44,7 +44,7 @@ export function ExploreView({
   problem: string | null;
   filters: DashboardFilters;
   facets: TraceFilterBarFacets;
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   dashboards: readonly DashboardOption[];
   /** What the panels read. */
   range: DashboardRange;

@@ -3,11 +3,9 @@ import { afterEach, beforeEach, test } from "node:test";
 import { resolveConfig } from "@/config";
 import { resolveTaskJudge, resolveTestDraftModel } from "@/lib/views/eval-gate/models";
 import { draftTestFromRun, TestDraftError } from "@/lib/views/task-evals/run-to-test";
-import { judgeTaskSample } from "@/lib/views/task-scorers/judge";
 
 /**
- * With no model key the task loop has no model: the live judge is skipped without a row and
- * nothing calls out, while the deterministic scorers still run (`task-scorers/job.ts`); a
+ * With no model key the task loop has no model and nothing calls out: a
  * simulation reserves nothing and scores deterministically; run-to-test says no model is
  * configured. The stand-ins are a local switch, never a production one. No upstream counterpart (the sibling of
  * `eval-gate/no-outbound-without-key.test.ts`).
@@ -43,26 +41,6 @@ test("with no key and no mock there is no task judge", () => {
 test("EVAL_GATE_MOCK_MODEL=1 gives the rule judge outside production", () => {
   const judge = resolveTaskJudge(resolveConfig({ env: { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" } }));
   assert.equal(judge?.standIn, true);
-});
-
-test("the live judge with no key reads nothing, writes nothing and calls nothing", async () => {
-  // Any use of the database fails the test: with no judge the sample returns before a query.
-  const db = new Proxy(
-    {},
-    {
-      get: () => {
-        throw new Error("the database was touched");
-      },
-    },
-  ) as never;
-  await judgeTaskSample(
-    "11111111-1111-4111-8111-111111111111",
-    "task-a",
-    "Call notify.",
-    [],
-    new Date("2026-11-01T12:00:00Z"),
-    db,
-  );
 });
 
 test("with no key and no mock there is no test drafter; the stand-in only with the mock", () => {

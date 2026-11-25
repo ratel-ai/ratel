@@ -42,7 +42,6 @@ import {
 } from "@/lib/synthesis/traces/view";
 import { exactly } from "@/lib/views/dashboards/range";
 import { exploreTracesHref } from "@/lib/views/explore/links";
-import { dashboardsEnabled } from "../../dashboards/context";
 
 const EXPERIMENT_MODE: Readonly<Record<ExperimentMode, string>> = {
   split: "Runs in this window are split between its variants.",
@@ -86,7 +85,7 @@ export async function RunsPageV2({
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
 
-  const [page, facets, aggregate, experiments, explore] = await Promise.all([
+  const [page, facets, aggregate, experiments] = await Promise.all([
     withStatementTimeout((db) => listTraces(project.id, view.queryOptions, db), {
       operation: "trace_list",
     }),
@@ -143,7 +142,6 @@ export async function RunsPageV2({
           { operation: "trace_experiments", timeoutMs },
         ),
     }),
-    dashboardsEnabled(project.id),
   ]);
 
   // Separate reads under separate timeouts: a slow one costs only its own column.
@@ -216,15 +214,13 @@ export async function RunsPageV2({
               {instantLabel(exact.since)} to {instantLabel(exact.until)} UTC
             </span>
           ) : null}
-          {explore ? (
-            <ExploreLink
-              href={exploreTracesHref(
-                project.id,
-                search,
-                exact ? exactly(exact.since, exact.until) : view.range,
-              )}
-            />
-          ) : null}
+          <ExploreLink
+            href={exploreTracesHref(
+              project.id,
+              search,
+              exact ? exactly(exact.since, exact.until) : view.range,
+            )}
+          />
         </>
       }
       now={now.toISOString()}

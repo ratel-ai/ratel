@@ -193,7 +193,6 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // The task and eval-set pages (RC-234).
   ["list_task_simulations", false],
   ["get_fix_eval_set", false],
-  ["change_task_scorer", true],
   ["change_task_eval_set", true],
   ["draft_task_test", true],
   ["change_task_simulation", true],

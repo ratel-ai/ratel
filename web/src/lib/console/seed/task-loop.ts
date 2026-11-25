@@ -23,8 +23,6 @@ import { taskEvalRuns } from "@/lib/views/task-evals/schema";
 import "@/lib/views/task-evals/ship";
 import { runTaskSimulation, type TaskSimulationDeps } from "@/lib/views/task-evals/simulation";
 import { simulateTaskEvalJob } from "@/lib/views/task-evals/simulation-job";
-import { scoreTasksJob } from "@/lib/views/task-scorers/job";
-import { scorersFor, upsertScorer } from "@/lib/views/task-scorers/store";
 
 /**
  * The task loop demo, run through the production jobs on a seeded project: 14 UTC days of live
@@ -96,39 +94,6 @@ export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOpt
     },
     ...(options.noModels ? { models: standInModels() } : {}),
   };
-  // Preserve an existing user scorer. New demo criteria exercise the judge in simulations.
-  for (const item of tasks) {
-    if (
-      !(await scorersFor(project.id, item.id, db)).some(
-        (scorer) => scorer.kind === "judge_criteria",
-      )
-    ) {
-      await upsertScorer(
-        {
-          projectId: project.id,
-          taskId: item.id,
-          scorer: {
-            kind: "judge_criteria",
-            criteria: "Complete the requested task without ending on a failed tool call.",
-          },
-          source: "default",
-          updatedBy: ACTOR,
-        },
-        db,
-      );
-    }
-  }
-  for (let offset = 13; offset >= 0; offset--) {
-    const day = new Date(now.getTime() - offset * DAY_MS);
-    if (offset > 0) day.setUTCHours(23, 59, 59, 999);
-    await step("score_tasks", () =>
-      scoreTasksJob(project.id, {
-        ...deps,
-        now: () => day,
-        ...(options.noModels ? { judge: null } : {}),
-      }),
-    );
-  }
   await enqueueDueTaskEvalSets(project.id, { db, flagDeps: config, now: () => now });
   for (const item of tasks)
     await enqueueTaskEvalRefreshJob(project.id, item.id, { db, flagDeps: config });

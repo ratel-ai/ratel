@@ -6,14 +6,13 @@ import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { scorerSweepStep } from "./register";
 import { attachScorer, createScorer, detachScorer, getScorer, latestScores } from "./store";
-import { type SweepOptions, sweepScorers } from "./sweep";
+import { sweepScorers } from "./sweep";
 import { checkDraft } from "./test-support";
 import { countMatchingTraces } from "./traces";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
-const on: SweepOptions = { flagOn: async () => true };
 
 test("a trace is scored once, only after its summary settled", async () => {
   const { client, db, add, scored } = await setup();
@@ -21,18 +20,18 @@ test("a trace is scored once, only after its summary settled", async () => {
     const id = await scorer(client, db);
     await add("settled", { ageS: 60 });
     await add("fresh", { ageS: 10 });
-    const first = await sweepScorers(on, db);
+    const first = await sweepScorers({}, db);
     assert.deepEqual([first.scoresWritten, first.caughtUp], [1, true]);
     assert.deepEqual(await scored(id), ["settled"]);
 
     await client.exec("update otel_trace_summaries set updated_at = now() - interval '50 seconds'");
-    await sweepScorers(on, db);
+    await sweepScorers({}, db);
     assert.deepEqual(await scored(id), ["fresh", "settled"]);
     // A summary written again (a late span) does not change the stored result.
     await client.exec(
       "update otel_trace_summaries set duration_ms = 9999, updated_at = now() - interval '46 seconds'",
     );
-    const again = await sweepScorers(on, db);
+    const again = await sweepScorers({}, db);
     assert.deepEqual([again.tracesScanned, again.scoresWritten], [2, 0]);
     assert.ok((await latestScores(PROJECT, id, 10, db)).every((row) => row.passed));
   } finally {
@@ -50,13 +49,13 @@ test("the filter, the sample and the creation time limit the traces; a second sw
     await add("old", { ageS: 60, receivedAgeS: 7200, models: ["gpt-a"] });
     await add("other", { ageS: 60, project: OTHER_PROJECT, models: ["gpt-a"] });
 
-    await sweepScorers({ ...on, batchSize: 37 }, db);
+    await sweepScorers({ batchSize: 37 }, db);
     assert.equal((await scored(filtered)).length, 10);
     const taken = await scored(sampled);
     assert.ok(taken.length > 160 && taken.length < 240, `${taken.length} of 400`);
 
     await client.exec("update trace_scorers set cursor_at = now() - interval '1 hour'");
-    const second = await sweepScorers(on, db);
+    const second = await sweepScorers({}, db);
     assert.ok(second.tracesScanned > 0);
     assert.equal(second.scoresWritten, 0);
     assert.deepEqual(await scored(sampled), taken);
@@ -73,7 +72,7 @@ test("a root attribute is read, and a missing one is skipped", async () => {
     });
     await add("with", { ageS: 60, attributes: { "user.plan": "pro" } });
     await add("without", { ageS: 60, attributes: {} });
-    const result = await sweepScorers(on, db);
+    const result = await sweepScorers({}, db);
     assert.deepEqual([result.scoresWritten, result.skipped], [1, 1]);
     assert.deepEqual(await scored(id), ["with"]);
   } finally {
@@ -99,7 +98,7 @@ test("a scorer scoped to a task scores only the traces of that task's turns, onc
     await turn({ key: "otlp:other", project: OTHER_PROJECT });
 
     // No turn has a task before a signal run: the scoped scorer waits and loses nothing.
-    await sweepScorers(on, db);
+    await sweepScorers({}, db);
     assert.deepEqual(await scored(scoped), []);
     assert.equal((await scored(all)).length, 5);
 
@@ -108,20 +107,20 @@ test("a scorer scoped to a task scores only the traces of that task's turns, onc
       update trace_turns set workflow_id = 'task-b' where turn_key = 'otlp:otlp-b';
     `);
     await reading();
-    await sweepScorers(on, db);
+    await sweepScorers({}, db);
     assert.deepEqual(await scored(scoped), ["otlp-a", "steps-a"]);
 
     // A trace that the last run did not place yet waits for the next one.
     await add("late", { ageS: 60 });
     await turn({ key: "otlp:late" });
-    await sweepScorers(on, db);
+    await sweepScorers({}, db);
     await client.exec("update trace_turns set workflow_id = 'task-a' where turn_key = 'otlp:late'");
-    await sweepScorers(on, db);
+    await sweepScorers({}, db);
     assert.deepEqual(await scored(scoped), ["otlp-a", "steps-a"]);
     await client.exec(
       "update otel_trace_summaries set updated_at = now() - interval '2 hours' where trace_id = 'late'; update trace_scorers set cursor_at = now() - interval '3 hours'",
     );
-    await sweepScorers(on, db);
+    await sweepScorers({}, db);
     assert.deepEqual(await scored(scoped), ["late", "otlp-a", "steps-a"]);
     assert.equal(
       await countMatchingTraces(PROJECT, { filter: {}, tasks: ["task-a"] }, new Date(0), db),
@@ -149,7 +148,7 @@ test("a scorer attached to two tasks scores both and no other; detach stops new 
         "update trace_scorers set cursor_at = now() - interval '3 hours', created_at = now() - interval '3 hours'",
       );
       await reading();
-      await sweepScorers(on, db);
+      await sweepScorers({}, db);
     };
     await place(1);
     assert.deepEqual(await scored(id), ["a1", "b1"]);
@@ -184,11 +183,11 @@ test("a sweep stops at its time budget and the next one continues from the curso
       clock += 10;
       return clock;
     };
-    const limited = { ...on, batchSize: 3, timeBudgetMs: 20, now: tick };
+    const limited = { batchSize: 3, timeBudgetMs: 20, now: tick };
     const first = await sweepScorers(limited, db);
     assert.deepEqual([first.tracesScanned, first.caughtUp], [3, false]);
     assert.equal((await scored(id)).length, 3);
-    const rest = await sweepScorers({ ...on, batchSize: 3 }, db);
+    const rest = await sweepScorers({ batchSize: 3 }, db);
     assert.deepEqual([rest.tracesScanned, rest.caughtUp], [7, true]);
     assert.equal((await scored(id)).length, 10);
   } finally {
@@ -196,21 +195,18 @@ test("a sweep stops at its time budget and the next one continues from the curso
   }
 });
 
-test("with the flag off, or the scorer disabled, nothing is written and no cursor moves", async () => {
+test("with the scorer disabled, nothing is written and no cursor moves", async () => {
   const { client, db, add, scored } = await setup();
   try {
-    const id = await scorer(client, db);
     const disabled = await scorer(client, db, { enabled: false });
     await add("t", { ageS: 60 });
     const before = await client.query("select id, cursor_at from trace_scorers order by id");
-    const result = await sweepScorers({ flagOn: async () => false }, db);
+    const result = await sweepScorers({}, db);
     assert.deepEqual([result.scorers, result.tracesScanned], [0, 0]);
     assert.deepEqual(
       (await client.query("select id, cursor_at from trace_scorers order by id")).rows,
       before.rows,
     );
-    await sweepScorers(on, db);
-    assert.equal((await scored(id)).length, 1);
     assert.equal((await scored(disabled)).length, 0);
   } finally {
     await client.close();
@@ -227,7 +223,7 @@ test("one scorer that fails does not stop the others", async () => {
       create function refuse() returns trigger language plpgsql as $$ begin raise exception 'refused'; end $$;
       create trigger refuse before insert on trace_scores for each row when (new.scorer_id = '${bad}') execute function refuse();
     `);
-    const result = await sweepScorers(on, db);
+    const result = await sweepScorers({}, db);
     assert.equal(result.failedScorers, 1);
     assert.deepEqual([await scored(bad), await scored(good)], [[], ["t"]]);
   } finally {

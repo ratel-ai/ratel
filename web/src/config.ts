@@ -78,7 +78,6 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
-  customMonitoring: "FF_CUSTOM_MONITORING",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -325,16 +324,6 @@ const CONFIG_SCHEMA = schema({
       "EVAL_GATE_REPLAY_MAX_STEPS",
       z.number().finite().min(1).transform(Math.floor),
       D.evalGate.replayMaxSteps,
-    ),
-    taskJudgeSample: setting(
-      "TASK_JUDGE_SAMPLE",
-      nonNegative.transform(Math.floor),
-      D.evalGate.taskJudgeSample,
-    ),
-    taskJudgeBudgetUsd: setting(
-      "TASK_JUDGE_BUDGET_USD",
-      nonNegative,
-      D.evalGate.taskJudgeBudgetUsd,
     ),
   },
   matchQuality: {

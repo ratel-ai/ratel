@@ -14,9 +14,6 @@ import {
  * and the rest of the dashboard is untouched. Safe for the browser.
  */
 
-/** Every switch on: a widget whose switch is off is not broken. */
-const FEATURES = { customMonitoring: true } as const;
-
 export function isBroken(widget: DashboardWidget): widget is BrokenWidget {
   return "problem" in widget;
 }
@@ -71,7 +68,7 @@ function readWidget(
   const { id, layout, missingScorer, ...rest } = raw as Record<string, unknown>;
   if (typeof id !== "string" || !id) return { ok: false, problem: "The widget has no id." };
   if (ids.has(id)) return { ok: false, problem: "Another widget has the same id." };
-  const parsed = parseWidget(rest, FEATURES);
+  const parsed = parseWidget(rest);
   if (!parsed.ok) return { ok: false, problem: parsed.error };
   const place = gridPositionSchema.safeParse(layout);
   if (!place.success)

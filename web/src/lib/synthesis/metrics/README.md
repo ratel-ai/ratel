@@ -44,8 +44,6 @@ Dashboards and alerts both call it.
 - `total` is read over the whole window. It is not the sum of the buckets.
 - Nothing to read is 0 for a count or a sum, and null for a rate, an average or a percentile. `samples`
   says how many rows are behind a total.
-- The scorer entries carry `feature: "customMonitoring"`. `offeredMetrics` leaves them out with the switch
-  off, and a caller checks `metricOffered` before it runs or stores a query.
 - The pass rate reads the pass or fail results, the average reads the 1 to 5 results. The time of a
   result is its trace's start.
 - `trace_scores` belongs to a higher layer. `views/scorers/metrics` fills `metricSeams.scores`; a

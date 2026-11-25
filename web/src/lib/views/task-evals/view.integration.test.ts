@@ -37,20 +37,13 @@ test("the eval view loads captured asks, enabled scorer results, issue titles an
         ('${PROJECT}', 'task-a', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 'issue', 'Evidence of issue ${ISSUE}.');
       insert into trace_signals (id, project_id, kind, subject_kind, subject_key, severity, impact, n, first_seen_at, last_seen_at)
         values ('${ISSUE}', '${PROJECT}', 'error_loop', 'workflow', 'task-a', 1, 1, 1, now(), now());
-      insert into task_scorers (project_id, task_id, kind, config, enabled, source, updated_by) values
-        ('${PROJECT}', 'task-a', 'max_latency_ms', '{"max":1000}', true, 'user', 'user_test'),
-        ('${PROJECT}', 'task-a', 'max_cost_usd', '{"max":0.001}', false, 'user', 'user_test');
       insert into jobs (project_id, kind, status, payload) values ('${PROJECT}', 'refresh_task_eval_set', 'running', '{"taskId":"task-a"}');
     `);
     const view = await taskEvalViewFor(PROJECT, "task-a", db);
     assert.equal(view.rows.length, 2);
     assert.equal(view.rows[0]!.ask, "Track the steel delivery.");
-    assert.equal(view.rows[0]!.selectionReason, "Fails Run time");
+    assert.equal(view.rows[0]!.selectionReason, "Passes all enabled scorers");
     assert.equal(view.rows[0]!.chips.find((chip) => chip.kind === "ends_well")?.status, "pass");
-    assert.equal(
-      view.rows[0]!.chips.some((chip) => chip.kind === "max_cost_usd"),
-      false,
-    );
     assert.match(view.rows[1]!.selectionReason, /^Evidence of: /);
     assert.equal(view.rows[1]!.issueHref, `/project/${PROJECT}/health?peek=issue%3A${ISSUE}`);
     assert.equal(view.refreshJob?.status, "running");

@@ -270,14 +270,12 @@ describe("registry root", () => {
       "label_workflows",
       "match_quality_run",
       "refresh_task_eval_set",
-      "score_tasks",
       "simulate_fix_eval",
       "simulate_task_eval",
       "what_if_step",
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
-    // can carry events through turns, recurring asks, the graph and the engine, then the daily
-    // task-score sweep, as upstream orders them. After-steps are
+    // can carry events through turns, recurring asks, the graph and the engine, as upstream orders them. After-steps are
     // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
     // What-if's prune runs with retention off: a timed-out run must free its budget hold. The
     // ingest queue (ADR-0009) reaps and reports first, and drains and prunes with ingest's steps,
@@ -291,7 +289,6 @@ describe("registry root", () => {
         "before:query_categorizations_enqueue",
         "before:intent_graph_fold_enqueue",
         "before:intent_engine_enqueue",
-        "before:task_scores_enqueue",
         "before:alerts_evaluate",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",

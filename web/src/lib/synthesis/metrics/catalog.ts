@@ -18,10 +18,6 @@ export type MetricUnit = "count" | "ratio" | "ms" | "tokens" | "usd" | "score";
 
 /** Where the numbers come from: one row per trace, one row per captured prompt, or one per scorer result. */
 export type MetricSource = "traces" | "context" | "scores";
-/** The switches an entry can wait for. */
-export interface MetricFeatures {
-  customMonitoring: boolean;
-}
 
 export interface MetricDefinition {
   id: MeasureId;
@@ -34,8 +30,6 @@ export interface MetricDefinition {
   dimensions: readonly Dimension[];
   /** Whether trace filters apply. */
   filterable: boolean;
-  /** Offered only with this switch on. */
-  feature?: keyof MetricFeatures;
   /** The buckets the source can answer. */
   buckets: readonly Bucket[];
 }
@@ -66,10 +60,10 @@ export const MAX_METRIC_WINDOW_DAYS = 372;
 
 const DAY_MS = 86_400_000;
 
-const SCORER_METRIC = { source: "scores", feature: "customMonitoring" } as const;
+const SCORER_METRIC = { source: "scores" } as const;
 
 const READS: Readonly<
-  Record<MeasureId, Pick<MetricDefinition, "description" | "unit" | "source" | "feature">>
+  Record<MeasureId, Pick<MetricDefinition, "description" | "unit" | "source">>
 > = {
   trace_count: { source: "traces", unit: "count", description: "How many traces started." },
   error_rate: { source: "traces", unit: "ratio", description: "The share of traces that failed." },
@@ -117,16 +111,6 @@ export const METRICS: readonly MetricDefinition[] = MEASURE_IDS.map((id) => ({
 /** Nothing happened is 0 for an amount, and no answer for a ratio, an average or a percentile. */
 export function nothingIsZero(aggregation: Aggregation): boolean {
   return aggregation === "count" || aggregation === "sum";
-}
-
-/** Whether a project with these switches may use the entry. */
-export function metricOffered(metric: MetricDefinition, features: MetricFeatures): boolean {
-  return !metric.feature || features[metric.feature];
-}
-
-/** The entries a form offers, in menu order. */
-export function offeredMetrics(features: MetricFeatures): MetricDefinition[] {
-  return METRICS.filter((metric) => metricOffered(metric, features));
 }
 
 export function getMetric(id: string): MetricDefinition | null {

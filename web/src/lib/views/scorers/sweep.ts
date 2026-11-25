@@ -1,6 +1,5 @@
 import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { CLOSED_SINCE_SLACK_MS } from "@/lib/readings/trace-signals/sweep";
 import { settledBefore } from "@/lib/synthesis/traces/summary-refresh";
@@ -28,7 +27,6 @@ export interface SweepOptions {
   /** A trace is taken when its summary did not change for this long. */
   settleMs?: number;
   now?: () => number;
-  flagOn?: (projectId: string) => Promise<boolean>;
   judge?: JudgeDeps;
 }
 
@@ -129,9 +127,9 @@ export async function sweepScorers(
 
   const judge = { ...options.judge };
   if (judge.engine === undefined) judge.engine = resolveJudgeEngine();
-  let pending = (
-    await activeScorers(db, options.flagOn ?? scorersFlagOn, new Date(startedAt))
-  ).filter((scorer) => scorer.kind === "check" || judge.engine !== null);
+  let pending = (await activeScorers(db, new Date(startedAt))).filter(
+    (scorer) => scorer.kind === "check" || judge.engine !== null,
+  );
   result.scorers = pending.length;
   while (pending.length > 0) {
     const behind: Scorer[] = [];
@@ -345,12 +343,8 @@ function scoresOf(
   });
 }
 
-/** The enabled scorers of the projects whose flag is on, but those that wait, the one furthest behind first. */
-async function activeScorers(
-  db: Db,
-  flagOn: (projectId: string) => Promise<boolean>,
-  now: Date,
-): Promise<Scorer[]> {
+/** The enabled scorers, but those that wait, the one furthest behind first. */
+async function activeScorers(db: Db, now: Date): Promise<Scorer[]> {
   const rows = await db
     .select()
     .from(traceScorers)
@@ -361,15 +355,5 @@ async function activeScorers(
       ),
     )
     .orderBy(asc(traceScorers.cursorAt), asc(traceScorers.id));
-  const on = new Map<string, boolean>();
-  for (const { projectId } of rows)
-    if (!on.has(projectId)) on.set(projectId, await flagOn(projectId));
-  return scorersOf(
-    rows.filter((row) => on.get(row.projectId)),
-    db,
-  );
-}
-
-function scorersFlagOn(projectId: string): Promise<boolean> {
-  return featureEnabled("customMonitoring", { projectId });
+  return scorersOf(rows, db);
 }

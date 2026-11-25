@@ -77,15 +77,13 @@ export function nextChange(
   record: LayoutRecord,
   next: OverviewArrangement,
   offered: OfferedWidgets,
-  dashboardItems: boolean,
   what: Pick<LayoutChangeEntry, "kind" | "source" | "summary"> & { undoes?: number | null },
 ): LayoutWrite | null {
   const layout = storeArrangement(next);
   if (
     what.kind !== "undo" &&
     !isUnreadable(record.layout) &&
-    canonical(layout) ===
-      canonical(storeArrangement(readArrangement(record.layout, offered, dashboardItems)))
+    canonical(layout) === canonical(storeArrangement(readArrangement(record.layout, offered)))
   )
     return null;
   return {

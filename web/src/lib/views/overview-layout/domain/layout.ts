@@ -96,18 +96,8 @@ export type OverviewLayoutChange =
 /** A place from a browser, which may draw a widget that is no longer offered. */
 export type OverviewPlace = GridItem;
 
-/** The widgets of a project: the alerts only with `customMonitoring`. */
-export function offeredWidgets(features: { customMonitoring: boolean }): OfferedWidgets {
-  return WIDGET_CATALOG.filter(({ id }) => id !== "alerts" || features.customMonitoring);
-}
-
-/** What a person without a stored layout sees, with every widget offered. */
+/** What a person without a stored layout sees. */
 export const DEFAULT_LAYOUT: OverviewLayout = defaultLayout(WIDGET_CATALOG);
-
-/** The same with no flag on, for where nobody read which widgets are offered. */
-export const UNFLAGGED_LAYOUT: OverviewLayout = defaultLayout(
-  offeredWidgets({ customMonitoring: false }),
-);
 
 export function changeLayout(
   layout: OverviewLayout,

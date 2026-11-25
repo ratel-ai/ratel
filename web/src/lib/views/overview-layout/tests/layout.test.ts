@@ -8,7 +8,6 @@ import {
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewWidgetId,
-  offeredWidgets,
   onlyWidget,
   sameLayout,
   stepChange,
@@ -21,7 +20,7 @@ import {
   storeArrangement,
 } from "../domain/stored";
 
-/** The four that are always offered. */
+/** The four without the alerts. */
 const WIDGET_CATALOG: OfferedWidgets = EVERY_WIDGET.filter(({ id }) => id !== "alerts");
 const DEFAULT_LAYOUT = defaultLayout(WIDGET_CATALOG);
 const OVERVIEW_WIDGETS = WIDGET_CATALOG.map(({ id }) => id);
@@ -178,15 +177,12 @@ test("a change from outside is checked", () => {
     );
 });
 
-test("the alerts are offered with customMonitoring, under the rest, and no widget is below its minimum", () => {
-  assert.deepEqual(offeredWidgets({ customMonitoring: false }), WIDGET_CATALOG);
-  const offered = offeredWidgets({ customMonitoring: true });
-  assert.deepEqual(offered, EVERY_WIDGET);
-  assert.deepEqual(places(defaultLayout(offered)), {
+test("the default has the alerts under the rest, and no widget is below its minimum", () => {
+  assert.deepEqual(places(defaultLayout(EVERY_WIDGET)), {
     ...places(DEFAULT_LAYOUT),
     alerts: [0, 16, 12, 4],
   });
-  for (const { min, place } of offered) assert.ok(place.w >= min.w && place.h >= min.h);
+  for (const { min, place } of EVERY_WIDGET) assert.ok(place.w >= min.w && place.h >= min.h);
 });
 
 /* A later widget, behind a flag. */

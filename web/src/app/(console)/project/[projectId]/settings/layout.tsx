@@ -18,7 +18,7 @@ export default async function ProjectSettingsLayout({
   if (!isDbConfigured()) return children;
   const { projectId } = await params;
   return (
-    <SettingsFrame label="Project settings" tabs={await projectTabs(projectId)}>
+    <SettingsFrame label="Project settings" tabs={projectTabs(projectId)}>
       {children}
     </SettingsFrame>
   );

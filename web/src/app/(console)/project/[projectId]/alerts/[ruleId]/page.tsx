@@ -27,7 +27,7 @@ export default async function AlertPage({
   const id = parseProjectUuid(ruleId);
   const rule = id ? await getAlertRule(page.projectId, id) : null;
   if (!rule) notFound();
-  const [{ form }, events] = await Promise.all([
+  const [form, events] = await Promise.all([
     loadAlertForm(page),
     listAlertEvents(page.projectId, rule.id),
   ]);

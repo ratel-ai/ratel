@@ -148,7 +148,6 @@ export const DRAIN_ERROR_AREAS: Readonly<Record<string, string>> = {
   intent_graph_revisions_prune: "intentGraphErrors",
   intent_engine_enqueue: "intentEngineErrors",
   intent_engine_expire: "intentEngineErrors",
-  task_scores_enqueue: "taskScoreErrors",
   otlp_raw_prune: "otlpRawErrors",
   trace_summary_refresh: "traceSummaryErrors",
   trace_summary_prune: "traceSummaryErrors",

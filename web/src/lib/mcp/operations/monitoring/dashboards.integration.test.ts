@@ -126,12 +126,11 @@ beforeEach(async () => {
   await m.client.exec(
     "delete from dashboards; delete from trace_scorers; delete from otel_trace_summaries",
   );
-  m.set.on = true;
   m.events.length = 0;
 });
 after(() => m.client.close());
 
-test("each operation with the flag on and off, with and without access", async () => {
+test("each operation with and without access", async () => {
   for (const [id, params] of CALLS) {
     const expected = id === "get_dashboard" ? "not_found" : true;
     const keyed = await m.call(id, params);
@@ -146,11 +145,6 @@ test("each operation with the flag on and off, with and without access", async (
       personAuth("admin", MISSING),
     );
     assert.equal(!stranger.ok && stranger.error, "not_found", id);
-  }
-  m.set.on = false;
-  for (const [id, params] of CALLS) {
-    const off = await m.call(id, params);
-    assert.equal(!off.ok && off.reason, "custom_monitoring_off", id);
   }
 });
 
@@ -202,9 +196,7 @@ test("an import through MCP equals the web app's", async () => {
         user: { id: "u", externalId: "u", name: "Ann", username: null, email: "a@b.c" },
       }),
       findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
-      enabled: async () => true,
       isRestricted: async () => false,
-      features: async () => ({ customMonitoring: true }),
       scorers: (projectId) => scorerOptions(projectId, m.db),
       store: {
         ...store,

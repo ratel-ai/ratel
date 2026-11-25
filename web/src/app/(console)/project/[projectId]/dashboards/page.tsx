@@ -1,20 +1,36 @@
-import { permanentRedirect } from "next/navigation";
-import { projectRoot } from "@/lib/console/navigation";
-import { dashboardsEnabled } from "./context";
-import { DashboardsList } from "./list";
+import { DashboardsListView } from "@/components/console/dashboards/DashboardsListView";
+import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { listDashboards } from "@/lib/views/dashboards/store";
+import { dashboardsScope } from "./context";
 
 export const metadata = { title: "Dashboards" };
 
-/**
- * Unless `customMonitoring` is on, dashboards are gone: Overview carries the numbers, and its Spend opens the
- * context split this page used to show.
- */
+/** The project's dashboards. */
 export default async function ScopedDashboardsPage({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  if (await dashboardsEnabled(projectId)) return <DashboardsList projectId={projectId} />;
-  permanentRedirect(`${projectRoot(projectId)}?peek=context`);
+  const scope = await dashboardsScope(projectId);
+  if (!scope)
+    return (
+      <DatabaseUnavailable title="Dashboards">
+        Dashboards become available once setup finishes.
+      </DatabaseUnavailable>
+    );
+  const dashboards = await listDashboards(scope.project.id);
+  return (
+    <DashboardsListView
+      projectId={scope.project.id}
+      now={new Date().toISOString()}
+      dashboards={dashboards.map(({ id, name, widgetCount, updatedAt, updatedByName }) => ({
+        id,
+        name,
+        widgets: widgetCount,
+        updatedAt: updatedAt.toISOString(),
+        updatedBy: updatedByName,
+      }))}
+    />
+  );
 }

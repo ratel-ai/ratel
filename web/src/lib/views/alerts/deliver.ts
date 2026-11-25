@@ -1,6 +1,5 @@
 import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { projects } from "@/lib/platform/projects/schema";
 import type { AlertNotice, AlertNotifier, NoticeOutcome } from "@/lib/views/alerts/notifier";
@@ -11,7 +10,6 @@ type Db = ReturnType<typeof getDb>;
 
 export interface DeliverOptions {
   now?: () => Date;
-  flagOn?: (projectId: string) => Promise<boolean>;
   timeBudgetMs?: number;
 }
 
@@ -42,13 +40,10 @@ export async function deliverAlerts(
   db: Db = getDb(),
 ): Promise<DeliveryResult> {
   const now = options.now ?? (() => new Date());
-  const on =
-    options.flagOn ?? ((projectId: string) => featureEnabled("customMonitoring", { projectId }));
   const startedAt = Date.now();
   const result: DeliveryResult = { sent: 0, retrying: 0, failures: [] };
   for (const pending of await pendingEvents(db, now())) {
     if (Date.now() - startedAt >= (options.timeBudgetMs ?? TIME_BUDGET_MS)) break;
-    if (!(await on(pending.notice.projectId))) continue;
     const attempts = await claim(db, pending.notice.eventId, now());
     if (attempts === null) continue;
     const { notice } = pending;

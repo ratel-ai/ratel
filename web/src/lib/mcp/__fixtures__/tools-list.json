@@ -3688,7 +3688,7 @@
   {
     "name": "get_task",
     "title": "Get task",
-    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -5206,87 +5206,6 @@
     },
     "_meta": {
       "sh.ratel/stage": "ship"
-    }
-  },
-  {
-    "name": "change_task_scorer",
-    "title": "Change a task scorer",
-    "description": "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task.",
-    "inputSchema": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "type": "object",
-      "properties": {
-        "projectId": {
-          "description": "Project id. Optional with a project API key, which implies it.",
-          "type": "string",
-          "minLength": 36,
-          "maxLength": 36
-        },
-        "taskId": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 500,
-          "description": "A task id from list_tasks."
-        },
-        "kind": {
-          "type": "string",
-          "enum": [
-            "ends_well",
-            "max_self_corrections",
-            "max_latency_ms",
-            "max_cost_usd",
-            "expected_tool",
-            "max_tool_calls",
-            "judge_criteria"
-          ]
-        },
-        "action": {
-          "default": "save",
-          "description": "reset returns the scorer to its default.",
-          "type": "string",
-          "enum": [
-            "save",
-            "reset"
-          ]
-        },
-        "enabled": {
-          "description": "Required to save: on or off.",
-          "type": "boolean"
-        },
-        "max": {
-          "description": "The limit for max_* kinds; a whole number for max_tool_calls and max_self_corrections.",
-          "type": "number",
-          "minimum": 0
-        },
-        "tool": {
-          "description": "The tool id expected_tool checks for.",
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 500
-        },
-        "criteria": {
-          "description": "What judge_criteria asks a judge model to check.",
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 5000
-        }
-      },
-      "required": [
-        "taskId",
-        "kind"
-      ]
-    },
-    "annotations": {
-      "title": "Change a task scorer",
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "idempotentHint": false
-    },
-    "execution": {
-      "taskSupport": "forbidden"
-    },
-    "_meta": {
-      "sh.ratel/stage": "improve"
     }
   },
   {

@@ -82,7 +82,7 @@ async function handlePost(req: Request) {
     genAiLogs: createGenAiLogStore(),
     // Raw request bodies, within the daily byte cap.
     otlpRawCapture: { store: createOtlpRawStore() },
-    // The country and region of each trace (customMonitoring).
+    // The country and region of each trace.
     locate: geoIngest.locate,
     // The same before a batch is queued, so that no address waits in the queue.
     redact: geoIngest.redact,

@@ -24,9 +24,6 @@ import {
 } from "@/lib/views/task-evals/simulation-page";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { type TestProposal, testProposalSchema } from "@/lib/views/task-evals/test-proposal";
-import { changeTaskScorer } from "@/lib/views/task-scorers/actions";
-import { resetScorer, upsertScorer } from "@/lib/views/task-scorers/store";
-import { SCORER_KINDS } from "@/lib/views/task-scorers/types";
 import {
   buildTaskDetail,
   buildTaskList,
@@ -39,7 +36,7 @@ import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 import type { ExampleRun } from "@/lib/views/tasks/queries";
 
 /**
- * A task's scorers, eval set, tests and simulations as tools: what the Task
+ * A task's eval set, tests and simulations as tools: what the Task
  * page and its Simulations tab let a person change, through the same
  * `lib/task-*` entry points the console's server actions call. Those entry
  * points take a session; here the MCP caller stands in for it (`mcpActor`), and
@@ -236,9 +233,6 @@ export interface TaskOperationDeps {
   ) => Promise<TaskSimulationDetail>;
   /** A task's cases, excluded ones included, for `restore` by case id. */
   taskEvalCases: (projectId: string, taskId: string) => Promise<TaskEvalCaseRow[]>;
-  changeTaskScorer: typeof changeTaskScorer;
-  saveScorer: typeof upsertScorer;
-  resetScorer: typeof resetScorer;
   changeTaskEval: typeof changeTaskEval;
   enqueueTaskEvalRefresh: (projectId: string, taskId: string) => Promise<{ id: string } | null>;
   draftTaskTest: typeof draftTaskTest;
@@ -261,9 +255,6 @@ export const defaultTaskDeps: TaskOperationDeps = {
   taskSimulationDetailFor: (projectId, taskId, fix) =>
     taskSimulationDetailFor(projectId, taskId, fix),
   taskEvalCases: async (projectId, taskId) => (await taskEvalSetFor(projectId, taskId)).cases,
-  changeTaskScorer,
-  saveScorer: (input) => upsertScorer(input),
-  resetScorer: (projectId, taskId, kind) => resetScorer(projectId, taskId, kind),
   changeTaskEval,
   enqueueTaskEvalRefresh: (projectId, taskId) => enqueueTaskEvalRefreshJob(projectId, taskId),
   draftTaskTest,
@@ -452,91 +443,6 @@ export function loopTaskReadOperations(deps: TaskOperationDeps = defaultTaskDeps
 
 export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDeps): McpOperation[] {
   return [
-    defineOperation({
-      id: "change_task_scorer",
-      domain: "writes",
-      title: "Change a task scorer",
-      description:
-        "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task.",
-      keywords: ["task scorer", "judge criteria", "expected tool scorer"],
-      scope: "project",
-      mutates: true,
-      params: z.object({
-        ...projectScoped,
-        taskId: taskIdParam,
-        kind: z.enum(SCORER_KINDS),
-        action: z
-          .enum(["save", "reset"])
-          .default("save")
-          .describe("reset returns the scorer to its default."),
-        enabled: z.boolean().optional().describe("Required to save: on or off."),
-        max: z
-          .number()
-          .finite()
-          .nonnegative()
-          .optional()
-          .describe(
-            "The limit for max_* kinds; a whole number for max_tool_calls and max_self_corrections.",
-          ),
-        tool: z
-          .string()
-          .trim()
-          .min(1)
-          .max(500)
-          .optional()
-          .describe("The tool id expected_tool checks for."),
-        criteria: z
-          .string()
-          .trim()
-          .min(1)
-          .max(5_000)
-          .optional()
-          .describe("What judge_criteria asks a judge model to check."),
-      }),
-      async execute(ctx, params) {
-        if (params.action === "save" && params.enabled === undefined)
-          throw invalidParams("Pass enabled to save a scorer.");
-        const actor = await requireTaskGates(deps, ctx);
-        const base = { projectId: ctx.projectId, taskId: params.taskId };
-        const input =
-          params.action === "reset"
-            ? { ...base, action: "reset", kind: params.kind }
-            : {
-                ...base,
-                action: "save",
-                enabled: params.enabled,
-                scorer: {
-                  kind: params.kind,
-                  max: params.max,
-                  tool: params.tool,
-                  criteria: params.criteria,
-                },
-              };
-        const result = await deps.changeTaskScorer(input, {
-          ...mcpSessionDeps(ctx, actor),
-          enabled: decided,
-          save: deps.saveScorer,
-          reset: deps.resetScorer,
-          observe: (fields) => track(deps, ctx, "task_scorer_updated", fields),
-        });
-        if (!result.ok) {
-          throw result.error === "The scorer settings are invalid."
-            ? invalidParams(
-                `${result.error} ${params.kind.startsWith("max_") ? "Pass max." : params.kind === "expected_tool" ? "Pass tool." : params.kind === "judge_criteria" ? "Pass criteria." : ""}`.trim(),
-              )
-            : libRefusal(result.error);
-        }
-        return {
-          data: {
-            taskId: params.taskId,
-            kind: params.kind,
-            action: params.action,
-            ...(params.action === "save" ? { enabled: params.enabled } : {}),
-          },
-          hint: "get_task shows the task's scorers; run_eval re-simulates a fix with them.",
-        };
-      },
-    }),
     defineOperation({
       id: "change_task_eval_set",
       domain: "writes",

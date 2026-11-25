@@ -84,8 +84,7 @@ test("a rule from outside is checked like a widget", () => {
     windowMinutes: 5,
     destinationIds: [],
   };
-  const off = { customMonitoring: false };
-  const parsed = parseRule(draft, off);
+  const parsed = parseRule(draft);
   assert.ok(parsed.ok);
   assert.deepEqual(parsed.draft, { ...draft, name: "Slow" });
   const refused: [Record<string, unknown>, RegExp][] = [
@@ -99,10 +98,9 @@ test("a rule from outside is checked like a widget", () => {
     [{ query: metricQuery("nope" as never, "p95") }, /Unknown measure/],
     [{ query: metricQuery("latency", "sum") }, /aggregated/],
     [{ query: metricQuery("latency", "p95", { dimensions: ["model"] }) }, /cannot be grouped/],
-    [{ query: metricQuery("scorer_pass_rate", "rate") }, /off for this project/],
   ];
   for (const [change, error] of refused) {
-    const result = parseRule({ ...draft, ...change }, off);
+    const result = parseRule({ ...draft, ...change });
     assert.ok(!result.ok);
     assert.match(result.error, error);
   }

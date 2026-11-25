@@ -52,7 +52,6 @@ import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { scorersRegistration } from "@/lib/views/scorers/register";
 import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
 import { taskEvalsRegistration } from "@/lib/views/task-evals/register";
-import { taskScorersRegistration } from "@/lib/views/task-scorers/register";
 
 const queueLogger = getLogger("ingest/queue");
 
@@ -161,7 +160,6 @@ const CORE: Registration[] = [
   evalGateRegistration,
   fixDraftsRegistration,
   sessionReplayRegistration,
-  taskScorersRegistration,
   taskEvalsRegistration,
   scorersRegistration,
   alertsRegistration,

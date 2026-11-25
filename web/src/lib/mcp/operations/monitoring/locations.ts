@@ -14,9 +14,9 @@ import {
   callerRole,
   defaultMonitoringDeps,
   type MonitoringDeps,
+  monitoringCaller,
   observeChange,
   refusal,
-  requireMonitoring,
 } from "./deps";
 
 /** What each attribute holds, as Settings > General > Location attributes says it. */
@@ -43,7 +43,7 @@ export function locationReadOperations(
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = monitoringCaller(ctx);
         const attributes = await loadGeoAttributes(projectId, deps.db());
         return {
           data: shown(projectId, attributes),
@@ -79,7 +79,7 @@ export function locationWriteOperations(
         reset: z.boolean().optional().describe("true: the defaults, but for the fields given."),
       }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = monitoringCaller(ctx);
         const given = Object.fromEntries(
           GEO_ATTRIBUTES.flatMap((key) => (params[key] === undefined ? [] : [[key, params[key]]])),
         );
@@ -93,8 +93,7 @@ export function locationWriteOperations(
           { ...before, ...given },
           {
             findProjectScope: async () => scopeOf(ctx),
-            // requireMonitoring let the caller in, and a support session is a browser's.
-            enabled: async () => true,
+            // A support session is a browser's.
             isRestricted: async () => false,
             save: (id, attributes) => saveGeoAttributes(id, attributes, deps.db()),
             observe: observeChange(deps, ctx, "project_settings_updated"),

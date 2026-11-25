@@ -446,7 +446,6 @@ export function taskDetail(
         ][index],
       })),
       scorers: [],
-      scoreSeries: [],
       evalSet: null,
       shipments: null,
     },

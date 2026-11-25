@@ -21,7 +21,7 @@ export function WidgetLinkItems({
   filters,
   range,
   exploreHref,
-  alerts,
+  missingScorer,
   alertWithFilters = false,
 }: {
   projectId: string;
@@ -30,14 +30,14 @@ export function WidgetLinkItems({
   range: DashboardRange;
   /** The Explore page with the widget; null inside it, or for a widget that shows no numbers. */
   exploreHref: string | null;
-  /** Whether a metric can start an alert. */
-  alerts: boolean;
+  /** A scorer the project does not have: no alert can watch it. */
+  missingScorer?: string;
   /** The alert takes the page's filters too. */
   alertWithFilters?: boolean;
 }) {
   const withFilters = alertWithFilters && takesPageFilters(query, filters);
   const alertHref =
-    alerts && query.kind === "metric"
+    query.kind === "metric" && !missingScorer
       ? newAlertHref(projectId, withFilters ? withPageFilters(query, filters) : query, withFilters)
       : null;
   return (

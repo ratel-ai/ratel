@@ -10,7 +10,7 @@ import {
   undoOverviewChange,
 } from "../actions";
 import { KEPT_CHANGES, type LayoutRecord, NO_RECORD, postedRevision } from "../domain/history";
-import { DEFAULT_LAYOUT, sameLayout, UNFLAGGED_LAYOUT, WIDGET_CATALOG } from "../domain/layout";
+import { DEFAULT_LAYOUT, sameLayout, WIDGET_CATALOG } from "../domain/layout";
 import type { OverviewLayoutStore } from "../ports/store";
 import { pageLayout, webLayoutReader } from "../readers";
 
@@ -54,7 +54,6 @@ const deps = (reader: LayoutReader | null, { store }: ReturnType<typeof memory>)
   reader: async () => reader,
   store: () => store,
   offered: async () => WIDGET_CATALOG,
-  dashboardsOn: async () => false,
   dashboardWidget: async () => null,
   source: async () => ({ kind: "web" }),
 });
@@ -168,7 +167,7 @@ test("the page offers no save when the layout was not read", async () => {
     ...db,
     store: { ...db.store, read: () => Promise.reject(new Error("statement timeout")) },
   });
-  const unsaved = { ...DEFAULT, layout: UNFLAGGED_LAYOUT, revision: "", read: false };
+  const unsaved = { ...DEFAULT, revision: "", read: false };
   assert.deepEqual(await pageLayout("p1", thrown), unsaved);
   assert.deepEqual(await pageLayout("p1", deps(null, db)), unsaved);
   assert.deepEqual(await pageLayout("p1", deps(PERSON, db)), { ...DEFAULT, read: true });

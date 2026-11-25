@@ -61,7 +61,7 @@ export function AlertForm({
   rule: AlertRule | null;
   /** What a new one measures at first. */
   start: MetricQuery | null;
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   facets: TraceFilterBarFacets;
   destinations: readonly AlertDestination[];
   /** Channels of a Slack workspace that is not connected any more are among them. */
@@ -90,7 +90,7 @@ export function AlertForm({
   const defaultName = queryName(query);
 
   function edit(change: QueryChange) {
-    const next = changeQuery(query, change, scorers ?? []);
+    const next = changeQuery(query, change, scorers);
     // A threshold in another unit is another threshold.
     if (getMetric(next.measures[0].measure)?.unit !== unit) setThresholdText("");
     setQuery(next);
@@ -137,7 +137,7 @@ export function AlertForm({
             facets={facets}
             onChange={(next) =>
               setQuery((current) =>
-                changeQuery(current, { filter: next(current.filters) }, scorers ?? []),
+                changeQuery(current, { filter: next(current.filters) }, scorers),
               )
             }
           />

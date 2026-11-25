@@ -21,7 +21,6 @@ import { type TimeWindow, TimeWindowMenu } from "@/components/console/traces/Tra
 import { placeWords } from "@/lib/console/grid/edit-mode";
 import { type GridItem, type GridStep, stepped } from "@/lib/console/grid/layout";
 import { projectRoot } from "@/lib/console/navigation";
-import { metricOffered } from "@/lib/synthesis/metrics/catalog";
 import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
@@ -58,7 +57,6 @@ import type {
 import {
   isFilterable,
   queryFilter,
-  queryMetric,
   queryScorerId,
   widgetName,
 } from "@/lib/views/dashboards/widget";
@@ -83,7 +81,6 @@ export function DashboardView({
   facets,
   timeWindow,
   scorers,
-  alerts,
   draft,
   overview = false,
   startEditing = false,
@@ -97,10 +94,7 @@ export function DashboardView({
   widgets: readonly { widget: DashboardWidget; result: QueryResult | null }[];
   facets: TraceFilterBarFacets;
   timeWindow: TimeWindow;
-  /** The project's scorers; null while scorers are off. */
-  scorers: readonly ScorerOption[] | null;
-  /** Alerts are on: a widget can start one. */
-  alerts: boolean;
+  scorers: readonly ScorerOption[];
   /** A widget to start adding as the page opens, from a scorer's page. */
   draft: WidgetInput | null;
   /** The Overview takes widgets of dashboards (`focusedConsole`). */
@@ -263,11 +257,6 @@ export function DashboardView({
     } catch {
       toast({ title: "Could not export the dashboard. Try again.", tone: "danger" });
     }
-  }
-
-  function available(widget: Widget) {
-    const metric = queryMetric(widget.query);
-    return !metric || metricOffered(metric, { customMonitoring: scorers !== null });
   }
 
   const cards = placed.map((widget) => ({ ...cardOf(widget), min: MIN_WIDGET, ownHeight: true }));
@@ -436,11 +425,7 @@ export function DashboardView({
                   );
                 const title = widgetName(widget);
                 const editItem = (
-                  <MenuItem
-                    icon={<Pencil />}
-                    disabled={!available(widget)}
-                    onClick={() => openEditor(widget)}
-                  >
+                  <MenuItem icon={<Pencil />} onClick={() => openEditor(widget)}>
                     Edit widget
                   </MenuItem>
                 );
@@ -459,7 +444,7 @@ export function DashboardView({
                         <FilterNote
                           filter={queryFilter(widget.query)}
                           scorer={
-                            scorers?.find(({ id }) => id === queryScorerId(widget.query))?.name
+                            scorers.find(({ id }) => id === queryScorerId(widget.query))?.name
                           }
                         />
                         <Menu>
@@ -490,14 +475,14 @@ export function DashboardView({
                               filters={filters}
                               range={timeWindow}
                               exploreHref={
-                                available(widget) && !widget.missingScorer
+                                !widget.missingScorer
                                   ? explorePanelHref(projectId, widget, {
                                       filters,
                                       range: timeWindow,
                                     })
                                   : null
                               }
-                              alerts={alerts && available(widget) && !widget.missingScorer}
+                              missingScorer={widget.missingScorer}
                             />
                           </MenuContent>
                         </Menu>
@@ -510,7 +495,6 @@ export function DashboardView({
                       result={resultOf.get(widget.id) ?? null}
                       range={timeWindow}
                       filters={filters}
-                      available={available(widget)}
                       missingScorer={widget.missingScorer}
                     />
                   </CardFrame>

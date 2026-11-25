@@ -4,7 +4,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { upsertScorer } from "@/lib/views/task-scorers/store";
 import { selectTaskEvalRuns } from "./selection";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -24,25 +23,6 @@ test("selection mixes scorer results, open issue evidence and intents with at le
       insert into trace_signals (project_id, kind, subject_kind, subject_key, severity, impact, n, evidence, first_seen_at, last_seen_at)
         values ('${PROJECT}', 'error_loop', 'workflow', 'task-a', 1, 1, 1, '{"turnIds":["${id(4)}"]}', now(), now());
     `);
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "max_latency_ms", max: 5000 },
-        updatedBy: "user_test",
-      },
-      db,
-    );
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "max_tool_calls", max: 0 },
-        enabled: false,
-        updatedBy: "user_test",
-      },
-      db,
-    );
     const selected = await selectTaskEvalRuns({ projectId: PROJECT, taskId: "task-a" }, db);
     const ids = new Set(selected.map((row) => row.turnId));
     assert.ok(selected.length >= 20);
@@ -154,7 +134,7 @@ test("three open issues with eighty evidence runs stay within the target and per
   }
 });
 
-test("four scorers retain passing and failing examples with explicit reasons and intent coverage", async () => {
+test("three scorers retain passing and failing examples with explicit reasons and intent coverage", async () => {
   const { client, db } = await setup();
   try {
     await seedRuns(client, 60);
@@ -173,27 +153,9 @@ test("four scorers retain passing and failing examples with explicit reasons and
           jsonb_build_object('turnIds', (select jsonb_agg(id) from trace_turns)), now(), now()
           from generate_series(1, 3) g;
     `);
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "max_latency_ms", max: 5000 },
-        updatedBy: "user_test",
-      },
-      db,
-    );
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "max_tool_calls", max: 1 },
-        updatedBy: "user_test",
-      },
-      db,
-    );
     const selected = await selectTaskEvalRuns({ projectId: PROJECT, taskId: "task-a" }, db);
     assert.equal(selected.length, 20);
-    for (const kind of ["ends_well", "max_self_corrections", "max_latency_ms", "max_tool_calls"]) {
+    for (const kind of ["ends_well", "max_self_corrections", "max_latency_ms"]) {
       for (const status of ["pass", "fail"]) {
         assert.ok(
           selected.some((row) => row.selectionReason.includes(`${kind}: ${status}`)),

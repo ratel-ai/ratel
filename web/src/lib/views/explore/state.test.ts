@@ -332,19 +332,17 @@ test("the fullest panels with their page filters fit an address, a widget and an
   assert.equal(filtersProblem(queries, PAGE), null);
   assert.deepEqual(opened(withPanels("?range=7d", four)), four);
   const saved = withPageFilters(four[0].query, PAGE) as MetricQuery;
-  assert.ok(parseWidget({ ...four[0], query: saved }, { customMonitoring: true }).ok);
+  assert.ok(parseWidget({ ...four[0], query: saved }).ok);
   const { hash, searchParams } = new URL(newAlertHref("p1", saved, true), "https://x.test");
   const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
-  const parsed = parseAlertQuery(alertQueryOf(value === "hash" ? hash.slice(1) : value), {
-    customMonitoring: true,
-  });
+  const parsed = parseAlertQuery(alertQueryOf(value === "hash" ? hash.slice(1) : value));
   assert.ok(parsed.ok);
   assert.deepEqual(parsed.query, saved);
   // One byte more is refused in the bar, in a panel and in the alert.
   const over = fullest(1, 1);
   assert.equal(filtersProblem([over.query], PAGE), TOO_LONG);
   assert.equal(panelProblem({ ...over, query: withPageFilters(over.query, PAGE) }), TOO_LONG);
-  const alert = parseAlertQuery(withPageFilters(over.query, PAGE), { customMonitoring: true });
+  const alert = parseAlertQuery(withPageFilters(over.query, PAGE));
   assert.deepEqual(alert, { ok: false, error: TOO_LONG });
 });
 

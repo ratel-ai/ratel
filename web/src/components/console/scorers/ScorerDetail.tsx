@@ -40,8 +40,7 @@ export function ScorerDetail({
   now,
 }: {
   projectId: string;
-  /** The project's dashboards; null with `customMonitoring` off. */
-  dashboards: readonly { id: string; name: string }[] | null;
+  dashboards: readonly { id: string; name: string }[];
   scorer: ScorerItem;
   trend: readonly TrendDay[];
   latest: readonly LatestRow[];
@@ -179,9 +178,8 @@ function AddToDashboard({
 }: {
   projectId: string;
   scorerId: string;
-  dashboards: readonly { id: string; name: string }[] | null;
+  dashboards: readonly { id: string; name: string }[];
 }) {
-  if (!dashboards) return null;
   if (dashboards.length === 0)
     return (
       <Link href={dashboardsHref(projectId)} className={buttonVariants({ variant: "secondary" })}>

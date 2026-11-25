@@ -106,7 +106,7 @@ import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/type
  * Logs and events carry counts only: no query text, no end-user ids.
  *
  * Owned (ADR-0004): Agent health is on for every project here, so there is no flag gate.
- * The readings that follow a run (live task scores, topics, the tool explorer, fix drafts) are seams: each one's
+ * The readings that follow a run (due eval sets, topics, the tool explorer, fix drafts) are seams: each one's
  * registration fills its enqueue in {@link computeSeams} when it lands, and a run with
  * the seam unset simply queues nothing.
  */
@@ -150,8 +150,8 @@ export interface ComputeJobDeps {
   enqueueExplore?: (projectId: string, signalRunId: string) => Promise<unknown>;
   /** Queue drafts for the project's new rewrite fixes; a seam fix drafts' registration fills. */
   enqueueFixDrafts?: (projectId: string) => Promise<unknown>;
-  /** Queue live task scores after placement and signal persistence. The queue checks the organization flag. */
-  enqueueTaskScores?: (projectId: string) => Promise<unknown>;
+  /** Queue the due eval sets of the project's tasks after placement and signal persistence. The queue checks the organization flag. */
+  enqueueTaskEvalSets?: (projectId: string) => Promise<unknown>;
   /** Whether an import is storing runs for the project right now. */
   importRunning: (projectId: string) => Promise<boolean>;
   /** Queue the full-window run that follows a quick first reading. */
@@ -181,7 +181,7 @@ export interface ComputeJobDeps {
  */
 export const computeSeams: Pick<
   ComputeJobDeps,
-  "enqueueTopics" | "enqueueExplore" | "enqueueFixDrafts" | "enqueueTaskScores"
+  "enqueueTopics" | "enqueueExplore" | "enqueueFixDrafts" | "enqueueTaskEvalSets"
 > = {};
 
 /** The turn build's seed window: what a project's first build reads. */
@@ -467,7 +467,7 @@ export async function computeProjectTraceSignals(
     // The full window follows a quick week at once; an early reading for a
     // backlog or an import waits for them instead (the build's drain hook).
     if (early?.quickDays) await queueFullReading(projectId, deps);
-    await queueTaskScores(projectId, deps);
+    await queueTaskEvalSets(projectId, deps);
     await queueWorkflowLabels(projectId, result.summary, deps);
     await queueTopics(projectId, deps);
     await queueToolExplorer(projectId, run.id, deps);
@@ -667,16 +667,18 @@ async function queueFixDrafts(
   }
 }
 
-/** Keep the completed signal run when the score queue fails. Log and report the failure. */
-async function queueTaskScores(
+/** Keep the completed signal run when the eval set queue fails. Log and report the failure. */
+async function queueTaskEvalSets(
   projectId: string,
-  deps: Pick<ComputeJobDeps, "enqueueTaskScores">,
+  deps: Pick<ComputeJobDeps, "enqueueTaskEvalSets">,
 ): Promise<void> {
   try {
-    await deps.enqueueTaskScores?.(projectId);
+    await deps.enqueueTaskEvalSets?.(projectId);
   } catch (err) {
-    logger.error({ err, project_id: projectId }, "task scores enqueue failed");
-    reportServerException(err, `project:${projectId}`, { operation: "score_tasks_enqueue" });
+    logger.error({ err, project_id: projectId }, "task eval sets enqueue failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "refresh_task_eval_set_enqueue",
+    });
   }
 }
 

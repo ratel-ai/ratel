@@ -14,17 +14,17 @@ import {
   callerAccess,
   defaultMonitoringDeps,
   type MonitoringDeps,
+  monitoringCaller,
   observeChange,
   refusal,
   required,
-  requireMonitoring,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { cappedResult, countOf, headline } from "@/lib/mcp/operations/monitoring/results";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { resolveWindow, windowParams } from "@/lib/mcp/windows";
-import { MAX_METRIC_WINDOW_DAYS, offeredMetrics } from "@/lib/synthesis/metrics/catalog";
+import { MAX_METRIC_WINDOW_DAYS, METRICS } from "@/lib/synthesis/metrics/catalog";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { loadWidgets } from "@/lib/views/dashboards/data";
@@ -52,7 +52,6 @@ import { chartProblem, widgetName } from "@/lib/views/dashboards/widget";
 import { explorePanelsHref } from "@/lib/views/explore/links";
 import { MAX_PANELS } from "@/lib/views/explore/types";
 
-const FEATURES = { customMonitoring: true } as const;
 const QUERY_WINDOW = { defaultDays: 7, maxDays: MAX_METRIC_WINDOW_DAYS } as const;
 /** How a change made through MCP is signed: the core has no table of people. */
 const EDITOR_NAME = "An agent (MCP)";
@@ -126,8 +125,7 @@ export function dashboardReadOperations(
           .default("all")
           .describe("catalog: without the two schemas. query or dashboard: one schema alone."),
       }),
-      async execute(ctx, { part }) {
-        await requireMonitoring(deps, ctx);
+      async execute(_ctx, { part }) {
         const has = (wanted: string) => part === "all" || part === wanted;
         return {
           data: {
@@ -171,7 +169,7 @@ export function dashboardReadOperations(
         limit: limitParam,
       }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const panels = askedPanels(params);
         const filter = parsedFilters(params.filters);
         const tooLong = filtersProblem(
@@ -243,7 +241,7 @@ export function dashboardReadOperations(
       mutates: false,
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const all = await store.listDashboards(projectId, deps.db());
         const tracker = new TruncationTracker();
         return {
@@ -287,7 +285,7 @@ export function dashboardReadOperations(
           .describe("false: the document and the widgets alone, without a read of the numbers."),
       }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const dashboard = await store.getDashboard(projectId, params.dashboardId, deps.db());
         if (!dashboard) throw notFound("dashboard");
         const window = dashboardWindow(dashboard, params, deps.now());
@@ -298,7 +296,6 @@ export function dashboardReadOperations(
                 projectId,
                 dashboard.widgets,
                 { ...window, filter: dashboard.filters },
-                FEATURES,
                 deps.loadWidget,
               )
             : dashboard.widgets.map(() => null),
@@ -566,7 +563,7 @@ async function run(
   ctx: OperationContext,
   change: (projectId: string) => Promise<object>,
 ) {
-  const caller = await requireMonitoring(deps, ctx);
+  const caller = monitoringCaller(ctx);
   const db = deps.db();
   const result = await changeDashboard(
     { ...(await change(caller.projectId)), projectId: caller.projectId },
@@ -581,7 +578,6 @@ async function run(
           email: EDITOR_NAME,
         },
       }),
-      features: async () => FEATURES,
       scorers: (projectId) => scorerOptions(projectId, db),
       store: {
         countDashboards: (projectId) => store.countDashboards(projectId, db),
@@ -719,7 +715,7 @@ function catalog() {
       charts: kind === "metric" ? METRIC_CHARTS : [kind],
       example: EXAMPLES[kind],
     })),
-    measures: offeredMetrics(FEATURES).map(
+    measures: METRICS.map(
       ({ id, label, description, unit, aggregations, dimensions, buckets, filterable }) => ({
         id,
         label,

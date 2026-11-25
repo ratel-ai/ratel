@@ -14,8 +14,6 @@ import {
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/links";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
-import type { MetricWidget } from "@/lib/views/dashboards/types";
-import { scorerWidget } from "@/lib/views/dashboards/widget";
 
 const FILTER: TraceFilter = {
   models: ["gpt-4o", "a&b"],
@@ -141,7 +139,6 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
     "p1",
     widgets,
     { since: new Date(0), until: new Date(1) },
-    { customMonitoring: false },
     async (_, widget) => {
       running += 1;
       most = Math.max(most, running);
@@ -155,29 +152,6 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
     results.map((result) => (result as MetricResult | null)?.series[0].groups[0].value ?? null),
     ["0", "1", "2", null, "4", "5", "6", "7", "8", "9"],
   );
-});
-
-test("a scorer widget reads nothing while customMonitoring is off", async () => {
-  const widgets = [
-    scorerWidget({ id: "44444444-4444-4444-8444-444444444444", verdict: true }),
-    STARTER_WIDGETS[0],
-  ];
-  const read = async (customMonitoring: boolean) => {
-    const asked: string[] = [];
-    await loadWidgets(
-      "p1",
-      widgets,
-      { since: new Date(0), until: new Date(1) },
-      { customMonitoring },
-      async (_, widget) => {
-        asked.push((widget as MetricWidget).query.measures[0].measure);
-        return null;
-      },
-    );
-    return asked;
-  };
-  assert.deepEqual(await read(false), ["trace_count"]);
-  assert.deepEqual(await read(true), ["scorer_pass_rate", "trace_count"]);
 });
 
 test("a scorer average is drawn on its 1 to 5 scale, named after the scorer", () => {

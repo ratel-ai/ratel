@@ -18,7 +18,6 @@ import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { taskEvalCases, taskEvalRuns, taskEvalSets } from "@/lib/views/task-evals/schema";
 import type { TaskSimulationDeps } from "@/lib/views/task-evals/simulation";
 import { simulateTaskEvalJob } from "@/lib/views/task-evals/simulation-job";
-import { upsertScorer } from "@/lib/views/task-scorers/store";
 
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -105,15 +104,6 @@ test("the comparison preserves the simulation baseline and prediction with froze
       breakdown: { task: { max_tool_calls: { before, after } } },
     });
     const shipment = await createFixShipment(input, db, { ...deps, now: () => shippedAt });
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "max_tool_calls", max: 5 },
-        updatedBy: "test",
-      },
-      db,
-    );
     await addRuns(db, "task-a", 20, new Date("2026-11-01T01:00:00Z"));
     const [run] = await db
       .select()
@@ -258,15 +248,6 @@ test("post-ship measures judge frozen task criteria and store the model spend", 
       change: { scorers: [{ kind: "judge_criteria", criteria: "Frozen criteria." }] },
     });
     await createFixShipment(input, db, { ...deps, now: () => new Date("2026-11-01T00:00:00Z") });
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "judge_criteria", criteria: "New criteria." },
-        updatedBy: "test",
-      },
-      db,
-    );
     await addRuns(db, "task-a", 20, new Date("2026-11-01T01:00:00Z"));
     const [run] = await db
       .select()

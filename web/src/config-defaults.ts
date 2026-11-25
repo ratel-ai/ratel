@@ -64,8 +64,6 @@ export const CONFIG_DEFAULTS = {
     replayBudgetUsd: 1,
     judgeBudgetUsd: 0.1,
     replayMaxSteps: 8,
-    taskJudgeSample: 20,
-    taskJudgeBudgetUsd: 0.5,
   },
   matchQuality: { mockAnalyst: false, mockDelayMs: 1_500 },
   traceTurns: {

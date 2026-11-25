@@ -379,6 +379,13 @@
       "when": 1795620006000,
       "tag": "0053_slack_app",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795620007000,
+      "tag": "0054_drop_task_scorers",
+      "breakpoints": true
     }
   ]
 }

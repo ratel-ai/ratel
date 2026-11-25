@@ -21,7 +21,6 @@ export interface ScorerAccessDeps {
     projectId: string,
     userId: string,
   ): Promise<{ project: { id: string }; organization: { id: string } } | null>;
-  enabled(subject: { projectId: string; organizationId: string; actor: string }): Promise<boolean>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
 }
@@ -50,7 +49,7 @@ export interface ScorerActionDeps extends ScorerAccessDeps {
   }): Promise<void>;
 }
 
-/** Check and apply one change to a project's scorers: membership and the flag come first. */
+/** Check and apply one change to a project's scorers: membership comes first. */
 export async function changeScorer(
   raw: unknown,
   deps: ScorerActionDeps,
@@ -118,7 +117,7 @@ export async function testScorer(
   return { ok: true, results: await deps.preview(access.projectId, parsed.draft) };
 }
 
-/** Require a session, project membership and the project's flag, outside a support session. */
+/** Require a session and project membership, outside a support session. */
 export async function authorizeScorers(
   projectId: string,
   deps: ScorerAccessDeps,
@@ -135,8 +134,6 @@ export async function authorizeScorers(
     organizationId: scope.organization.id,
     actor: session.user.externalId,
   };
-  if (!(await deps.enabled(subject)))
-    return { ok: false, error: "Scorers are off for this project." };
   if (await deps.isRestricted())
     return { ok: false, error: "A support session cannot change scorers." };
   return { ok: true, ...subject };

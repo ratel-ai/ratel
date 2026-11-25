@@ -45,7 +45,7 @@ export function ExplorePanel({
   refused: RefusedChange | null;
   /** What the page came with, so that the first numbers need no request. */
   served: ServedResults;
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   facets: TraceFilterBarFacets;
   range: DashboardRange;
   filters: DashboardFilters;
@@ -58,7 +58,7 @@ export function ExplorePanel({
 }) {
   const { preview, pending } = useWidgetPreview(projectId, widget, range, filters, served);
   const name = widgetName(widget);
-  const complete = parseWidget(widget, { customMonitoring: scorers !== null }).ok;
+  const complete = parseWidget(widget).ok;
 
   async function copyQuery() {
     try {
@@ -111,7 +111,6 @@ export function ExplorePanel({
               filters={filters}
               range={range}
               exploreHref={null}
-              alerts
               alertWithFilters
             />
             <MenuSeparator />

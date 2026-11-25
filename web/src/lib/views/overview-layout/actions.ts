@@ -51,8 +51,6 @@ export interface LayoutDeps {
   store: () => OverviewLayoutStore;
   /** The widgets the project offers now, such as behind a flag. */
   offered: (projectId: string) => Promise<OfferedWidgets>;
-  /** Whether the project has dashboards, so that their widgets can be on the Overview. */
-  dashboardsOn: (projectId: string) => Promise<boolean>;
   /** A widget of a dashboard of this project; null when there is none. */
   dashboardWidget: (
     projectId: string,
@@ -93,7 +91,6 @@ export type LayoutRefusal =
   | "api_key"
   | "support_session"
   | "invalid"
-  | "dashboards_off"
   | "no_source"
   | "too_many"
   | "unreadable"
@@ -121,7 +118,6 @@ export const LAYOUT_REFUSALS: Readonly<Record<LayoutRefusal, string>> = {
     "An API key has no Overview layout. Sign in to the MCP server as a person to use the layout.",
   support_session: "A support session cannot change the Overview or read its history.",
   invalid: "That is not a change the Overview can make.",
-  dashboards_off: "Dashboards are off for this project.",
   no_source: "This project has no such dashboard widget.",
   too_many: `An Overview can have ${MAX_DASHBOARD_ITEMS} dashboard widgets. Remove one first.`,
   unreadable:
@@ -139,10 +135,10 @@ export async function readOverviewLayout(
 ): Promise<LayoutResult> {
   const reader = await deps.reader(projectId);
   if (!reader) return { ok: false, reason: "not_found" };
-  const offer = await offerOf(projectId, deps);
+  const offered = await deps.offered(projectId);
   if (reader.kind === "api-key" || reader.restricted)
-    return { ok: true, ...snapshotOf(NO_RECORD, offer) };
-  return { ok: true, ...snapshotOf(await deps.store().read(reader), offer) };
+    return { ok: true, ...snapshotOf(NO_RECORD, offered) };
+  return { ok: true, ...snapshotOf(await deps.store().read(reader), offered) };
 }
 
 /** `base`: the revision the person saw. Null applies the change to what is there now. */
@@ -152,18 +148,18 @@ export function changeOverviewLayout(
   deps: LayoutDeps,
   base: string | null,
 ): Promise<LayoutChangeResult> {
-  return write(projectId, deps, base, async (offer) => {
-    const parsed = layoutChangeSchema(offer.widgets).safeParse(change);
+  return write(projectId, deps, base, async (offered) => {
+    const parsed = layoutChangeSchema(offered).safeParse(change);
     if (!parsed.success) return "invalid";
-    const wanted = await withSource(projectId, parsed.data, offer, deps);
+    const wanted = await withSource(projectId, parsed.data, deps);
     if (typeof wanted === "string") return wanted;
     return (record) => {
       // Only a reset, which asks for it, replaces what cannot be read.
       if (isUnreadable(record.layout) && wanted.kind !== "reset") return "unreadable";
-      const before = arrangementOf(record.layout, offer);
+      const before = readArrangement(record.layout, offered);
       if (wanted.kind === "add" && wanted.source && !hasRoom(before.layout, wanted.widget))
         return "too_many";
-      const next = changeArrangement(before, wanted, offer.widgets);
+      const next = changeArrangement(before, wanted, offered);
       return {
         next,
         kind: "change",
@@ -179,11 +175,11 @@ export function undoOverviewChange(
   deps: LayoutDeps,
   base: string,
 ): Promise<LayoutChangeResult> {
-  return write(projectId, deps, base, async (offer) => (record) => {
+  return write(projectId, deps, base, async (offered) => (record) => {
     if (isUnreadable(record.layout)) return "unreadable";
     const target = undoTarget(record);
     if (!target) return "nothing_to_undo";
-    const next = keptArrangement(target.layout, offer);
+    const next = keptArrangement(target.layout, offered);
     return (
       (next && { next, kind: "undo", summary: describeUndo(target), undoes: target.seq }) ??
       "unreadable_entry"
@@ -198,11 +194,11 @@ export function restoreOverviewLayout(
   deps: LayoutDeps,
   base: string,
 ): Promise<LayoutChangeResult> {
-  return write(projectId, deps, base, async (offer) => (record) => {
+  return write(projectId, deps, base, async (offered) => (record) => {
     if (isUnreadable(record.layout)) return "unreadable";
     const entry = record.entries.find(({ seq }) => seq === entryId);
     if (!entry) return "not_kept";
-    const next = keptArrangement(entry.layout, offer);
+    const next = keptArrangement(entry.layout, offered);
     return (
       (next && { next, kind: "restore", summary: describeRestore(entry) }) ?? "unreadable_entry"
     );
@@ -217,14 +213,14 @@ export async function readOverviewHistory(
   const reader = await deps.reader(projectId);
   const key = ownerOf(reader);
   if (typeof key === "string") return { ok: false, reason: key };
-  const offer = await offerOf(projectId, deps);
+  const offered = await deps.offered(projectId);
   const record = await deps.store().read(key);
-  const now = isUnreadable(record.layout) ? null : arrangementOf(record.layout, offer).layout;
+  const now = isUnreadable(record.layout) ? null : readArrangement(record.layout, offered).layout;
   return {
     ok: true,
-    snapshot: snapshotOf(record, offer),
+    snapshot: snapshotOf(record, offered),
     entries: record.entries.map(({ seq, kind, source, at, summary, layout: stored }) => {
-      const layout = keptArrangement(stored, offer)?.layout ?? null;
+      const layout = keptArrangement(stored, offered)?.layout ?? null;
       return {
         id: seq,
         kind,
@@ -253,13 +249,13 @@ async function write(
   deps: LayoutDeps,
   base: string | null,
   prepare: (
-    offer: Offer,
+    offered: OfferedWidgets,
   ) => Promise<((record: LayoutRecord) => Planned | LayoutRefusal) | LayoutRefusal>,
 ): Promise<LayoutChangeResult> {
   const key = ownerOf(await deps.reader(projectId));
   if (typeof key === "string") return { ok: false, reason: key };
-  const offer = await offerOf(projectId, deps);
-  const plan = await prepare(offer);
+  const offered = await deps.offered(projectId);
+  const plan = await prepare(offered);
   if (typeof plan === "string") return { ok: false, reason: plan };
   const source = await deps.source();
   let refusal: LayoutRefusal | null = null;
@@ -275,14 +271,11 @@ async function write(
       return null;
     }
     const { next, ...what } = planned;
-    const entry = nextChange(current, next, offer.widgets, offer.dashboardItems, {
-      ...what,
-      source,
-    });
+    const entry = nextChange(current, next, offered, { ...what, source });
     changed = entry?.summary ?? null;
     return entry;
   });
-  const snapshot = snapshotOf(record, offer);
+  const snapshot = snapshotOf(record, offered);
   if (refusal === "stale") return { ok: false, reason: refusal, current: snapshot };
   return refusal ? { ok: false, reason: refusal } : { ok: true, changed, ...snapshot };
 }
@@ -294,50 +287,28 @@ function ownerOf(reader: LayoutReader | null): LayoutKey | LayoutRefusal {
   return { projectId: reader.projectId, personId: reader.personId };
 }
 
-function snapshotOf(record: LayoutRecord, offer: Offer): LayoutSnapshot {
+function snapshotOf(record: LayoutRecord, offered: OfferedWidgets): LayoutSnapshot {
   const target = isUnreadable(record.layout) ? null : undoTarget(record);
   return {
-    layout: arrangementOf(record.layout, offer).layout,
+    layout: readArrangement(record.layout, offered).layout,
     revision: revisionOf(record),
-    undo: target && keptArrangement(target.layout, offer) ? target.summary : null,
+    undo: target && keptArrangement(target.layout, offered) ? target.summary : null,
   };
 }
 
 /** The arrangement of a kept value: null is the default. Null when this build cannot read it. */
-function keptArrangement(stored: unknown, offer: Offer): OverviewArrangement | null {
-  if (stored === null) return { layout: defaultLayout(offer.widgets), kept: [] };
-  return isUnreadable(stored) ? null : arrangementOf(stored, offer);
-}
-
-/** What the project's Overview can hold now. */
-interface Offer {
-  widgets: OfferedWidgets;
-  dashboardItems: boolean;
-}
-
-async function offerOf(projectId: string, deps: LayoutDeps): Promise<Offer> {
-  const [widgets, dashboardItems] = await Promise.all([
-    deps.offered(projectId),
-    deps.dashboardsOn(projectId),
-  ]);
-  return { widgets, dashboardItems };
-}
-
-function arrangementOf(stored: unknown, { widgets, dashboardItems }: Offer): OverviewArrangement {
-  return readArrangement(stored, widgets, dashboardItems);
+function keptArrangement(stored: unknown, offered: OfferedWidgets): OverviewArrangement | null {
+  if (stored === null) return { layout: defaultLayout(offered), kept: [] };
+  return isUnreadable(stored) ? null : readArrangement(stored, offered);
 }
 
 /** An added dashboard widget gets its name and size from the dashboard, never from who asks. */
 async function withSource(
   projectId: string,
   change: OverviewLayoutChange,
-  offer: Offer,
   deps: LayoutDeps,
 ): Promise<OverviewLayoutChange | LayoutRefusal> {
-  if (!("widget" in change) || change.widget === undefined) return change;
-  if (change.kind === "arrange" || !isDashboardItem(change.widget)) return change;
-  if (!offer.dashboardItems) return "dashboards_off";
-  if (change.kind !== "add") return change;
+  if (change.kind !== "add" || !isDashboardItem(change.widget)) return change;
   const ref = parseDashboardItem(change.widget);
   const source = ref && (await deps.dashboardWidget(projectId, ref));
   return source ? { ...change, source } : "no_source";

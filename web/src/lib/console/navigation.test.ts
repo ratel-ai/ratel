@@ -429,7 +429,7 @@ test("the active item matches exact index pages and nested paths", () => {
 test("an item is lit on every path it has absorbed, old URLs included", () => {
   const items = consoleNav({ projectId: P1, additions: [] });
   const active = (path: string) => activeNavItemId(`/project/${P1}${path}`, items);
-  assert.equal(active("/dashboards"), "overview");
+  assert.equal(active("/dashboards"), "dashboards");
   assert.equal(active("/insights"), "overview");
   assert.equal(active("/improvement/health"), "health");
   assert.equal(active("/improvement/tool-explorer"), "tasks");
@@ -444,12 +444,8 @@ test("an item is lit on every path it has absorbed, old URLs included", () => {
   assert.equal(active("/calibrations"), null, "an absorbed path matches whole segments");
 });
 
-test("Scorers, Dashboards and Alerts show under Overview only with customMonitoring on", () => {
-  const off = consoleNav({ projectId: P1, additions: [] });
-  assert.deepEqual(consoleNav({ projectId: P1, additions: [], customMonitoring: false }), off);
-  assert.equal(off.find(({ id }) => id === "overview")?.children, undefined);
-  const on = consoleNav({ projectId: P1, additions: [], customMonitoring: true });
-  const overview = on.find(({ id }) => id === "overview");
+test("Scorers, Dashboards and Alerts show under Overview", () => {
+  const overview = consoleNav({ projectId: P1, additions: [] }).find(({ id }) => id === "overview");
   assert.equal(overview?.section, "group:monitor");
   assert.deepEqual(
     overview?.children?.map(({ id, label, href }) => [id, label, href]),
@@ -461,15 +457,10 @@ test("Scorers, Dashboards and Alerts show under Overview only with customMonitor
       ["alerts", "Alerts", `/project/${P1}/alerts`],
     ],
   );
-  // Everything else on the rail is as it was.
-  assert.deepEqual(
-    on.map((item) => (item.id === "overview" ? { ...item, children: undefined } : item)),
-    off.map((item) => (item.id === "overview" ? { ...item, children: undefined } : item)),
-  );
 });
 
-test("with customMonitoring on, the rail keeps 9 items and lights the open page", () => {
-  const on = consoleNav({ projectId: P1, additions: [], customMonitoring: true });
+test("the rail keeps 9 items and lights the open page", () => {
+  const on = consoleNav({ projectId: P1, additions: [] });
   assert.equal(on.length, 9);
   assert.equal(activeNavItemId(`/project/${P1}`, on), "overview");
   assert.equal(activeNavItemId(`/project/${P1}/insights`, on), "overview");
@@ -478,11 +469,6 @@ test("with customMonitoring on, the rail keeps 9 items and lights the open page"
   assert.equal(activeNavItemId(`/project/${P1}/dashboards/d1`, on), "dashboards");
   assert.equal(activeNavItemId(`/project/${P1}/explore`, on), "explore");
   assert.equal(activeNavItemId(`/project/${P1}/alerts`, on), "alerts");
-});
-
-test("the organization rail has no monitoring page", () => {
-  const rail = { projectId: undefined, organizationSlug: "acme", additions: [] };
-  assert.deepEqual(consoleNav({ ...rail, customMonitoring: true }), consoleNav(rail));
 });
 
 test("switching project keeps the section the reader is on", () => {
@@ -525,6 +511,10 @@ test("the command menu lists the project's pages, the organization's, then every
     entries.map(({ label, group, href }) => `${group}|${label}|${href}`),
     [
       `Project|Overview|/project/${P1}`,
+      `Project|Scorers|/project/${P1}/scorers`,
+      `Project|Dashboards|/project/${P1}/dashboards`,
+      `Project|Explore|/project/${P1}/explore`,
+      `Project|Alerts|/project/${P1}/alerts`,
       `Project|Agent health|/project/${P1}/health`,
       `Project|Self-corrections|/project/${P1}/health/self-corrections`,
       `Project|Traces|/project/${P1}/traces`,
@@ -543,7 +533,6 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Test a search|/project/${P1}/playground`,
       `Project|Settings|/project/${P1}/settings`,
       `Pages|Admin|/admin`,
-      `Overview|Usage and spend|/project/${P1}/dashboards`,
       `Settings|API keys|/project/${P1}/settings/api-keys`,
       `Settings|Danger zone|/project/${P1}/settings/danger`,
       `Quality|Experiments|/project/${P1}/calibration`,
@@ -596,7 +585,6 @@ test("the command menu finds a page by its keywords, not only its name", () => {
   });
   const first = (query: string) => searchCommands(entries, query)[0]?.label;
   assert.equal(first("delete project"), "Danger zone");
-  assert.equal(first("spend"), "Usage and spend");
   assert.equal(first("api keys"), "API keys");
   assert.equal(first("experiments"), "Experiments");
   assert.equal(first("sdk events"), "SDK events");

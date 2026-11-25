@@ -78,7 +78,7 @@ export async function enqueueTaskEvalRefreshJob(
   return job!;
 }
 
-/** Queue due task sets after live scoring. No task refreshes more than once a week automatically. */
+/** Queue the project's due task sets. No task refreshes more than once a week automatically. */
 export async function enqueueDueTaskEvalSets(
   projectId: string,
   deps: EnqueueDeps = {},

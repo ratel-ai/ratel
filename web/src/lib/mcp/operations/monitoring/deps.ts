@@ -4,7 +4,6 @@ import { mcpActor, mcpEventContext, mcpSessionDeps } from "@/lib/mcp/operations/
 import type { OperationContext } from "@/lib/mcp/registry";
 import { getDb } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { type ServerEventName, trackServerEvent } from "@/lib/platform/telemetry";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
@@ -21,7 +20,6 @@ import { slackWorkspace } from "@/lib/views/slack/workspace";
  * calls the same action as the console's server action; the MCP caller stands in for the session.
  */
 export interface MonitoringDeps {
-  enabled(subject: { projectId: string; organizationId: string; actor: string }): Promise<boolean>;
   db(): ReturnType<typeof getDb>;
   previewScorer(...args: Parameters<typeof previewScorer>): ReturnType<typeof previewScorer>;
   countLastWeek(...args: Parameters<typeof countLastWeek>): ReturnType<typeof countLastWeek>;
@@ -44,7 +42,6 @@ export interface MonitoringDeps {
 }
 
 export const defaultMonitoringDeps: MonitoringDeps = {
-  enabled: (subject) => featureEnabled("customMonitoring", subject),
   db: () => getDb(),
   previewScorer: (...args) => previewScorer(...args),
   countLastWeek: (...args) => countLastWeek(...args),
@@ -66,37 +63,25 @@ export const defaultMonitoringDeps: MonitoringDeps = {
   now: () => new Date(),
 };
 
-/** Who acts, once the flag let them in. */
+/** Who acts. */
 export interface MonitoringCaller {
   projectId: string;
   organizationId: string;
   actor: string;
 }
 
-/** Refuses with `forbidden` while `customMonitoring` is off for the caller. */
-export async function requireMonitoring(
-  deps: Pick<MonitoringDeps, "enabled">,
-  ctx: OperationContext,
-): Promise<MonitoringCaller> {
-  const caller = {
+export function monitoringCaller(ctx: OperationContext): MonitoringCaller {
+  return {
     projectId: ctx.projectId,
     organizationId: ctx.organizationId ?? "",
     actor: mcpActor(ctx.auth, ctx.projectId),
   };
-  if (!(await deps.enabled(caller)))
-    throw new McpOperationError(
-      "forbidden",
-      "Custom monitoring (scorers, dashboards and alerts) is off for this project. get_flag_status shows customMonitoring.",
-      { reason: "custom_monitoring_off" },
-    );
-  return caller;
 }
 
-/** The access checks of the actions, answered for a caller that `requireMonitoring` let in. */
+/** The access checks of the actions, answered for an MCP caller. */
 export function callerAccess(ctx: OperationContext, caller: MonitoringCaller) {
   return {
     ...mcpSessionDeps(ctx, caller.actor),
-    enabled: async () => true,
     // A support session is a browser's.
     isRestricted: async () => false,
   };
@@ -120,8 +105,7 @@ export function callerRole(ctx: OperationContext): string | null {
 }
 
 const NOT_FOUND = /(does not exist|no longer exists)\.$/;
-const FORBIDDEN =
-  /^(You cannot|Sign in to|Only (?:an )?organization admin|A support session)| are off for this project\.$/;
+const FORBIDDEN = /^(You cannot|Sign in to|Only (?:an )?organization admin|A support session)/;
 const CONFLICT =
   /^A (project|dashboard) can have \d+ (alerts|destinations|dashboards|scorers|widgets)\.$|^A scorer (covers up to|keeps its)|Confirm the change first\.$|is already a destination\.$|cannot store secrets/;
 

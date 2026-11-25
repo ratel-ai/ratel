@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { projectSettingsRoot } from "@/lib/console/settings/tabs";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { getSessionContext } from "@/lib/platform/session";
@@ -37,14 +36,12 @@ import * as store from "@/lib/views/alerts/store";
 import { ALERT_WINDOWS, type AlertWindow } from "@/lib/views/alerts/types";
 import { channelAccess } from "@/lib/views/slack/channels";
 import { slackWorkspace } from "@/lib/views/slack/workspace";
-import { metricFeatures } from "../dashboards/context";
 
 const logger = getLogger("alerts/actions");
 
 const access: AlertAccessDeps = {
   getSession: getSessionContext,
   findProjectScope: (projectId) => findProjectScope(projectId),
-  enabled: (subject) => featureEnabled("customMonitoring", subject),
   isRestricted: isRestrictedBySupportSession,
 };
 
@@ -53,7 +50,6 @@ export async function changeAlertAction(input: AlertActionInput): Promise<AlertA
   return guarded("alert_change", "Could not save the alert. Try again.", () =>
     changeAlert(input, {
       ...access,
-      features: metricFeatures,
       store,
       observe: async (fields) => {
         logger.info(fields, "alert_changed");
@@ -110,14 +106,7 @@ export async function previewAlertAction(
   return guarded("alert_preview", "The numbers could not be read.", async () => {
     const scope = await findProjectScope(projectId);
     if (!scope) return { ok: false, error: "You cannot read this project." };
-    const subject = {
-      projectId: scope.project.id,
-      organizationId: scope.organization.id,
-      actor: scope.user.externalId,
-    };
-    if (!(await featureEnabled("customMonitoring", subject)))
-      return { ok: false, error: "Alerts are off for this project." };
-    const parsed = parseAlertQuery(rawQuery, await metricFeatures(subject));
+    const parsed = parseAlertQuery(rawQuery);
     if (!parsed.ok) return parsed;
     if (!ALERT_WINDOWS.includes(windowMinutes))
       return { ok: false, error: "The alert settings are invalid." };

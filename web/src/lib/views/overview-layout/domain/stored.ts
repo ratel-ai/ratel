@@ -90,19 +90,14 @@ export function layoutChangeSchema(offered: OfferedWidgets): z.ZodType<OverviewL
 /**
  * The arrangement in a stored value, for the widgets that are offered now. One that is not in it
  * is added at the end and visible. One that is in it but not offered is kept. A value that does
- * not parse, or that names a widget twice, reads as the default. The dashboard widgets are kept
- * like one that is not offered, unless `dashboardItems`: they are never added here.
+ * not parse, or that names a widget twice, reads as the default. A dashboard widget is never added here.
  */
-export function readArrangement(
-  stored: unknown,
-  offered: OfferedWidgets,
-  dashboardItems = false,
-): OverviewArrangement {
+export function readArrangement(stored: unknown, offered: OfferedWidgets): OverviewArrangement {
   const entries = storedWidgets(stored);
   if (!entries) return { layout: defaultLayout(offered), kept: [] };
   const named = new Set(entries.map(({ id }) => id));
   const ids = new Set<string>(offered.map(({ id }) => id));
-  const isKnown = (id: string) => ids.has(id) || (dashboardItems && isDashboardItem(id));
+  const isKnown = (id: string) => ids.has(id) || isDashboardItem(id);
   const known = entries
     .filter(({ id }) => isKnown(id))
     .map(

@@ -3,7 +3,6 @@ import { z } from "zod";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { hasNoNul, NUL_PROBLEM } from "@/lib/contracts/json-text";
 import type { SessionUser } from "@/lib/contracts/session";
-import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 import { importDashboard } from "@/lib/views/dashboards/document";
 import { defaultsSchema, filtersProblem, filtersRefusal } from "@/lib/views/dashboards/filters";
 import {
@@ -70,13 +69,6 @@ export interface DashboardActionDeps {
     projectId: string,
     userId: string,
   ): Promise<{ project: { id: string }; organization: { id: string } } | null>;
-  enabled(subject: { organizationId: string }): Promise<boolean>;
-  /** The switches that decide which metrics a widget may use. */
-  features(subject: {
-    projectId: string;
-    organizationId: string;
-    actor: string;
-  }): Promise<MetricFeatures>;
   /** The project's scorers, for an import to find by name. */
   scorers(projectId: string): Promise<readonly ScorerOption[]>;
   /** An admin support session may look but not change. */
@@ -102,7 +94,7 @@ const layoutsSchema = z.record(z.string(), gridPositionSchema);
 const INVALID = "The dashboard change is invalid.";
 const MISSING = "This dashboard no longer exists.";
 
-/** One change to a project's dashboards: membership and the flag first, then the widget's rules. */
+/** One change to a project's dashboards: membership first, then the widget's rules. */
 export async function changeDashboard(
   raw: unknown,
   deps: DashboardActionDeps,
@@ -114,8 +106,6 @@ export async function changeDashboard(
   if (!session) return { ok: false, error: "Sign in to change dashboards." };
   const scope = await deps.findProjectScope(projectId, session.user.id);
   if (!scope) return { ok: false, error: "You cannot change this project's dashboards." };
-  if (!(await deps.enabled({ organizationId: scope.organization.id })))
-    return { ok: false, error: "Dashboards are off for this project." };
   if (await deps.isRestricted())
     return { ok: false, error: "A support session cannot change dashboards." };
 
@@ -123,18 +113,7 @@ export async function changeDashboard(
   const actor = user.externalId;
   const editor = { updatedBy: actor, updatedByName: user.name || user.username || user.email };
   try {
-    const { id: dashboardId, missingScorers } = await apply(
-      input,
-      scope.project.id,
-      editor,
-      deps,
-      () =>
-        deps.features({
-          projectId: scope.project.id,
-          organizationId: scope.organization.id,
-          actor,
-        }),
-    );
+    const { id: dashboardId, missingScorers } = await apply(input, scope.project.id, editor, deps);
     await deps.observe({
       project_id: scope.project.id,
       organization_id: scope.organization.id,
@@ -155,7 +134,6 @@ async function apply(
   projectId: string,
   editor: DashboardEditor,
   { store, scorers }: DashboardActionDeps,
-  features: () => Promise<MetricFeatures>,
 ): Promise<{ id: string; missingScorers?: string[] }> {
   switch (input.action) {
     case "create":
@@ -167,10 +145,7 @@ async function apply(
       return store.createDashboard({ projectId, name, widgets, ...editor });
     }
     case "import": {
-      const read = importDashboard(input.document, {
-        scorers: await scorers(projectId),
-        features: await features(),
-      });
+      const read = importDashboard(input.document, await scorers(projectId));
       if (!read.ok) throw new Refusal(read.error);
       await checkRoom(projectId, store);
       const { widgets, missingScorers, ...rest } = read.dashboard;
@@ -208,7 +183,7 @@ async function apply(
     case "save-layout":
     case "remove-widget": {
       const id = dashboardIdOf(input);
-      const change = await widgetChange(input, features);
+      const change = widgetChange(input);
       const outcome = await store.changeWidgets({ projectId, id, change, ...editor });
       if (outcome === "missing") throw new Refusal(MISSING);
       return { id };
@@ -219,12 +194,11 @@ async function apply(
 }
 
 /** The next widget list. */
-async function widgetChange(
+function widgetChange(
   input: Record<string, unknown>,
-  features: () => Promise<MetricFeatures>,
-): Promise<(widgets: DashboardWidget[], filters: DashboardFilters) => DashboardWidget[]> {
+): (widgets: DashboardWidget[], filters: DashboardFilters) => DashboardWidget[] {
   if (input.action === "add-widget") {
-    const widget = checkedWidget(input.widget, await features());
+    const widget = checkedWidget(input.widget);
     const missing = text(input.missingScorer).slice(0, 200);
     if (!hasNoNul(missing)) throw new Refusal(NUL_PROBLEM);
     const back = gridPositionSchema.safeParse(input.layout);
@@ -253,7 +227,7 @@ async function widgetChange(
     return index;
   };
   if (input.action === "edit-widget") {
-    const widget = checkedWidget(input.widget, await features());
+    const widget = checkedWidget(input.widget);
     return (widgets, filters) => {
       checkFilters([widget], filters);
       const index = indexIn(widgets);
@@ -263,8 +237,8 @@ async function widgetChange(
   return (widgets) => compacted(widgets.toSpliced(indexIn(widgets), 1));
 }
 
-function checkedWidget(raw: unknown, features: MetricFeatures): WidgetInput {
-  const parsed = parseWidget(raw, features);
+function checkedWidget(raw: unknown): WidgetInput {
+  const parsed = parseWidget(raw);
   if (!parsed.ok) throw new Refusal(parsed.error);
   return parsed.widget;
 }

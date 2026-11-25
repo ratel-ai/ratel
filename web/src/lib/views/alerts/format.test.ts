@@ -39,7 +39,7 @@ test("a widget's query survives the link to the form", () => {
   // An alert has no grouping and no bucket.
   const href = newAlertHref("p", { ...query, dimensions: ["model"], bucket: "day" });
   const value = new URL(href, "https://ratel.test").searchParams.get(NEW_ALERT_PARAM);
-  const parsed = parseAlertQuery(alertQueryOf(value ?? ""), { customMonitoring: true });
+  const parsed = parseAlertQuery(alertQueryOf(value ?? ""));
   assert.deepEqual(parsed, { ok: true, query });
 });
 

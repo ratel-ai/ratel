@@ -42,8 +42,7 @@ export function WidgetEditor({
   initial: WidgetInput | null;
   /** What a new one starts from, instead of the default. */
   start: WidgetInput | null;
-  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   facets: TraceFilterBarFacets;
   range: DashboardRange;
   /** The dashboard's: the preview shows what the widget will. */
@@ -87,7 +86,7 @@ function EditorForm({
 }: {
   projectId: string;
   initial: WidgetInput;
-  scorers: readonly ScorerOption[] | null;
+  scorers: readonly ScorerOption[];
   submitLabel: string;
   facets: TraceFilterBarFacets;
   range: DashboardRange;

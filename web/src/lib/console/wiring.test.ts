@@ -29,10 +29,6 @@ function registrations(dir = join(APP_ROOT, "lib")): string[] {
   });
 }
 
-test("the Tasks page's freshness waits on the task scores, a job this edition runs", () => {
-  assert.ok(sectionJobKinds("tasks").includes("score_tasks"));
-});
-
 test("the sidebar renders the analysis freshness line inside a project", () => {
   assert.match(source("components/console/shell/Sidebar.tsx"), /<AnalysisFreshness\b/);
 });
@@ -173,17 +169,6 @@ test("the shell decides focusedConsole per organization and the rail reads it", 
   assert.match(
     source("components/console/shell/AppFrame.tsx"),
     /focusedConsoleOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*focusedConsole,/,
-  );
-});
-
-test("the shell decides customMonitoring per organization and the rail reads them", () => {
-  assert.match(
-    source("components/console/shell/ConsoleShell.tsx"),
-    /customMonitoringOrganizationIds\(organizations\)/,
-  );
-  assert.match(
-    source("components/console/shell/AppFrame.tsx"),
-    /customMonitoringOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*customMonitoring,/,
   );
 });
 

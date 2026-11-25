@@ -1,7 +1,6 @@
 # Slack
 
-An organization's Slack app and its one connected workspace, for the alerts (`../alerts`). Behind the
-`customMonitoring` flag. Core-owned.
+An organization's Slack app and its one connected workspace, for the alerts (`../alerts`). Core-owned.
 
 | Table | Holds |
 |---|---|

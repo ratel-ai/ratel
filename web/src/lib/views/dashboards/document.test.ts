@@ -28,7 +28,6 @@ const DOCUMENT = {
   range: null,
   widgets: [WIDGET],
 };
-const CONTEXT = { scorers: [], features: { customMonitoring: true } };
 
 test("a document is refused by what it is, then by the widget that is wrong", () => {
   const widgets = (change: object) => ({
@@ -57,7 +56,7 @@ test("a document is refused by what it is, then by the widget that is wrong", ()
     [{ ...DOCUMENT, widgets: [null] }, /^Widget 1: /],
   ];
   for (const [raw, error] of refused) {
-    const read = importDashboard(raw, CONTEXT);
+    const read = importDashboard(raw, []);
     assert.ok(!read.ok, JSON.stringify(raw));
     assert.match(read.error, error);
   }
@@ -66,7 +65,7 @@ test("a document is refused by what it is, then by the widget that is wrong", ()
 test("what an agent leaves out has its default, and overlaps are put apart", () => {
   const { filters: _, range: __, ...short } = DOCUMENT;
   const { dimensions: ___, filters: ____, ...query } = WIDGET.query;
-  const read = importDashboard({ ...short, widgets: [{ ...WIDGET, query }, WIDGET] }, CONTEXT);
+  const read = importDashboard({ ...short, widgets: [{ ...WIDGET, query }, WIDGET] }, []);
   assert.ok(read.ok);
   assert.deepEqual([read.dashboard.filters, read.dashboard.range], [{}, null]);
   assert.deepEqual(read.dashboard.widgets[0].query, WIDGET.query);
@@ -84,7 +83,7 @@ test("an export that is imported again has the same layout", () => {
     { x: 0, y: 6, w: 12, h: 24 },
   ];
   const widgets = layouts.map((layout) => ({ ...WIDGET, layout }));
-  const read = importDashboard({ ...DOCUMENT, widgets }, CONTEXT);
+  const read = importDashboard({ ...DOCUMENT, widgets }, []);
   assert.ok(read.ok);
   const exported = exportDashboard(
     {
@@ -97,7 +96,7 @@ test("an export that is imported again has the same layout", () => {
     exported.widgets.map(({ layout }) => layout),
     layouts,
   );
-  const again = importDashboard(JSON.parse(JSON.stringify(exported)), CONTEXT);
+  const again = importDashboard(JSON.parse(JSON.stringify(exported)), []);
   assert.deepEqual(again, read);
 });
 
@@ -135,11 +134,11 @@ test("F445-7: hostile JSON is refused, never thrown on", () => {
   ];
   for (const [index, place] of places.entries())
     for (const value of hostile) {
-      const read = importDashboard(place(value), CONTEXT);
+      const read = importDashboard(place(value), []);
       assert.ok(!read.ok, `place ${index}`);
       assert.ok(read.error.length < 400, read.error.slice(0, 400));
     }
-  const read = importDashboard({ ...DOCUMENT, type: hostile[0] }, CONTEXT);
+  const read = importDashboard({ ...DOCUMENT, type: hostile[0] }, []);
   assert.ok(!read.ok && /its type is "an object"/.test(read.error));
 
   const nul = "a\u0000b";
@@ -165,7 +164,7 @@ test("F445-7: hostile JSON is refused, never thrown on", () => {
       ],
     },
   ]) {
-    const refused = importDashboard(place, CONTEXT);
+    const refused = importDashboard(place, []);
     assert.ok(!refused.ok && /NUL character/.test(refused.error), JSON.stringify(refused));
   }
 });
@@ -180,7 +179,7 @@ test("a missing scorer is named once, does not stop the import and reads no numb
   };
   const read = importDashboard(
     { ...DOCUMENT, widgets: [scored, { ...scored, layout: { ...WIDGET.layout, x: 6 } }, WIDGET] },
-    { ...CONTEXT, scorers: [{ id: "1", name: "Depth", verdict: true }] },
+    [{ id: "1", name: "Depth", verdict: true }],
   );
   assert.ok(read.ok);
   assert.deepEqual(read.dashboard.missingScorers, ["Depth"]);
@@ -190,7 +189,7 @@ test("a missing scorer is named once, does not stop the import and reads no numb
     "p",
     read.dashboard.widgets,
     { since: new Date(0), until: new Date(1) },
-    CONTEXT.features,
+
     async () => {
       reads += 1;
       return null;
@@ -266,7 +265,7 @@ test("each other kind is exported as it is imported, and drawn as itself only", 
     chart: query.kind,
     layout: { x: 0, y: index * 6, w: 6, h: 6 },
   }));
-  const read = importDashboard({ ...DOCUMENT, widgets }, CONTEXT);
+  const read = importDashboard({ ...DOCUMENT, widgets }, []);
   assert.ok(read.ok, JSON.stringify(read));
   const dashboard = {
     ...read.dashboard,
@@ -274,13 +273,10 @@ test("each other kind is exported as it is imported, and drawn as itself only", 
   };
   assert.deepEqual(exportDashboard(dashboard, []).widgets, widgets);
   for (const [index, widget] of widgets.entries()) {
-    const wrong = importDashboard(
-      { ...DOCUMENT, widgets: [{ ...widget, chart: "line" }] },
-      CONTEXT,
-    );
+    const wrong = importDashboard({ ...DOCUMENT, widgets: [{ ...widget, chart: "line" }] }, []);
     assert.ok(!wrong.ok && wrong.error.includes("is drawn as a"), queries[index].kind);
   }
-  const metric = importDashboard({ ...DOCUMENT, widgets: [{ ...WIDGET, chart: "flow" }] }, CONTEXT);
+  const metric = importDashboard({ ...DOCUMENT, widgets: [{ ...WIDGET, chart: "flow" }] }, []);
   assert.ok(!metric.ok && /metric cannot be drawn as a flow/.test(metric.error));
 });
 
@@ -306,7 +302,7 @@ test("a funnel's scorer is its name in a document, and one the project lacks is 
     [scorers, undefined],
     [[], "Polite"],
   ] as const) {
-    const read = importDashboard(document, { ...CONTEXT, scorers: known });
+    const read = importDashboard(document, known);
     assert.ok(read.ok, JSON.stringify(read));
     const [imported] = read.dashboard.widgets;
     assert.equal(imported.missingScorer, missing);
@@ -319,7 +315,7 @@ test("a funnel's scorer is its name in a document, and one the project lacks is 
   const byId = { ...polite, condition: { ...polite.condition, scorer: { id } } };
   const refused = importDashboard(
     { ...document, widgets: [{ ...widget, query: { ...widget.query, steps: [clean, byId] } }] },
-    CONTEXT,
+    [],
   );
   assert.ok(!refused.ok && /given by its name/.test(refused.error));
 });
@@ -333,7 +329,7 @@ test("a map's scorer is its name in a document", () => {
     chart: "geography",
     layout: WIDGET.layout,
   };
-  const read = importDashboard({ ...DOCUMENT, widgets: [widget] }, { ...CONTEXT, scorers });
+  const read = importDashboard({ ...DOCUMENT, widgets: [widget] }, scorers);
   assert.ok(read.ok, JSON.stringify(read));
   const [imported] = read.dashboard.widgets;
   assert.equal(imported.missingScorer, undefined);

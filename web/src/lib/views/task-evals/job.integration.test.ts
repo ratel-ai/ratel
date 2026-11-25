@@ -7,17 +7,19 @@ import { jobs } from "@/lib/jobs/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { enqueueTaskEvalRefreshJob, refreshTaskEvalSetJob } from "@/lib/views/task-evals/job";
+import {
+  enqueueDueTaskEvalSets,
+  enqueueTaskEvalRefreshJob,
+  refreshTaskEvalSetJob,
+} from "@/lib/views/task-evals/job";
 import type { OrganizationFlagDeps } from "@/lib/views/task-evals/store";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
-import { scoreTasksJob } from "@/lib/views/task-scorers/job";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-01T12:00:00Z");
 // Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
 const FLAGS_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
-const observability = { trackSystemEvent: async () => undefined };
 
 test("refresh jobs and enqueue requests write nothing when the eval gate is off", async () => {
   const { client, db } = await setup();
@@ -37,7 +39,7 @@ test("refresh jobs and enqueue requests write nothing when the eval gate is off"
   }
 });
 
-test("scoring queues a weekly refresh and explicit requests bypass the weekly limit", async () => {
+test("a due set queues a weekly refresh and explicit requests bypass the weekly limit", async () => {
   const { client, db } = await setup();
   try {
     const events: Record<string, unknown>[] = [];
@@ -55,11 +57,11 @@ test("scoring queues a weekly refresh and explicit requests bypass the weekly li
         },
       },
     };
-    await scoreTasksJob(PROJECT, { ...deps, observability });
+    await enqueueDueTaskEvalSets(PROJECT, deps);
     const [queued] = await db.select().from(jobs).where(eq(jobs.kind, "refresh_task_eval_set"));
     assert.ok(queued);
     assert.deepEqual(queued.payload, { taskId: "task-a", scheduled: true });
-    await scoreTasksJob(PROJECT, { ...deps, observability });
+    await enqueueDueTaskEvalSets(PROJECT, deps);
     assert.equal((await db.select().from(jobs)).length, 1, "pending refreshes coalesce");
     const first = await refreshTaskEvalSetJob(PROJECT, queued.payload, deps);
     assert.equal(first.refreshed, true);
@@ -69,7 +71,7 @@ test("scoring queues a weekly refresh and explicit requests bypass the weekly li
       reason: "recent",
     });
     await db.update(jobs).set({ status: "done" }).where(eq(jobs.id, queued.id));
-    await scoreTasksJob(PROJECT, { ...deps, observability });
+    await enqueueDueTaskEvalSets(PROJECT, deps);
     assert.equal((await db.select().from(jobs)).length, 1, "weekly refresh is not due");
     const manual = await enqueueTaskEvalRefreshJob(PROJECT, "task-a", deps);
     assert.ok(manual);

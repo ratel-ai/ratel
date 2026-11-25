@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { resolveConfig } from "@/config";
 import { jobs } from "@/lib/jobs/schema";
@@ -23,7 +23,8 @@ import {
   taskSimulationListFor,
 } from "@/lib/views/task-evals/simulation-page";
 import type { OrganizationFlagDeps } from "@/lib/views/task-evals/store";
-import { upsertScorer } from "@/lib/views/task-scorers/store";
+
+import type { Scorer } from "@/lib/views/task-scorers/types";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -136,6 +137,10 @@ test("task simulations report each scorer before and after for task cases and fi
   try {
     await seedCases(db, fix.id);
     const queued = await runTaskSimulation(fix.id, { projectId: PROJECT, deps });
+    await freeze(db, [
+      { kind: "expected_tool", tool: "lookup_order" },
+      { kind: "max_tool_calls", max: 2 },
+    ]);
     for (const run of queued.runs) {
       const result = await simulateTaskEvalJob(PROJECT, { runId: run.id }, deps);
       assert.equal(result.simulated, true);
@@ -280,29 +285,12 @@ test("concurrent task rows reserve one shared organization budget and settle act
   }
 });
 
-test("queued task simulations keep the frozen judge criteria after an edit", async () => {
+test("queued task simulations keep the judge criteria they were queued with", async () => {
   const { client, db, deps, fix } = await setup();
   try {
     await seedCases(db, fix.id);
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "judge_criteria", criteria: "Frozen task criteria." },
-        updatedBy: "test",
-      },
-      db,
-    );
     const queued = await runTaskSimulation(fix.id, { projectId: PROJECT, deps });
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "judge_criteria", criteria: "Edited task criteria." },
-        updatedBy: "test",
-      },
-      db,
-    );
+    await freeze(db, [{ kind: "judge_criteria", criteria: "Frozen task criteria." }]);
     const run = queued.runs.find((row) => row.taskId === "task-a")!;
     let calls = 0;
     await simulateTaskEvalJob(
@@ -343,6 +331,13 @@ test("queued task simulations keep the frozen judge criteria after an edit", asy
     await client.close();
   }
 });
+
+/** The scorers of the queued runs, as a run from before the old task scoring was removed holds them. */
+async function freeze(db: ReturnType<typeof getDb>, scorers: Scorer[]) {
+  await db.update(taskEvalRuns).set({
+    change: sql`jsonb_set(coalesce(${taskEvalRuns.change}, '{}'), '{scorers}', ${JSON.stringify(scorers)}::jsonb)`,
+  });
+}
 
 async function seedCases(db: ReturnType<typeof getDb>, fixId: string) {
   for (const taskId of ["task-a", "task-b"]) {
@@ -389,19 +384,6 @@ async function seedCases(db: ReturnType<typeof getDb>, fixId: string) {
         outcome: "ok",
       },
     ]);
-    await upsertScorer(
-      {
-        projectId: PROJECT,
-        taskId,
-        scorer: { kind: "expected_tool", tool: "lookup_order" },
-        updatedBy: "test",
-      },
-      db,
-    );
-    await upsertScorer(
-      { projectId: PROJECT, taskId, scorer: { kind: "max_tool_calls", max: 2 }, updatedBy: "test" },
-      db,
-    );
     await db.insert(taskEvalCases).values([
       { projectId: PROJECT, taskId, turnId: turn!.id, origin: "auto" },
       {

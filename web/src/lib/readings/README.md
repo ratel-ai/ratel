@@ -37,8 +37,8 @@ graph's compaction; the graph never imports the engine.
 exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 `enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id) and
 `enqueueFixDrafts` (filled by `views/fix-drafts/register.ts`: drafts for the new rewrite fixes,
-behind the `evalGate` flag and a model key) and `enqueueTaskScores` (filled by
-`views/task-scorers/register.ts`: the project's live task scores, behind the `evalGate` flag).
+behind the `evalGate` flag and a model key) and `enqueueTaskEvalSets` (filled by
+`views/task-evals/register.ts`: the project's due eval sets, behind the `evalGate` flag).
 An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
 `anthropic/client.ts` (a copy) is the one place the platform gets a Claude client:
 `anthropicClient` and `anthropicConfigured`. With `ANTHROPIC_BACKEND` unset, `ANTHROPIC_API_KEY`

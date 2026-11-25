@@ -117,11 +117,7 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    * Where each span comes from: marks the spans with country and region codes, before any row is
    * built, and says whether one carried an IP address. Absent, no span is located.
    */
-  locate?: (
-    projectId: string,
-    organization: PersistSpansContext["organization"],
-    spans: readonly DecodedSpan[],
-  ) => Promise<{ addressed: boolean }>;
+  locate?: (projectId: string, spans: readonly DecodedSpan[]) => Promise<{ addressed: boolean }>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -224,7 +220,7 @@ async function storeDecodedSpans(
   // Fail open for the batch, and closed for the address.
   let addressed = false;
   try {
-    addressed = (await deps.locate?.(projectId, organization, spans))?.addressed ?? false;
+    addressed = (await deps.locate?.(projectId, spans))?.addressed ?? false;
   } catch (err) {
     addressed = true;
     logError("span location failed", err, { project_id: projectId });

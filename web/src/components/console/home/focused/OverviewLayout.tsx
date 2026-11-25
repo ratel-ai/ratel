@@ -42,8 +42,8 @@ export interface LayoutActions {
   undo: (base: string) => Promise<Saved>;
   restore: (entryId: number, base: string) => Promise<Saved>;
   history: () => Promise<LayoutHistory>;
-  /** What the dashboards offer; null while they are off. */
-  dashboardWidgets: (() => Promise<DashboardWidgetsRead>) | null;
+  /** What the dashboards offer. */
+  dashboardWidgets: () => Promise<DashboardWidgetsRead>;
 }
 
 interface LayoutState {
@@ -69,8 +69,8 @@ interface LayoutState {
   restore: (entryId: number) => Promise<Saved>;
   /** After the changes that wait. */
   readHistory: () => Promise<LayoutHistory>;
-  /** Null where the Overview takes no dashboard widget. */
-  readDashboardWidgets: LayoutActions["dashboardWidgets"];
+  /** Null where nobody may change the layout. */
+  readDashboardWidgets: LayoutActions["dashboardWidgets"] | null;
   /** The History dialog. */
   browsing: boolean;
   setBrowsing: (browsing: boolean) => void;

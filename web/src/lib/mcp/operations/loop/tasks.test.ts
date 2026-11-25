@@ -13,7 +13,6 @@ import type { TaskEvalCaseRow } from "@/lib/views/task-evals/schema";
 import { changeTaskSimulation } from "@/lib/views/task-evals/simulation-actions";
 import type { TaskSimulationDetail } from "@/lib/views/task-evals/simulation-page";
 import type { TestProposal } from "@/lib/views/task-evals/test-proposal";
-import { changeTaskScorer } from "@/lib/views/task-scorers/actions";
 import {
   defaultTaskDeps,
   loopTaskReadOperations,
@@ -175,8 +174,6 @@ function deps(events: Tracked[], over: Partial<TaskOperationDeps> = {}): TaskOpe
     ],
     taskSimulationDetailFor: async () => detail(),
     taskEvalCases: async () => [],
-    saveScorer: unexpected,
-    resetScorer: unexpected,
     enqueueTaskEvalRefresh: unexpected,
     draftTestFromRun: unexpected,
     loadFixContext: async (projectId, fixId) => (fixId === FIX ? { projectId, fix } : null),
@@ -215,7 +212,6 @@ function error(result: Awaited<ReturnType<typeof run>>) {
 }
 
 const WRITES: [string, Record<string, unknown>][] = [
-  ["change_task_scorer", { taskId: TASK, kind: "ends_well", enabled: true }],
   ["change_task_eval_set", { taskId: TASK, action: "refresh" }],
   ["draft_task_test", { taskId: TASK, runId: RUN }],
   [
@@ -231,7 +227,6 @@ test("every task tool refuses with eval_gate_off and calls nothing", async () =>
     throw new Error("must not run");
   };
   const quiet: Partial<TaskOperationDeps> = {
-    changeTaskScorer: spy("scorer"),
     changeTaskEval: spy("eval"),
     draftTaskTest: spy("draft"),
     changeTaskSimulation: spy("simulation"),
@@ -311,66 +306,6 @@ test("list_task_simulations with fixId returns one simulation's detail, capped, 
   assert.equal(
     error(await run("list_task_simulations", { taskId: TASK, fixId: "craft:other" })).error,
     "not_found",
-  );
-});
-
-test("change_task_scorer saves through the console's action as the caller, and emits task_scorer_updated", async () => {
-  const events: Tracked[] = [];
-  const saved: unknown[] = [];
-  const out = data<{ kind: string; enabled: boolean }>(
-    await run(
-      "change_task_scorer",
-      { taskId: TASK, kind: "max_tool_calls", max: 3, enabled: true },
-      events,
-      {
-        saveScorer: async (input) => saved.push(input) as never,
-      },
-    ),
-  );
-  assert.deepEqual(saved, [
-    {
-      projectId: PROJECT,
-      taskId: TASK,
-      scorer: { kind: "max_tool_calls", max: 3 },
-      enabled: true,
-      source: "user",
-      updatedBy: ACTOR,
-    },
-  ]);
-  assert.equal(out.enabled, true);
-  assert.equal(events[0]!.name, "task_scorer_updated");
-  assert.equal(events[0]!.properties.surface, "mcp");
-  assert.equal(events[0]!.properties.kind, "max_tool_calls");
-  assert.equal(events[0]!.properties.organization_id, "org-1");
-});
-
-test("change_task_scorer resets, and refuses a scorer without its setting or a save without enabled", async () => {
-  const reset: unknown[] = [];
-  data(
-    await run("change_task_scorer", { taskId: TASK, kind: "judge_criteria", action: "reset" }, [], {
-      resetScorer: async (...args) => reset.push(args) as never,
-    }),
-  );
-  assert.deepEqual(reset, [[PROJECT, TASK, "judge_criteria"]]);
-  const noMax = error(
-    await run("change_task_scorer", { taskId: TASK, kind: "max_cost_usd", enabled: true }),
-  );
-  assert.equal(noMax.error, "invalid_params");
-  assert.match(noMax.message, /Pass max/);
-  assert.equal(
-    error(
-      await run("change_task_scorer", {
-        taskId: TASK,
-        kind: "max_tool_calls",
-        max: 2.5,
-        enabled: true,
-      }),
-    ).error,
-    "invalid_params",
-  );
-  assert.equal(
-    error(await run("change_task_scorer", { taskId: TASK, kind: "ends_well" })).error,
-    "invalid_params",
   );
 });
 
@@ -697,23 +632,4 @@ test("change_task_simulation input passes the console's own checks, which then r
     ),
   );
   assert.equal(noEffect.error, "invalid_params");
-});
-
-test("change_task_scorer runs the real action end to end with the console's parse", async () => {
-  const saved: unknown[] = [];
-  data(
-    await run(
-      "change_task_scorer",
-      { taskId: TASK, kind: "expected_tool", tool: " hold_fare ", enabled: false },
-      [],
-      {
-        changeTaskScorer,
-        saveScorer: async (input) => saved.push(input) as never,
-      },
-    ),
-  );
-  assert.deepEqual((saved[0] as { scorer: unknown }).scorer, {
-    kind: "expected_tool",
-    tool: "hold_fare",
-  });
 });

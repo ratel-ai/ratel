@@ -30,8 +30,7 @@ import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { type TaskEvalRunRow, taskEvalRuns, taskEvalSets } from "@/lib/views/task-evals/schema";
 import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
 import { taskEvalViewFor } from "@/lib/views/task-evals/store";
-import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
-import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
+import { scorersFor } from "@/lib/views/task-scorers/store";
 import type { TaskDetailModel, TaskListModel, TaskRow } from "@/lib/views/tasks/model";
 
 /**
@@ -377,7 +376,6 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
     listEvalBadges: async () => ({}),
     latestFixDraft: async () => null,
     scorersFor: async () => [{ kind: "ends_well", enabled: true, source: "default", version: 1 }],
-    dailyScoresFor: async () => [],
     taskEvalViewFor: async () => ({
       rows: [],
       targetRuns: 20,
@@ -1132,13 +1130,12 @@ test("list_tasks returns project tasks with a bounded page and task links", asyn
   assert.equal((result as DispatchSuccess).truncated, true);
 });
 
-test("get_task returns its scorers, score series and eval set within the project", async () => {
+test("get_task returns its scorers and eval set within the project", async () => {
   const reads: [string, string][] = [];
   const out = data<{
     task: {
       id: string;
       scorers: { kind: string }[];
-      scoreSeries: unknown[];
       evalSet: { targetRuns: number };
     };
   }>(
@@ -1152,7 +1149,6 @@ test("get_task returns its scorers, score series and eval set within the project
   assert.equal(out.task.id, task.id);
   assert.deepEqual(reads, [[PROJECT, task.id]]);
   assert.equal(out.task.scorers[0]!.kind, "max_tool_calls");
-  assert.deepEqual(out.task.scoreSeries, []);
   assert.equal(out.task.evalSet.targetRuns, 20);
   assert.equal(
     ((await run("get_task", { taskId: "foreign-task" })) as { error: string }).error,
@@ -1164,16 +1160,14 @@ test("get_task does not read scorers or evals when the eval gate is off", async 
   const unavailable = async (): Promise<never> => {
     throw new Error("The read must not run.");
   };
-  const out = data<{ task: { scorers: unknown[]; scoreSeries: unknown[]; evalSet: null } }>(
+  const out = data<{ task: { scorers: unknown[]; evalSet: null } }>(
     await run("get_task", { taskId: task.id }, [], {
       evalGateEnabled: async () => false,
       scorersFor: unavailable,
-      dailyScoresFor: unavailable,
       taskEvalViewFor: unavailable,
     }),
   );
   assert.deepEqual(out.task.scorers, []);
-  assert.deepEqual(out.task.scoreSeries, []);
   assert.equal(out.task.evalSet, null);
 });
 
@@ -1409,19 +1403,9 @@ test("MCP task reads, simulations and shipments use the existing stores without 
         refreshedAt: new Date("2026-11-01T00:00:00Z"),
       })),
     );
-    await db.insert(taskScoresDaily).values({
-      projectId: PROJECT,
-      taskId: task.id,
-      day: "2026-11-01",
-      scorerKind: "overall",
-      scorerVersion: 1,
-      n: 20,
-      passed: 15,
-    });
     const over: Partial<LoopOperationDeps> = {
       loadProjectFixes: async () => ({ ...model, open: [boundFix] }),
       scorersFor: (projectId, taskId) => scorersFor(projectId, taskId, db),
-      dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId, db),
       taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId, db),
       taskShipmentsFor: (projectId, taskId) => taskShipmentsFor(projectId, taskId, db),
       runTaskSimulation: (fixId, options) =>
@@ -1432,13 +1416,10 @@ test("MCP task reads, simulations and shipments use the existing stores without 
     const detail = data<{
       task: {
         scorers: { kind: string }[];
-        scoreSeries: { n: number; passed: number }[];
         evalSet: { targetRuns: number };
       };
     }>(await run("get_task", { taskId: task.id }, [], over));
     assert.ok(detail.task.scorers.some((scorer) => scorer.kind === "ends_well"));
-    assert.equal(detail.task.scoreSeries[0]!.n, 20);
-    assert.equal(detail.task.scoreSeries[0]!.passed, 15);
     assert.equal(detail.task.evalSet.targetRuns, 25);
 
     const queued = data<{ eval: { tasks: { id: string; taskId: string }[] } }>(

@@ -19,7 +19,6 @@ import type { Fix } from "@/lib/views/fixes/types";
 import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { taskEvalRuns } from "@/lib/views/task-evals/schema";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
-import { dailyScoresFor } from "@/lib/views/task-scorers/store";
 
 /**
  * The task loop demo seed against a migrated PGlite. Owned (ADR-0004): upstream's
@@ -53,10 +52,6 @@ test("model-free seeding writes scores, evals, a draft, simulations and a measur
     }
     assert.equal(result.taskId, "task-a");
     assert.equal(result.fixId, top.id);
-    assert.equal(
-      new Set((await dailyScoresFor(PROJECT, "task-a", db)).map((row) => row.day)).size,
-      14,
-    );
     assert.ok((await taskEvalSetFor(PROJECT, "task-a", db)).cases.length >= 20);
     assert.equal((await latestFixDraft(PROJECT, top.id, db))?.status, "ready");
     const shipments = await taskShipmentsFor(PROJECT, "task-a", db);
