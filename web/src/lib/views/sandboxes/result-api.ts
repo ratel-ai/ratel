@@ -8,9 +8,6 @@ import { type RunDeps, stopInstanceOf } from "./runs";
 
 /** `POST /api/v1/sandbox-runs/[id]/result`: the runner of an instance posts the result of its run. */
 export type ResultApiDeps = Pick<RunDeps, "runs" | "provider" | "now"> & {
-  /** True when no project of the deployment can have the flag. */
-  offForAll: () => boolean;
-  enabled: (projectId: string) => Promise<boolean>;
   /** Runs the work after the response, so the runner gets its answer before its instance stops. */
   afterResponse: (work: () => Promise<void>) => void;
   onFinished?: (run: {
@@ -30,12 +27,10 @@ export async function handleRunResult(
   runId: string,
   deps: ResultApiDeps,
 ): Promise<Response> {
-  if (deps.offForAll()) return reply(404, "not_found", "Not found.");
   const token = bearerFromHeader(req.headers.get("authorization"));
   const owner = token ? await deps.runs.findByTokenHash(hashApiKey(token)) : null;
   if (!owner)
     return reply(401, "unauthorized", "The run token is not valid, or the run has ended.");
-  if (!(await deps.enabled(owner.projectId))) return reply(404, "not_found", "Not found.");
   // The token is for one run.
   if (owner.id !== runId) return reply(403, "forbidden", "The token is for another run.");
 

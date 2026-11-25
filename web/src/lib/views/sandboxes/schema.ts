@@ -16,7 +16,7 @@ import { projects } from "@/lib/platform/projects/schema";
 import type { SandboxManifest } from "./domain/manifest";
 import type { RunInput, RunResult } from "./domain/run";
 
-/** The tables of Ratel sandboxes (the `sandboxes` flag). */
+/** The tables of Ratel sandboxes. */
 
 /** A sandbox: the name that the pushes of a project share. */
 export const sandboxes = pgTable(

@@ -19,7 +19,6 @@ import {
   HEARTBEAT_MS,
   type ImageBuildDeps,
   NOT_CONFIGURED_REASON,
-  OFF_REASON,
   runImageBuild,
   STOPPED_REASON,
 } from "../image-build-job";
@@ -54,7 +53,6 @@ async function setup(over: { install?: string[]; stored?: Buffer } = {}) {
     builds,
     bundles,
     provider,
-    enabled: async () => true,
     now: () => new Date(),
     every: () => () => {},
   };
@@ -159,13 +157,6 @@ test("with no provider the version stays unbuilt with the reason, and no call go
   assert.match(NOT_CONFIGURED_REASON, /not configured/);
   assert.equal(calls.mock.callCount(), 0);
   mock.restoreAll();
-});
-
-test("with the flag off the version stays unbuilt", async () => {
-  const t = await setup();
-  assert.deepEqual(await t.run({ enabled: async () => false }), { status: "unbuilt" });
-  assert.equal((await t.read()).reason, OFF_REASON);
-  assert.equal(t.provider.builds.length, 0);
 });
 
 test("a build of 12 minutes is not reaped, and a build with no heartbeat is", async () => {

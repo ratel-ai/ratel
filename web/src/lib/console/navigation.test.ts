@@ -52,6 +52,8 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "intents", href: `/project/${P1}/intents` },
       { id: "improvements", href: `/project/${P1}/improvement` },
       { id: "ship", href: `/project/${P1}/ship` },
+      { id: "evals", href: `/project/${P1}/evals` },
+      { id: "sandbox", href: `/project/${P1}/sandbox` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
       { id: "settings", href: `/project/${P1}/settings` },
     ],
@@ -152,6 +154,8 @@ test("outside a project, the organization rail lists its projects page", () => {
       "intents",
       "improvements",
       "ship",
+      "evals",
+      "sandbox",
       "catalog",
       "settings",
     ],
@@ -169,7 +173,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 10);
+  assert.equal(withProject.length, 12);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -193,6 +197,8 @@ test("the OSS composition adds no destination", () => {
       "intents",
       "improvements",
       "ship",
+      "evals",
+      "sandbox",
       "catalog",
       "settings",
     ],
@@ -232,6 +238,8 @@ test("an edition's project group sits between the core pages and Settings, under
       "group:ship:ship:Ship",
       "group:apis:project-models/embeddings:APIs",
       "group:apis:project-models/tool-picker:",
+      "settings:evals:",
+      "settings:sandbox:",
       "settings:catalog:",
       "settings:settings:",
     ],
@@ -285,6 +293,8 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
       "group:insights:intents:",
       "group:improve:improvements:Improve",
       "group:ship:ship:Ship",
+      "settings:evals:",
+      "settings:sandbox:",
       "settings:catalog:",
       "settings:group-apis:",
       "settings:settings:",
@@ -331,7 +341,7 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
   const project = consoleNav({ projectId: P1, additions: [], projectGroups: cloud.projectNav });
   assert.deepEqual(
     project.filter(({ section }) => section === "settings").map(({ id }) => id),
-    ["catalog", "group-apis", "settings"],
+    ["evals", "sandbox", "catalog", "group-apis", "settings"],
   );
   const row = project.find(({ id }) => id === "group-apis");
   assert.equal(row?.icon, "apis");
@@ -387,6 +397,8 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "group:insights:intents",
       "group:improve:improvements",
       "group:ship:ship",
+      "settings:evals",
+      "settings:sandbox",
       "settings:catalog",
       "settings:settings",
       "edition:edition:/admin",
@@ -487,6 +499,8 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Quality|/project/${P1}/quality`,
       `Project|Adaptive ranking|/project/${P1}/improvement/adaptive-ranking`,
       `Project|Ship|/project/${P1}/ship`,
+      `Project|Evals|/project/${P1}/evals`,
+      `Project|Ratel sandbox|/project/${P1}/sandbox`,
       `Project|Catalog|/project/${P1}/catalogs`,
       `Project|Tools|/project/${P1}/catalogs/tools`,
       `Project|Skills|/project/${P1}/catalogs/skills`,
@@ -610,6 +624,8 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "intents:i",
       "improvements:",
       "ship:l",
+      "evals:",
+      "sandbox:",
       "catalog:c",
       "settings:s",
       "edition:/admin:",
@@ -655,6 +671,8 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
       "project-models/x|group:apis|APIs",
+      "evals|settings|",
+      "sandbox|settings|",
       "catalog|settings|",
       "settings|settings|",
     ],

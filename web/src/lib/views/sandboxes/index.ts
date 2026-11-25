@@ -7,7 +7,6 @@ import * as runs from "./runs";
 
 /** The public interface of the module: other modules import only this file. */
 export type { RunStatus, SandboxRun, ToolFixture } from "./domain/run";
-export { sandboxesEnabledForProject } from "./gate";
 export type { StartRunOptions, StartRunResult } from "./runs";
 
 /** A version as another module reads it. */

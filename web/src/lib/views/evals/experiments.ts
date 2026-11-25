@@ -23,7 +23,6 @@ import type { ExperimentStore } from "./ports/experiment-store";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
 export type SandboxPort = {
-  enabled: (projectId: string) => Promise<boolean>;
   listVersions: (projectId: string, limit: number) => Promise<SandboxVersionSummary[]>;
   getVersion: (projectId: string, versionId: string) => Promise<SandboxVersionSummary | null>;
   startRun: (
@@ -54,7 +53,6 @@ export type StartExperimentResult =
   | { ok: true; experiment: Experiment }
   | { ok: false; reason: StartRefusal; message: string };
 export type StartRefusal =
-  | "sandboxes_off"
   | "not_found"
   | "not_ready"
   | "no_cases"
@@ -79,9 +77,6 @@ export async function startExperiment(
   deps: ExperimentDeps,
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
-  if (!(await deps.sandboxes.enabled(projectId))) {
-    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
-  }
   const version = await findVersion(projectId, sandboxVersion, deps);
   if (!version) {
     return sandboxVersion === "latest"
@@ -161,10 +156,9 @@ export function advanceExperiment(
           );
         }
       });
-      const mayStart = !late() && (await deps.sandboxes.enabled(experiment.projectId));
-      const starts = mayStart
-        ? await experiments.claimStarts(experiment, OPEN_TRIALS, deps.now())
-        : [];
+      const starts = late()
+        ? []
+        : await experiments.claimStarts(experiment, OPEN_TRIALS, deps.now());
       await inParallel(starts, (trial) => startTrial(experiment, trial, deps));
       const closed = await experiments.close(experiment.id, deps.now());
       return { started: starts.length, finished, closed };

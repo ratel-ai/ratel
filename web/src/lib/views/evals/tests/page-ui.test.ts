@@ -8,14 +8,12 @@ import { PairedTrials } from "@/components/console/evals/CompareCase";
 import { CompareView } from "@/components/console/evals/CompareView";
 import { EvalsView } from "@/components/console/evals/EvalsView";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
-import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import { compare } from "../domain/compare";
 import type { Experiment, Trial } from "../domain/experiment";
 import { pairedTrials } from "../domain/paired-trials";
 import type { TrialResult } from "../domain/score";
-import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
 import {
   type CaseEditorModel,
   type CaseVersionView,
@@ -50,22 +48,11 @@ const model = (over: Partial<CaseEditorModel> = {}): CaseEditorModel => ({
   draft: version({ state: "draft" }),
   ...over,
 });
-const labels = (evalsPage: boolean) =>
-  flattenNav(consoleNav({ projectId: PROJECT_ID, additions: [], evalsPage })).map(
-    ({ label }) => label,
-  );
+const labels = () =>
+  flattenNav(consoleNav({ projectId: PROJECT_ID, additions: [] })).map(({ label }) => label);
 
-test("evals are off by default, and FF_EVALS=1 turns them on", async () => {
-  assert.equal(await evalsEnabledForProject("p1", { config: resolveConfig() }), false);
-  assert.equal(evalsOffForAll({ config: resolveConfig(), port: undefined }), true);
-  const config = resolveConfig({ env: { FF_EVALS: "1" } });
-  assert.equal(await evalsEnabledForProject("p1", { config }), true);
-  assert.deepEqual(await evalsOrganizationIds([{ id: "o1" }], { config }), ["o1"]);
-});
-
-test("the rail has Evals only with the flag on", () => {
-  assert.ok(labels(true).includes("Evals"));
-  assert.ok(!labels(false).includes("Evals"));
+test("the rail has Evals", () => {
+  assert.ok(labels().includes("Evals"));
 });
 
 test("the list shows which version counts", () => {
@@ -109,7 +96,7 @@ test("a support session sees no action", () => {
   assert.ok(!text.includes("Save draft"));
 });
 
-test("the turn page shows the action behind the flag, and the pages are under the gated layout", () => {
+test("the turn page shows the action to a person who may read and change content", () => {
   const source = (path: string) =>
     readFileSync(
       fileURLToPath(new URL(`../../../../app/(console)/${path}`, import.meta.url)),
@@ -118,9 +105,8 @@ test("the turn page shows the action behind the flag, and the pages are under th
   const page = source("project/[projectId]/traces/turns/[turnId]/page.tsx");
   assert.match(
     page,
-    /evalsEnabledForProject\(project\.id\)\) &&\s*!\(await isRestrictedBySupportSession\(\)\) &&\s*\(await contentOptIn\(project\.id\)\);\s*const saveAction = canSave \? \(?\s*<SaveAsEvalCase/,
+    /canSave =\s*!\(await isRestrictedBySupportSession\(\)\) &&\s*\(await contentOptIn\(project\.id\)\);\s*const saveAction = canSave \? \(?\s*<SaveAsEvalCase/,
   );
-  assert.match(source("../(evals)/project/[projectId]/layout.tsx"), /notFound\(\)/);
 });
 
 test("the experiment page shows the raw counts of each case, and links each trial to its trace", () => {

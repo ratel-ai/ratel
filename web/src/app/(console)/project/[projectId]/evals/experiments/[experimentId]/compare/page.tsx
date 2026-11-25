@@ -7,7 +7,6 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { compareWithBaseline } from "@/lib/views/evals/baseline";
 import { baselineDeps } from "@/lib/views/evals/baseline-deps";
-import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { comparePageModel } from "@/lib/views/evals/page-model";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +19,6 @@ export default async function ComparePage({
   params: Promise<{ projectId: string; experimentId: string }>;
 }) {
   const { projectId, experimentId } = await params;
-  // Next renders a page next to its layout: the layout's 404 does not stop this data.
-  if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Evals">

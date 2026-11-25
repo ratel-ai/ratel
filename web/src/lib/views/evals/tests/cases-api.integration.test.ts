@@ -48,7 +48,6 @@ async function setup() {
       projectId === PROJECT_ID
         ? { project: { id: projectId }, organization: { id: ORGANIZATION_ID }, role: "member" }
         : null,
-    enabled: async () => true,
     isRestricted: async () => false,
     cases: () => store,
     readContent: async () => true,
@@ -209,7 +208,7 @@ test("a case with no gating scorer is not approved", async () => {
   assert.deepEqual([status, body.error], [422, "not_ready"]);
 });
 
-test("another project, a stranger, the flag off and a support session change nothing", async () => {
+test("another project, a stranger and a support session change nothing", async () => {
   const t = await setup();
   const { body: made } = await t.post(edit());
   const before = await t.rows();
@@ -219,7 +218,6 @@ test("another project, a stranger, the flag off and a support session change not
     (await t.approve(made.caseId, made.draft, d, projectId)).status,
   ];
   assert.deepEqual(await all(t.deps(), OTHER_PROJECT_ID), [404, 404, 404]);
-  assert.deepEqual(await all(t.deps({ enabled: async () => false })), [404, 404, 404]);
   assert.deepEqual(await all(t.deps({ getSession: async () => null })), [401, 401, 401]);
   const restricted = t.deps({ isRestricted: async () => true });
   assert.deepEqual(await all(restricted), [403, 403, 403]);

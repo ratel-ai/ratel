@@ -3,13 +3,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import { publicUrl } from "@/lib/platform/public-url";
 import { trackServerEvent } from "@/lib/platform/telemetry";
-import {
-  getRun,
-  getSandboxVersion,
-  listSandboxVersions,
-  sandboxesEnabledForProject,
-  startRun,
-} from "@/lib/views/sandboxes";
+import { getRun, getSandboxVersion, listSandboxVersions, startRun } from "@/lib/views/sandboxes";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import { createDrizzleExperimentStore } from "./adapters/drizzle-experiment-store";
 import { evalsAccess } from "./console-deps";
@@ -25,7 +19,6 @@ export function experimentDeps(): ExperimentDeps {
     experiments: createDrizzleExperimentStore(db),
     cases: createDrizzleCaseStore(db),
     sandboxes: {
-      enabled: (projectId) => sandboxesEnabledForProject(projectId),
       listVersions: listSandboxVersions,
       getVersion: getSandboxVersion,
       startRun,

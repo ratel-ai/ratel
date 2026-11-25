@@ -26,7 +26,6 @@ async function setup() {
         projectId === member
           ? { project: { id: projectId }, organization: { id: ORGANIZATION_ID }, role }
           : null,
-      enabled: async () => true,
       isRestricted: async () => false,
       secrets: () => store,
       sealingKey: (): SealedSecretsKey => ({ ok: true, key: KEY }),
@@ -153,15 +152,11 @@ test("a member who is not an admin reads the names and changes nothing", async (
   assert.equal((await t.list(member)).status, 200);
 });
 
-test("with no sealing key a set says not configured, and with the flag off all is 404", async () => {
+test("with no sealing key a set says not configured", async () => {
   const t = await setup();
   const keyless = t.deps({
     sealingKey: () => ({ ok: false, reason: "not_configured", message: "It is not configured." }),
   });
   const refused = await t.set("A_KEY", VALUE, keyless);
   assert.deepEqual([refused.status, refused.body.error], [503, "not_configured"]);
-  const off = t.deps({ enabled: async () => false });
-  assert.equal((await t.list(off)).status, 404);
-  assert.equal((await t.set("A_KEY", VALUE, off)).status, 404);
-  assert.equal((await t.remove("A_KEY", off)).status, 404);
 });

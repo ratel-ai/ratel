@@ -1,7 +1,6 @@
 import type { Registration } from "@/lib/contracts/registry";
 import { getLogger } from "@/lib/platform/logger";
 import { advance, experimentDeps } from "./experiment-deps";
-import { evalsEnabledForProject } from "./gate";
 
 /** The experiments that one tick moves. */
 const LIMIT = 50;
@@ -26,7 +25,6 @@ export const evalsRegistration: Registration = {
         for (const experiment of await deps.experiments.listRunning(LIMIT)) {
           if (new Date() > deadline) break;
           try {
-            if (!(await evalsEnabledForProject(experiment.projectId))) continue;
             const { started, finished, closed } = await advance(experiment, deps, deadline);
             totals.startedTrials += started;
             totals.finishedTrials += finished;

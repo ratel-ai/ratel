@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { SandboxView } from "@/components/console/sandboxes/SandboxView";
-import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
-import { sandboxOrganizationIds } from "../gate";
 import type { RunRow, SandboxPageModel, VersionRow } from "../page-model";
 
 const COMMIT = "b1c2d3e4f5a6b1c2d3e4f5a6b1c2d3e4f5a6b1c2";
@@ -131,23 +129,7 @@ test("no text of the page names the provider", () => {
   }
 });
 
-test("the rail shows Ratel sandbox with the flag on only", async () => {
-  const ids = (env: Record<string, string>) =>
-    sandboxOrganizationIds([{ id: "org-1" }], {
-      config: resolveConfig({ env }),
-      port: undefined,
-      edition: "Ratel OSS",
-    });
-  assert.deepEqual(await ids({}), []);
-  assert.deepEqual(await ids({ FF_SANDBOXES: "1" }), ["org-1"]);
-  const nav = (sandboxPage?: boolean) =>
-    consoleNav({ projectId: "p1", additions: [], ...(sandboxPage ? { sandboxPage } : {}) });
-  const ofOff = flattenNav(nav()).map((item) => item.id);
-  const ofOn = flattenNav(nav(true)).map((item) => item.id);
-  assert.ok(!ofOff.includes("sandbox"));
-  assert.deepEqual(
-    ofOn.filter((id) => id !== "sandbox"),
-    ofOff,
-  );
-  assert.ok(ofOn.includes("sandbox"));
+test("the rail shows Ratel sandbox", () => {
+  const items = flattenNav(consoleNav({ projectId: "p1", additions: [] }));
+  assert.ok(items.some(({ id }) => id === "sandbox"));
 });

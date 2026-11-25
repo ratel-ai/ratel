@@ -112,8 +112,6 @@ async function setup(limitOverrides: Parameters<typeof createInMemoryUsageLimits
   const envOf = (index = 0) => provider.starts[index]?.env ?? {};
   const resultDeps: ResultApiDeps = {
     ...deps,
-    offForAll: () => false,
-    enabled: async () => true,
     afterResponse: (work) => {
       pending.push(work());
     },
@@ -358,8 +356,6 @@ test("the run token reads no API: only trace ingest of its project knows it, whi
   const token = t.envOf().RATEL_RUN_TOKEN ?? "";
   const noKey = async () => null;
   const traceLookup = withRunTokens(noKey, {
-    offForAll: () => false,
-    enabled: async () => true,
     runs: () => t.runs,
   });
   const ask = (scope: (typeof API_KEY_SCOPES)[number], find: Parameters<typeof withRunTokens>[0]) =>
@@ -378,12 +374,6 @@ test("the run token reads no API: only trace ingest of its project knows it, whi
       assert.equal(allowed.policy.appendOnlyIngest, true);
     }
   }
-  const off = withRunTokens(noKey, {
-    offForAll: () => false,
-    enabled: async () => false,
-    runs: () => t.runs,
-  });
-  assert.equal((await ask("ingest:traces", off)).ok, false, "the flag is off");
   await t.post(run.id, token);
   assert.equal((await ask("ingest:traces", traceLookup)).ok, false, "the run has ended");
 });
@@ -481,13 +471,11 @@ test("a start that cannot run is refused with the reason", async () => {
   assert.equal(t.provider.starts.length, 0);
 });
 
-test("the result route is 404 with the flag off, and refuses what is not a result", async () => {
+test("the result route refuses what is not a result", async () => {
   const t = await setup();
   await t.makeReady();
   const run = await t.started();
   const token = t.envOf().RATEL_RUN_TOKEN ?? "";
-  assert.equal(await t.post(run.id, token, undefined, { offForAll: () => true }), 404);
-  assert.equal(await t.post(run.id, token, undefined, { enabled: async () => false }), 404);
   assert.equal(await t.post(run.id, token, { v: 1 }), 400);
   const large = { ...resultBody(run.id), output: "x".repeat(6 * 1024 * 1024) };
   assert.equal(await t.post(run.id, token, large), 413);
@@ -526,8 +514,6 @@ test("a run token reads as a key that was used", async () => {
   await t.makeReady();
   await t.started();
   const find = withRunTokens(async () => null, {
-    offForAll: () => false,
-    enabled: async () => true,
     runs: () => t.runs,
   });
   const key = await find(hashApiKey(t.envOf().RATEL_RUN_TOKEN ?? ""));

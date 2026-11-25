@@ -48,7 +48,7 @@ async function handlePost(req: Request) {
     scope: BEARER_ROUTE_SCOPES["POST /api/v1/traces"],
     isDbConfigured,
     hashApiKey,
-    // A sandbox run sends its traces with its run token (the `sandboxes` flag).
+    // A sandbox run sends its traces with its run token.
     findActiveApiKeyByHash: withRunTokens(findActiveApiKeyByHash),
     touchApiKey,
     insertEventsWithMetrics,

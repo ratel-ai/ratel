@@ -6,7 +6,6 @@ import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleBuildStore } from "./adapters/drizzle-build-store";
 import { sandboxProvider } from "./adapters/provider-from-env";
-import { sandboxesEnabledForProject } from "./gate";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
 import { runDeps } from "./run-deps";
 import { sweepRuns } from "./run-sweep";
@@ -26,7 +25,6 @@ export const sandboxesRegistration: Registration = {
         builds: createDrizzleBuildStore(getDb()),
         bundles: bundleStore(),
         provider: sandboxProvider(),
-        enabled: (projectId) => sandboxesEnabledForProject(projectId),
         now: () => new Date(),
         every: (ms, beat) => {
           const timer = setInterval(beat, ms);

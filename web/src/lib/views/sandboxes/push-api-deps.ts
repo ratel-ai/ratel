@@ -11,15 +11,12 @@ import { usageLimits } from "@/lib/platform/usage-limits";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleVersionStore } from "./adapters/drizzle-version-store";
 import { sandboxProviderConfigured } from "./adapters/provider-from-env";
-import { sandboxesEnabledForProject, sandboxesOffForAll } from "./gate";
 import type { PushApiDeps } from "./push-api";
 
 /** The push API over the real database, bundle store and limits. */
 export function pushApiDeps(req: Request, scope: ApiKeyScope): PushApiDeps {
   return {
-    offForAll: sandboxesOffForAll,
     authenticate: () => resolveProjectFromBearer(req, scope),
-    enabled: (projectId) => sandboxesEnabledForProject(projectId),
     organizationIdOf: async (projectId) =>
       (await getOrganizationByProjectId(projectId))?.id ?? null,
     versions: () => createDrizzleVersionStore(getDb()),

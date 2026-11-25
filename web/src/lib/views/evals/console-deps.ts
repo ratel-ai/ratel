@@ -8,14 +8,12 @@ import { listSandboxVersions } from "@/lib/views/sandboxes";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import type { CasesApiDeps } from "./cases-api";
-import { evalsEnabledForProject } from "./gate";
 import { loadTurnContent } from "./turn-content";
 
 /** The session routes over the real session and database. */
 export const evalsAccess: MemberAccessDeps = {
   getSession: getSessionContext,
   findProjectScope,
-  enabled: (projectId) => evalsEnabledForProject(projectId),
   isRestricted: isRestrictedBySupportSession,
 };
 

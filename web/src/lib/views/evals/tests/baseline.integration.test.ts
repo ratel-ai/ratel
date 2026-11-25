@@ -42,7 +42,6 @@ async function setup() {
     over: Partial<BaselineKeyDeps> = {},
   ): BaselineKeyDeps => ({
     ...deps,
-    offForAll: () => false,
     // The real key check over a fake key.
     authenticate: () =>
       resolveProjectFromBearer(
@@ -61,7 +60,6 @@ async function setup() {
           touchApiKey: async () => {},
         },
       ),
-    enabled: async () => true,
     organizationIdOf: async () => ORGANIZATION_ID,
     ...over,
   });
@@ -73,7 +71,6 @@ async function setup() {
       organization: { id: ORGANIZATION_ID },
       role: "member",
     }),
-    enabled: async () => true,
     isRestricted: async () => false,
     ...over,
   });
@@ -281,23 +278,9 @@ test("a read key cannot pin, and a write key cannot read a comparison", async ()
   assert.equal(await t.baselines.get(PROJECT_ID), null);
 });
 
-test("with the flag off the routes answer 404, and a support session cannot pin", async () => {
+test("a support session cannot pin", async () => {
   const t = await setup();
   const id = await t.experiment(["pass"]);
-  for (const off of [{ offForAll: () => true }, { enabled: async () => false }]) {
-    const deps = t.key(COMPARE, {}, off);
-    for (const response of [
-      await handleCompareByKey(id, deps),
-      await handleGetBaselineByKey(deps),
-      await handlePinByKey(pin(id), deps),
-      await handleUnpinByKey(UNPIN, deps),
-    ]) {
-      assert.equal(response.status, 404);
-    }
-  }
-  const off = t.member({ enabled: async () => false });
-  assert.equal((await handlePinByMember(pin(id), PROJECT_ID, off)).status, 404);
-  assert.equal((await handleCompareByMember(PROJECT_ID, id, off)).status, 404);
   const support = t.member({ isRestricted: async () => true });
   assert.equal((await handlePinByMember(pin(id), PROJECT_ID, support)).status, 403);
   assert.equal((await handleUnpinByMember(UNPIN, PROJECT_ID, support)).status, 403);
