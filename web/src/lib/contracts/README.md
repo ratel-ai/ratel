@@ -33,7 +33,7 @@ that shows Agent health in full (optional, named by the locks), and a plan's nam
 `CoreServices` (same file) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool
-Picker ranks, `forcedFlag`, the value the configuration forces for a core switch (an edition's
+Picker ranks, `forgetOrganization`, what an edition calls before it deletes an organization, `forcedFlag`, the value the configuration forces for a core switch (an edition's
 own flag reads apply it first, as `featureEnabled` does), and `importedRuns` (`imported-runs.ts`), which stores runs Cloud's Agent health
 import read from another product as live ingest does, asks for a reading and queues the import's
 job; its optional `registerSourceIds` names the source ids the importer stores runs under, which
@@ -103,6 +103,10 @@ is not rejected by the monthly event cap. The second is the SQL condition that k
 queries (the turn build, partial readings, the inferred tool share, match quality's searches) off
 a trace that was not analyzed; they apply it through `platform/analysis-filter.ts`. The defaults
 meter nothing and filter nothing.
+
+`slackApp` (`slack-app.ts`) is an optional port: the Slack app of an edition that owns one for every
+organization, or null while it has none. With it, organization settings show no Slack app fields. The
+open-source edition has none: each organization saves its own app.
 
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the

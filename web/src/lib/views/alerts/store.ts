@@ -1,7 +1,12 @@
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { storedQuery } from "@/lib/views/alerts/parse-rule";
-import { alertEvents, alertRules } from "@/lib/views/alerts/schema";
+import {
+  alertDestinations,
+  alertEvents,
+  alertRuleDestinations,
+  alertRules,
+} from "@/lib/views/alerts/schema";
 import {
   type AlertDraft,
   type AlertingRule,
@@ -27,6 +32,9 @@ const RULE = {
   firing: alertRules.firing,
   lastValue: alertRules.lastValue,
   stateChangedAt: alertRules.stateChangedAt,
+  destinationIds: sql<string[]>`array(
+    select d.destination_id::text from alert_rule_destinations d
+    where d.rule_id = ${sql.raw('"alert_rules"."id"')} order by 1)`,
 };
 
 /** Oldest first, so the list does not move as rules change state. */
@@ -100,11 +108,15 @@ export async function createAlertRule(
   actor: string,
   db: AlertsDb = getDb(),
 ): Promise<string> {
-  const [row] = await db
-    .insert(alertRules)
-    .values({ ...draft, projectId, createdBy: actor, updatedBy: actor })
-    .returning({ id: alertRules.id });
-  return row.id;
+  const { destinationIds, ...rule } = draft;
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(alertRules)
+      .values({ ...rule, projectId, createdBy: actor, updatedBy: actor })
+      .returning({ id: alertRules.id });
+    await setDestinations(tx, projectId, row.id, destinationIds);
+    return row.id;
+  });
 }
 
 /** False when the project has no such rule, as for every change below. The next tick evaluates it. */
@@ -115,12 +127,16 @@ export async function updateAlertRule(
   actor: string,
   db: AlertsDb = getDb(),
 ): Promise<boolean> {
-  const rows = await db
-    .update(alertRules)
-    .set({ ...draft, lastEvaluatedAt: null, updatedBy: actor, updatedAt: sql`now()` })
-    .where(inProject(projectId, id))
-    .returning({ id: alertRules.id });
-  return rows.length > 0;
+  const { destinationIds, ...rule } = draft;
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(alertRules)
+      .set({ ...rule, lastEvaluatedAt: null, updatedBy: actor, updatedAt: sql`now()` })
+      .where(inProject(projectId, id))
+      .returning({ id: alertRules.id });
+    if (rows.length > 0) await setDestinations(tx, projectId, id, destinationIds);
+    return rows.length > 0;
+  });
 }
 
 export async function setAlertRuleEnabled(
@@ -183,6 +199,30 @@ export async function listAlertEvents(
 }
 
 export type AlertEvent = Awaited<ReturnType<typeof listAlertEvents>>[number];
+
+/** The project's own destinations only; an unknown one is left out. */
+async function setDestinations(
+  tx: Pick<AlertsDb, "select" | "insert" | "delete">,
+  projectId: string,
+  ruleId: string,
+  destinationIds: readonly string[],
+): Promise<void> {
+  await tx.delete(alertRuleDestinations).where(eq(alertRuleDestinations.ruleId, ruleId));
+  if (destinationIds.length === 0) return;
+  const known = await tx
+    .select({ destinationId: alertDestinations.id })
+    .from(alertDestinations)
+    .where(
+      and(
+        eq(alertDestinations.projectId, projectId),
+        inArray(alertDestinations.id, [...destinationIds]),
+      ),
+    );
+  if (known.length > 0)
+    await tx
+      .insert(alertRuleDestinations)
+      .values(known.map(({ destinationId }) => ({ ruleId, destinationId })));
+}
 
 function readRule<R extends { query: unknown }>(row: R) {
   return { ...row, ...storedQuery(row.query) };

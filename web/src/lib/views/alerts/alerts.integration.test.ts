@@ -8,9 +8,19 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { runQuery } from "@/lib/synthesis/metrics/query";
 import { type AlertActionDeps, changeAlert } from "./actions";
 import { deliverAlerts, MAX_ATTEMPTS } from "./deliver";
+import {
+  createChannelDestination,
+  createDestination,
+  deleteDestination,
+  listDestinations,
+  recordAccess,
+  sealedDestination,
+  sealedDestinationsOfRule,
+} from "./destinations";
 import { evaluateAlerts } from "./evaluate";
 import { type AlertNotifier, memoryNotifier } from "./notifier";
 import { alertsStep } from "./register";
+import { slackMessage } from "./slack-message";
 import * as store from "./store";
 import type { AlertDraft } from "./types";
 
@@ -24,6 +34,7 @@ const DRAFT: AlertDraft = {
   operator: "above",
   threshold: 0.5,
   windowMinutes: 5,
+  destinationIds: [],
 };
 
 let client: Awaited<ReturnType<typeof createMigratedPGlite>>;
@@ -218,7 +229,7 @@ test("a rule whose stored query is malformed needs attention, is skipped with on
   await client.exec("update alert_events set delivery = 'pending' where notice is not null");
   const notifier = memoryNotifier();
   await deliverAlerts(notifier, { now: () => now, flagOn: async () => true }, db);
-  assert.equal(notifier.notices.length, 1);
+  assert.match(slackMessage(notifier.notices[0], "https://x").text, /The value is above 0.5/);
 });
 
 test("a scorer metric fires on that scorer's results", async () => {
@@ -279,15 +290,69 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
   const nested: AlertNotifier = {
     send: async () => {
       inside.push(await deliverAlerts(notifier, on, db));
-      throw new Error("https://example.test/secret");
+      throw new Error("https://hooks.slack.com/services/secret");
     },
   };
   assert.equal((await deliverAlerts(nested, on, db)).retrying, 1);
   assert.deepEqual(inside, [{ sent: 0, retrying: 0, failures: [] }]);
   assert.doesNotMatch(
     (await store.listAlertEvents(PROJECT, id, db))[0].error ?? "",
-    /example\.test/,
+    /hooks\.slack/,
   );
+});
+
+test("a rule keeps its project's destinations only; a removed one leaves the rule", async () => {
+  const input = {
+    name: "Ops",
+    url: new URL("https://hooks.slack.com/services/T/B/wxyz"),
+    actor: "u",
+    key: "k",
+  };
+  const mine = await createDestination({ ...input, projectId: PROJECT }, db);
+  const foreign = await createDestination({ ...input, projectId: OTHER }, db);
+  const id = await rule({ destinationIds: [mine, foreign] });
+  const ids = async () => (await store.getAlertRule(PROJECT, id, db))?.destinationIds;
+  assert.deepEqual(await ids(), [mine]);
+  assert.deepEqual(await listDestinations(PROJECT, db), [
+    { id: mine, name: "Ops", kind: "webhook", lastFour: "wxyz" },
+  ]);
+  const stored = await client.query("select * from alert_destinations");
+  assert.doesNotMatch(JSON.stringify(stored.rows), /hooks\.slack/);
+  assert.equal(await deleteDestination(OTHER, mine, db), false);
+  assert.equal(await deleteDestination(PROJECT, mine, db), true);
+  assert.deepEqual(await ids(), []);
+});
+
+test("a channel destination is one per project, and keeps its last access", async () => {
+  const input = {
+    projectId: PROJECT,
+    name: "#ops",
+    teamId: "T1",
+    channelId: "C0000001",
+    accessError: "not_in_channel",
+    actor: "u",
+  };
+  const id = await createChannelDestination(input, db);
+  assert.ok(id);
+  assert.equal(await createChannelDestination(input, db), null);
+  const other = await createChannelDestination({ ...input, projectId: OTHER }, db);
+  assert.ok(other);
+  await recordAccess(id, null, db);
+  const channel = {
+    id,
+    name: "#ops",
+    kind: "slack_channel",
+    teamId: "T1",
+    channelId: "C0000001",
+    accessError: null,
+  };
+  assert.deepEqual(await sealedDestination(PROJECT, id, db), { ...channel, organizationId: ORG });
+  const ruleId = await rule({ destinationIds: [id] });
+  assert.deepEqual(await sealedDestinationsOfRule(ruleId, db), [
+    { ...channel, organizationId: ORG },
+  ]);
+  await deleteDestination(PROJECT, id, db);
+  await deleteDestination(OTHER, other, db);
 });
 
 test("a person creates, edits, pauses and deletes a rule; others cannot", async () => {

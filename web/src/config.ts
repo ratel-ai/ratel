@@ -174,6 +174,16 @@ const CONFIG_SCHEMA = schema({
     importsRunInWorker: setting("IMPORTS_RUN_IN_WORKER", one, D.jobs.importsRunInWorker),
     dataRetention: setting("DATA_RETENTION_ENABLED", one, D.jobs.dataRetention),
   },
+  secrets: {
+    /** Seals the secrets the app reads back (`lib/platform/secret-box.ts`); unset, none is stored. */
+    key: optional("RATEL_SECRET_KEY", configured.pipe(z.string().min(32).optional()), {
+      sensitive: true,
+    }),
+  },
+  slack: {
+    /** Where Slack's consent page and API are: another address for GovSlack. */
+    url: setting("SLACK_URL", trimmed.pipe(z.url({ protocol: /^https?$/ })), D.slack.url),
+  },
   logging: {
     /** Unset: `debug` in development, else `info`. */
     level: optional("LOG_LEVEL", trimmed),

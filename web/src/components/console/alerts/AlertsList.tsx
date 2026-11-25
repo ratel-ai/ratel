@@ -84,7 +84,7 @@ export function AlertsList({
     <Page>
       <PageHeader
         title="Alerts"
-        description="The metrics with a threshold, and whether they cross it now."
+        description="A message when a metric crosses a threshold, and one when it recovers."
         actions={alerts.length > 0 ? create : undefined}
       />
       <PageBody wide>

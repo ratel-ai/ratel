@@ -41,6 +41,7 @@ npm packages.
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions; refused in a support session |
 | `organization.ts`, `api-keys.ts`, `api-keys-observability.ts` | pure helpers: slugs and roles, key generation and hashing, expired-key reporting |
 | `api-key-secrets.ts` | the core's side of the optional `apiKeySecrets` port: `keepApiKeySecret` hands a key just issued to the edition (never throws; logs the id, the error's name and database code, never the error's message, which repeats the sealed key) and `apiKeysRevealable` says whether keys reveal later |
+| `secret-box.ts` | `sealSecret`, `openSecret`: a secret the app reads back, AES-256-GCM under a key derived from `secrets.key` (`RATEL_SECRET_KEY`) and bound to its row. No default key: without it `secretBoxConfigured()` is false and nothing is sealed |
 | `api-key-bearer.ts` | `resolveProjectFromBearer`: the project a `/api/v1/*` bearer key belongs to |
 | `api-keys/` | scoped keys (ratel-cloud #428): `scopes.ts` (every scope and the Full, read-only, ingest and custom presets), `policy.ts` (`apiKeyPolicy`, the one place that decides what a key may do), `authenticate.ts` (`authenticateApiKey`, the bearer decision every key route shares: 401, 403 with the missing scope, or the key and its policy) and `routes.ts` (`BEARER_ROUTE_SCOPES`, the scope each bearer route needs; `routes.test.ts` fails a route that authenticates a key without its entry) |
 | `format.ts` | `fmtCount`, `fmtCost`: the shared numeric display formatters |

@@ -8,7 +8,7 @@ export function NewAlertFrame({ projectId, children }: { projectId: string; chil
       <PageHeader
         crumbs={[{ label: "Alerts", href: alertsHref(projectId) }]}
         title="New alert"
-        description="A metric, a threshold, and a history of each time it is crossed."
+        description="A message when a metric crosses a threshold, and one when it recovers."
       />
       <PageBody>{children}</PageBody>
     </Page>

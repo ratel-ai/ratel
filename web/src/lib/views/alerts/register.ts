@@ -2,7 +2,7 @@ import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { deliverAlerts } from "@/lib/views/alerts/deliver";
 import { evaluateAlerts } from "@/lib/views/alerts/evaluate";
-import type { AlertNotifier } from "@/lib/views/alerts/notifier";
+import { slackNotifier } from "@/lib/views/alerts/slack";
 
 type TrackProjectEvent = ReturnType<typeof createBackgroundObservability>["trackProjectEvent"];
 
@@ -12,12 +12,9 @@ export interface AlertsStepDeps {
   track: TrackProjectEvent;
 }
 
-/** No destination exists yet: a message is recorded, and told to nobody. */
-const nobody: AlertNotifier = { send: async () => ({ sentTo: [], error: null }) };
-
 const defaultDeps: AlertsStepDeps = {
   evaluate: () => evaluateAlerts(),
-  deliver: () => deliverAlerts(nobody),
+  deliver: () => deliverAlerts(slackNotifier()),
   track: createBackgroundObservability().trackProjectEvent,
 };
 

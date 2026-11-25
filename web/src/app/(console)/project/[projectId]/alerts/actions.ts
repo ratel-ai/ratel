@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
+import { projectSettingsRoot } from "@/lib/console/settings/tabs";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
+import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
@@ -15,11 +17,26 @@ import {
   type AlertActionResult,
   changeAlert,
 } from "@/lib/views/alerts/actions";
+import {
+  changeDestination,
+  type DestinationActionInput,
+  type DestinationActionResult,
+} from "@/lib/views/alerts/destination-actions";
+import {
+  countDestinations,
+  createChannelDestination,
+  createDestination,
+  deleteDestination,
+  sealedDestination,
+} from "@/lib/views/alerts/destinations";
 import { alertsHref } from "@/lib/views/alerts/links";
 import { parseAlertQuery } from "@/lib/views/alerts/parse-rule";
 import { loadAlertPreview } from "@/lib/views/alerts/preview";
+import { postTo } from "@/lib/views/alerts/slack";
 import * as store from "@/lib/views/alerts/store";
 import { ALERT_WINDOWS, type AlertWindow } from "@/lib/views/alerts/types";
+import { channelAccess } from "@/lib/views/slack/channels";
+import { slackWorkspace } from "@/lib/views/slack/workspace";
 import { metricFeatures } from "../dashboards/context";
 
 const logger = getLogger("alerts/actions");
@@ -45,6 +62,37 @@ export async function changeAlertAction(input: AlertActionInput): Promise<AlertA
           { externalId: fields.actor, projectId: fields.project_id, orgId: fields.organization_id },
           fields,
         );
+        revalidatePath(alertsHref(fields.project_id), "layout");
+      },
+    }),
+  );
+}
+
+/** Add, test or remove a Slack destination. The answer never holds a secret. */
+export async function changeDestinationAction(
+  input: DestinationActionInput,
+): Promise<DestinationActionResult> {
+  return guarded("alert_destination", "Could not change the destination. Try again.", () =>
+    changeDestination(input, {
+      ...access,
+      canSeal: secretBoxConfigured,
+      count: (projectId) => countDestinations(projectId),
+      create: (destination) => createDestination(destination),
+      channelAccess: (organizationId, channelId) =>
+        channelAccess(organizationId, channelId, slackWorkspace()),
+      createChannel: (destination) => createChannelDestination(destination),
+      remove: (projectId, id) => deleteDestination(projectId, id),
+      sealed: (projectId, id) => sealedDestination(projectId, id),
+      post: (destination, message) => postTo(destination, message),
+      projectName: async (projectId) => (await findProjectScope(projectId))?.project.name ?? "",
+      observe: async (fields) => {
+        logger.info(fields, "alert_destination_changed");
+        await trackServerEvent(
+          "feature.alerts.destination_changed",
+          { externalId: fields.actor, projectId: fields.project_id, orgId: fields.organization_id },
+          fields,
+        );
+        revalidatePath(projectSettingsRoot(fields.project_id), "layout");
         revalidatePath(alertsHref(fields.project_id), "layout");
       },
     }),

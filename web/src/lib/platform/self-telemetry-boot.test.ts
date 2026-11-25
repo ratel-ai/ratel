@@ -122,6 +122,16 @@ test("with both endpoints set the process exports its traces and logs, and the f
   );
 
   trace.getTracer("self-telemetry-boot").startSpan("boot-test-span").end();
+  // F447-2: as Next makes the span of the Slack callback.
+  trace
+    .getTracer("next.js")
+    .startSpan("GET /api/integrations/slack/callback", {
+      attributes: {
+        "http.target": "/api/integrations/slack/callback?code=one-time-code&state=sealed-state",
+        "http.route": "/api/integrations/slack/callback",
+      },
+    })
+    .end();
   logs.getLogger("self-telemetry-boot").emit({ body: "boot-test-log" });
   assert.equal(received.length, 0, "batched, not sent yet");
 
@@ -129,6 +139,11 @@ test("with both endpoints set the process exports its traces and logs, and the f
   const traces = received.find((request) => request.path === "/v1/traces");
   const logRecords = received.find((request) => request.path === "/v1/logs");
   assert.ok(traces?.body.includes("boot-test-span"));
+  assert.ok(
+    traces?.body.includes("/api/integrations/slack/callback"),
+    "the callback's span is sent",
+  );
+  assert.doesNotMatch(received.map(({ body }) => body).join(), /one-time-code|sealed-state/);
   assert.ok(logRecords?.body.includes("boot-test-log"));
   for (const request of [traces, logRecords]) {
     assert.ok(request?.body.includes("ratel-platform"), "the resource names this service");

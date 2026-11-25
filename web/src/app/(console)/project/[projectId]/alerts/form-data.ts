@@ -7,18 +7,20 @@ import {
   EMPTY_TRACE_FILTER_FACETS,
   getTraceFilterFacets,
 } from "@/lib/synthesis/traces/trace-filters";
+import { listDestinations } from "@/lib/views/alerts/destinations";
 import { hasVerdict } from "@/lib/views/scorers/format";
 import { listScorers } from "@/lib/views/scorers/store";
+import { getSlackConnection } from "@/lib/views/slack/store";
 import { metricFeatures } from "../dashboards/context";
 import type { FeaturePage } from "../feature-page";
 
 const WEEK_MS = 7 * 86_400_000;
 
-/** What the alert form offers: filter values and scorers (null while they are off). */
+/** What the alert form offers: filter values, scorers (null while they are off), destinations and whether Slack is lost. */
 export async function loadAlertForm(page: FeaturePage) {
   const { projectId } = page;
   const features = await metricFeatures(page);
-  const [facets, scorers] = await Promise.all([
+  const [facets, scorers, destinations, slack] = await Promise.all([
     loadOrFallback({
       operation: "alert_facets",
       distinctId: `project:${projectId}`,
@@ -37,11 +39,16 @@ export async function loadAlertForm(page: FeaturePage) {
         ),
     }),
     features.customMonitoring ? listScorers(projectId) : null,
+    listDestinations(projectId),
+    getSlackConnection(page.organizationId),
   ]);
   return {
     features,
     form: {
       facets,
+      destinations,
+      slackLost:
+        (slack === null || slack.lost) && destinations.some(({ kind }) => kind === "slack_channel"),
       scorers:
         scorers?.map((scorer) => ({
           id: scorer.id,
