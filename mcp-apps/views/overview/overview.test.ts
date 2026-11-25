@@ -49,8 +49,8 @@ test("default: the four widgets", () => {
   assert.match(html, /href="[^"]*\?peek=context"/, "a Panel opens in the console");
 });
 
-test("a hidden widget is absent, and the rest keep the person's order", () => {
-  const { html, ids } = draw("get_overview · hidden widget");
+test("a removed widget is absent, and the rest keep the person's order", () => {
+  const { html, ids } = draw("get_overview · removed widget");
   assert.equal(ids[0], "attention");
   assert.ok(!ids.includes("topology"));
   assert.doesNotMatch(html, /data-topology/);

@@ -1,5 +1,10 @@
-import { changeLayout, DEFAULT_LAYOUT, type OverviewLayout } from "./domain/layout";
-import { layoutChangeSchema } from "./domain/stored";
+import { defaultLayout, type OfferedWidgets, type OverviewLayout } from "./domain/layout";
+import {
+  changeArrangement,
+  layoutChangeSchema,
+  readArrangement,
+  storeArrangement,
+} from "./domain/stored";
 import type { OverviewLayoutStore } from "./ports/store";
 
 /**
@@ -17,6 +22,8 @@ export interface LayoutDeps {
   /** Null for somebody who is signed out or has no access to the project. */
   reader: (projectId: string) => Promise<LayoutReader | null>;
   store: () => OverviewLayoutStore;
+  /** The widgets the project offers now, such as behind a flag. */
+  offered: (projectId: string) => Promise<OfferedWidgets>;
 }
 
 export type LayoutRefusal = "not_found" | "api_key" | "support_session" | "invalid";
@@ -39,8 +46,10 @@ export async function readOverviewLayout(
 ): Promise<LayoutResult> {
   const reader = await deps.reader(projectId);
   if (!reader) return { ok: false, reason: "not_found" };
-  if (reader.kind === "api-key" || reader.restricted) return { ok: true, layout: DEFAULT_LAYOUT };
-  return { ok: true, layout: await deps.store().read(reader) };
+  const offered = await deps.offered(projectId);
+  if (reader.kind === "api-key" || reader.restricted)
+    return { ok: true, layout: defaultLayout(offered) };
+  return { ok: true, layout: readArrangement(await deps.store().read(reader), offered).layout };
 }
 
 export async function changeOverviewLayout(
@@ -52,12 +61,16 @@ export async function changeOverviewLayout(
   if (!reader) return { ok: false, reason: "not_found" };
   if (reader.kind === "api-key") return { ok: false, reason: "api_key" };
   if (reader.restricted) return { ok: false, reason: "support_session" };
-  const parsed = layoutChangeSchema.safeParse(change);
+  const offered = await deps.offered(projectId);
+  const parsed = layoutChangeSchema(offered).safeParse(change);
   if (!parsed.success) return { ok: false, reason: "invalid" };
-  const layout = await deps
+  let layout = defaultLayout(offered);
+  await deps
     .store()
-    .update({ projectId: reader.projectId, personId: reader.personId }, (current) =>
-      changeLayout(current, parsed.data),
-    );
+    .update({ projectId: reader.projectId, personId: reader.personId }, (current) => {
+      const next = changeArrangement(readArrangement(current, offered), parsed.data, offered);
+      layout = next.layout;
+      return storeArrangement(next);
+    });
   return { ok: true, layout };
 }

@@ -38,7 +38,7 @@ export function CustomizePanel() {
   const { editable, layout, change } = useOverviewLayout();
   const peek = usePeek();
   if (!editable) return null;
-  const hidden = new Map(layout.map((widget) => [widget.id, widget.hidden]));
+  const hidden = new Map(layout.map((widget) => [widget.id, widget.removed]));
   return (
     <Panel
       open={peek.id === PEEK}
@@ -60,7 +60,7 @@ export function CustomizePanel() {
                   checked={!hidden.get(widget)}
                   onCheckedChange={(shown) =>
                     change(
-                      { kind: shown ? "show" : "hide", widget },
+                      { kind: shown ? "add" : "remove", widget },
                       `${title} ${shown ? "shown" : "hidden"}`,
                     )
                   }

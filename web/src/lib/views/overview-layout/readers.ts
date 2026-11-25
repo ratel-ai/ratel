@@ -4,6 +4,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import type { LayoutDeps, LayoutReader } from "./actions";
 import { createDrizzleOverviewLayoutStore } from "./adapters/drizzle-store";
+import { WIDGET_CATALOG } from "./domain/layout";
 
 /** The web's side: the signed-in person, with the console's own project check. */
 export interface WebReaderDeps {
@@ -31,4 +32,5 @@ export function webLayoutReader(
 export const webLayoutDeps: LayoutDeps = {
   reader: webLayoutReader(),
   store: () => createDrizzleOverviewLayoutStore(getDb()),
+  offered: async () => WIDGET_CATALOG,
 };

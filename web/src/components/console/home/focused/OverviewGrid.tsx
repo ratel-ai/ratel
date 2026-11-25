@@ -13,7 +13,7 @@ import {
   type OverviewWidgetId,
   stepChange,
   visibleWidgets,
-  WIDGET_MINIMUM,
+  widgetMinimum,
 } from "@/lib/views/overview-layout/domain/layout";
 
 export interface WidgetBody {
@@ -31,7 +31,7 @@ export function OverviewGrid({
 }) {
   const { layout, editable, change } = useOverviewLayout();
   const cards = useMemo(
-    () => visibleWidgets(layout).map((widget) => ({ ...widget, min: WIDGET_MINIMUM[widget.id] })),
+    () => visibleWidgets(layout).map((widget) => ({ ...widget, min: widgetMinimum(widget.id) })),
     [layout],
   );
   if (cards.length === 0) return <AllHidden />;
@@ -51,12 +51,12 @@ export function OverviewGrid({
   }
 
   function hide(widget: OverviewWidgetId) {
-    change({ kind: "hide", widget }, `${WIDGET_TITLES[widget]} hidden`);
+    change({ kind: "remove", widget }, `${WIDGET_TITLES[widget]} hidden`);
     toast({
       title: `${WIDGET_TITLES[widget]} is hidden`,
       action: {
         label: "Undo",
-        onClick: () => change({ kind: "show", widget }, `${WIDGET_TITLES[widget]} shown`),
+        onClick: () => change({ kind: "add", widget }, `${WIDGET_TITLES[widget]} shown`),
       },
     });
     requestAnimationFrame(() => document.getElementById(CUSTOMIZE_ID)?.focus());

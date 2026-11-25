@@ -13,7 +13,7 @@ export const overviewLayouts = pgTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     personId: text("person_id").notNull(),
-    /** `StoredOverviewLayout`, read only through `readLayout`. */
+    /** `StoredOverviewLayout`, read only through `readArrangement`. */
     layout: jsonb("layout").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

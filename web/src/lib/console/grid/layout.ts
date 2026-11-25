@@ -37,19 +37,19 @@ export type GridStep =
   | "taller"
   | "shorter";
 
-/** The items with every gap above and every overlap gone; their order in the list stays. `first` keeps its place, and what it covers goes below it. */
-export function compacted(items: readonly GridItem[], first?: string): GridItem[] {
-  const kept = items.find(({ id }) => id === first);
-  return placed(
-    items,
-    verticalCompactor.compact(
-      items.map((item) => ({
-        ...cellOf(item),
-        y: kept && item !== kept && overlaps(kept, item) ? kept.y + kept.h : item.y,
-      })),
-      GRID_COLUMNS,
-    ),
-  );
+/** The items with every gap above and every overlap gone; their order in the list stays. Those in `first` keep their place, and what they cover goes below them, in its own order. */
+export function compacted(items: readonly GridItem[], ...first: string[]): GridItem[] {
+  let apart = [...items];
+  for (const kept of items.filter(({ id }) => first.includes(id))) {
+    const covered = apart.some((item) => !first.includes(item.id) && overlaps(kept, item));
+    if (!covered) continue;
+    apart = apart.map((item) => {
+      if (first.includes(item.id)) return item;
+      if (item.y >= kept.y) return { ...item, y: item.y + kept.h };
+      return overlaps(kept, item) ? { ...item, y: kept.y + kept.h } : item;
+    });
+  }
+  return placed(items, verticalCompactor.compact(apart.map(cellOf), GRID_COLUMNS));
 }
 
 /** A drag: the item goes to the cell, its neighbors make room, and the rows close up. Null for an unknown id. */
@@ -173,6 +173,10 @@ export function samePlace(a: GridPlace, b: GridPlace): boolean {
   return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
+export function overlaps(a: GridPlace, b: GridPlace): boolean {
+  return crosses(a.x, a.w, b.x, b.w) && crosses(a.y, a.h, b.y, b.h);
+}
+
 function cellOf({ id, x, y, w, h }: GridItem) {
   return { i: id, x, y, w, h };
 }
@@ -180,10 +184,6 @@ function cellOf({ id, x, y, w, h }: GridItem) {
 function placed(items: readonly GridItem[], layout: Layout): GridItem[] {
   const places = new Map(layout.map(({ i, x, y, w, h }) => [i, { x, y, w, h }]));
   return items.map((item) => ({ ...item, ...places.get(item.id) }));
-}
-
-function overlaps(a: GridPlace, b: GridPlace): boolean {
-  return crosses(a.x, a.w, b.x, b.w) && crosses(a.y, a.h, b.y, b.h);
 }
 
 function crosses(start: number, size: number, otherStart: number, otherSize: number): boolean {

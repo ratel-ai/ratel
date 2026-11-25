@@ -171,9 +171,9 @@ test("reads the context only for its Panel", async () => {
 
 const order = (html: string) =>
   [...html.matchAll(/data-overview-widget="(\w+)"/g)].map((match) => match[1]);
-const hide = (...ids: OverviewWidgetId[]) =>
+const removed = (...ids: OverviewWidgetId[]) =>
   ids.reduce<OverviewLayout>(
-    (layout, widget) => changeLayout(layout, { kind: "hide", widget }),
+    (layout, widget) => changeLayout(layout, { kind: "remove", widget }),
     DEFAULT_LAYOUT,
   );
 
@@ -197,8 +197,13 @@ test("without a stored layout: Metrics, Topology, then Health with Needs attenti
     assert.ok(!text.includes(dropped), `no "${dropped}"`);
 });
 
-test("the page is the person's layout: their order, and no hidden widget", async () => {
-  const moved = changeLayout(hide("topology"), { kind: "move", widget: "attention", x: 4, y: 0 });
+test("the page is the person's layout: their order, and no removed widget", async () => {
+  const moved = changeLayout(removed("topology"), {
+    kind: "move",
+    widget: "attention",
+    x: 4,
+    y: 0,
+  });
   assert.deepEqual(order(page(await load({}, { layout: moved }))), [
     "attention",
     "metrics",
@@ -206,12 +211,12 @@ test("the page is the person's layout: their order, and no hidden widget", async
   ]);
   for (const id of OVERVIEW_WIDGETS) {
     const others = OVERVIEW_WIDGETS.filter((other) => other !== id);
-    assert.deepEqual(order(page(await load({}, { layout: hide(...others) }))), [id], "alone");
+    assert.deepEqual(order(page(await load({}, { layout: removed(...others) }))), [id], "alone");
   }
 });
 
 test("all hidden is one quiet line with Customize", async () => {
-  const html = page(await load({}, { layout: hide(...OVERVIEW_WIDGETS) }));
+  const html = page(await load({}, { layout: removed(...OVERVIEW_WIDGETS) }));
   assert.deepEqual(order(html), []);
   assert.match(html, /data-overview-hidden="all"[^>]*>Every widget is hidden\.<button/);
 });

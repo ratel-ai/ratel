@@ -26,9 +26,11 @@ import {
 } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
 import {
+  type OfferedWidgets,
   OVERVIEW_WIDGETS,
   type OverviewLayout,
   visibleWidgets,
+  WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
 import type { OverviewLayoutStore } from "@/lib/views/overview-layout/ports/store";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
@@ -47,6 +49,7 @@ export interface OverviewOperationDeps {
   focusedConsole: (organization: Pick<Organization, "id">) => Promise<boolean>;
   loadOverview: typeof loadFocusedOverview;
   layoutStore: () => OverviewLayoutStore;
+  offeredWidgets: (projectId: string) => Promise<OfferedWidgets>;
   restricted: () => Promise<boolean>;
   /** The Agents and MCP servers pages exist, so the map can link to them. */
   entitiesLinked: (organization: Pick<Organization, "id">) => Promise<boolean>;
@@ -59,12 +62,13 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   focusedConsole: (organization) => focusedConsoleEnabled(organization),
   loadOverview: loadFocusedOverview,
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
+  offeredWidgets: async () => WIDGET_CATALOG,
   restricted: isRestrictedBySupportSession,
   entitiesLinked: (organization) => projectEntitiesEnabled(organization),
   now: () => new Date(),
 };
 
-const CHANGES = ["move", "resize", "show", "hide", "reset"] as const;
+const CHANGES = ["move", "resize", "add", "remove", "reset"] as const;
 const cell = (low: number, high: number) => z.number().int().min(low).max(high).optional();
 
 export function overviewOperations(
@@ -76,7 +80,7 @@ export function overviewOperations(
       domain: "observability",
       title: "Get the Overview",
       description:
-        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. A hidden widget has no data. With an API key, the layout is the default. Example: {"range": "30d"}.',
+        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. A removed widget has no data. With an API key, the layout is the default. Example: {"range": "30d"}.',
       keywords: ["overview", "recap", "needs attention", "overview layout", "widgets"],
       scope: "project",
       mutates: false,
@@ -103,12 +107,12 @@ export function overviewOperations(
           layout: read.layout,
           now: deps.now(),
         });
-        const hidden = data.layout.filter((widget) => widget.hidden).map(({ id }) => id);
+        const removed = data.layout.filter((widget) => widget.removed).map(({ id }) => id);
         return {
           data: overviewData(data, ctx.auth.kind === "api-key" || (await deps.restricted())),
-          ...(hidden.length > 0
+          ...(removed.length > 0
             ? {
-                hint: `These widgets are hidden and have no data: ${hidden.join(", ")}. Call change_overview_layout with change "show" to show one.`,
+                hint: `These widgets are removed and have no data: ${removed.join(", ")}. Call change_overview_layout with change "add" to add one again.`,
               }
             : {}),
           ...(ctx.forView
@@ -136,7 +140,14 @@ export function overviewWriteOperations(
       title: "Change the Overview layout",
       description:
         'Changes the Overview layout of the signed-in person in one project. Other people keep their layouts. The grid has 12 columns. Call get_overview first to read the layout. An API key cannot change a layout. Example: {"change": "move", "widget": "attention", "x": 0, "y": 0}.',
-      keywords: ["arrange overview", "move widget", "resize widget", "hide widget", "reset layout"],
+      keywords: [
+        "arrange overview",
+        "move widget",
+        "resize widget",
+        "add widget",
+        "remove widget",
+        "reset layout",
+      ],
       scope: "project",
       mutates: true,
       params: z.object({
@@ -144,7 +155,7 @@ export function overviewWriteOperations(
         change: z
           .enum(CHANGES)
           .describe(
-            "move needs widget, x and y. resize needs widget, w and h. show and hide need widget. reset restores the default layout and needs no other parameter.",
+            "move needs widget, x and y. resize needs widget, w and h. add and remove need widget. reset restores the default layout and needs no other parameter.",
           ),
         widget: z.enum(OVERVIEW_WIDGETS).optional().describe("The widget to change."),
         x: cell(0, 11).describe("The first column of the widget. Column 0 is the left column."),
@@ -205,7 +216,11 @@ export async function focusedConsoleForCaller(
 // — Helpers ——————————————————————————————————————————————————————————————————
 
 function layoutDeps(deps: OverviewOperationDeps, auth: McpAuthContext): LayoutDeps {
-  return { reader: mcpLayoutReader(auth, deps.restricted), store: deps.layoutStore };
+  return {
+    reader: mcpLayoutReader(auth, deps.restricted),
+    store: deps.layoutStore,
+    offered: deps.offeredWidgets,
+  };
 }
 
 async function requireOverview(deps: OverviewOperationDeps, projectId: string) {
@@ -240,8 +255,8 @@ interface ChangeParams {
 const NEEDS: Record<ChangeParams["change"], readonly Exclude<keyof ChangeParams, "change">[]> = {
   move: ["widget", "x", "y"],
   resize: ["widget", "w", "h"],
-  show: ["widget"],
-  hide: ["widget"],
+  add: ["widget"],
+  remove: ["widget"],
   reset: [],
 };
 
@@ -300,20 +315,20 @@ function overviewData(data: FocusedOverviewData, defaultLayout: boolean) {
   };
 }
 
-/** The visible widgets in reading order, then the hidden ones. */
+/** The visible widgets in reading order, then the removed ones. */
 function layoutView(layout: OverviewLayout) {
   return {
     columns: 12,
     widgets: [
       ...visibleWidgets(layout).map(({ id, x, y, w, h }) => ({
         id,
-        hidden: false,
+        removed: false,
         x,
         y,
         w,
         h,
       })),
-      ...layout.filter(({ hidden }) => hidden).map(({ id }) => ({ id, hidden: true })),
+      ...layout.filter(({ removed }) => removed).map(({ id }) => ({ id, removed: true })),
     ],
   };
 }

@@ -16,7 +16,7 @@ import view from "./bindings";
 import { readOverviewView } from "./overview";
 
 /**
- * The Overview: the console's own widgets, in the person's places, with the hidden ones absent.
+ * The Overview: the console's own widgets, in the person's places, without the removed ones.
  * Nothing is arranged here: an agent does that with change_overview_layout.
  */
 function Overview({ result }: { result: ToolSuccess }) {
@@ -56,7 +56,7 @@ function Overview({ result }: { result: ToolSuccess }) {
           description="The Overview shows once the project sends its first event."
         />
       ) : cards.length === 0 ? (
-        <p className="text-sm text-fg-muted">Every widget is hidden.</p>
+        <p className="text-sm text-fg-muted">Every widget is removed.</p>
       ) : (
         <GridCells cards={cards}>
           {(card) => (

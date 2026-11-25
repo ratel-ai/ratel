@@ -108,7 +108,7 @@ async function load(over: Partial<FocusedReads> = {}, layout: OverviewLayout = D
 
 const only = (...ids: OverviewWidgetId[]): OverviewLayout =>
   OVERVIEW_WIDGETS.filter((id) => !ids.includes(id)).reduce<OverviewLayout>(
-    (layout, widget) => changeLayout(layout, { kind: "hide", widget }),
+    (layout, widget) => changeLayout(layout, { kind: "remove", widget }),
     DEFAULT_LAYOUT,
   );
 const labels = (metrics: MetricsData | "failed" | null) => {
@@ -116,7 +116,7 @@ const labels = (metrics: MetricsData | "failed" | null) => {
   return focusedStats(metrics).map(({ label }) => label);
 };
 
-test("each read runs once, and a hidden widget causes none of its own", async () => {
+test("each read runs once, and a removed widget causes none of its own", async () => {
   const attention = ["dailyAggregates", "fixes", "health", "intents", "tasks", "traces"];
   const metrics = ["dailyTraces", "previous", "sdkDays", "sdkPrevious", "traces"];
   const expected: [OverviewWidgetId[], string[]][] = [
@@ -134,7 +134,7 @@ test("each read runs once, and a hidden widget causes none of its own", async ()
   ];
   for (const [ids, reads] of expected) {
     const { data, ran } = await load({}, only(...ids));
-    assert.deepEqual(ran, [...ALWAYS, ...reads].sort(), ids.join("+") || "all hidden");
+    assert.deepEqual(ran, [...ALWAYS, ...reads].sort(), ids.join("+") || "all removed");
     for (const id of OVERVIEW_WIDGETS)
       assert.equal(data[id] === null, !ids.includes(id), `${id} in ${ids}`);
   }

@@ -23,7 +23,7 @@ import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import { changeOverviewLayout, readOverviewLayout } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
-import { DEFAULT_LAYOUT } from "@/lib/views/overview-layout/domain/layout";
+import { DEFAULT_LAYOUT, WIDGET_CATALOG } from "@/lib/views/overview-layout/domain/layout";
 import { webLayoutReader } from "@/lib/views/overview-layout/readers";
 
 /** The Overview over MCP, against a database: one person's layout and one set of numbers with the web. */
@@ -103,6 +103,7 @@ function webDeps(db: Db, externalId: string) {
       restricted: async () => false,
     }),
     store: () => createDrizzleOverviewLayoutStore(db),
+    offered: async () => WIDGET_CATALOG,
   };
 }
 
@@ -126,13 +127,13 @@ test("a person's OAuth id and session id are one person, and no other", async ()
 
 test("an OAuth session changes the layout, and get_overview and the web read the same one", async () => {
   const { call, web, db } = await setup();
-  await call("change_overview_layout", { change: "hide", widget: "topology" });
+  await call("change_overview_layout", { change: "remove", widget: "topology" });
   const changed = dataOf(
     await call("change_overview_layout", { change: "move", widget: "attention", x: 0, y: 0 }),
   );
   const overview = dataOf(await call("get_overview"));
   assert.deepEqual(overview.layout, { of: "person", ...changed.layout });
-  assert.equal(overview.topology, null, "a hidden widget has no data");
+  assert.equal(overview.topology, null, "a removed widget has no data");
   assert.equal(overview.layout.widgets[0].id, "attention");
 
   const read = await readOverviewLayout(PROJECT_ID, web);
@@ -146,14 +147,17 @@ test("an OAuth session changes the layout, and get_overview and the web read the
     db,
   });
   assert.deepEqual(
-    page.layout.map(({ id, hidden }) => [id, hidden]),
-    overview.layout.widgets.map(({ id, hidden }: { id: string; hidden: boolean }) => [id, hidden]),
+    page.layout.map(({ id, removed }) => [id, removed]),
+    overview.layout.widgets.map(({ id, removed }: { id: string; removed: boolean }) => [
+      id,
+      removed,
+    ]),
   );
 
   // And back: a change on the web is what the agent reads.
   await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, web);
   const after = dataOf(await call("get_overview"));
-  assert.ok(after.layout.widgets.every(({ hidden }: { hidden: boolean }) => !hidden));
+  assert.ok(after.layout.widgets.every(({ removed }: { removed: boolean }) => !removed));
   assert.equal(dataOf(await call("get_overview", {}, person("user_ben"))).layout.widgets.length, 4);
 });
 
@@ -190,24 +194,24 @@ test("the numbers are the web loader's, for both ranges", async () => {
 
 test("an API key reads the default layout and cannot change one", async () => {
   const { call, web } = await setup();
-  await call("change_overview_layout", { change: "hide", widget: "health" });
+  await call("change_overview_layout", { change: "remove", widget: "health" });
   const overview = dataOf(await call("get_overview", {}, KEY));
   assert.equal(overview.layout.of, "default");
-  assert.ok(overview.layout.widgets.every(({ hidden }: { hidden: boolean }) => !hidden));
+  assert.ok(overview.layout.widgets.every(({ removed }: { removed: boolean }) => !removed));
   const refused = await call("change_overview_layout", { change: "reset" }, KEY);
   assert.deepEqual(refusal(refused), ["forbidden", "api_key"]);
   assert.match(refused.ok ? "" : refused.message, /Sign in to the MCP server as a person/);
   const read = await readOverviewLayout(PROJECT_ID, web);
-  assert.ok(read.ok && read.layout.some(({ hidden }) => hidden), "nothing was reset");
+  assert.ok(read.ok && read.layout.some(({ removed }) => removed), "nothing was reset");
 });
 
 test("a support session reads the default on both surfaces and cannot change, and the stored layout stays", async () => {
   let restricted = false;
   const { call, store, web } = await setup({ restricted: async () => restricted });
-  await call("change_overview_layout", { change: "hide", widget: "topology" });
+  await call("change_overview_layout", { change: "remove", widget: "topology" });
   const key = { projectId: PROJECT_ID, personId: "user_ana" };
   const personal = await store().read(key);
-  assert.notDeepEqual(personal, DEFAULT_LAYOUT);
+  assert.ok(personal);
 
   restricted = true;
   const overview = dataOf(await call("get_overview"));
@@ -225,7 +229,7 @@ test("a support session reads the default on both surfaces and cannot change, an
     layout: DEFAULT_LAYOUT,
   });
   assert.deepEqual(
-    refusal(await call("change_overview_layout", { change: "hide", widget: "health" })),
+    refusal(await call("change_overview_layout", { change: "remove", widget: "health" })),
     ["forbidden", "support_session"],
   );
   assert.deepEqual(await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, support), {

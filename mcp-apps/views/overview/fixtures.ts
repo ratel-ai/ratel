@@ -152,16 +152,19 @@ function fixture(
   };
 }
 
-const ARRANGED = changeLayout(changeLayout(DEFAULT_LAYOUT, { kind: "hide", widget: "topology" }), {
-  kind: "move",
-  widget: "attention",
-  x: 4,
-  y: 0,
-});
+const ARRANGED = changeLayout(
+  changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "topology" }),
+  {
+    kind: "move",
+    widget: "attention",
+    x: 4,
+    y: 0,
+  },
+);
 
 const fixtures: ViewFixtures = {
   get_overview: fixture(),
-  "get_overview · hidden widget": fixture({ topology: null }, ARRANGED),
+  "get_overview · removed widget": fixture({ topology: null }, ARRANGED),
   "get_overview · no score": fixture({
     health: {
       href: HEALTH,

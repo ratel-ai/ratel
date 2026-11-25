@@ -88,7 +88,7 @@ import { readTopology, type Topology } from "@/lib/views/project-entities/topolo
 
 /**
  * The recap Overview's reads (`focusedConsole`): when telemetry last arrived, and what the widgets
- * a person shows need. A hidden widget reads nothing. Each read degrades on its own, and one that
+ * a person keeps need. A removed widget reads nothing. Each read degrades on its own, and one that
  * several widgets share runs once. The context Panel's read runs only when the Panel is asked for.
  */
 
@@ -146,7 +146,7 @@ export interface FocusedOverviewData {
   /** False only when nothing has ever arrived: the page is the setup guide. */
   hasTelemetry: boolean;
   layout: OverviewLayout;
-  /** Each widget is null when it is hidden. */
+  /** Each widget is null when it is removed. */
   metrics: MetricsData | Failed | null;
   topology: Topology | Failed | null;
   health: FocusedHealth | null;
@@ -239,17 +239,17 @@ export async function loadFocusedOverview({
     return model === FAILED ? FAILED : withoutLowConfidence(model);
   });
   const widgets = new Set(visibleWidgets(layout).map(({ id }) => id));
-  const shown = <T>(id: OverviewLayout[number]["id"], load: () => Promise<T>) =>
+  const ifVisible = <T>(id: OverviewLayout[number]["id"], load: () => Promise<T>) =>
     widgets.has(id) ? load() : null;
 
   const [telemetry, sdkLatestAt, metrics, topology, health, attention, context] = await Promise.all(
     [
       read("telemetry", (run) => run(scope)),
       read("sdkLatestAt", (run) => run(scope)),
-      shown("metrics", metricsWidget),
-      shown("topology", () => read("topology", (run) => run(scope))),
-      shown("health", healthWidget),
-      shown("attention", attentionWidget),
+      ifVisible("metrics", metricsWidget),
+      ifVisible("topology", () => read("topology", (run) => run(scope))),
+      ifVisible("health", healthWidget),
+      ifVisible("attention", attentionWidget),
       contextOpen ? read("context", (run) => run(scope, range.days)) : null,
     ],
   );

@@ -31,7 +31,7 @@ export async function saveOverviewLayout(
   try {
     const result = await changeOverviewLayout(scope.project.id, change, webLayoutDeps);
     if (!result.ok) return { ok: false, message: LAYOUT_REFUSALS[result.reason] };
-    // The page then reads what a widget just shown needs, and Back shows this layout.
+    // The page then reads what a widget just added needs, and Back shows this layout.
     revalidatePath(`/project/${scope.project.id}`);
     return result;
   } catch (err) {

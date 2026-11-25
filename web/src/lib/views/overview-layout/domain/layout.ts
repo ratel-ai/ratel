@@ -3,6 +3,7 @@ import {
   fitted,
   type GridItem,
   type GridMinimum,
+  type GridPlace,
   type GridStep,
   inReadingOrder,
   movedTo,
@@ -19,62 +20,80 @@ import {
 export const OVERVIEW_WIDGETS = ["metrics", "topology", "health", "attention"] as const;
 export type OverviewWidgetId = (typeof OVERVIEW_WIDGETS)[number];
 
-/** The smallest size at which a widget's content is whole. */
-export const WIDGET_MINIMUM: Readonly<Record<OverviewWidgetId, GridMinimum>> = {
-  metrics: { w: 8, h: 4 },
-  topology: { w: 4, h: 5 },
-  health: { w: 4, h: 6 },
-  attention: { w: 5, h: 4 },
-};
+export interface OverviewWidget {
+  id: OverviewWidgetId;
+  /** The smallest size at which its content is whole. */
+  min: GridMinimum;
+  /** Where it is in the default layout. */
+  place: GridPlace;
+}
+
+/** The widgets that are offered: the page, the dialog and the default layout know no other. */
+export type OfferedWidgets = readonly OverviewWidget[];
+
+/** The metrics on top, then the topology, then the Health score with Needs attention beside it. */
+export const WIDGET_CATALOG: OfferedWidgets = [
+  { id: "metrics", min: { w: 8, h: 4 }, place: { x: 0, y: 0, w: 12, h: 4 } },
+  { id: "topology", min: { w: 4, h: 5 }, place: { x: 0, y: 4, w: 12, h: 8 } },
+  { id: "health", min: { w: 4, h: 6 }, place: { x: 0, y: 12, w: 4, h: 7 } },
+  { id: "attention", min: { w: 5, h: 4 }, place: { x: 4, y: 12, w: 8, h: 7 } },
+];
 
 export interface OverviewPlacement extends GridItem {
   id: OverviewWidgetId;
-  /** Kept with its place, so showing it again puts it back. */
-  hidden: boolean;
+  /** Kept with its place, so adding it again puts it back. */
+  removed: boolean;
 }
 
-/** Every widget once, the visible ones compacted, in the order people read them; the hidden ones last. */
+/** Every offered widget once, the visible ones compacted, in the order people read them; the removed ones last. */
 export type OverviewLayout = readonly OverviewPlacement[];
 
 export type OverviewLayoutChange =
   | { kind: "move"; widget: OverviewWidgetId; x: number; y: number }
   | { kind: "resize"; widget: OverviewWidgetId; w: number; h: number }
-  | { kind: "show" | "hide"; widget: OverviewWidgetId }
+  | { kind: "add" | "remove"; widget: OverviewWidgetId }
   /** Where the grid in a browser left the visible widgets. */
   | { kind: "arrange"; places: readonly OverviewPlace[] }
   | { kind: "reset" };
 
-export type OverviewPlace = Pick<OverviewPlacement, "id" | "x" | "y" | "w" | "h">;
+/** A place from a browser, which may draw a widget that is no longer offered. */
+export type OverviewPlace = GridItem;
 
-/** The metrics on top, then the topology, then the Health score with Needs attention beside it. */
-export const DEFAULT_LAYOUT: OverviewLayout = [
-  { id: "metrics", x: 0, y: 0, w: 12, h: 4, hidden: false },
-  { id: "topology", x: 0, y: 4, w: 12, h: 8, hidden: false },
-  { id: "health", x: 0, y: 12, w: 4, h: 7, hidden: false },
-  { id: "attention", x: 4, y: 12, w: 8, h: 7, hidden: false },
-];
+/** What a person without a stored layout sees. */
+export const DEFAULT_LAYOUT: OverviewLayout = defaultLayout(WIDGET_CATALOG);
 
-export function changeLayout(layout: OverviewLayout, change: OverviewLayoutChange): OverviewLayout {
+export function changeLayout(
+  layout: OverviewLayout,
+  change: OverviewLayoutChange,
+  offered: OfferedWidgets = WIDGET_CATALOG,
+): OverviewLayout {
   switch (change.kind) {
     case "reset":
-      return DEFAULT_LAYOUT;
-    case "show":
-    case "hide": {
-      const hidden = change.kind === "hide";
+      return defaultLayout(offered);
+    case "add":
+    case "remove": {
+      const removed = change.kind === "remove";
       return settled(
-        layout.map((widget) => (widget.id === change.widget ? { ...widget, hidden } : widget)),
-        hidden ? undefined : change.widget,
+        layout.map((widget) => (widget.id === change.widget ? { ...widget, removed } : widget)),
+        offered,
+        removed ? [] : [change.widget],
       );
     }
     case "move":
-      return withPlaces(layout, movedTo(visibleWidgets(layout), change.widget, change));
+      return withPlaces(layout, movedTo(visibleWidgets(layout), change.widget, change), offered);
     case "resize":
       return withPlaces(
         layout,
-        resizedTo(visibleWidgets(layout), change.widget, change, WIDGET_MINIMUM[change.widget]),
+        resizedTo(
+          visibleWidgets(layout),
+          change.widget,
+          change,
+          widgetMinimum(change.widget, offered),
+        ),
+        offered,
       );
     case "arrange":
-      return withPlaces(layout, change.places);
+      return withPlaces(layout, change.places, offered);
   }
 }
 
@@ -83,47 +102,72 @@ export function stepChange(
   layout: OverviewLayout,
   widget: OverviewWidgetId,
   step: GridStep,
+  offered: OfferedWidgets = WIDGET_CATALOG,
 ): Extract<OverviewLayoutChange, { kind: "arrange" }> | null {
-  const items = stepped(visibleWidgets(layout), widget, step, WIDGET_MINIMUM[widget]);
+  const items = stepped(visibleWidgets(layout), widget, step, widgetMinimum(widget, offered));
   return (
     items && {
       kind: "arrange",
-      places: items.map(({ id, x, y, w, h }) => ({ id: id as OverviewWidgetId, x, y, w, h })),
+      places: items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })),
     }
+  );
+}
+
+/** The default layout of the offered widgets. */
+export function defaultLayout(offered: OfferedWidgets): OverviewLayout {
+  return settled(
+    offered.map(({ id, place }) => ({ id, ...place, removed: false })),
+    offered,
   );
 }
 
 /** In reading order. */
 export function visibleWidgets(layout: OverviewLayout): OverviewPlacement[] {
-  return inReadingOrder(layout.filter(({ hidden }) => !hidden));
+  return inReadingOrder(layout.filter(({ removed }) => !removed));
+}
+
+export function widgetMinimum(
+  widget: OverviewWidgetId,
+  offered: OfferedWidgets = WIDGET_CATALOG,
+): GridMinimum {
+  return offered.find(({ id }) => id === widget)?.min ?? { w: 1, h: 1 };
 }
 
 export function sameLayout(a: OverviewLayout, b: OverviewLayout): boolean {
+  if (a.length !== b.length) return false;
   const other = new Map(b.map((widget) => [widget.id, widget]));
   return a.every((widget) => {
     const match = other.get(widget.id);
-    return match?.hidden === widget.hidden && samePlace(match, widget);
+    return match?.removed === widget.removed && samePlace(match, widget);
   });
 }
 
-/** Hidden widgets keep the place they had. */
-function withPlaces(layout: OverviewLayout, places: readonly GridItem[] | null): OverviewLayout {
-  if (!places) return layout;
-  const moved = new Map(places.map(({ id, x, y, w, h }) => [id, { x, y, w, h }]));
-  return settled(
-    layout.map((widget) => (widget.hidden ? widget : { ...widget, ...moved.get(widget.id) })),
-  );
-}
-
-/** Every size whole, and the visible widgets compacted; `first` keeps its place. */
+/** Every size whole, and the visible widgets compacted; those in `first` keep their place. */
 export function settled(
   widgets: readonly OverviewPlacement[],
-  first?: OverviewWidgetId,
+  offered: OfferedWidgets,
+  first: readonly OverviewWidgetId[] = [],
 ): OverviewLayout {
-  const whole = widgets.map((widget) => fitted(widget, WIDGET_MINIMUM[widget.id]));
-  const shown = compacted(
-    whole.filter(({ hidden }) => !hidden),
-    first,
+  const whole = widgets.map((widget) => fitted(widget, widgetMinimum(widget.id, offered)));
+  const visible = compacted(
+    whole.filter(({ removed }) => !removed),
+    ...first,
   ) as OverviewPlacement[];
-  return [...inReadingOrder(shown), ...whole.filter(({ hidden }) => hidden)];
+  return [...inReadingOrder(visible), ...whole.filter(({ removed }) => removed)];
+}
+
+/** Removed widgets keep the place they had. */
+function withPlaces(
+  layout: OverviewLayout,
+  places: readonly GridItem[] | null,
+  offered: OfferedWidgets,
+): OverviewLayout {
+  if (!places) return layout;
+  const moved = new Map<string, GridPlace>(
+    places.map(({ id, x, y, w, h }) => [id, { x, y, w, h }]),
+  );
+  return settled(
+    layout.map((widget) => (widget.removed ? widget : { ...widget, ...moved.get(widget.id) })),
+    offered,
+  );
 }
