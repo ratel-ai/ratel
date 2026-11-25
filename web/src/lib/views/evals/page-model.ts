@@ -1,5 +1,14 @@
 import type { Member } from "@/lib/console/scope/member-access";
+import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
 import { approvedVersion, type CaseVersion, draftVersion, type EvalCase } from "./domain/case";
+import {
+  type Counts,
+  countTrials,
+  type Experiment,
+  type ExperimentState,
+  type Trial,
+} from "./domain/experiment";
+import { type CaseCounts, caseCounts } from "./experiment-view";
 
 /** What the pages of evals show. Plain data. */
 export type CaseRow = {
@@ -64,4 +73,83 @@ function versionView(version: CaseVersion | null): CaseVersionView | null {
       updatedAt: version.updatedAt.toISOString(),
     }
   );
+}
+
+export type ExperimentRow = {
+  id: string;
+  sandboxName: string;
+  commit: string;
+  state: ExperimentState;
+  cases: number;
+  counts: Counts;
+  createdAt: string;
+};
+
+export type ReadyVersion = { id: string; name: string; commit: string };
+
+export type TrialView = Omit<Trial, "experimentId">;
+
+export type ExperimentPageModel = {
+  projectId: string;
+  id: string;
+  state: ExperimentState;
+  sandboxName: string;
+  sandboxVersionId: string;
+  commit: string;
+  dirty: boolean;
+  params: Record<string, unknown>;
+  trialsPerCase: number;
+  createdAt: string;
+  counts: Counts;
+  cases: Array<CaseCounts & { trials: TrialView[] }>;
+};
+
+export function experimentRow({
+  experiment,
+  trials,
+}: {
+  experiment: Experiment;
+  trials: ReadonlyArray<Pick<Trial, "result">>;
+}): ExperimentRow {
+  return {
+    id: experiment.id,
+    sandboxName: experiment.sandboxName,
+    commit: experiment.gitCommit,
+    state: experiment.state,
+    cases: experiment.caseVersions.length,
+    counts: countTrials(trials),
+    createdAt: experiment.createdAt.toISOString(),
+  };
+}
+
+export function experimentPageModel(
+  experiment: Experiment,
+  trials: readonly Trial[],
+): ExperimentPageModel {
+  return {
+    projectId: experiment.projectId,
+    id: experiment.id,
+    state: experiment.state,
+    sandboxName: experiment.sandboxName,
+    sandboxVersionId: experiment.sandboxVersionId,
+    commit: experiment.gitCommit,
+    dirty: experiment.gitDirty,
+    params: experiment.params,
+    trialsPerCase: experiment.trialsPerCase,
+    createdAt: experiment.createdAt.toISOString(),
+    counts: countTrials(trials),
+    cases: caseCounts(experiment, trials).map((row) => ({
+      ...row,
+      trials: trials
+        .filter(({ caseVersionId }) => caseVersionId === row.versionId)
+        .map(({ experimentId: _, ...trial }) => trial),
+    })),
+  };
+}
+
+/** The versions that a run can use, the newest first. */
+export function readyVersions(versions: readonly SandboxVersionSummary[]): ReadyVersion[] {
+  return versions
+    .filter(({ status }) => status === "ready")
+    .map(({ id, name, git }) => ({ id, name, commit: git.commit }));
 }

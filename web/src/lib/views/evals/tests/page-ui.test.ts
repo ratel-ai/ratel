@@ -4,12 +4,19 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
-import { EvalCasesView } from "@/components/console/evals/EvalCasesView";
+import { EvalsView } from "@/components/console/evals/EvalsView";
+import { ExperimentView } from "@/components/console/evals/ExperimentView";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
+import type { Experiment, Trial } from "../domain/experiment";
 import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
-import type { CaseEditorModel, CaseVersionView } from "../page-model";
+import {
+  type CaseEditorModel,
+  type CaseVersionView,
+  experimentPageModel,
+  readyVersions,
+} from "../page-model";
 import { content } from "./support";
 
 const NOW = "2026-11-25T10:00:00.000Z";
@@ -57,11 +64,13 @@ test("the rail has Evals only with the flag on", () => {
 test("the list shows which version counts", () => {
   const row = { id: "c1", name: "Late refund", labels: ["task: refunds"], createdAt: NOW };
   const html = render(
-    createElement(EvalCasesView, {
+    createElement(EvalsView, {
       projectId: PROJECT_ID,
       canEdit: true,
       now: NOW,
       cases: [{ ...row, approved: 1, draft: 2 }],
+      experiments: [],
+      versions: [],
     }),
   );
   const text = visibleText(html);
@@ -101,4 +110,100 @@ test("the turn page shows the action behind the flag, and the pages are under th
   const page = source("project/[projectId]/traces/turns/[turnId]/page.tsx");
   assert.match(page, /evalsEnabledForProject\(project\.id\)\) \? \(\s*<SaveAsEvalCase/);
   assert.match(source("(evals)/project/[projectId]/layout.tsx"), /notFound\(\)/);
+});
+
+test("the experiment page shows the raw counts of each case, and links each trial to its trace", () => {
+  const trial = (over: Partial<Trial>): Trial => ({
+    id: crypto.randomUUID(),
+    experimentId: "e1",
+    caseVersionId: "v1",
+    index: 0,
+    state: "done",
+    result: "pass",
+    reason: null,
+    output: "No.",
+    toolCalls: [{ name: "lookup_order", arguments: {}, result: {}, source: "real" }],
+    scorers: [],
+    costUsd: 0.01,
+    durationMs: 900,
+    traceId: "c".repeat(32),
+    sandboxRunId: "r1",
+    ...over,
+  });
+  const experiment: Experiment = {
+    id: "e1",
+    projectId: PROJECT_ID,
+    organizationId: "o1",
+    sandboxVersionId: "sv1",
+    sandboxName: "support-demo",
+    gitCommit: "b".repeat(40),
+    gitDirty: false,
+    params: { model: "x" },
+    trialsPerCase: 3,
+    caseVersions: [{ caseId: "c1", versionId: "v1", number: 2, name: "Late refund" }],
+    scorerSnapshots: {},
+    startedBy: "u",
+    state: "completed",
+    createdAt: new Date(NOW),
+    finishedAt: new Date(NOW),
+  };
+  const model = experimentPageModel(experiment, [
+    trial({}),
+    trial({
+      index: 1,
+      result: "fail",
+      scorers: [
+        {
+          scorerId: "s",
+          name: "No refund",
+          kind: "check",
+          gating: true,
+          status: "fail",
+          reason: "tools ne refund_order: the value is there.",
+        },
+      ],
+    }),
+    trial({ index: 2, result: "invalid", reason: "timed_out: no result", traceId: null }),
+  ]);
+  const html = render(createElement(ExperimentView, { model, now: NOW }));
+  const text = visibleText(html);
+  assert.equal(text.match(/1 pass/g)?.length, 2, "the total and the case");
+  for (const part of ["1 fail", "1 invalid", "Late refund", "timed_out: no result", "sv1"]) {
+    assert.ok(text.includes(part), part);
+  }
+  assert.match(text, /No refund\s*gating\s*tools ne refund_order/);
+  assert.match(html, new RegExp(`traces/${"c".repeat(32)}`));
+});
+
+test("Run evals lists ready versions only, and is not there in a support session", () => {
+  const version = (id: string, status: "ready" | "failed") => ({
+    id,
+    projectId: PROJECT_ID,
+    sandboxId: "s",
+    name: "support-demo",
+    git: { commit: "b".repeat(40), dirty: false },
+    status,
+    createdAt: new Date(),
+    tools: [],
+  });
+  const versions = readyVersions([version("1", "failed"), version("2", "ready")]);
+  assert.deepEqual(
+    versions.map(({ id }) => id),
+    ["2"],
+  );
+  const view = (canEdit: boolean) =>
+    visibleText(
+      render(
+        createElement(EvalsView, {
+          projectId: PROJECT_ID,
+          canEdit,
+          now: NOW,
+          cases: [],
+          experiments: [],
+          versions,
+        }),
+      ),
+    );
+  assert.ok(view(true).includes("No case is approved yet."));
+  assert.ok(!view(false).includes("Run evals"));
 });

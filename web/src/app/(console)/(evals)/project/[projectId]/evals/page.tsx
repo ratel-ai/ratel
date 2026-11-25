@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { EvalCasesView } from "@/components/console/evals/EvalCasesView";
+import { EvalsView } from "@/components/console/evals/EvalsView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
@@ -7,12 +7,17 @@ import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
-import { caseRow } from "@/lib/views/evals/page-model";
+import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
+import { caseRow, experimentRow, readyVersions } from "@/lib/views/evals/page-model";
+import { listSandboxVersions, sandboxesEnabledForProject } from "@/lib/views/sandboxes";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Evals" };
 
-/** The project's eval cases (the `evals` flag). */
+const EXPERIMENTS = 20;
+const VERSIONS = 50;
+
+/** The project's eval cases and experiments (the `evals` flag). */
 export default async function EvalsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   if (!isDbConfigured()) {
@@ -24,17 +29,28 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const cases = await withFeatureSpan(
+  const [cases, experiments, versions] = await withFeatureSpan(
     "evals",
     "load_page",
-    () => createDrizzleCaseStore(getDb()).list(project.id),
+    async () => {
+      const db = getDb();
+      return Promise.all([
+        createDrizzleCaseStore(db).list(project.id),
+        createDrizzleExperimentStore(db).list(project.id, EXPERIMENTS),
+        (await sandboxesEnabledForProject(project.id))
+          ? listSandboxVersions(project.id, VERSIONS)
+          : [],
+      ]);
+    },
     { attributes: { "project.id": project.id } },
   );
   return (
-    <EvalCasesView
+    <EvalsView
       projectId={project.id}
       canEdit={!(await isRestrictedBySupportSession())}
       cases={cases.map(caseRow)}
+      experiments={experiments.map(experimentRow)}
+      versions={readyVersions(versions)}
       now={new Date().toISOString()}
     />
   );

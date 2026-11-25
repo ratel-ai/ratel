@@ -40,6 +40,9 @@ export const BEARER_ROUTE_SCOPES = {
   "GET /api/v1/sandboxes/versions/[versionId]": "sandboxes:read",
   "PUT /api/v1/sandboxes/versions/[versionId]/bundle": "sandboxes:write",
   "POST /api/v1/sandboxes/versions/[versionId]/finalize": "sandboxes:write",
+  "GET /api/v1/evals/experiments": "evals:read",
+  "POST /api/v1/evals/experiments": "evals:write",
+  "GET /api/v1/evals/experiments/[experimentId]": "evals:read",
 } as const satisfies Record<string, ApiKeyScope>;
 
 export type BearerRoute = keyof typeof BEARER_ROUTE_SCOPES;

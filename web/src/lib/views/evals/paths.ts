@@ -5,3 +5,7 @@ export function evalsHref(projectId: string): string {
 export function caseHref(projectId: string, caseId: string): string {
   return `${evalsHref(projectId)}/cases/${caseId}`;
 }
+
+export function experimentHref(projectId: string, experimentId: string): string {
+  return `${evalsHref(projectId)}/experiments/${experimentId}`;
+}

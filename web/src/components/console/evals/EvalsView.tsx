@@ -8,19 +8,25 @@ import { EmptyState } from "@ratel/design-system/states";
 import { ListChecks } from "lucide-react";
 import Link from "next/link";
 import { formatRelativeTime } from "@/lib/synthesis/traces/v2/format";
-import type { CaseRow } from "@/lib/views/evals/page-model";
+import type { CaseRow, ExperimentRow, ReadyVersion } from "@/lib/views/evals/page-model";
 import { caseHref } from "@/lib/views/evals/paths";
+import { ExperimentList } from "./ExperimentList";
+import { RunEvals } from "./RunEvals";
 
-/** The cases of a project. */
-export function EvalCasesView({
+/** The experiments and the cases of a project. */
+export function EvalsView({
   projectId,
   canEdit,
   cases,
+  experiments,
+  versions,
   now,
 }: {
   projectId: string;
   canEdit: boolean;
   cases: CaseRow[];
+  experiments: ExperimentRow[];
+  versions: ReadyVersion[];
   /** ISO time the page was rendered, so relative times agree on server and client. */
   now: string;
 }) {
@@ -41,6 +47,14 @@ export function EvalCasesView({
         }
       />
       <PageBody>
+        {canEdit ? (
+          <RunEvals
+            projectId={projectId}
+            versions={versions}
+            approved={cases.filter(({ approved }) => approved !== null).length}
+          />
+        ) : null}
+        <ExperimentList projectId={projectId} experiments={experiments} now={now} />
         <Section title="Cases" description="Only an approved case counts in an eval run.">
           {cases.length === 0 ? (
             <EmptyState

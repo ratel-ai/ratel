@@ -33,6 +33,8 @@ export const API_KEY_SCOPES = [
   "content:read",
   "sandboxes:read",
   "sandboxes:write",
+  "evals:read",
+  "evals:write",
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
@@ -43,7 +45,7 @@ export const ALL_SCOPES = "*";
 export type StoredApiKeyScope = ApiKeyScope | typeof ALL_SCOPES;
 
 type ScopeInfo = { label: string; description: string; group: ScopeGroup };
-export type ScopeGroup = "Ingest" | "Catalog" | "Runtime" | "Usage" | "MCP" | "Sandboxes";
+export type ScopeGroup = "Ingest" | "Catalog" | "Runtime" | "Usage" | "MCP" | "Sandboxes" | "Evals";
 
 /** Labels for the advanced picker and the 403 reason. Plain words, no engine names. */
 export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
@@ -124,6 +126,16 @@ export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
     group: "Sandboxes",
     label: "Push sandboxes",
     description: "POST /api/v1/sandboxes/versions (ratel sandbox push)",
+  },
+  "evals:read": {
+    group: "Evals",
+    label: "Read eval runs",
+    description: "GET /api/v1/evals/experiments",
+  },
+  "evals:write": {
+    group: "Evals",
+    label: "Start eval runs",
+    description: "POST /api/v1/evals/experiments (ratel eval run)",
   },
 };
 
