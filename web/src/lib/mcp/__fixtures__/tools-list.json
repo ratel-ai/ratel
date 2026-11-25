@@ -1851,7 +1851,7 @@
   {
     "name": "get_agent_health",
     "title": "Get agent health",
-    "description": "The Agent health page for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
+    "description": "Agent health for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",

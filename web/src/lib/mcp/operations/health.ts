@@ -706,7 +706,7 @@ export function healthOperations(deps: HealthOperationDeps = defaultHealthDeps):
       domain: "observability",
       title: "Get agent health",
       description:
-        "The Agent health page for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
+        "Agent health for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
       keywords: [
         "health summary",
         "turn shapes",
