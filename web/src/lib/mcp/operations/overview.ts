@@ -9,9 +9,12 @@ import { getDb } from "@/lib/platform/db/client";
 import type { Organization } from "@/lib/platform/organizations";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getProjectById } from "@/lib/platform/projects/queries";
+import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import type { AttentionItem } from "@/lib/views/home/attention";
 import {
+  type FocusedAttention,
+  type FocusedHealth,
   type FocusedOverviewData,
   loadFocusedOverview,
   type MetricsData,
@@ -29,6 +32,9 @@ import {
   type OfferedWidgets,
   OVERVIEW_WIDGETS,
   type OverviewLayout,
+  type OverviewWidget,
+  type OverviewWidgetId,
+  onlyWidget,
   visibleWidgets,
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
@@ -38,9 +44,11 @@ import type { Topology } from "@/lib/views/project-entities/topology";
 
 /**
  * The recap Overview over MCP (`focusedConsole`): `get_overview` reads what the person sees on the
- * web, through the page's own loader and layout, and `change_overview_layout` arranges it through
- * the web's own action. With the flag off neither is listed (`operations/index.ts`), and a caller
- * that reaches a project whose organization has it off is refused.
+ * web, through the page's own loader and layout, or one widget of it through the same loader, and
+ * `change_overview_layout` arranges it through the web's own action. Both draw the overview view.
+ * A later widget needs an entry in `WIDGET_DATA`, and no operation. With the flag off neither is
+ * listed (`operations/index.ts`), and a caller that reaches a project whose organization has it off
+ * is refused.
  */
 
 export interface OverviewOperationDeps {
@@ -49,12 +57,26 @@ export interface OverviewOperationDeps {
   focusedConsole: (organization: Pick<Organization, "id">) => Promise<boolean>;
   loadOverview: typeof loadFocusedOverview;
   layoutStore: () => OverviewLayoutStore;
+  /** Every widget there is, which the parameter lists. A project may be offered fewer. */
+  widgets: OfferedWidgets;
   offeredWidgets: (projectId: string) => Promise<OfferedWidgets>;
+  /** What an agent reads of each widget. */
+  widgetData: Readonly<Record<OverviewWidgetId, WidgetData>>;
   restricted: () => Promise<boolean>;
   /** The Agents and MCP servers pages exist, so the map can link to them. */
   entitiesLinked: (organization: Pick<Organization, "id">) => Promise<boolean>;
   now: () => Date;
 }
+
+type WidgetData = (data: FocusedOverviewData) => unknown;
+
+/** What an agent reads of each widget: the same numbers as the page. Null when it is removed. */
+export const WIDGET_DATA: Readonly<Record<OverviewWidgetId, WidgetData>> = {
+  metrics: ({ metrics }) => metrics && metricsView(metrics),
+  topology: ({ topology }) => topology && topologyView(topology),
+  health: ({ health }) => health && healthView(health),
+  attention: ({ attention, root }) => attention && attentionView(attention, root),
+};
 
 export const defaultOverviewDeps: OverviewOperationDeps = {
   getProject: getProjectById,
@@ -62,7 +84,9 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   focusedConsole: (organization) => focusedConsoleEnabled(organization),
   loadOverview: loadFocusedOverview,
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
+  widgets: WIDGET_CATALOG,
   offeredWidgets: async () => WIDGET_CATALOG,
+  widgetData: WIDGET_DATA,
   restricted: isRestrictedBySupportSession,
   entitiesLinked: (organization) => projectEntitiesEnabled(organization),
   now: () => new Date(),
@@ -80,12 +104,25 @@ export function overviewOperations(
       domain: "observability",
       title: "Get the Overview",
       description:
-        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. A removed widget has no data. With an API key, the layout is the default. Example: {"range": "30d"}.',
-      keywords: ["overview", "recap", "needs attention", "overview layout", "widgets"],
+        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. Give widget to read only that widget, also if it is removed from the Overview. Without widget, a removed widget has no data. With an API key, the layout is the default. Example: {"widget": "health", "range": "30d"}.',
+      keywords: [
+        "overview",
+        "recap",
+        "needs attention",
+        "overview layout",
+        "widgets",
+        "one widget",
+      ],
       scope: "project",
       mutates: false,
       params: z.object({
         ...projectScoped,
+        // A string, so that an unknown name gets the refusal below, which lists the project's widgets.
+        widget: z
+          .string()
+          .optional()
+          .meta({ enum: deps.widgets.map(({ id }) => id) })
+          .describe("The widget to read. Without it, the result is the whole Overview."),
         range: z
           .enum(["7d", "30d"])
           .default("7d")
@@ -93,37 +130,45 @@ export function overviewOperations(
       }),
       async execute(ctx, params) {
         const { project, organization } = await requireOverview(deps, ctx.projectId);
-        const read = await readOverviewLayout(project.id, layoutDeps(deps, ctx.auth));
-        if (!read.ok) throw refused(read.reason);
-        const data = await deps.loadOverview({
-          project: {
-            id: project.id,
-            name: project.name,
-            slug: project.slug,
-            isDemo: project.isDemo,
-          },
-          organization,
-          window: params.range === "30d" ? 30 : 7,
-          layout: read.layout,
-          now: deps.now(),
-        });
-        const removed = data.layout.filter((widget) => widget.removed).map(({ id }) => id);
+        const widget =
+          params.widget === undefined
+            ? null
+            : requireWidget(params.widget, await deps.offeredWidgets(project.id));
+        const layout = widget
+          ? onlyWidget(widget)
+          : await wholeLayout(project.id, layoutDeps(deps, ctx.auth));
+        const data = await load(deps, { project, organization }, layout, params.range);
+        const view = ctx.forView
+          ? { view: await overviewView(deps, organization, data, widget) }
+          : {};
+        if (widget)
+          return {
+            data: {
+              ...pageData(data),
+              widget: widget.id,
+              [widget.id]: deps.widgetData[widget.id](data),
+            },
+            ...view,
+          };
+        const removed = layout.filter((placed) => placed.removed).map(({ id }) => id);
         return {
-          data: overviewData(data, ctx.auth.kind === "api-key" || (await deps.restricted())),
+          data: {
+            ...pageData(data),
+            layout: {
+              of:
+                ctx.auth.kind === "api-key" || (await deps.restricted())
+                  ? ("default" as const)
+                  : ("person" as const),
+              ...layoutView(layout),
+            },
+            ...Object.fromEntries(layout.map(({ id }) => [id, deps.widgetData[id](data)])),
+          },
           ...(removed.length > 0
             ? {
-                hint: `These widgets are removed and have no data: ${removed.join(", ")}. Call change_overview_layout with change "add" to add one again.`,
+                hint: `These widgets are removed and have no data: ${removed.join(", ")}. Call get_overview with widget to read one. Call change_overview_layout with change "add" to add one again.`,
               }
             : {}),
-          ...(ctx.forView
-            ? {
-                view: {
-                  kind: "overview",
-                  overview: data,
-                  linked: await deps.entitiesLinked(organization),
-                },
-              }
-            : {}),
+          ...view,
         };
       },
     }),
@@ -166,16 +211,32 @@ export function overviewWriteOperations(
         h: cell(1, 24).describe("The height in rows. Each widget has a minimum height."),
       }),
       async execute(ctx, params) {
-        const { project } = await requireOverview(deps, ctx.projectId);
+        const { project, organization } = await requireOverview(deps, ctx.projectId);
         const changed = await changeOverviewLayout(
           project.id,
           layoutChange(params),
           layoutDeps(deps, ctx.auth),
         );
         if (!changed.ok) throw refused(changed.reason);
+        const { layout } = changed;
+        // The layout is saved: a drawing that fails never makes the change look refused.
+        const view = ctx.forView
+          ? await loadOrFallback({
+              operation: "overview_mcp_changed_view",
+              distinctId: `project:${project.id}`,
+              fallback: null,
+              load: async () =>
+                overviewView(
+                  deps,
+                  organization,
+                  await load(deps, { project, organization }, layout, "7d"),
+                ),
+            })
+          : null;
         return {
-          data: { layout: layoutView(changed.layout) },
+          data: { layout: layoutView(layout) },
           hint: "The web page shows this layout when the person loads the Overview again.",
+          ...(view ? { view } : {}),
         };
       },
     }),
@@ -237,6 +298,50 @@ async function requireOverview(deps: OverviewOperationDeps, projectId: string) {
   return { project, organization };
 }
 
+function requireWidget(id: string, offered: OfferedWidgets): OverviewWidget {
+  const widget = offered.find((candidate) => candidate.id === id);
+  if (widget) return widget;
+  const message = `The Overview has no widget with the name "${id.slice(0, 40)}". The widgets are: ${offered.map((one) => one.id).join(", ")}.`;
+  throw invalidParams(message, [{ path: "widget", message: "Not a widget of this project." }]);
+}
+
+async function wholeLayout(projectId: string, deps: LayoutDeps): Promise<OverviewLayout> {
+  const read = await readOverviewLayout(projectId, deps);
+  if (!read.ok) throw refused(read.reason);
+  return read.layout;
+}
+
+/** The page's own loader: it reads only what the visible widgets of the layout need. */
+function load(
+  deps: OverviewOperationDeps,
+  { project, organization }: Awaited<ReturnType<typeof requireOverview>>,
+  layout: OverviewLayout,
+  range: "7d" | "30d",
+): Promise<FocusedOverviewData> {
+  return deps.loadOverview({
+    project: { id: project.id, name: project.name, slug: project.slug, isDemo: project.isDemo },
+    organization,
+    window: range === "30d" ? 30 : 7,
+    layout,
+    now: deps.now(),
+  });
+}
+
+/** What the overview view draws (mcp-apps/views/overview). `widget`: that one alone. */
+async function overviewView(
+  deps: OverviewOperationDeps,
+  organization: Pick<Organization, "id">,
+  overview: FocusedOverviewData,
+  widget: OverviewWidget | null = null,
+) {
+  return {
+    kind: "overview",
+    overview,
+    linked: await deps.entitiesLinked(organization),
+    ...(widget ? { widget: widget.id } : {}),
+  };
+}
+
 function refused(reason: LayoutRefusal): McpOperationError {
   if (reason === "not_found") return notFound("project");
   if (reason === "invalid") return invalidParams(LAYOUT_REFUSALS.invalid);
@@ -274,47 +379,13 @@ function layoutChange(params: ChangeParams): Record<string, unknown> {
   };
 }
 
-function overviewData(data: FocusedOverviewData, defaultLayout: boolean) {
+function pageData(data: FocusedOverviewData) {
   return {
     project: { id: data.project.id, name: data.project.name },
     href: data.window === 7 ? data.root : `${data.root}?range=${data.rangeParam}`,
     range: data.rangeParam,
     lastEventAt: data.lastEventAt?.toISOString() ?? null,
     hasTelemetry: data.hasTelemetry,
-    layout: {
-      of: defaultLayout ? ("default" as const) : ("person" as const),
-      ...layoutView(data.layout),
-    },
-    metrics: data.metrics && metricsView(data.metrics),
-    topology: data.topology && topologyView(data.topology),
-    health: data.health && {
-      windowDays: data.health.windowDays,
-      href: data.health.href,
-      ...(data.health.card.kind === "score"
-        ? {
-            score: data.health.card.score.value,
-            stillCalculating: data.health.card.early,
-            ...(data.health.card.lowConfidence
-              ? { lowConfidence: data.health.card.lowConfidence }
-              : {}),
-            lostPoints: data.health.card.lost.map(({ level, label, lost }) => ({
-              category: level,
-              label,
-              points: lost,
-            })),
-          }
-        : {
-            score: null,
-            why: data.health.card.line,
-            ...(data.health.card.failed ? { failed: true } : {}),
-          }),
-    },
-    attention: data.attention && {
-      rows: data.attention.items.map((item) => attentionRow(item, data.root)),
-      moreIssues: data.attention.moreIssues,
-      href: data.attention.healthHref,
-      ...(data.attention.partial ? { partial: true } : {}),
-    },
   };
 }
 
@@ -372,6 +443,34 @@ function topologyView(topology: Topology | "failed") {
     })),
     edges: topology.edges,
     leftOut: topology.omitted,
+  };
+}
+
+function healthView({ windowDays, href, card }: FocusedHealth) {
+  return {
+    windowDays,
+    href,
+    ...(card.kind === "score"
+      ? {
+          score: card.score.value,
+          stillCalculating: card.early,
+          ...(card.lowConfidence ? { lowConfidence: card.lowConfidence } : {}),
+          lostPoints: card.lost.map(({ level, label, lost }) => ({
+            category: level,
+            label,
+            points: lost,
+          })),
+        }
+      : { score: null, why: card.line, ...(card.failed ? { failed: true } : {}) }),
+  };
+}
+
+function attentionView(attention: FocusedAttention, root: string) {
+  return {
+    rows: attention.items.map((item) => attentionRow(item, root)),
+    moreIssues: attention.moreIssues,
+    href: attention.healthHref,
+    ...(attention.partial ? { partial: true } : {}),
   };
 }
 

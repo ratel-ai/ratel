@@ -17,7 +17,9 @@ background work, so it has no `register.ts`.
 ## A later widget
 
 Add it to `WIDGET_CATALOG`. Behind a flag, give it only in `LayoutDeps.offered` (the web: `readers.ts`;
-MCP: `OverviewOperationDeps.offeredWidgets`). Nobody's layout is reset, and nothing is migrated:
+MCP: `OverviewOperationDeps.offeredWidgets`). Give it a read (`home/focused-load`), a
+body (`widget-bodies`), a title (`widgets.ts`) and an entry in `WIDGET_DATA`: `get_overview` then reads
+and draws it alone too. Nobody's layout is reset, and nothing is migrated:
 
 - A stored layout keeps every place and removal. The new widget is at the bottom, visible, one time.
   After its removal it stays removed.

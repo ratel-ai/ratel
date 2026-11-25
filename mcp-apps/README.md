@@ -66,7 +66,7 @@ One prompt per view, in a new chat with the server on:
 | detail | "Show the Ratel project overview." |
 | series | "Show my Ratel cost by day for the last 30 days." |
 | health | "Show my agent's health in Ratel." Open an issue, then "Ask the agent to fix it". |
-| overview | "Show the Overview of my Ratel project." Needs `focusedConsole`. |
+| overview | "Show the Overview of my Ratel project.", or "Show only the Health score." Needs `focusedConsole`. |
 | replay | "Replay my latest Ratel session." Press Play, then fullscreen. |
 
 ## Rules
@@ -167,7 +167,8 @@ A view shows what its console page shows. Three rules keep it so:
   with the detail binding.
 - `overview`: `get_overview` as the recap Overview (`focusedConsole`): the console's own widget
   bodies (`components/console/home/focused/widget-bodies`) from the page's own data in the result's
-  `view`, in the person's places, with the hidden widgets absent. Nothing is arranged in the view.
+  `view`, in the person's places, with the hidden widgets absent, or one widget alone (`widget`).
+  `change_overview_layout` draws the Overview that it made. Nothing is arranged in the view.
   It is published only when the tool exists.
 - `replay`: the console's own session replay (`components/session-chat`:
   SessionChatView, SessionTrack with playback, StepInspector), from the same

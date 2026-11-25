@@ -56,7 +56,9 @@ These differ from their `ratel-cloud` origin ("upstream").
 - `operations/overview.ts` (no upstream counterpart): `get_overview` and `change_overview_layout`, the
   recap Overview and its layout through the web's own loader and action. `focusedConsole` off for the
   caller, they are not listed and the overview view is not published; off for the project's
-  organization, they refuse. An API key reads the default layout and cannot change one.
+  organization, they refuse. `get_overview` with `widget` reads and draws one widget alone, with only its own reads, also when the person removed it; a new
+  widget needs an entry in `WIDGET_DATA` and no operation. Both tools draw the overview view. An API
+  key reads the default layout and cannot change one.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `mcpApps`; upstream asks its flag service per project key or person, with timeouts and a
