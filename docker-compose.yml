@@ -12,7 +12,7 @@ name: ratel
 
 # What web and worker share: one image, one `.env`, one database.
 x-platform: &platform
-  image: ratelai/ratel:${RATEL_VERSION:-0.3.1} # x-release-please-version
+  image: ratelai/ratel:${RATEL_VERSION:-0.4.0} # x-release-please-version
   # Back after a reboot or a daemon restart; `docker compose stop` keeps it down.
   restart: unless-stopped
   env_file:
@@ -66,7 +66,7 @@ services:
 
   demo:
     profiles: [demo]
-    image: ratelai/ratel-demo:${RATEL_VERSION:-0.3.1} # x-release-please-version
+    image: ratelai/ratel-demo:${RATEL_VERSION:-0.4.0} # x-release-please-version
     # Shares the database's network, so `localhost` is exactly this Postgres and the seeds' guard
     # against any other database stays as it is.
     network_mode: service:db
