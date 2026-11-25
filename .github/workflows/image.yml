@@ -5,7 +5,7 @@
 #   a push to main                                          edge
 #   manual dispatch with `tag`                              that tag only (a test, for example 0.0.0-test)
 # Each image carries OCI labels, a provenance attestation and an SBOM. After the push, the smoke
-# job runs the amd64 image on Postgres and waits for /api/health.
+# job runs each platform of the app image on Postgres and waits for /api/health.
 name: image
 
 on:
@@ -32,25 +32,37 @@ concurrency:
   group: image-${{ inputs.version || inputs.tag || github.ref }}
   cancel-in-progress: false
 
+# One definition for the labels (build) and the tags (merge).
+env:
+  # semver: from `version` when called, else from the pushed tag (it skips a branch push).
+  # A pre-release gets only its full version, and `latest` follows only a final release.
+  IMAGE_TAGS: |
+    type=semver,pattern={{version}},value=${{ inputs.version }}
+    type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}
+    type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+    type=edge,branch=main,enable=${{ inputs.version == '' && inputs.tag == '' }}
+
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    # The arm64 half builds under QEMU, which is slow.
-    timeout-minutes: 120
+  # One platform of one image, on a runner of that platform: the arm64 Next build takes about 1.5
+  # minutes there and 11 to 19 under QEMU. It pushes by digest only: no tag moves here.
+  # No layer cache: a source change or a new NEXT_DEPLOYMENT_ID always misses the Next build, a cache
+  # hit on the dependencies takes longer to download than to install, and the export took 2 to 4 minutes.
+  build:
+    name: build (${{ matrix.target }}, ${{ matrix.arch.platform }})
+    runs-on: ${{ matrix.arch.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        target: [oss, demo]
+        arch:
+          - { platform: amd64, runner: ubuntu-24.04 }
+          - { platform: arm64, runner: ubuntu-24.04-arm }
         include:
           - { target: oss, image: ratelai/ratel, title: Ratel, description: "Ratel Platform, open-source edition" }
           - { target: demo, image: ratelai/ratel-demo, title: Ratel demo data, description: "One-shot demo data for Ratel" }
-    # The same for both images.
-    outputs:
-      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -60,13 +72,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: docker.io/${{ matrix.image }}
-          # semver: from `version` when called, else from the pushed tag (it skips a branch push).
-          # A pre-release gets only its full version, and `latest` follows only a final release.
-          tags: |
-            type=semver,pattern={{version}},value=${{ inputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
-            type=edge,branch=main,enable=${{ inputs.version == '' && inputs.tag == '' }}
+          tags: ${{ env.IMAGE_TAGS }}
           labels: |
             org.opencontainers.image.title=${{ matrix.title }}
             org.opencontainers.image.description=${{ matrix.description }}
@@ -81,26 +87,94 @@ jobs:
         env:
           VERSION: ${{ steps.meta.outputs.version }}
         run: echo "id=${VERSION//./-}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: web/Dockerfile
           target: ${{ matrix.target }}
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/${{ matrix.arch.platform }}
+          tags: docker.io/${{ matrix.image }}
+          outputs: type=image,push=true,push-by-digest=true,name-canonical=true
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           build-args: NEXT_DEPLOYMENT_ID=${{ steps.deployment.outputs.id }}
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=image-${{ matrix.target }}
-          cache-to: type=gha,scope=image-${{ matrix.target }},mode=max
+      # A file named after the digest: matrix jobs cannot have one job output each.
+      - name: Save the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.target }}-${{ matrix.arch.platform }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+
+  # Joins the two platforms of an image, with their attestations, under its tags.
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: oss, image: ratelai/ratel }
+          - { target: demo, image: ratelai/ratel-demo }
+    # The same for both images.
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-${{ matrix.target }}-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ matrix.image }}
+          tags: ${{ env.IMAGE_TAGS }}
+      - name: Create the manifest list
+        working-directory: digests
+        env:
+          IMAGE: docker.io/${{ matrix.image }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          digests=(*)
+          if [ "${#digests[@]}" -ne 2 ]; then
+            echo "::error::expected one digest for each platform, got: ${digests[*]}"
+            exit 1
+          fi
+          args=()
+          while read -r tag; do
+            if [ -n "$tag" ]; then args+=(-t "$tag"); fi
+          done <<<"$TAGS"
+          docker buildx imagetools create "${args[@]}" "${digests[@]/#/$IMAGE@sha256:}"
+          docker buildx imagetools inspect "${args[1]}"
 
   smoke:
-    needs: publish
-    runs-on: ubuntu-latest
+    name: smoke (${{ matrix.arch.platform }})
+    needs: merge
+    runs-on: ${{ matrix.arch.runner }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - { platform: amd64, runner: ubuntu-24.04 }
+          - { platform: arm64, runner: ubuntu-24.04-arm }
     services:
       db:
         image: postgres:16-alpine
@@ -114,7 +188,7 @@ jobs:
     steps:
       - name: Pull and run the pushed image
         env:
-          REF: docker.io/ratelai/ratel:${{ needs.publish.outputs.version }}
+          REF: docker.io/ratelai/ratel:${{ needs.merge.outputs.version }}
         run: |
           docker pull "$REF"
           docker run -d --name ratel --network host \
