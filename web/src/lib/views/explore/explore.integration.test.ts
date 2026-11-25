@@ -6,6 +6,14 @@ import { type MetricQuery, metricQuery, QUERY_KINDS } from "@/lib/contracts/quer
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { type MetricsDb, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import {
+  alertQueryOf,
+  IN_FRAGMENT,
+  NEW_ALERT_PARAM,
+  newAlertHref,
+  PAGE_FILTERS_PARAM,
+} from "@/lib/views/alerts/links";
+import { parseAlertQuery } from "@/lib/views/alerts/parse-rule";
 import { changeDashboard, type DashboardActionDeps } from "@/lib/views/dashboards/actions";
 // The modules that run the kinds register with it.
 import "@/lib/views/dashboards/data";
@@ -17,7 +25,7 @@ import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { traceFilterFromSearch, withoutRollupFilters } from "@/lib/synthesis/traces/v2/filters";
 import { resolveTraceListView, resolveTraceRange } from "@/lib/synthesis/traces/view";
-import { withPageFilters } from "@/lib/views/dashboards/filters";
+import { takesPageFilters, withPageFilters } from "@/lib/views/dashboards/filters";
 import { widgetTracesHref } from "@/lib/views/dashboards/links";
 import { exactly } from "@/lib/views/dashboards/range";
 import * as store from "@/lib/views/dashboards/store";
@@ -100,7 +108,7 @@ test("a panel of each kind runs, and saves as an equal widget", async () => {
   }
 });
 
-test("the saved widget and the trace link read the rows the panel showed", async () => {
+test("the saved widget, the alert and the trace link read the rows the panel showed", async () => {
   const cases: [string, TraceFilter, DashboardFilters, string[]][] = [
     ["no filter", {}, {}, ["start", "both", "x", "staging"]],
     ["disjoint scalar", { environments: ["prod"] }, { environments: ["staging"] }, []],
@@ -136,6 +144,9 @@ test("the saved widget and the trace link read the rows the panel showed", async
     const stored = (await store.getDashboard(PROJECT, dashboardId, db))?.widgets.at(-1);
     assert.ok(stored && isWidget(stored));
     assert.deepEqual(await runQuery(PROJECT, stored.query, HOUR, db), shown, name);
+
+    const alert = alertOf(newAlertHref(PROJECT, merged, takesPageFilters(query, page)));
+    assert.deepEqual(await runQuery(PROJECT, alert, HOUR, db), shown, name);
 
     const href = widgetTracesHref(PROJECT, withClause(queryFilter(query), page), HOUR);
     assert.deepEqual(
@@ -193,6 +204,56 @@ test("a trace is in an exact window by its start, as in the panel", async () => 
       if (!/rollback/i.test(String(error))) throw error;
     });
 });
+
+test("Save and Create alert take a long tool list and the page's filters, and say what they include", async () => {
+  const tools = Array.from({ length: 130 }, (_, index) => `a-long-tool-name-${index}`);
+  const query = metricQuery("latency", "p95", { filters: { tools } });
+  const page = { agents: ["a"], models: ["m"] };
+  const href = newAlertHref(PROJECT, withPageFilters(query, page), takesPageFilters(query, page));
+  assert.deepEqual(alertOf(href).filters, { tools, and: [{ agents: ["a"], models: ["m"] }] });
+  const said = (filters: object, of: MetricQuery = query) =>
+    new URL(
+      newAlertHref(PROJECT, withPageFilters(of, filters), takesPageFilters(of, filters)),
+      "https://x.test",
+    ).searchParams.get(PAGE_FILTERS_PARAM);
+  assert.equal(said(page), "1");
+  for (const [filters, of] of [
+    [{}, query],
+    [{ models: ["m"] }, metricQuery("latency", "p95", { filters: { models: ["m"] } })],
+    [page, metricQuery("context_cost", "sum")],
+  ] as const)
+    assert.equal(said(filters, of), null);
+});
+
+test("a link of the form before this one still opens", () => {
+  const query = metricQuery("latency", "p95", { filters: { services: ["web"] } });
+  const params = new URLSearchParams({ [NEW_ALERT_PARAM]: JSON.stringify(query) });
+  assert.deepEqual(alertOf(`/new?${params}`), query);
+});
+
+test("Create alert opens the form with the panel's metric and filter", () => {
+  const query = metricQuery("error_rate", "rate", {
+    dimensions: ["model"],
+    filters: { services: ["web"] },
+    bucket: "day",
+  });
+  assert.deepEqual(
+    alertOf(newAlertHref(PROJECT, query)),
+    metricQuery("error_rate", "rate", { filters: { services: ["web"] } }),
+  );
+});
+
+/** The query the alert form opens with. */
+function alertOf(href: string): MetricQuery {
+  const { searchParams, hash } = new URL(href, "https://x.test");
+  const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
+  const parsed = parseAlertQuery(
+    alertQueryOf(value === IN_FRAGMENT ? hash.slice(1) : value),
+    FEATURES,
+  );
+  assert.ok(parsed.ok);
+  return parsed.query;
+}
 
 /** What the Traces page lists and counts for an address. */
 async function tracesOf(href: string, of: typeof db = db): Promise<number[]> {

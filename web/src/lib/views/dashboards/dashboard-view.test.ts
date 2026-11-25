@@ -81,6 +81,7 @@ function html(props: Partial<ComponentProps<typeof DashboardView>> = {}): string
       facets: { model: [], tool: [], service: [], environment: [] },
       timeWindow: { preset: "7d", from: at, to: at, today: "2026-11-24" },
       scorers: [],
+      alerts: false,
       draft: null,
       ...props,
     }),

@@ -3,6 +3,7 @@ import { DashboardView } from "@/components/console/dashboards/DashboardView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { projectRoot } from "@/lib/console/navigation";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { resolveTraceRange, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
@@ -57,7 +58,7 @@ export default async function ScopedDashboardPage({
     organizationId: scope.organization.id,
     actor: scope.user.externalId,
   });
-  const [results, { facets, scorers }] = await Promise.all([
+  const [results, { facets, scorers }, alerts] = await Promise.all([
     loadWidgets(
       scope.project.id,
       problem ? [] : dashboard.widgets,
@@ -65,12 +66,18 @@ export default async function ScopedDashboardPage({
       features,
     ),
     loadWidgetForm(scope.project.id, range, features),
+    featureEnabled("customMonitoring", {
+      projectId: scope.project.id,
+      organizationId: scope.organization.id,
+      actor: scope.user.externalId,
+    }),
   ]);
   const overview = await focusedConsoleEnabled(scope.organization);
   const added = scorers?.find(({ id }) => id === search[ADD_SCORER_PARAM]);
   return (
     <DashboardView
       scorers={scorers}
+      alerts={alerts}
       overview={overview}
       draft={added ? scorerWidget(added) : null}
       projectId={scope.project.id}

@@ -111,6 +111,8 @@ export function ExplorePanel({
               filters={filters}
               range={range}
               exploreHref={null}
+              alerts
+              alertWithFilters
             />
             <MenuSeparator />
             <MenuItem icon={<Braces />} onClick={() => void copyQuery()}>

@@ -40,9 +40,9 @@ function drawView(view: OverviewView | null, drawn?: Parameters<typeof OverviewB
   return { html, text: visibleText(html), ids };
 }
 
-test("default: the four widgets", () => {
+test("default: the five widgets", () => {
   const { html, text, ids } = draw("get_overview");
-  assert.deepEqual(ids, ["metrics", "topology", "health", "attention"]);
+  assert.deepEqual(ids, ["metrics", "topology", "health", "attention", "alerts"]);
   assert.match(text, /Runs .*141.*Failed runs .*Median duration .*Spend/);
   assert.match(text, /Retries after errors/);
   assert.match(html, /data-health-score="\d+"/);
@@ -93,6 +93,8 @@ test("one widget: nothing to show, a failed read and no data each have their own
     draw("get_overview · attention, nothing").text,
     /Nothing needs you right now.*Open Agent health/,
   );
+  assert.match(draw("get_overview · alerts").text, /Too many errors\s*12%\s*above 5% · 12m ago/);
+  assert.match(draw("get_overview · alerts, none").text, /No alert fires now.*Open Alerts/);
   const failed = draw("get_overview · topology, failed read");
   assert.match(failed.text, /The map did not load.*Try again/);
   assert.deepEqual(failed.ids, ["topology"]);

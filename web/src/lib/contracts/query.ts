@@ -10,7 +10,7 @@ import { hasNoNul, NUL_PROBLEM, shownValue } from "@/lib/contracts/json-text";
 import { filterProblem, MAX_FILTER_BYTES } from "./filter-budget";
 
 /**
- * The query object: the one JSON contract of dashboards. It says what to measure,
+ * The query object: the one JSON contract of dashboards, alerts and MCP. It says what to measure,
  * never over which time: the window is a separate argument of whoever runs it. The measures table
  * is the whole vocabulary; `synthesis/metrics` runs it. `docs/schemas/query.schema.json` is
  * generated from this file (`pnpm schemas:generate`).

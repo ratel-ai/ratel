@@ -33,7 +33,7 @@ const defaults: FeaturePageDeps = {
  * setup notice. Else the reader's project.
  */
 export function resolveFeaturePage(
-  feature: "scorers" | "explore",
+  feature: "scorers" | "alerts" | "explore",
   projectId: string,
   deps: FeaturePageDeps = defaults,
 ): Promise<FeaturePage | null> {

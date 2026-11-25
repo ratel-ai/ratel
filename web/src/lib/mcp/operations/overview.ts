@@ -15,6 +15,7 @@ import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import type { AttentionItem } from "@/lib/views/home/attention";
 import {
+  type FocusedAlerts,
   type FocusedAttention,
   type FocusedHealth,
   type FocusedOverviewData,
@@ -48,7 +49,7 @@ import {
   visibleWidgets,
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
-import { projectDashboardsOn } from "@/lib/views/overview-layout/offered";
+import { projectDashboardsOn, projectWidgets } from "@/lib/views/overview-layout/offered";
 import type { OverviewLayoutStore } from "@/lib/views/overview-layout/ports/store";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 import type { Topology } from "@/lib/views/project-entities/topology";
@@ -94,6 +95,7 @@ export const WIDGET_DATA: Readonly<Record<OverviewWidgetId, WidgetData>> = {
   topology: ({ topology }) => topology && topologyView(topology),
   health: ({ health }) => health && healthView(health),
   attention: ({ attention, root }) => attention && attentionView(attention, root),
+  alerts: ({ alerts }) => alerts && alertsView(alerts),
 };
 
 export const defaultOverviewDeps: OverviewOperationDeps = {
@@ -103,7 +105,7 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   loadOverview: loadFocusedOverview,
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
   widgets: WIDGET_CATALOG,
-  offeredWidgets: async () => WIDGET_CATALOG,
+  offeredWidgets: (projectId) => projectWidgets(projectId),
   dashboardsOn: (projectId) => projectDashboardsOn(projectId),
   dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref),
   widgetData: WIDGET_DATA,
@@ -130,7 +132,7 @@ export function overviewOperations(
       domain: "observability",
       title: "Get the Overview",
       description:
-        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. Give widget to read only that widget, also if it is removed from the Overview. Without widget, a removed widget has no data. With an API key, the layout is the default. Example: {"widget": "health", "range": "30d"}.',
+        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, attention rows, alerts and the widget layout. Give widget to read only that widget, also if it is removed from the Overview. Without widget, a removed widget has no data. With an API key, the layout is the default. Example: {"widget": "health", "range": "30d"}.',
       keywords: [
         "overview",
         "recap",
@@ -655,6 +657,11 @@ function attentionView(attention: FocusedAttention, root: string) {
     href: attention.healthHref,
     ...(attention.partial ? { partial: true } : {}),
   };
+}
+
+function alertsView(alerts: FocusedAlerts | "failed") {
+  if (alerts === "failed") return { failed: true };
+  return { count: alerts.items.length, rows: alerts.items, href: alerts.href };
 }
 
 function attentionRow(item: AttentionItem, root: string) {

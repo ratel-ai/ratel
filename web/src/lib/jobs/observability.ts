@@ -46,6 +46,10 @@ export type BackgroundEventName = Extract<
   | "fix_draft_finished"
   | "feature.scorers.swept"
   | "feature.scorers.judge_skipped"
+  | "feature.alerts.fired"
+  | "feature.alerts.recovered"
+  | "feature.alerts.delivery_failed"
+  | "feature.alerts.skipped"
 >;
 
 export interface BackgroundObservabilityDeps {

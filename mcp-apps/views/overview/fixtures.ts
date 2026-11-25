@@ -140,6 +140,19 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
     healthHref: HEALTH,
     partial: false,
   },
+  alerts: {
+    items: [
+      {
+        id: "a1",
+        name: "Too many errors",
+        value: "12%",
+        condition: "above 5%",
+        since: "12m ago",
+        href: `${ROOT}/alerts/a1`,
+      },
+    ],
+    href: `${ROOT}/alerts`,
+  },
   dashboards: null,
   context: null,
 };
@@ -171,6 +184,7 @@ function single(
     topology: null,
     health: null,
     attention: null,
+    alerts: null,
     [widget]: DATA[widget],
     ...over,
     layout: onlyWidget(entry),
@@ -252,6 +266,10 @@ const fixtures: ViewFixtures = {
   "get_overview · attention, nothing": single("attention", {
     attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false },
   }),
+  "get_overview · alerts": single("alerts"),
+  "get_overview · alerts, none": single("alerts", {
+    alerts: { items: [], href: `${ROOT}/alerts` },
+  }),
   "get_overview · topology, failed read": single("topology", { topology: "failed" }),
   "get_overview · metrics, no data": single("metrics", { hasTelemetry: false, metrics: null }),
   "get_overview · unknown widget": {
@@ -259,7 +277,7 @@ const fixtures: ViewFixtures = {
     input: { widget: "spend" },
     result: errorResult(
       "invalid_params",
-      'The Overview has no widget with the name "spend". The widgets are: metrics, topology, health, attention.',
+      'The Overview has no widget with the name "spend". The widgets are: metrics, topology, health, attention, alerts.',
     ),
   },
   change_overview_layout: {

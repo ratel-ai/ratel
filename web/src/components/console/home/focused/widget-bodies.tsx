@@ -5,6 +5,7 @@ import { ArrowRight, CircleCheck } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AttentionList } from "@/components/console/home/AttentionList";
+import { AlertsWidget } from "@/components/console/home/focused/AlertsWidget";
 import { HealthWidget } from "@/components/console/home/focused/HealthWidget";
 import { focusedStats } from "@/components/console/home/overview-stats";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
@@ -29,7 +30,7 @@ export function widgetBodies(
   /** Where a Panel opens from somewhere other than the page (an MCP App view); absent, in place. */
   peekHref?: PeekHref,
 ): Record<OverviewWidgetId, ReactNode> {
-  const { metrics, topology, health, attention, root, rangeParam } = data;
+  const { metrics, topology, health, attention, alerts, root, rangeParam } = data;
   const reload = data.window === 7 ? root : `${root}?range=${rangeParam}`;
   return {
     metrics:
@@ -56,6 +57,12 @@ export function widgetBodies(
     attention: attention && (
       <NeedsAttention attention={attention} reload={reload} peekHref={peekHref} />
     ),
+    alerts:
+      alerts === "failed" ? (
+        <NotLoaded title="The alerts did not load." href={reload} />
+      ) : (
+        alerts && <AlertsWidget alerts={alerts} />
+      ),
   };
 }
 

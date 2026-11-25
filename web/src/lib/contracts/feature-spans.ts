@@ -19,6 +19,7 @@ export type FeatureName =
   | "tool_run_insights"
   | "hosted_apis"
   | "scorers"
+  | "alerts"
   | "explore";
 
 export type FeatureSpanOptions = {

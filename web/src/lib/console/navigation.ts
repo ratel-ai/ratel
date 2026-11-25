@@ -105,7 +105,7 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
-  /** `customMonitoring` on for the shown organization: Scorers, Dashboards and Explore under Overview. */
+  /** `customMonitoring` on for the shown organization: Scorers, Dashboards, Explore and Alerts under Overview. */
   customMonitoring?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
@@ -544,6 +544,13 @@ function withMonitoringPages(root: string, overview: NavItem): NavItem {
         href: `${root}/explore`,
         icon: "overview",
         keywords: ["query", "analyze", "playground", "charts", "funnel", "flow"],
+      },
+      {
+        id: "alerts",
+        label: "Alerts",
+        href: `${root}/alerts`,
+        icon: "overview",
+        keywords: ["threshold", "monitors"],
       },
     ],
   };

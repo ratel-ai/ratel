@@ -9,7 +9,7 @@ import {
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
 /**
- * The metric catalog: what a widget can measure. The query contract
+ * The metric catalog: what a widget or an alert can measure. The query contract
  * (`contracts/query`) says what each measure allows; this adds how it reads and where it comes
  * from. Pure data, safe for the browser, so every form is built from it.
  */
@@ -50,6 +50,11 @@ export interface QueryWindow {
 export interface QueryScope extends QueryWindow {
   /** Nothing for a measure that cannot be filtered. */
   filter?: TraceFilter;
+  /**
+   * What the window selects a metric's rows by: when they started (dashboards), or when they became
+   * known (alerts). A trace is known when its summary was last written, a result when it was stored.
+   */
+  by?: "started" | "known";
 }
 
 /** The groups kept in a grouped result. */
@@ -108,6 +113,11 @@ export const METRICS: readonly MetricDefinition[] = MEASURE_IDS.map((id) => ({
   ...MEASURES[id],
   ...READS[id],
 }));
+
+/** Nothing happened is 0 for an amount, and no answer for a ratio, an average or a percentile. */
+export function nothingIsZero(aggregation: Aggregation): boolean {
+  return aggregation === "count" || aggregation === "sum";
+}
 
 /** Whether a project with these switches may use the entry. */
 export function metricOffered(metric: MetricDefinition, features: MetricFeatures): boolean {

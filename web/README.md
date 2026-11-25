@@ -90,7 +90,7 @@ exist: `ingest` only queues ingest batches and never migrates, `persist` only pe
 `RATEL_EXPERIMENTAL_FEATURES=1` (`experimentalFeatures`) turns on the experimental features left in the open-source
 edition: the eval gate, adaptive ranking's catalog drift (the gone-tool warning only for tools a
 published catalog dropped, closable warnings, gone tools pruned on rebuild), MCP Apps, the MCP
-server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), Scorers, custom Dashboards, and tool-run
+server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), Scorers, custom Dashboards, Alerts, and tool-run
 insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
 confidence). Cloud ignores it and reads each flag (`evalGate`, `rankingCatalogDrift`, `mcpApps`,

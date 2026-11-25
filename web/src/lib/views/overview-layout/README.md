@@ -8,7 +8,7 @@ Where each person put the Overview's widgets, and which ones they removed, per p
 | `domain/stored.ts` | pure: the stored row (`readArrangement`, `changeArrangement`, `storeArrangement`) and the schema of a change from outside |
 | `domain/history.ts` | pure: the entry of a change and its words (`nextChange`, `describeChange`), what Undo takes back (`undoTarget`) and the name of a state (`revisionOf`) |
 | `ports/store.ts`, `adapters/drizzle-store.ts`, `schema.ts` | `overview_layouts`: one versioned `jsonb` layout per project and person. No row is the default layout. `overview_layout_changes`: its last 25 changes. Both are deleted with the project. An update runs under a per-person lock, and stores the layout, its entry and the drop of the oldest in one transaction |
-| `offered.ts` | `projectDashboardsOn`: whether a project has dashboards, so that their widgets can be on the Overview |
+| `offered.ts` | `projectWidgets`: the widgets a project is offered, on the web and over MCP. The Alerts widget needs `customMonitoring` for the project's organization |
 | `dashboard-widgets.ts` | the widgets of the project's dashboards, for the picker and for an add |
 | `actions.ts` | `readOverviewLayout`, `changeOverviewLayout`, `undoOverviewChange`, `restoreOverviewLayout` and `readOverviewHistory`, which the web and MCP both call. Somebody without access gets `not_found`; an API key and a support session read the default with no read of the store, cannot write, and cannot read a history |
 | `readers.ts` | who asks on the web: the console's project scope, and `pageLayout`, which offers no save when the read failed. MCP's reader is in `lib/mcp/operations/overview.ts` |

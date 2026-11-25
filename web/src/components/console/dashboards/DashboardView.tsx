@@ -83,6 +83,7 @@ export function DashboardView({
   facets,
   timeWindow,
   scorers,
+  alerts,
   draft,
   overview = false,
   startEditing = false,
@@ -98,6 +99,8 @@ export function DashboardView({
   timeWindow: TimeWindow;
   /** The project's scorers; null while scorers are off. */
   scorers: readonly ScorerOption[] | null;
+  /** Alerts are on: a widget can start one. */
+  alerts: boolean;
   /** A widget to start adding as the page opens, from a scorer's page. */
   draft: WidgetInput | null;
   /** The Overview takes widgets of dashboards (`focusedConsole`). */
@@ -494,6 +497,7 @@ export function DashboardView({
                                     })
                                   : null
                               }
+                              alerts={alerts && available(widget) && !widget.missingScorer}
                             />
                           </MenuContent>
                         </Menu>

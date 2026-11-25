@@ -16,6 +16,7 @@ import {
   METRIC_GROUP_LIMIT,
   type MetricDefinition,
   metricBucket,
+  nothingIsZero,
   type QueryScope,
   type QueryWindow,
 } from "@/lib/synthesis/metrics/catalog";
@@ -86,6 +87,8 @@ export interface MetricSourceQuery {
   table: SQL;
   project: SQL;
   time: SQL;
+  /** When a row became known; its time by default. */
+  knownAt?: SQL;
   /** The scorer of a row, where there is one. */
   scorer?: SQL;
   /** A count needs no more than the row. `where` keeps the rows the metric applies to. */
@@ -132,6 +135,7 @@ const SOURCES: Record<"traces" | "context", MetricSourceQuery> = {
     table: sql`otel_trace_summaries s`,
     project: sql`s.project_id`,
     time: sql`s.started_at`,
+    knownAt: sql`s.updated_at`,
     measures: {
       trace_count: { value: sql`1` },
       error_rate: { value: sql`case when coalesce(s.root_error, s.has_error) then 1 else 0 end` },
@@ -171,8 +175,8 @@ export const metricSeams: {
 } = {};
 
 /**
- * The one way a query object runs: over a window, filtered and grouped. Throws
- * `QueryError` for a query the contract does not allow.
+ * The one way a query object runs: over a window, filtered and grouped. Dashboards and alerts both
+ * call it. Throws `QueryError` for a query the contract does not allow.
  */
 export async function runQuery<Q extends Query>(
   projectId: string,
@@ -328,7 +332,8 @@ function aggregateSql(
   if (!source || !measure || !groups.every((group) => group !== undefined)) {
     throw new Error(`the metric source "${metric.source}" cannot answer "${metric.id}"`);
   }
-  const { table, time } = source;
+  const { table } = source;
+  const time = scope.by === "known" ? (source.knownAt ?? source.time) : source.time;
   const condition = traceFilterCondition(traceFilter);
   return sql`
     with measured as (
@@ -392,8 +397,7 @@ function toSeries(
   aggregation: Aggregation,
   grouped: boolean,
 ): MetricSeries[] {
-  // Nothing happened is 0 for an amount, and no answer for a ratio.
-  const nothing = aggregation === "count" || aggregation === "sum" ? 0 : null;
+  const nothing = nothingIsZero(aggregation) ? 0 : null;
   const indexOf = new Map(buckets.map((start, index) => [start, index]));
   const byGroup = new Map<string, MetricSeries>();
   const seriesOf = (grp: readonly string[], labels: readonly (string | null)[]) => {

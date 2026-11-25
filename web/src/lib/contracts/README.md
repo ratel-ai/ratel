@@ -10,7 +10,7 @@ side annotates against it, so the two shapes cannot drift. Its optional `product
 edition names the product in copy (`full` for the MCP server, `short` for the service in a
 sentence); without it the copy keeps its neutral words.
 
-`query.ts` is the query object: the one JSON contract of dashboards (a version, a kind
+`query.ts` is the query object: the one JSON contract of dashboards, alerts and MCP (a version, a kind
 and what that kind asks; never the time window), with `parseQuery` and the `MEASURES` vocabulary.
 `check.ts` is what a check reads and how it compares, for check scorers and funnel steps. `views/dashboards/json-schemas.ts` derives the JSON Schemas under
 `docs/schemas`.

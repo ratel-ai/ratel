@@ -46,6 +46,7 @@ import { traceSignalsRegistration } from "@/lib/readings/trace-signals/register"
 import { qualityRegistration } from "@/lib/synthesis/quality/register";
 import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
+import { alertsRegistration } from "@/lib/views/alerts/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { scorersRegistration } from "@/lib/views/scorers/register";
@@ -163,6 +164,7 @@ const CORE: Registration[] = [
   taskScorersRegistration,
   taskEvalsRegistration,
   scorersRegistration,
+  alertsRegistration,
 ];
 
 export function collectRegistrations(

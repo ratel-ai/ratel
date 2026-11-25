@@ -112,6 +112,11 @@ export const SERVER_EVENT_NAMES = [
   "feature.scorers.changed",
   "feature.scorers.swept",
   "feature.scorers.judge_skipped",
+  "feature.alerts.changed",
+  "feature.alerts.fired",
+  "feature.alerts.recovered",
+  "feature.alerts.delivery_failed",
+  "feature.alerts.skipped",
   "dashboard_changed",
 ] as const;
 
