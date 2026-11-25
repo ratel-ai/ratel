@@ -16,6 +16,7 @@ import {
   changeLayout,
   type OverviewLayout,
   type OverviewLayoutChange,
+  type OverviewWidgetId,
   sameLayout,
 } from "@/lib/views/overview-layout/domain/layout";
 
@@ -33,6 +34,11 @@ interface LayoutState {
   /** The Add widget dialog. */
   adding: boolean;
   setAdding: (adding: boolean) => void;
+  /** The widgets of the last visit to the dialog, until the page has shown them. */
+  added: readonly OverviewWidgetId[];
+  setAdded: (added: readonly OverviewWidgetId[]) => void;
+  /** A save is on its way. */
+  saving: boolean;
   /** Applies at once, then saves. `said` is for a screen reader. */
   change: (change: OverviewLayoutChange, said?: string) => void;
   said: string;
@@ -60,6 +66,7 @@ export function OverviewLayoutProvider({
   const [layout, setLayout] = useState(initial);
   const [editing, setEditMode] = useState(startEditing);
   const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<readonly OverviewWidgetId[]>([]);
   const [said, setSaid] = useState("");
   const [seen, setSeen] = useState(initial);
   const [pending, setPending] = useState(0);
@@ -78,6 +85,8 @@ export function OverviewLayoutProvider({
 
   const setEditing = useCallback((next: boolean) => {
     setEditMode(next);
+    setAdding(false);
+    setAdded([]);
     setSaid(next ? "Edit mode. Add, move, resize or remove widgets." : "Edit mode is off.");
   }, []);
 
@@ -114,10 +123,13 @@ export function OverviewLayoutProvider({
       setEditing,
       adding: editable && editing && adding,
       setAdding,
+      added,
+      setAdded,
+      saving: pending > 0,
       change,
       said,
     }),
-    [layout, editable, editing, setEditing, adding, change, said],
+    [layout, editable, editing, setEditing, adding, added, pending, change, said],
   );
   return (
     <LayoutContext.Provider value={state}>

@@ -227,7 +227,8 @@ name, the menu with the steps for the keyboard, and Remove. No content moves bet
 widget's body takes no press in edit mode: a mouse drags the whole widget, a finger its name, and the
 corner resizes. Remove is at once, with Undo in the toast. `Add widget` is a Dialog with every widget.
 Focus goes from Edit to Done and back, from Remove to the next widget or Add widget, and from the
-dialog to Add widget. Below `lg`, one column in reading order: add, remove and reset only. Without the
+dialog to Add widget, and the page scrolls to a widget that was added out of view. Escape is Done when
+no layer, drag or text field takes it. Below `lg`, one column in reading order: add, remove and reset only. Without the
 right to edit there is no Edit.
 
 **Widgets.** A widget's body fills it with no frame of its own, keeps the lines between numbers or

@@ -3,10 +3,15 @@
 import { Button } from "@ratel/design-system/button";
 import { Dialog, DialogContent } from "@ratel/design-system/dialog";
 import { Check, Pencil, Plus } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useRef } from "react";
+import { keyLeavesEditMode } from "@/components/console/home/focused/edit-mode";
 import { useOverviewLayout } from "@/components/console/home/focused/OverviewLayout";
 import { offeredTo, WIDGETS } from "@/components/console/home/focused/widgets";
-import { defaultLayout, sameLayout } from "@/lib/views/overview-layout/domain/layout";
+import {
+  defaultLayout,
+  type OverviewWidgetId,
+  sameLayout,
+} from "@/lib/views/overview-layout/domain/layout";
 
 export const EDIT_ID = "overview-edit";
 export const DONE_ID = "overview-done";
@@ -45,6 +50,11 @@ export function HeaderInEditMode({ children }: { children: ReactNode }) {
 /** Add widget, Reset and Done, over the header. It takes no room, so nothing moves when it comes, and it stays in reach when the page scrolls. */
 export function EditBar() {
   const { editing, setEditing, layout, change, setAdding } = useOverviewLayout();
+  const leave = useCallback(() => {
+    setEditing(false);
+    focusSoon(EDIT_ID);
+  }, [setEditing]);
+  useEscape(editing, leave);
   return (
     <div className="sticky top-[calc(var(--support-bar,0px)+3rem)] z-sticky h-0 md:top-[var(--support-bar,0px)]">
       {editing ? (
@@ -69,15 +79,7 @@ export function EditBar() {
             <Plus aria-hidden />
             Add widget
           </Button>
-          <Button
-            id={DONE_ID}
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setEditing(false);
-              focusSoon(EDIT_ID);
-            }}
-          >
+          <Button id={DONE_ID} variant="primary" size="sm" onClick={leave}>
             Done
           </Button>
         </section>
@@ -88,14 +90,18 @@ export function EditBar() {
 
 /** Every widget the Overview offers: the ones on the page, and the ones to add. */
 export function AddWidgetDialog() {
-  const { adding, setAdding, layout, change, said } = useOverviewLayout();
+  const { adding, setAdding, setAdded, layout, change, said } = useOverviewLayout();
+  const added = useRef<OverviewWidgetId[]>([]);
   const removed = new Set(layout.filter((widget) => widget.removed).map(({ id }) => id));
   return (
     <Dialog
       open={adding}
       onOpenChange={setAdding}
       onOpenChangeComplete={(open) => {
-        if (!open) document.getElementById(ADD_ID)?.focus();
+        if (open) return;
+        document.getElementById(ADD_ID)?.focus({ preventScroll: true });
+        setAdded(added.current);
+        added.current = [];
       }}
     >
       <DialogContent title="Add widget" description="Added widgets go back to their last place.">
@@ -116,7 +122,10 @@ export function AddWidgetDialog() {
                   variant={available ? "secondary" : "ghost"}
                   disabled={!available}
                   focusableWhenDisabled
-                  onClick={() => change({ kind: "add", widget: id }, `${title} added`)}
+                  onClick={() => {
+                    added.current.push(id);
+                    change({ kind: "add", widget: id }, `${title} added`);
+                  }}
                 >
                   {available ? <Plus aria-hidden /> : <Check aria-hidden />}
                   {available ? "Add" : "Added"}
@@ -136,4 +145,38 @@ export function AddWidgetDialog() {
 /** After React has drawn the change that brings the element. */
 export function focusSoon(id: string) {
   requestAnimationFrame(() => document.getElementById(id)?.focus());
+}
+
+/**
+ * Escape in edit mode. It looks before anything else reacts (the capture phase of the window), so
+ * a layer that the same key closes still counts as open: to leave then takes a second Escape.
+ */
+function useEscape(editing: boolean, leave: () => void) {
+  useEffect(() => {
+    if (!editing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const moment = {
+        key: event.key,
+        continued: event.repeat || event.isComposing,
+        layerOpen: openLayer(),
+        arranging: document.querySelector(ARRANGING) !== null,
+        fieldFocused: document.activeElement?.closest(`${FIELD}, ${TOASTS}`) != null,
+      };
+      if (keyLeavesEditMode(moment)) leave();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [editing, leave]);
+}
+
+const LAYERS = ["dialog", "alertdialog", "menu", "listbox"]
+  .map((role) => `[role="${role}"]:not([data-closed])`)
+  .join(", ");
+/** A toast has the role of a dialog, and it blocks nothing. */
+const TOASTS = "[role='region'][aria-label='Notifications']";
+const ARRANGING = ".react-draggable-dragging, .react-grid-item.resizing";
+const FIELD = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+
+function openLayer(): boolean {
+  return [...document.querySelectorAll(LAYERS)].some((layer) => !layer.closest(TOASTS));
 }

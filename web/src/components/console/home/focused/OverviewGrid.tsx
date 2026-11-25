@@ -4,9 +4,10 @@ import { Button } from "@ratel/design-system/button";
 import { Skeleton } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import { Plus } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useEffect, useMemo } from "react";
 import { CardGrid } from "@/components/console/grid/CardGrid";
 import { ADD_ID, EDIT_ID, EditButton, focusSoon } from "@/components/console/home/focused/EditMode";
+import { scrollToReveal, widgetToReveal } from "@/components/console/home/focused/edit-mode";
 import { useOverviewLayout } from "@/components/console/home/focused/OverviewLayout";
 import {
   focusToolbar,
@@ -14,6 +15,7 @@ import {
   WidgetCard,
 } from "@/components/console/home/focused/WidgetCard";
 import { WIDGETS } from "@/components/console/home/focused/widgets";
+import { GRID_GAP_PX } from "@/lib/console/grid/layout";
 import {
   type OverviewPlacement,
   type OverviewWidgetId,
@@ -30,6 +32,7 @@ export function OverviewGrid({
   bodies: Readonly<Record<OverviewWidgetId, ReactNode>>;
 }) {
   const { layout, editing, change } = useOverviewLayout();
+  useReveal(bodies);
   const cards = useMemo(
     () => visibleWidgets(layout).map((widget) => ({ ...widget, min: widgetMinimum(widget.id) })),
     [layout],
@@ -106,6 +109,35 @@ export function OverviewGrid({
       }}
     </CardGrid>
   );
+}
+
+/** Scrolls to what the Add widget dialog added, once it is saved and the server has drawn it. */
+function useReveal(bodies: Readonly<Record<OverviewWidgetId, ReactNode>>) {
+  const { layout, added, setAdded, saving, adding } = useOverviewLayout();
+  const widget = widgetToReveal(added, layout);
+  const drawn = widget !== null && Boolean(bodies[widget]);
+  useEffect(() => {
+    if (added.length === 0 || saving || adding || (widget && !drawn)) return;
+    const frame = requestAnimationFrame(() => {
+      if (widget) reveal(widget);
+      setAdded([]);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [added, setAdded, saving, adding, widget, drawn]);
+}
+
+function reveal(id: OverviewWidgetId) {
+  const card = document.querySelector(`[data-overview-widget="${id}"]`);
+  if (!card) return;
+  const bar = document.querySelector("[data-overview-edit-bar]");
+  const top = scrollToReveal(card.getBoundingClientRect(), {
+    // The widget's toolbar floats over the gap above it.
+    top: (bar?.getBoundingClientRect().bottom ?? 0) + GRID_GAP_PX,
+    bottom: window.innerHeight,
+  });
+  if (top === 0) return;
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollBy({ top, behavior: still ? "instant" : "smooth" });
 }
 
 function NoWidgets() {
