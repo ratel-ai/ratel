@@ -58,3 +58,29 @@ export function isComparable(op: CheckOperator, value: CheckValue): boolean {
     !ORDER_OPERATORS.includes(op) || (typeof value !== "boolean" && Number.isFinite(Number(value)))
   );
 }
+
+/** The agent's answer of an eval trial. `output.<path>` reads one field of an answer that is JSON. */
+export const OUTPUT_PATH = "output";
+export const OUTPUT_PREFIX = "output.";
+/** `tool_arguments.<tool>.<path>` reads an argument of each call of a tool in an eval trial. */
+export const TOOL_ARGUMENTS_PREFIX = "tool_arguments.";
+
+/** The trace fields that an eval trial has too. */
+export const TRIAL_FIELDS = [
+  "duration_ms",
+  "cost_usd",
+  "input_tokens",
+  "output_tokens",
+  "total_tokens",
+  "tools",
+] as const satisfies readonly TraceField[];
+
+/** Whether a check of an eval case may read the path. A trial has no trace attributes. */
+export function isTrialCheckPath(path: string): boolean {
+  return (
+    TRIAL_FIELDS.some((field) => field === path) ||
+    path === OUTPUT_PATH ||
+    (path.startsWith(OUTPUT_PREFIX) && path.length > OUTPUT_PREFIX.length) ||
+    /^tool_arguments\..+\..+$/.test(path)
+  );
+}

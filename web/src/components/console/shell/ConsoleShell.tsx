@@ -9,6 +9,7 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
+import { evalsOrganizationIds } from "@/lib/views/evals/gate";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 import { sandboxOrganizationIds } from "@/lib/views/sandboxes/gate";
 
@@ -29,6 +30,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   const organizations = scope?.organizations ?? [];
   const entityPagesOrganizations = await entityPagesOrganizationIds(organizations);
   const sandboxOrganizations = await sandboxOrganizationIds(organizations);
+  const evalsOrganizations = await evalsOrganizationIds(organizations);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -58,6 +60,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           projectNav: composition.projectNav,
           entityPagesOrganizations,
           sandboxOrganizations,
+          evalsOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {

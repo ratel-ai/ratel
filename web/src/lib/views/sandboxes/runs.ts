@@ -4,12 +4,12 @@ import type { UsageLimitsPort, UsageRefusal } from "@/lib/contracts/usage-limits
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { getLogger } from "@/lib/platform/logger";
 import { type SealedSecretsKey, unsealSecret } from "@/lib/platform/sealed-secrets";
+import { storable } from "@/lib/platform/storable";
 import {
   encodeRunInput,
   MAX_ENCODED_INPUT_BYTES,
   type RunInput,
   type SandboxRun,
-  storable,
   type ToolFixture,
 } from "./domain/run";
 import type { SandboxVersion } from "./domain/version";

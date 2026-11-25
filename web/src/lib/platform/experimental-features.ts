@@ -49,3 +49,25 @@ export function experimentalFeatureEnabled(
   if (config.flags[flag] === true) return true;
   return edition === "Ratel OSS" && config.experimentalFeatures;
 }
+
+/** Whether the switch is off for every project, known with no project: a route can answer 404 first. */
+export function featureOffForAll(flag: CoreFlag, deps: Partial<FeatureFlagDeps> = {}): boolean {
+  const config = deps.config ?? getConfig();
+  if (config.flags[flag] === false) return true;
+  const port = "port" in deps ? deps.port : composition.featureFlags;
+  return !port && !experimentalFeatureEnabled(flag, config, deps.edition);
+}
+
+/** The organizations that have the switch on. A failed decision is off. */
+export async function organizationIdsWithFeature(
+  flag: CoreFlag,
+  organizations: ReadonlyArray<{ id: string }>,
+  deps: Partial<FeatureFlagDeps> = {},
+): Promise<string[]> {
+  const decided = await Promise.all(
+    organizations.map(async ({ id }) =>
+      (await featureEnabled(flag, { organizationId: id }, deps)) ? [id] : [],
+    ),
+  );
+  return decided.flat();
+}

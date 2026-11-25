@@ -17,6 +17,8 @@ export const CORE_FLAGS = [
   "toolRunInsights",
   // Ratel sandboxes. Owner: rstagi. Remove once `sandboxes` is on for every organization.
   "sandboxes",
+  // Evals on Ratel sandboxes. Owner: rstagi. Remove once `evals` is on for every organization.
+  "evals",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

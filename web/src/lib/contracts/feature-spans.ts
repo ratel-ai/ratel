@@ -18,7 +18,8 @@ export type FeatureName =
   | "agents_pages"
   | "tool_run_insights"
   | "hosted_apis"
-  | "sandboxes";
+  | "sandboxes"
+  | "evals";
 
 export type FeatureSpanOptions = {
   attributes?: Attributes;

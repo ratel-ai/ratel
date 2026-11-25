@@ -30,6 +30,8 @@ export type ShellData = {
   entityPagesOrganizations?: readonly string[];
   /** The organizations with `sandboxes` on: their rail shows Ratel sandbox. */
   sandboxOrganizations?: readonly string[];
+  /** The organizations with `evals` on: their rail shows Evals. */
+  evalsOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */

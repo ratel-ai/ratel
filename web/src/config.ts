@@ -81,6 +81,7 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   sandboxes: "FF_SANDBOXES",
+  evals: "FF_EVALS",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */

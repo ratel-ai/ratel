@@ -85,6 +85,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   sandboxPage = false,
+  evalsPage = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -104,6 +105,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `sandboxes` on for the shown organization: Ratel sandbox before Catalog and Settings. */
   sandboxPage?: boolean;
+  /** `evals` on for the shown organization: Evals before Ratel sandbox. */
+  evalsPage?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -381,7 +384,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxPage) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages, { sandboxPage, evalsPage }) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -404,7 +407,7 @@ function stageRailNav(
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
   entityPages: boolean,
-  sandboxPage: boolean,
+  { sandboxPage, evalsPage }: { sandboxPage: boolean; evalsPage: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -477,6 +480,18 @@ function stageRailNav(
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
+    ...(evalsPage
+      ? [
+          {
+            id: "evals",
+            label: "Evals",
+            href: `${root}/evals`,
+            icon: "improvements" as const,
+            keywords: ["evals", "cases", "experiments", "trials"],
+            section: "settings" as const,
+          },
+        ]
+      : []),
     ...(sandboxPage
       ? [
           {

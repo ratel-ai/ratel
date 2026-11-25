@@ -109,6 +109,8 @@ export const SERVER_EVENT_NAMES = [
   "agent_override_updated",
   "sandbox_version_pushed",
   "sandbox_run_started",
+  "eval_case_created",
+  "eval_case_approved",
   "mcp_servers_viewed",
   "agents_viewed",
 ] as const;

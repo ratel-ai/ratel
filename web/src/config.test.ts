@@ -151,6 +151,7 @@ test("each flag has its own env var and file key", () => {
     FF_AGENTS_PAGES: "1",
     FF_TOOL_RUN_INSIGHTS: "1",
     FF_SANDBOXES: "1",
+    FF_EVALS: "1",
   };
   const fromEnv = resolveConfig({ env }).flags;
   const fromFile = resolveConfig({
