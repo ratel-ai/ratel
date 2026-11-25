@@ -111,6 +111,7 @@ function reads(over: Partial<FocusedReads> = {}) {
     intents: async () => null,
     tasks: async () => null,
     dailyAggregates: async () => [],
+    alerting: async () => [],
     dashboards: async () => ({}),
     context: async () => ({ split: null, suggestions: [], promptCacheHitRate: null }),
     ...over,
@@ -205,18 +206,19 @@ const removed = (...ids: OverviewWidgetId[]) =>
     DEFAULT_LAYOUT,
   );
 
-test("without a stored layout: Metrics, Topology, then Health with Needs attention beside it", async () => {
+test("without a stored layout: Metrics, Topology, then Health with Needs attention beside it, then Alerts", async () => {
   const html = page(await load());
-  assert.deepEqual(order(html), ["metrics", "topology", "health", "attention"]);
+  assert.deepEqual(order(html), ["metrics", "topology", "health", "attention", "alerts"]);
   const headings = [...html.matchAll(/<h2[^>]*>([^<]+)</g)].map((match) => match[1]);
   assert.deepEqual(headings, [
     "Metrics",
     "Agents and MCP servers",
     "Health score",
     "Needs attention",
+    "Alerts",
   ]);
   const places = [...html.matchAll(/--cell-column:([^;"]+);--cell-row:([^;"]+)/g)];
-  assert.equal(places.length, 4, "the server draws the places");
+  assert.equal(places.length, 5, "the server draws the places");
   assert.equal(places[2][2], places[3][2], "Health and Needs attention share their rows");
   const text = visibleText(html);
   assert.match(text, /Receiving data/);
@@ -236,6 +238,7 @@ test("the page is the person's layout: their order, and no removed widget", asyn
     "attention",
     "metrics",
     "health",
+    "alerts",
   ]);
   for (const id of OVERVIEW_WIDGETS) {
     const others = OVERVIEW_WIDGETS.filter((other) => other !== id);
@@ -268,12 +271,18 @@ test("view mode is quiet: no visible title, border or control on a widget", asyn
 test("edit mode: a toolbar per widget, and a body that takes no press", async () => {
   const data = await load();
   const html = page(data, { edit: true });
-  for (const title of ["Metrics", "Agents and MCP servers", "Health score", "Needs attention"]) {
+  for (const title of [
+    "Metrics",
+    "Agents and MCP servers",
+    "Health score",
+    "Needs attention",
+    "Alerts",
+  ]) {
     assert.match(html, new RegExp(`role="toolbar" aria-label="${title}"`));
     assert.match(html, new RegExp(`aria-label="Arrange ${title}"`));
     assert.match(html, new RegExp(`aria-label="Remove ${title}"`));
   }
-  assert.equal((html.match(/data-grid-body="" inert=""/g) ?? []).length, 4);
+  assert.equal((html.match(/data-grid-body="" inert=""/g) ?? []).length, 5);
   for (const words of ["Add widget", "Reset", "Done"])
     assert.match(visibleText(html), new RegExp(words));
   assert.deepEqual(order(html), order(page(data)));
@@ -379,7 +388,7 @@ test("the Add widget dialog lists what the server offers", () => {
   );
   assert.deepEqual(
     offeredTo(DEFAULT_LAYOUT.filter(({ id }) => id !== "health")).map(({ id }) => id),
-    ["metrics", "topology", "attention"],
+    ["metrics", "topology", "attention", "alerts"],
   );
 });
 

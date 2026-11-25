@@ -13,6 +13,7 @@ export const scorerMetricSource: MetricSourceQuery = {
     left join otel_trace_summaries s on s.project_id = r.project_id and s.trace_id = r.trace_id`,
   project: sql`r.project_id`,
   time: sql`r.trace_started_at`,
+  knownAt: sql`r.scored_at`,
   scorer: sql`r.scorer_id`,
   measures: {
     scorer_pass_rate: {

@@ -19,7 +19,7 @@ import {
  * every function gives a layout that can be drawn. What is stored is in `stored.ts`.
  */
 
-export const OVERVIEW_WIDGETS = ["metrics", "topology", "health", "attention"] as const;
+export const OVERVIEW_WIDGETS = ["metrics", "topology", "health", "attention", "alerts"] as const;
 export type OverviewWidgetId = (typeof OVERVIEW_WIDGETS)[number];
 
 const DASHBOARD = "dashboard:";
@@ -57,17 +57,19 @@ export const WIDGET_TITLES: Readonly<Record<OverviewWidgetId, string>> = {
   topology: "Agents and MCP servers",
   health: "Health score",
   attention: "Needs attention",
+  alerts: "Alerts",
 };
 
 /** The widgets that are offered: the page, the dialog and the default layout know no other. */
 export type OfferedWidgets = readonly OverviewWidget[];
 
-/** The metrics on top, then the topology, then the Health score with Needs attention beside it. */
+/** The metrics on top, then the topology, then the Health score with Needs attention beside it, then the alerts. */
 export const WIDGET_CATALOG: OfferedWidgets = [
   { id: "metrics", min: { w: 8, h: 3 }, place: { x: 0, y: 0, w: 12, h: 3 } },
   { id: "topology", min: { w: 4, h: 4 }, place: { x: 0, y: 3, w: 12, h: 7 } },
   { id: "health", min: { w: 4, h: 5 }, place: { x: 0, y: 10, w: 4, h: 6 } },
   { id: "attention", min: { w: 5, h: 3 }, place: { x: 4, y: 10, w: 8, h: 6 } },
+  { id: "alerts", min: { w: 4, h: 3 }, place: { x: 0, y: 16, w: 12, h: 4 } },
 ];
 
 export interface OverviewPlacement extends GridItem {
@@ -94,8 +96,18 @@ export type OverviewLayoutChange =
 /** A place from a browser, which may draw a widget that is no longer offered. */
 export type OverviewPlace = GridItem;
 
-/** What a person without a stored layout sees. */
+/** The widgets of a project: the alerts only with `customMonitoring`. */
+export function offeredWidgets(features: { customMonitoring: boolean }): OfferedWidgets {
+  return WIDGET_CATALOG.filter(({ id }) => id !== "alerts" || features.customMonitoring);
+}
+
+/** What a person without a stored layout sees, with every widget offered. */
 export const DEFAULT_LAYOUT: OverviewLayout = defaultLayout(WIDGET_CATALOG);
+
+/** The same with no flag on, for where nobody read which widgets are offered. */
+export const UNFLAGGED_LAYOUT: OverviewLayout = defaultLayout(
+  offeredWidgets({ customMonitoring: false }),
+);
 
 export function changeLayout(
   layout: OverviewLayout,

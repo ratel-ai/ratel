@@ -19,6 +19,8 @@ import {
 import { simplified } from "@/lib/synthesis/traces/trace-filter-clauses";
 import { packFilter, traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
 import { resolveTraceListView, resolveTraceRange } from "@/lib/synthesis/traces/view";
+import { alertQueryOf, NEW_ALERT_PARAM, newAlertHref } from "@/lib/views/alerts/links";
+import { parseAlertQuery } from "@/lib/views/alerts/parse-rule";
 import {
   dashboardFiltersSchema,
   filtersProblem,
@@ -324,17 +326,26 @@ test("the budget is what the measured request leaves", () => {
   }
 });
 
-test("the fullest panels with their page filters fit an address and a widget", () => {
+test("the fullest panels with their page filters fit an address, a widget and an alert link", () => {
   const four = [1, 1_001, 2_001, 3_001].map((seed) => fullest(seed));
   const queries = four.map(({ query }) => query);
   assert.equal(filtersProblem(queries, PAGE), null);
   assert.deepEqual(opened(withPanels("?range=7d", four)), four);
   const saved = withPageFilters(four[0].query, PAGE) as MetricQuery;
   assert.ok(parseWidget({ ...four[0], query: saved }, { customMonitoring: true }).ok);
-  // One byte more is refused in the bar and in a panel.
+  const { hash, searchParams } = new URL(newAlertHref("p1", saved, true), "https://x.test");
+  const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
+  const parsed = parseAlertQuery(alertQueryOf(value === "hash" ? hash.slice(1) : value), {
+    customMonitoring: true,
+  });
+  assert.ok(parsed.ok);
+  assert.deepEqual(parsed.query, saved);
+  // One byte more is refused in the bar, in a panel and in the alert.
   const over = fullest(1, 1);
   assert.equal(filtersProblem([over.query], PAGE), TOO_LONG);
   assert.equal(panelProblem({ ...over, query: withPageFilters(over.query, PAGE) }), TOO_LONG);
+  const alert = parseAlertQuery(withPageFilters(over.query, PAGE), { customMonitoring: true });
+  assert.deepEqual(alert, { ok: false, error: TOO_LONG });
 });
 
 test("the longest filters of a bar are packed in the address, and no longer ones are taken", () => {

@@ -1,9 +1,11 @@
 "use client";
 
 import { MenuLinkItem } from "@ratel/design-system/menu";
-import { Compass, ListTree } from "lucide-react";
+import { Bell, Compass, ListTree } from "lucide-react";
 import Link from "next/link";
 import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
+import { newAlertHref } from "@/lib/views/alerts/links";
+import { takesPageFilters, withPageFilters } from "@/lib/views/dashboards/filters";
 import {
   type DashboardRange,
   intentsMapHref,
@@ -19,6 +21,8 @@ export function WidgetLinkItems({
   filters,
   range,
   exploreHref,
+  alerts,
+  alertWithFilters = false,
 }: {
   projectId: string;
   widget: WidgetInput;
@@ -26,7 +30,16 @@ export function WidgetLinkItems({
   range: DashboardRange;
   /** The Explore page with the widget; null inside it, or for a widget that shows no numbers. */
   exploreHref: string | null;
+  /** Whether a metric can start an alert. */
+  alerts: boolean;
+  /** The alert takes the page's filters too. */
+  alertWithFilters?: boolean;
 }) {
+  const withFilters = alertWithFilters && takesPageFilters(query, filters);
+  const alertHref =
+    alerts && query.kind === "metric"
+      ? newAlertHref(projectId, withFilters ? withPageFilters(query, filters) : query, withFilters)
+      : null;
   return (
     <>
       {exploreHref ? (
@@ -48,6 +61,11 @@ export function WidgetLinkItems({
           }
         >
           View traces
+        </MenuLinkItem>
+      )}
+      {alertHref === null ? null : (
+        <MenuLinkItem icon={<Bell />} render={<Link href={alertHref} />}>
+          Create alert
         </MenuLinkItem>
       )}
     </>

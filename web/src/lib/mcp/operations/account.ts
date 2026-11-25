@@ -71,7 +71,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "customMonitoring",
-    note: "the Scorers and Dashboards items and pages",
+    note: "the Scorers, Dashboards and Alerts items and pages",
   },
 ];
 

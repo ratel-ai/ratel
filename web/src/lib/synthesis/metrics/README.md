@@ -1,6 +1,7 @@
 # `lib/synthesis/metrics`
 
 One metric catalog and the one function that runs a query object (`lib/contracts/query.ts`).
+Dashboards and alerts both call it.
 
 | File | Holds |
 |---|---|

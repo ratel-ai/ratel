@@ -85,6 +85,7 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
     entitiesLinked: async () => true,
     loadOverview: (input) => loadFocusedOverview({ ...input, db }),
     layoutStore: store,
+    offeredWidgets: async () => WIDGET_CATALOG,
     dashboardsOn: async () => true,
     dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref, db as never),
     restricted: async () => false,
@@ -127,6 +128,7 @@ const empty = ({ layout = DEFAULT_LAYOUT }: Parameters<typeof loadFocusedOvervie
   topology: null,
   health: null,
   attention: null,
+  alerts: null,
   dashboards: null,
   context: null,
 });
@@ -198,7 +200,7 @@ test("an OAuth session changes the layout, and get_overview and the web read the
   await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, web, null);
   const after = dataOf(await call("get_overview"));
   assert.ok(after.layout.widgets.every(({ removed }: { removed: boolean }) => !removed));
-  assert.equal(dataOf(await call("get_overview", {}, person("user_ben"))).layout.widgets.length, 4);
+  assert.equal(dataOf(await call("get_overview", {}, person("user_ben"))).layout.widgets.length, 5);
 });
 
 test("a layout this build cannot read is refused a change, and reset replaces it", async () => {
@@ -240,7 +242,7 @@ test("an agent lists the changes, undoes and restores, and the web shows the res
     ],
   );
   assert.equal(listed.layout.undoTakesBack, "Removed Agents and MCP servers");
-  assert.ok(listed.changes[0].at && listed.changes[0].layout.widgets.length === 4);
+  assert.ok(listed.changes[0].at && listed.changes[0].layout.widgets.length === 5);
   assert.equal(dataOf(await call("get_overview")).layout.revision, listed.layout.revision);
 
   const { revision } = listed.layout;
@@ -510,44 +512,41 @@ test("an unknown widget is refused with the names of the widgets", async () => {
   assert.equal(refusal(result)?.[0], "invalid_params");
   assert.match(
     result.ok ? "" : result.message,
-    /"spend"\. The widgets are: metrics, topology, health, attention\./,
+    /"spend"\. The widgets are: metrics, topology, health, attention, alerts\./,
   );
 });
 
-test("a fifth widget has its single-widget read and its place, and no new operation", async () => {
-  const alerts = "alerts" as OverviewWidgetId;
-  const five = [
+test("a later widget has its single-widget read and its place, and no new operation", async () => {
+  const spend = "spend" as OverviewWidgetId;
+  const more = [
     ...WIDGET_CATALOG,
-    { id: alerts, min: { w: 3, h: 3 }, place: { x: 0, y: 16, w: 6, h: 4 } },
+    { id: spend, min: { w: 3, h: 3 }, place: { x: 0, y: 16, w: 6, h: 4 } },
   ];
   const over: Partial<OverviewOperationDeps> = {
-    widgets: five,
-    widgetData: { ...WIDGET_DATA, [alerts]: (data: object) => (data as Alerts).alerts },
+    widgets: more,
+    widgetData: { ...WIDGET_DATA, [spend]: (data: object) => (data as Spend).spend },
     loadOverview: async (input) =>
       ({
         ...empty(input),
-        alerts: { firing: 2 },
+        spend: { usd: 2 },
       }) as never,
   };
-  type Alerts = { alerts?: { firing: number } };
-  const { call } = await setup({ ...over, offeredWidgets: async () => five });
-  const one = await call("get_overview", { widget: "alerts" }, ANA, true);
-  assert.deepEqual(dataOf(one).alerts, { firing: 2 });
-  assert.equal(one.ok && one.view?.widget, "alerts");
-  assert.deepEqual(dataOf(await call("get_overview")).alerts, { firing: 2 });
+  type Spend = { spend?: { usd: number } };
+  const { call } = await setup({ ...over, offeredWidgets: async () => more });
+  const one = await call("get_overview", { widget: "spend" }, ANA, true);
+  assert.deepEqual(dataOf(one).spend, { usd: 2 });
+  assert.equal(one.ok && one.view?.widget, "spend");
+  assert.deepEqual(dataOf(await call("get_overview")).spend, { usd: 2 });
   const listed = overviewOperations({ ...defaultOverviewDeps, ...over });
   assert.deepEqual(
     listed.map(({ id }) => id),
     overviewOperations().map(({ id }) => id),
   );
-  assert.match(JSON.stringify(z.toJSONSchema(listed[0].params)), /"attention","alerts"\]/);
+  assert.match(JSON.stringify(z.toJSONSchema(listed[0].params)), /"alerts","spend"\]/);
 
   // Behind a flag that is off for this project, it is no widget.
   const off = await setup({ ...over, offeredWidgets: async () => WIDGET_CATALOG });
-  assert.equal(
-    refusal(await off.call("get_overview", { widget: "alerts" }))?.[0],
-    "invalid_params",
-  );
+  assert.equal(refusal(await off.call("get_overview", { widget: "spend" }))?.[0], "invalid_params");
 });
 
 test("a change of the layout draws the Overview that it made, and only for a view", async () => {

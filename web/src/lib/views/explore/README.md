@@ -25,8 +25,8 @@ field, and the bar a filter that does not fit a panel, so the screen and the add
 same and every panel can be saved, watched and opened. A text a person has not written yet (a step's
 name) is kept. Page filters longer than 2,800 characters are packed in the `filters` parameter.
 
-Save to dashboard and View traces read the rows the panel shows. They add the page's
+Save to dashboard, Create alert and View traces read the rows the panel shows. They add the page's
 filters to the query's as one more clause (`withPageFilters`), never by a merge of two sets: a trace
 can have tools of both. A page filter that the query has already adds none, and is not said to be
-included. A long trace filter is one packed
+included. A long alert query is the fragment, as the panels are. A long trace filter is one packed
 `and` parameter.

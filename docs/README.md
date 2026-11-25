@@ -20,7 +20,7 @@ baseline-capture-distributed.md   Collecting seeding evidence from a multi-insta
 
 ## `schemas/` — JSON Schemas
 
-Generated from the zod schemas in `web/src/lib` with `pnpm --filter @ratel/platform schemas:generate`; a test fails when they differ. [`query.schema.json`](schemas/query.schema.json) is the query object of dashboards. [`dashboard.schema.json`](schemas/dashboard.schema.json) is a dashboard as Export writes it and Import reads it; a scorer is given by its name. A step flow (`kind: "step_flow"`) counts what traces do at each step. The schema states each measure's aggregations. The server also checks which dimensions, filters and buckets a measure allows.
+Generated from the zod schemas in `web/src/lib` with `pnpm --filter @ratel/platform schemas:generate`; a test fails when they differ. [`query.schema.json`](schemas/query.schema.json) is the query object of dashboards and alerts. [`dashboard.schema.json`](schemas/dashboard.schema.json) is a dashboard as Export writes it and Import reads it; a scorer is given by its name. A step flow (`kind: "step_flow"`) counts what traces do at each step. The schema states each measure's aggregations. The server also checks which dimensions, filters and buckets a measure allows.
 
 ## `adr/` — Architecture decision records
 

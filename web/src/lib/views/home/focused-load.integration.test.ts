@@ -26,6 +26,7 @@ import {
 } from "@/lib/views/home/focused-load";
 import { firstTryTile, loadOverview } from "@/lib/views/home/load";
 import { readHealth } from "@/lib/views/home/overview-reads";
+import { WIDGET_CATALOG } from "@/lib/views/overview-layout/domain/layout";
 
 /** The recap Overview says what the old Overview says: one seeded project, the same window. */
 
@@ -226,6 +227,7 @@ test("get_overview has the attention rows of the web loader for a small project"
         getProject: (async () => PROJECT) as never,
         getOrganization: async () => ORGANIZATION,
         focusedConsole: async () => true,
+        offeredWidgets: async () => WIDGET_CATALOG,
         dashboardsOn: async () => false,
         loadOverview: (input) => loadFocusedOverview({ ...input, db }),
         now: () => NOW,

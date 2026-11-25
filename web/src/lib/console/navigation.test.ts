@@ -444,7 +444,7 @@ test("an item is lit on every path it has absorbed, old URLs included", () => {
   assert.equal(active("/calibrations"), null, "an absorbed path matches whole segments");
 });
 
-test("Scorers and Dashboards show under Overview only with customMonitoring on", () => {
+test("Scorers, Dashboards and Alerts show under Overview only with customMonitoring on", () => {
   const off = consoleNav({ projectId: P1, additions: [] });
   assert.deepEqual(consoleNav({ projectId: P1, additions: [], customMonitoring: false }), off);
   assert.equal(off.find(({ id }) => id === "overview")?.children, undefined);
@@ -458,6 +458,7 @@ test("Scorers and Dashboards show under Overview only with customMonitoring on",
       ["scorers", "Scorers", `/project/${P1}/scorers`],
       ["dashboards", "Dashboards", `/project/${P1}/dashboards`],
       ["explore", "Explore", `/project/${P1}/explore`],
+      ["alerts", "Alerts", `/project/${P1}/alerts`],
     ],
   );
   // Everything else on the rail is as it was.
@@ -476,6 +477,7 @@ test("with customMonitoring on, the rail keeps 9 items and lights the open page"
   assert.equal(activeNavItemId(`/project/${P1}/dashboards`, on), "dashboards");
   assert.equal(activeNavItemId(`/project/${P1}/dashboards/d1`, on), "dashboards");
   assert.equal(activeNavItemId(`/project/${P1}/explore`, on), "explore");
+  assert.equal(activeNavItemId(`/project/${P1}/alerts`, on), "alerts");
 });
 
 test("the organization rail has no monitoring page", () => {
