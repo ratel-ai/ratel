@@ -1,7 +1,7 @@
 import { MISSING } from "@/lib/synthesis/traces/v2/format";
 import { measuredText, unitOf } from "@/lib/views/alerts/format";
-import { alertHref, alertsHref } from "@/lib/views/alerts/links";
-import type { AlertingRule } from "@/lib/views/alerts/types";
+import { alertHref, alertsHref, newAlertHref } from "@/lib/views/alerts/links";
+import type { AlertingRule, AlertRuleCounts } from "@/lib/views/alerts/types";
 import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 
 /** An alert rule that alerts now: "Too many errors  67%  above 50% · 12m ago". */
@@ -20,11 +20,15 @@ export interface FocusedAlerts {
   /** Newest change first. */
   items: AlertRow[];
   href: string;
+  newHref: string;
+  /** Every rule of the project. Null when one alerts, or when it could not be read. */
+  rules: AlertRuleCounts | null;
 }
 
 export function alertsWidget(
   projectId: string,
   rules: readonly AlertingRule[],
+  counts: AlertRuleCounts | null,
   now: Date,
 ): FocusedAlerts {
   return {
@@ -40,5 +44,7 @@ export function alertsWidget(
       };
     }),
     href: alertsHref(projectId),
+    newHref: newAlertHref(projectId),
+    rules: counts,
   };
 }

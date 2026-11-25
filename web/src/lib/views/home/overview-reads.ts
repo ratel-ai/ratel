@@ -28,8 +28,8 @@ import {
   type TraceSummary,
   type TracesIngestDiagnostics,
 } from "@/lib/synthesis/traces/queries";
-import { listAlertingRules } from "@/lib/views/alerts/store";
-import type { AlertingRule } from "@/lib/views/alerts/types";
+import { countAlertRuleStates, listAlertingRules } from "@/lib/views/alerts/store";
+import type { AlertingRule, AlertRuleCounts } from "@/lib/views/alerts/types";
 import { loadFixes } from "@/lib/views/fixes/load";
 import { loadHealthPageModel } from "@/lib/views/health/page-model";
 import type { FixesSlice, IntentsRead, TasksRead } from "@/lib/views/home/glance";
@@ -152,6 +152,9 @@ export const readTasksGlance = (at: OverviewReadScope): Promise<TasksRead | null
 /** The alert rules that alert now. */
 export const readAlerting = (at: OverviewReadScope): Promise<AlertingRule[]> =>
   supplementary(at, "overview_alerting_rules", (db) => listAlertingRules(at.projectId, db));
+
+export const readAlertRuleCounts = (at: OverviewReadScope): Promise<AlertRuleCounts> =>
+  supplementary(at, "overview_alert_rule_counts", (db) => countAlertRuleStates(at.projectId, db));
 
 export const readPromptCache = (at: OverviewReadScope): Promise<PromptCacheTotals> =>
   supplementary(at, "overview_prompt_cache", (db) =>

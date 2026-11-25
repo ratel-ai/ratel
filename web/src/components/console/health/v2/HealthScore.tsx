@@ -187,6 +187,20 @@ export function ScoreRing({
   );
 }
 
+/** The ring before there is a score: no pixel is lit, and nothing moves. Decoration: say why beside it. */
+export function EmptyScoreRing() {
+  return (
+    <span className="relative flex h-full min-h-0" data-health-score-ring="empty">
+      <svg viewBox="0 0 200 200" className="h-full max-w-full" aria-hidden>
+        {ringCells(0, null).map((cell, index) => (
+          <RingPixel key={index} cell={cell} motion={null} />
+        ))}
+        <path d="M88 100 H112" className="stroke-fg-subtle" strokeWidth={4} />
+      </svg>
+    </span>
+  );
+}
+
 const PIXEL = 8;
 
 /** Calculating: the tip beats, and the pixels past it light one after another, round to the end. */

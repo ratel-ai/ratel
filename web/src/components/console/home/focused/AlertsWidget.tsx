@@ -1,27 +1,22 @@
-import { buttonVariants } from "@ratel/design-system/button-variants";
-import { EmptyState } from "@ratel/design-system/states";
-import { BellRing, ChevronRight, CircleCheck } from "lucide-react";
+import { BellOff, BellPlus, BellRing, ChevronRight, CircleCheck } from "lucide-react";
 import Link from "next/link";
+import { EmptyAction, WidgetEmpty } from "@/components/console/home/focused/WidgetEmpty";
 import type { FocusedAlerts } from "@/lib/views/home/focused-load";
 
 /** The alert rules that alert now, newest change first. Each row opens its alert. */
 export function AlertsWidget({ alerts }: { alerts: FocusedAlerts }) {
-  const { items, href } = alerts;
+  const { items, href, newHref, rules } = alerts;
   if (items.length === 0)
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <EmptyState
-          icon={CircleCheck}
-          title="No alert fires now"
-          description="An alert rule that crosses its threshold shows up here."
-          action={
-            <Link href={href} className={buttonVariants({ variant: "secondary", size: "sm" })}>
-              Open Alerts
-            </Link>
-          }
-          className="py-6"
-        />
-      </div>
+    return rules?.total === 0 ? (
+      <WidgetEmpty
+        name="alerts-none"
+        icon={BellPlus}
+        title="No alerts yet"
+        description="An alert tells you when a number crosses its threshold."
+        action={<EmptyAction href={newHref}>Create alert</EmptyAction>}
+      />
+    ) : (
+      <WidgetEmpty {...quiet(rules)} action={<EmptyAction href={href}>Open Alerts</EmptyAction>} />
     );
   return (
     <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
@@ -50,4 +45,28 @@ export function AlertsWidget({ alerts }: { alerts: FocusedAlerts }) {
       ))}
     </ul>
   );
+}
+
+/** Rules exist, as far as is known, and none fires. Paused and without data are not "all is well". */
+function quiet(rules: FocusedAlerts["rules"]) {
+  if (rules && rules.on === 0)
+    return {
+      name: "alerts-paused",
+      icon: BellOff,
+      title: "All alerts are paused",
+      description: "A paused alert checks nothing. Turn one on to see it here when it fires.",
+    };
+  if (rules && rules.noData === rules.on)
+    return {
+      name: "alerts-no-data",
+      icon: BellRing,
+      title: "No data to check yet",
+      description: "Alerts are on, but their numbers have no data. Send traces to start them.",
+    };
+  return {
+    name: "alerts-quiet",
+    icon: CircleCheck,
+    title: "No alert fires now",
+    description: "An alert rule that crosses its threshold shows up here.",
+  };
 }

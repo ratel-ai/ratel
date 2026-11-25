@@ -78,7 +78,8 @@ test("one dashboard widget: only it is drawn, with its title", () => {
 
 test("without a score, the gauge says why", () => {
   const { html, text } = draw("get_overview · no score");
-  assert.match(text, /Too few turns: 12 of the 50/);
+  assert.match(text, /not ready yet 12 of the 50 turns a score needs\. Send more traces/);
+  assert.match(html, /data-health-score-ring="empty"/);
   assert.doesNotMatch(html, /data-health-score=/);
 });
 
@@ -88,6 +89,25 @@ test("no data is read as no data, and a failed read costs its widget", () => {
   assert.match(text, /These numbers did not load/);
   assert.match(text, /The map did not load/);
   assert.match(text, /Retries after errors/);
+});
+
+test("no traces: each widget has the console's own empty state", () => {
+  const states = (name: string) =>
+    [...draw(name).html.matchAll(/data-widget-empty="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(states("get_overview · no traces yet"), [
+    "metrics",
+    "topology-none",
+    "health-no_turns",
+    "attention-no-data",
+    "alerts-none",
+    "item-none",
+  ]);
+  const window = draw("get_overview · no traces in the window");
+  assert.match(window.text, /No traces in the last 7 days.*Show 30 days/);
+  assert.match(window.html, /href="[^"]*\?range=30d"/);
+  assert.deepEqual(states("get_overview · alerts, no rules"), ["alerts-none"]);
+  assert.deepEqual(states("get_overview · attention, too early"), ["attention-early"]);
+  assert.match(draw("get_overview · first reading").text, /Calculating the score/);
 });
 
 test("a host that passed the text only has no view", () => {

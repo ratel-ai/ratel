@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
+import type { TracesSeen } from "@/lib/views/home/focused-load";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import { findDsViolations } from "../../../../eslint-rules/ds-tokens.mjs";
 import { type Topology, topologyModel } from "./topology";
@@ -23,8 +24,16 @@ const ROWS = {
 };
 const GRAPH = topologyModel(ROWS);
 
-const map = (graph: Topology, linked: boolean) =>
-  render(createElement(TopologyMap, { projectId: PROJECT_ID, graph, range: "7d", linked }));
+const map = (graph: Topology, linked: boolean, tracesSeen: TracesSeen | null = "in_window") =>
+  render(
+    createElement(TopologyMap, {
+      projectId: PROJECT_ID,
+      graph,
+      range: "7d",
+      linked,
+      empty: { root: `/project/${PROJECT_ID}`, window: 7, tracesSeen },
+    }),
+  );
 
 test("nodes, counts and flows, with a title for each edge and a text list", () => {
   const html = map(GRAPH, true);
@@ -70,7 +79,22 @@ test("MCP only says that no span names an agent", () => {
 
 test("nothing yet is a designed state", () => {
   const graph = topologyModel({ ...ROWS, agents: [], handoffs: [], servers: [], calls: [] });
-  assert.match(visibleText(map(graph, true)), /No agents or MCP servers in this window/);
+  for (const seen of ["in_window", null] as const) {
+    const text = visibleText(map(graph, true, seen));
+    assert.match(
+      text,
+      /No agents or MCP servers in this window.*gen_ai\.agent\.name.*Set up tracing/,
+    );
+  }
+  const none = map(graph, true, "none");
+  assert.match(visibleText(none), /No traces yet.*Send traces.*Set up tracing/);
+  assert.match(
+    visibleText(map(graph, true, "before")),
+    /No traces in the last 7 days.*Show 30 days/,
+  );
+  // The drawing is a picture and not data: hidden from a screen reader, no text, and it is still.
+  assert.match(none, /aria-hidden="true"[^>]*><svg[^>]*data-topology-ghost/);
+  assert.doesNotMatch(none, /<text|data-topology-node|animate-/);
 });
 
 test("what the caps left out is counted", () => {
