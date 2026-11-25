@@ -748,10 +748,11 @@ test("a trial that the concurrency limit refused waits for the next step", async
   });
   t.setRefuse((n) => (n === 0 ? null : full(1)));
   await t.step(experiment);
-  assert.deepEqual(
-    (await t.trials(experiment.id)).map(({ state }) => state).sort(),
-    ["pending", "pending", "running"],
-  );
+  assert.deepEqual((await t.trials(experiment.id)).map(({ state }) => state).sort(), [
+    "pending",
+    "pending",
+    "running",
+  ]);
   t.setRefuse(null);
   for (let round = 0; round < 3; round += 1) {
     for (const run of t.runs.values()) if (run.status === "running") t.end(run);
