@@ -14,6 +14,7 @@ import {
   Orbit,
   Plug,
   Rocket,
+  RotateCcw,
   Settings,
   Sparkles,
   Users,
@@ -37,6 +38,7 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   embeddings: Database,
   "tool-picker": Crosshair,
   ship: Rocket,
+  "self-corrections": RotateCcw,
   apis: Plug,
   edition: Blocks,
 };

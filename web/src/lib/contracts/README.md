@@ -11,7 +11,7 @@ edition names the product in copy (`full` for the MCP server, `short` for the se
 sentence); without it the copy keeps its neutral words.
 
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
-`rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`) and the optional
+`rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
 force each one on or off; only that file knows the environment variable of each. Without the port
 each switch is its configured value for the deployment, off when unset (in the open-source

@@ -39,6 +39,7 @@ export type NavIconName =
   | "embeddings"
   | "tool-picker"
   | "ship"
+  | "self-corrections"
   | "apis"
   | "edition";
 
