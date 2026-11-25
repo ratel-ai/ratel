@@ -1,4 +1,5 @@
 import { composition } from "@/lib/composition/ports";
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { processLogs } from "@/lib/ingest/otlp/process-logs";
 import { processTraces } from "@/lib/ingest/otlp/process-traces";
@@ -41,7 +42,13 @@ export async function startConfiguredIngestConsumer(): Promise<EnvelopeConsumer 
   return queue && startIngestConsumer({ queue, handler: configuredHandler() });
 }
 
-function configuredHandler(): EnvelopeHandler {
+/** A replay stores what was accepted before, so it counts nothing and stamps no key. */
+export interface ReplayDeps {
+  /** Decides a trace as it was decided before. Absent, every trace is analyzed. */
+  traceMetering?: TraceMeteringPort;
+}
+
+export function configuredHandler(replay?: ReplayDeps): EnvelopeHandler {
   // The jobs are only queued: the worker's loop, or the minute tick, runs them.
   const scheduleProjectDrain = () => undefined;
   const jobs = {
@@ -66,7 +73,12 @@ function configuredHandler(): EnvelopeHandler {
   };
   const genAiLogs = createGenAiLogStore();
   const otlpRawCapture = { store: createOtlpRawStore() };
-  const shared = { touchApiKeyAt, trackServerEvent };
+  const shared = replay
+    ? { touchApiKeyAt: async () => ({ first: false }), trackServerEvent: async () => undefined }
+    : { touchApiKeyAt, trackServerEvent };
+  const counters = replay
+    ? { traceMetering: replay.traceMetering }
+    : { incrementEventUsage, traceMetering: composition.traceMetering };
 
   return createEnvelopeHandler({
     findProject: async (projectId) => {
@@ -81,8 +93,7 @@ function configuredHandler(): EnvelopeHandler {
         insertOtelSpans,
         findStoredOtelSpans,
         insertTraceEvents,
-        incrementEventUsage,
-        traceMetering: composition.traceMetering,
+        ...counters,
         findRuntimeInvokes: (projectId, probe) => findRuntimeInvokes(projectId, probe),
         agentSpanDedupe: {
           findTracesWithModelCalls: (projectId, traceIds) =>

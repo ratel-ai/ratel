@@ -1,0 +1,206 @@
+import { sql } from "drizzle-orm";
+import { MAX_LOG_RECORDS, MAX_SPANS } from "@/lib/ingest/otlp/body";
+import { decodeOtlp } from "@/lib/ingest/otlp/decode";
+import { decodeOtlpLogs } from "@/lib/ingest/otlp/decode-logs";
+import { toOtelLogRows } from "@/lib/ingest/otlp/log-rows";
+import type { Envelope } from "@/lib/ingest/queue/envelope";
+import type { EnvelopeHandler } from "@/lib/ingest/queue/port/envelope-queue";
+import { readOtlpItems } from "@/lib/ingest/queue/process";
+import { parseRuntimeEvents, readEventsBody } from "@/lib/ingest/trace-events/ingest-events";
+import { deterministicEventId } from "@/lib/ingest/trace-events/parse";
+import type { getDb } from "@/lib/platform/db/client";
+
+/**
+ * Envelopes that were accepted before, through processing again (a private tool publishes them to a
+ * topic of their own). FILL stores what is missing and leaves what is there. REBUILD first removes what
+ * the envelopes of the range made.
+ *
+ * Outside `lib`, because it wires modules of every layer, as `ingest-consumer.ts` does.
+ */
+export type ReplayDb = Pick<ReturnType<typeof getDb>, "execute">;
+
+/** What a range of envelopes stored, by the ids its rows have whichever parser made them. */
+export interface ReplayRange {
+  /** Per project. */
+  traceIds: Map<string, Set<string>>;
+  logIds: Map<string, Set<string>>;
+  eventIds: Map<string, Set<string>>;
+  envelopeIds: Map<string, Set<string>>;
+}
+
+export function emptyRange(): ReplayRange {
+  return {
+    traceIds: new Map(),
+    logIds: new Map(),
+    eventIds: new Map(),
+    envelopeIds: new Map(),
+  };
+}
+
+function add(map: Map<string, Set<string>>, projectId: string, ids: Iterable<string>): void {
+  const set = map.get(projectId) ?? new Set();
+  for (const id of ids) set.add(id);
+  map.set(projectId, set);
+}
+
+/** An envelope that does not decode stored nothing, and is left to the consumer. */
+export function addToRange(range: ReplayRange, envelope: Envelope): void {
+  const { projectId } = envelope;
+  add(range.envelopeIds, projectId, [envelope.id]);
+  switch (envelope.signal) {
+    case "traces":
+      add(range.traceIds, projectId, traceIdsOf(envelope));
+      return;
+    case "logs": {
+      const read = readOtlpItems(envelope, {
+        decode: decodeOtlpLogs,
+        maxItems: MAX_LOG_RECORDS,
+        itemName: "log records",
+      });
+      if (!read.ok) return;
+      const { rows } = toOtelLogRows(projectId, read.items, new Date(envelope.receivedAt));
+      add(
+        range.logIds,
+        projectId,
+        rows.flatMap((row) => (row.id ? [row.id] : [])),
+      );
+      return;
+    }
+    case "events": {
+      const body = readEventsBody(envelope.body);
+      if (!body.ok) return;
+      add(
+        range.eventIds,
+        projectId,
+        parseRuntimeEvents(body.events).valid.map((event) =>
+          deterministicEventId(projectId, event.clientEventId),
+        ),
+      );
+      return;
+    }
+  }
+}
+
+export function traceIdsOf(envelope: Envelope): string[] {
+  if (envelope.signal !== "traces") return [];
+  const read = readOtlpItems(envelope, {
+    decode: decodeOtlp,
+    maxItems: MAX_SPANS,
+    itemName: "spans",
+  });
+  return read.ok ? [...new Set(read.items.map((span) => span.traceId).filter(Boolean))] : [];
+}
+
+const CHUNK = 500;
+
+/**
+ * Removes the range's rows and what was derived from them: spans and their calls, the events lifted from
+ * spans, the trace's summary and turns, log records, runtime events and the raw captures. What a removed
+ * runtime event had counted in `tool_usage_counters` is taken back, because storing it again counts it
+ * again. Readings that jobs make over the whole window (intents, health) follow when those jobs run.
+ */
+export async function removeRange(db: ReplayDb, range: ReplayRange): Promise<void> {
+  for (const [projectId, ids] of range.traceIds) {
+    for (const traceIds of chunks(ids)) {
+      const list = textArray(traceIds);
+      await db.execute(sql`
+        delete from trace_turns where project_id = ${projectId} and id in (
+          select s.turn_id from trace_turn_steps s join trace_events e on e.id = s.trace_event_id
+          where e.project_id = ${projectId} and e.trace_id = any(${list}) and e.ingest_source = 'otlp')`);
+      await db.execute(sql`
+        delete from trace_events
+        where project_id = ${projectId} and trace_id = any(${list}) and ingest_source = 'otlp'`);
+      for (const table of ["events", "otel_spans", "otel_trace_summaries"]) {
+        await db.execute(sql`
+          delete from ${sql.identifier(table)}
+          where project_id = ${projectId} and trace_id = any(${list})`);
+      }
+    }
+  }
+  for (const [projectId, ids] of range.logIds) {
+    for (const logIds of chunks(ids)) {
+      await db.execute(sql`
+        delete from otel_logs where project_id = ${projectId} and id = any(${uuidArray(logIds)})`);
+    }
+  }
+  for (const [projectId, ids] of range.eventIds) {
+    for (const eventIds of chunks(ids)) {
+      await removeRuntimeEvents(db, projectId, eventIds);
+    }
+  }
+  for (const [projectId, ids] of range.envelopeIds) {
+    for (const envelopeIds of chunks(ids)) {
+      await db.execute(sql`
+        delete from otlp_raw_exports
+        where project_id = ${projectId} and id = any(${uuidArray(envelopeIds)})`);
+    }
+  }
+}
+
+async function removeRuntimeEvents(
+  db: ReplayDb,
+  projectId: string,
+  eventIds: string[],
+): Promise<void> {
+  const list = uuidArray(eventIds);
+  await db.execute(sql`
+    delete from trace_turns where project_id = ${projectId} and id in (
+      select s.turn_id from trace_turn_steps s where s.trace_event_id = any(${list}))`);
+  // The types consolidation counts: a tool call's end, well or badly.
+  await db.execute(sql`
+    with gone as (
+      delete from trace_events
+      where project_id = ${projectId} and id = any(${list}) and ingest_source = 'runtime'
+      returning source_id, tool_id, type, took_ms
+    ), counted as (
+      select source_id, tool_id, count(*) as calls,
+        count(*) filter (where type = 'invoke_error') as errors,
+        coalesce(sum(took_ms), 0) as took
+      from gone
+      where source_id is not null and tool_id is not null
+        and type in ('invoke_end', 'invoke_error')
+      group by 1, 2
+    )
+    update tool_usage_counters c set calls = greatest(0, c.calls - n.calls),
+      errors = greatest(0, c.errors - n.errors),
+      total_duration_ms = greatest(0, c.total_duration_ms - n.took)
+    from counted n
+    where c.project_id = ${projectId} and c.source_id = n.source_id and c.tool_id = n.tool_id`);
+}
+
+function* chunks(ids: Set<string>): Generator<string[]> {
+  const all = [...ids];
+  for (let i = 0; i < all.length; i += CHUNK) yield all.slice(i, i + CHUNK);
+}
+
+const textArray = (ids: string[]) =>
+  sql`array[${sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  )}]::text[]`;
+
+const uuidArray = (ids: string[]) =>
+  sql`array[${sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  )}]::uuid[]`;
+
+/**
+ * Around a REBUILD: an envelope from outside the range is stored again only when it belongs to a removed
+ * trace, so that a trace that began before the range is whole again.
+ */
+export function rebuildHandler(
+  handler: EnvelopeHandler,
+  range: ReplayRange,
+  isMargin: (envelope: Envelope) => boolean,
+): EnvelopeHandler {
+  return async (envelope, delivery) => {
+    if (isMargin(envelope)) {
+      const removed = range.traceIds.get(envelope.projectId);
+      if (!removed || !traceIdsOf(envelope).some((id) => removed.has(id))) {
+        return { outcome: "ack" };
+      }
+    }
+    return handler(envelope, delivery);
+  };
+}
