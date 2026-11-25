@@ -36,7 +36,7 @@ function drawView(view: OverviewView | null, drawn?: Parameters<typeof OverviewB
   const html = render(
     React.createElement(OverviewBody, { view, openInConsole: () => undefined, drawn }),
   );
-  const ids = [...html.matchAll(/data-overview-widget="(\w+)"/g)].map(([, id]) => id);
+  const ids = [...html.matchAll(/data-overview-widget="([^"]+)"/g)].map(([, id]) => id);
   return { html, text: visibleText(html), ids };
 }
 
@@ -55,6 +55,25 @@ test("a removed widget is absent, and the rest keep the person's order", () => {
   assert.equal(ids[0], "attention");
   assert.ok(!ids.includes("topology"));
   assert.doesNotMatch(html, /data-topology/);
+});
+
+test("the dashboard widgets: their numbers and their dashboard; a broken one says why", () => {
+  const { text, html, ids } = draw("get_overview · dashboard widgets");
+  assert.equal(ids.filter((id) => id.startsWith("dashboard:")).length, 2);
+  assert.match(text, /Runs by model .*Support board .*claude-sonnet-5-5 .*141/);
+  assert.match(html, /href="[^"]*\/dashboards\/44444444-[^"]*"[^>]*>Support board</);
+  assert.match(text, /Old chart .*This widget is broken .*It was removed from the dashboard/);
+  assert.match(
+    draw("get_overview · dashboard widgets, failed read").text,
+    /Runs by model .*This widget did not load/,
+  );
+});
+
+test("one dashboard widget: only it is drawn, with its title", () => {
+  const { text, ids } = draw("get_overview · a dashboard widget");
+  assert.equal(ids.length, 1);
+  assert.match(text, /Runs by model .*141/);
+  assert.doesNotMatch(text, /Median duration/);
 });
 
 test("without a score, the gauge says why", () => {

@@ -12,7 +12,7 @@ Ratel reads the location of a trace one time, as its spans arrive. It takes the 
 | `geo.location.lat`, `geo.location.lon` | coordinates in degrees |
 | `client.address` | an IP address |
 
-A trace has the location of its root span, else of its first span with one. Each project can change the names in Settings > General > Location attributes. A change takes effect within one minute, for the traces that arrive from then on.
+A trace has the location of its root span, else of its first span with one. Each project can change the names in Settings > General > Location attributes. A change takes effect within one minute, for the traces that arrive from then on. An agent reads them with the MCP tool `get_location_attributes`. For an organization admin it changes them with `change_location_attributes`.
 
 Coordinates give a country, and a state in the United States. An IP address gives the same. Regions of other countries come from `geo.region.iso_code` only. The map has shapes for the countries of the world and for the states of the United States. The regions of another country show as a table.
 

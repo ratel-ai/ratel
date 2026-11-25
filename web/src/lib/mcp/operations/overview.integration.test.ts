@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
+import { metricQuery } from "@/lib/contracts/query";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { agentToolCount, assembleOperations } from "@/lib/mcp/operations";
@@ -23,6 +24,7 @@ import {
   setupDb,
 } from "@/lib/readings/trace-signals/signals/integration-support";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
+import { createDashboard, deleteDashboard } from "@/lib/views/dashboards/store";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import {
   changeOverviewLayout,
@@ -34,6 +36,8 @@ import { findDashboardWidget } from "@/lib/views/overview-layout/dashboard-widge
 import {
   type DashboardItemRef,
   DEFAULT_LAYOUT,
+  dashboardItemId,
+  MAX_DASHBOARD_ITEMS,
   OVERVIEW_WIDGETS,
   type OverviewWidgetId,
   WIDGET_CATALOG,
@@ -630,4 +634,151 @@ test("a connection lists the tools when one of its organizations has the flag", 
   assert.equal(await focusedConsoleForCaller(ANA, on), true);
   assert.equal(await focusedConsoleForCaller({ ...KEY, organization: null }, on), false);
   assert.equal(await focusedConsoleForCaller(ANA, async () => false), false);
+});
+
+const BOARD_WIDGET = {
+  id: "runs",
+  title: "Runs",
+  query: metricQuery("trace_count", "count"),
+  chart: "number" as const,
+  layout: { x: 0, y: 0, w: 6, h: 4 },
+};
+
+async function withBoard(over: Partial<OverviewOperationDeps> = {}) {
+  const at = await setup(over);
+  const { id } = await createDashboard(
+    {
+      projectId: PROJECT_ID,
+      name: "Board",
+      widgets: [BOARD_WIDGET],
+      updatedBy: "ana",
+      updatedByName: "Ana",
+    },
+    at.db as never,
+  );
+  const ref = { dashboardId: id, widgetId: "runs" };
+  return { ...at, id, ref, entry: dashboardItemId(id, "runs") };
+}
+
+test("a dashboard widget: added, moved and removed as on the web, with the client in the history", async () => {
+  const { call, web, ref, entry } = await withBoard();
+  const added = dataOf(await call("change_overview_layout", { change: "add", ...ref }));
+  assert.equal(added.changed, "Added Runs");
+  const placed = added.layout.widgets.find(({ id }: { id: string }) => id === entry);
+  assert.deepEqual(placed, {
+    id: entry,
+    ...ref,
+    name: "Runs",
+    removed: false,
+    x: 0,
+    y: 20,
+    w: 6,
+    h: 4,
+  });
+  const onWeb = await readOverviewLayout(PROJECT_ID, web);
+  assert.ok(onWeb.ok && onWeb.layout.some(({ id }) => id === entry));
+  dataOf(await call("change_overview_layout", { change: "move", ...ref, x: 0, y: 0 }));
+  dataOf(await call("change_overview_layout", { change: "resize", ...ref, w: 4, h: 3 }));
+  dataOf(await call("change_overview_layout", { change: "remove", ...ref }));
+  const { changes } = dataOf(await call("list_overview_changes"));
+  assert.deepEqual(
+    changes.map(({ what, source, client }: Record<string, string>) => [what, source, client]),
+    ["Removed Runs", "Resized Runs", "Moved Runs", "Added Runs"].map((what) => [
+      what,
+      "mcp",
+      "claude-code",
+    ]),
+  );
+  // The web's own add is the same entry, and an agent reads it.
+  assert.ok((await changeOverviewLayout(PROJECT_ID, { kind: "add", widget: entry }, web, null)).ok);
+  assert.ok(dataOf(await call("get_overview")).dashboardWidgets.length === 1);
+});
+
+test("a dashboard widget: the page and the widget alone have its numbers, and the view its drawing", async () => {
+  const { call, ref, entry, id } = await withBoard();
+  await call("change_overview_layout", { change: "add", ...ref });
+  for (const range of ["7d", "30d"]) {
+    const viewed = await call("get_overview", { range }, ANA, true);
+    const [widget] = dataOf(viewed).dashboardWidgets;
+    assert.equal(widget.name, "Runs");
+    assert.equal(widget.dashboard, "Board");
+    assert.equal(widget.href, `/project/${PROJECT_ID}/dashboards/${id}`);
+    assert.equal(widget.result.kind, "metric");
+    assert.equal(typeof widget.summary, "string");
+    assert.ok(viewed.ok);
+    const { dashboards } = viewed.view?.overview as {
+      dashboards: Record<string, { kind: string }>;
+    };
+    assert.equal(dashboards[entry].kind, "widget");
+    const one = await call("get_overview", { ...ref, range }, ANA, true);
+    assert.deepEqual(dataOf(one).dashboardWidgets, [widget]);
+    assert.ok(!("metrics" in dataOf(one)) && !("layout" in dataOf(one)));
+    assert.equal(one.ok && one.view?.widget, entry);
+  }
+  // Alone it needs no place on the Overview, also for an API key.
+  await call("change_overview_layout", { change: "remove", ...ref });
+  assert.equal(dataOf(await call("get_overview", ref, KEY)).dashboardWidgets.length, 1);
+  assert.deepEqual(dataOf(await call("get_overview")).dashboardWidgets, []);
+});
+
+test("a dashboard widget: a deleted source says why, and can be removed", async () => {
+  const { call, ref, id, db } = await withBoard();
+  await call("change_overview_layout", { change: "add", ...ref });
+  await deleteDashboard(PROJECT_ID, id, db as never);
+  const [widget] = dataOf(await call("get_overview")).dashboardWidgets;
+  assert.equal(widget.name, "Runs");
+  assert.equal(widget.problem, "Its dashboard was deleted.");
+  assert.equal(
+    dataOf(await call("change_overview_layout", { change: "remove", ...ref })).changed,
+    "Removed Runs",
+  );
+});
+
+test("a dashboard widget: the same refusals as the web", async () => {
+  const on = await withBoard();
+  const { ref } = on;
+  const add = { change: "add", ...ref };
+  const at = async (call: typeof on.call, params: object, auth = ANA) =>
+    refusal(await call("change_overview_layout", params as Record<string, unknown>, auth));
+  assert.deepEqual(await at(on.call, add, KEY), ["forbidden", "api_key"]);
+  const stranger = { ...(ANA as { kind: "oauth" }), memberships: [] } as never;
+  assert.equal((await at(on.call, add, stranger))?.[0], "not_found");
+  assert.equal((await at(on.call, { ...add, widgetId: "gone" }))?.[0], "invalid_params");
+  const wrong: object[] = [
+    { change: "add", dashboardId: ref.dashboardId },
+    { ...add, widget: "health" },
+    { ...add, dashboardId: "not-an-id" },
+  ];
+  for (const params of wrong)
+    assert.equal((await at(on.call, params))?.[0], "invalid_params", JSON.stringify(params));
+  for (let index = 0; index < MAX_DASHBOARD_ITEMS; index += 1) {
+    const { id } = await createDashboard(
+      {
+        projectId: PROJECT_ID,
+        name: `B${index}`,
+        widgets: [BOARD_WIDGET],
+        updatedBy: "ana",
+        updatedByName: "Ana",
+      },
+      on.db as never,
+    );
+    assert.equal(await at(on.call, { ...add, dashboardId: id }), null);
+  }
+  assert.deepEqual(await at(on.call, add), ["conflict", "too_many"]);
+
+  const off = await withBoard({ dashboardsOn: async () => false });
+  assert.deepEqual(await at(off.call, { change: "add", ...off.ref }), [
+    "forbidden",
+    "dashboards_off",
+  ]);
+  assert.deepEqual(refusal(await off.call("get_overview", off.ref)), [
+    "forbidden",
+    "dashboards_off",
+  ]);
+  assert.deepEqual(dataOf(await off.call("get_overview")).dashboardWidgets, []);
+  const support = await withBoard({ restricted: async () => true });
+  assert.deepEqual(await at(support.call, { change: "add", ...support.ref }), [
+    "forbidden",
+    "support_session",
+  ]);
 });

@@ -42,6 +42,36 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
   - Good: `fix(RP-123): keep the session open`
   - Bad: `updated some files`, `RP-123 Keep the session open`
 
+## Web and MCP parity
+
+A person uses the console. An agent uses MCP. Both must be able to do the same work.
+
+**Build**
+
+1. Give each console feature MCP operations in `web/src/lib/mcp/operations/`.
+2. Make an operation call the same action that the console's server action calls. Do not write the logic again.
+3. Put the operation behind the same flag and the same access check as the console.
+4. Never return a secret from an operation. Name a parameter that holds a secret in `secretParams`.
+5. Give each main view of the feature an MCP App view in `mcp-apps/views/`, or bind its tool to a generic view.
+6. Start each bound tool's result with a text summary. A host without MCP Apps shows only this text.
+7. Add the feature's action files to `ACTION_FILES` in `web/src/lib/mcp/operations/monitoring/parity.ts`.
+8. Add each action to `PARITY` in the same file. If only a browser can do an action, write the reason there.
+9. Run the parity test: `web/src/lib/mcp/operations/monitoring/parity.test.ts`. It fails for an action without an operation.
+
+**Prove**
+
+1. Show the MCP path next to the web path in the proof of the PR.
+2. For the MCP path, attach a recording or a transcript of an agent that uses the operations.
+3. Attach a screenshot of each new or changed MCP App view.
+
+**Review**
+
+1. Compare the console actions of the PR with its MCP operations.
+2. Report each missing operation as a finding.
+3. Report each missing MCP App view as a finding.
+4. Report a feature module that the parity test does not cover as a finding.
+5. Report a proof without the MCP path as a finding.
+
 ## When in doubt
 
 - For locked architectural decisions: [`docs/adr/`](docs/adr/) — the ADR is the source of truth, not any README.

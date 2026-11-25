@@ -142,6 +142,7 @@ test("the server loads the built views and links the generic views' tools", () =
       JSON.parse(readFileSync(path.join(DIST, "views.json"), "utf8")) as McpAppView[],
   });
   assert.deepEqual(catalog.views.map((view) => view.view).sort(), [
+    "dashboard",
     "detail",
     "health",
     "list",
@@ -155,6 +156,19 @@ test("the server loads the built views and links the generic views' tools", () =
   assert.equal(catalog.boundTool("get_trace")?.uri, "ui://ratel/trace");
   assert.equal(catalog.boundTool("get_cost_by_day")?.uri, "ui://ratel/series");
   assert.equal(catalog.boundTool("get_agent_health")?.uri, "ui://ratel/health");
+  for (const tool of ["get_dashboard", "query_monitoring"])
+    assert.equal(catalog.boundTool(tool)?.uri, "ui://ratel/dashboard");
+  for (const tool of [
+    "list_scorers",
+    "list_alerts",
+    "list_alert_destinations",
+    "list_slack_channels",
+    "get_location_attributes",
+    "list_dashboards",
+  ])
+    assert.equal(catalog.boundTool(tool)?.uri, "ui://ratel/list");
+  for (const tool of ["get_scorer", "get_alert"])
+    assert.equal(catalog.boundTool(tool)?.uri, "ui://ratel/detail");
   for (const tool of ["get_session", "get_run_summary", "get_trace_conversation"])
     assert.equal(catalog.boundTool(tool)?.uri, "ui://ratel/replay");
   for (const view of catalog.views) {
