@@ -24,3 +24,16 @@ export function sandboxesOffForAll(deps: Partial<FeatureFlagDeps> = {}): boolean
   const port = "port" in deps ? deps.port : composition.featureFlags;
   return !port && !experimentalFeatureEnabled("sandboxes", config, deps.edition);
 }
+
+/** The organizations whose rail shows Ratel sandbox. A failed decision hides it. */
+export async function sandboxOrganizationIds(
+  organizations: ReadonlyArray<{ id: string }>,
+  deps: Partial<FeatureFlagDeps> = {},
+): Promise<string[]> {
+  const decided = await Promise.all(
+    organizations.map(async ({ id }) =>
+      (await featureEnabled("sandboxes", { organizationId: id }, deps)) ? [id] : [],
+    ),
+  );
+  return decided.flat();
+}
