@@ -280,8 +280,11 @@ test("an empty Needs attention says whether anything was checked", async () => {
   assert.equal(await state(quiet), "clear");
   const none = async () => ({ ...clear, turns: 0 });
   assert.equal(await state({ traces: async () => NO_RUNS, health: none }), "no_data");
-  assert.equal(await state({ ...quiet, health: async () => ({ ...clear, turns: 3 }) }), "early");
-  assert.equal(await state({ ...quiet, health: none }), "early");
+  assert.equal(
+    await state({ ...quiet, health: async () => ({ ...clear, turns: 3 }) }),
+    "not_enough",
+  );
+  assert.equal(await state({ ...quiet, health: none }), "not_enough");
   assert.equal(
     await state({ ...quiet, health: async () => ({ ...clear, computedAt: null }) }),
     "early",

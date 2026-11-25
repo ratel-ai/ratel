@@ -1,5 +1,6 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
+import { DotShape } from "@ratel/design-system/dot-shape";
 import { EmptyState } from "@ratel/design-system/states";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -9,9 +10,10 @@ import type { TracesSeen } from "@/lib/views/home/focused-load";
 import type { OverviewWindow } from "@/lib/views/home/overview-model";
 
 /**
- * A widget with nothing to draw: a still picture of what it draws, in gray, or its icon, then why
- * it is empty and what to do. Never a skeleton, which says that it loads. In a short widget the
- * picture makes room for the words.
+ * A widget with nothing to draw: a picture of what it draws, or its icon, then why it is empty and
+ * what to do. Where what it draws is missing, the picture is dots that dissolve and form again
+ * (`DotShape`). Never a skeleton, which says that it loads. In a short widget the picture makes
+ * room for the words.
  */
 
 /** What decides how a person gets data into an empty widget. */
@@ -21,9 +23,26 @@ export interface EmptyWindow {
   tracesSeen: TracesSeen | null;
 }
 
+export type EmptyShape = keyof typeof SHAPES;
+
+/** What each widget draws. They start a quarter of a loop apart, so that they never turn together. */
+const SHAPES = {
+  topology: {
+    startMs: 0,
+    pictures: [
+      { picture: "topology", className: "[@container_(width<360px)]:hidden" },
+      { picture: "topologySmall", className: "[@container_(width>=360px)]:hidden" },
+    ],
+  },
+  health: { startMs: 1_100, pictures: [{ picture: "gauge", className: "" }] },
+  attention: { startMs: 2_200, pictures: [{ picture: "issues", className: "" }] },
+  alerts: { startMs: 3_300, pictures: [{ picture: "bell", className: "" }] },
+} as const;
+
 export function WidgetEmpty({
   name,
   icon: Icon,
+  shape,
   figure,
   title,
   description,
@@ -34,6 +53,8 @@ export function WidgetEmpty({
   /** For the tests and the screenshots: which state this is. */
   name: string;
   icon?: LucideIcon;
+  /** What is missing, in dots, in place of the icon. */
+  shape?: EmptyShape;
   /** In place of the icon. It is decoration: the words say the same. */
   figure?: ReactNode;
   title: string;
@@ -47,12 +68,32 @@ export function WidgetEmpty({
   return (
     <div
       data-widget-empty={name}
+      data-dot-shape-replay={shape ? "" : undefined}
       className={cn(
         "flex min-h-0 flex-1 flex-col items-center justify-center-safe overflow-y-auto",
         padded && "p-4",
       )}
     >
-      {figure ? (
+      {shape ? (
+        // Its place gives the size, so that the picture can follow it, and goes when it is too small.
+        <div
+          aria-hidden
+          className="flex min-h-0 w-full shrink basis-36 flex-col overflow-hidden max-lg:min-h-36"
+        >
+          <div className="mb-3 min-h-0 flex-1 [container-type:size]">
+            <div className="flex size-full items-center justify-center [@container_(height<48px)]:hidden">
+              {SHAPES[shape].pictures.map(({ picture, className }) => (
+                <DotShape
+                  key={picture}
+                  name={picture}
+                  startMs={SHAPES[shape].startMs}
+                  className={className}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : figure ? (
         <div
           aria-hidden
           className="mb-3 flex min-h-0 w-full shrink basis-28 justify-center overflow-hidden max-lg:min-h-28"

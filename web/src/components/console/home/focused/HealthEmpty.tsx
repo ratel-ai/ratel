@@ -8,6 +8,7 @@ import {
 } from "@/components/console/home/focused/WidgetEmpty";
 import { fmtCount } from "@/lib/platform/format";
 import type { FocusedHealth, HealthCard, NoScoreReason } from "@/lib/views/home/focused-load";
+import { DATA_IS_MISSING } from "@/lib/views/home/no-score";
 
 type NoScore = Extract<HealthCard, { kind: "state" }>;
 
@@ -26,10 +27,11 @@ export function HealthEmpty({
   note?: string;
 }) {
   const { title, description, traces } = copy(card, windowDays, at);
+  const missing = DATA_IS_MISSING.has(card.reason);
   return (
     <WidgetEmpty
       name={`health-${card.reason}`}
-      figure={<EmptyScoreRing />}
+      {...(missing ? { shape: "health" as const } : { figure: <EmptyScoreRing /> })}
       title={title}
       description={description}
       action={

@@ -473,6 +473,44 @@ test("no traces: each widget says so, asks for traces, and none of them looks li
   assert.doesNotMatch(visibleText(older), /No traces yet/);
 });
 
+const shapesOf = (html: string) =>
+  [...html.matchAll(/data-dot-shape="([^"]+)"/g)].map((match) => match[1]);
+
+test("the dots move only where something is missing, and not while the page is arranged", async () => {
+  const missing = {
+    telemetry: TELEMETRY(null),
+    health: async () => ({ ...pendingHealthModel(7), turns: 0, floor: 50 }),
+    topology: async () => NO_MAP,
+  };
+  const all = ["topology", "topologySmall", "gauge", "issues", "bell"];
+  assert.deepEqual(shapesOf(page(await load(missing))), all);
+  const edit = page(await load(missing), { edit: true });
+  assert.equal((edit.match(/data-grid-body="" inert=""/g) ?? []).length, 5, "each is inert");
+
+  const few = { health: async () => ({ ...pendingHealthModel(7), turns: 12, floor: 50 }) };
+  const noData = { alertRules: async () => ({ total: 1, on: 1, noData: 1 }) };
+  assert.deepEqual(shapesOf(page(await load({ ...few, ...noData }))), ["gauge", "issues", "bell"]);
+
+  const still = [
+    { alertRules: async () => ({ total: 2, on: 2, noData: 0 }) },
+    { alertRules: async () => ({ total: 2, on: 0, noData: 0 }) },
+  ];
+  const workflows = MODEL.workflows ?? ({ items: [], unserved: [] } as never);
+  const clear = { ...MODEL, signals: [], lockedCount: 0 };
+  for (const model of [
+    MODEL,
+    clear,
+    { ...clear, lockedCount: 3 },
+    { ...clear, computedAt: null },
+    { ...clear, score: null },
+    { ...clear, workflows: { ...workflows, blocked: "mixed_runs" as const } },
+  ])
+    for (const alerts of still)
+      assert.deepEqual(shapesOf(page(await load({ ...alerts, health: async () => model }))), []);
+  const failed = { topology: fail, health: fail, traces: fail, alerting: fail };
+  assert.deepEqual(shapesOf(page(await load(failed))), []);
+});
+
 test("each reason for no score keeps its own words, and only a first reading is being calculated", async () => {
   const health = async (over: Partial<HealthPageModel>) =>
     page(
@@ -493,7 +531,7 @@ test("each reason for no score keeps its own words, and only a first reading is 
     const html = await health(over);
     const text = visibleText(html);
     assert.match(text, words);
-    assert.match(html, /data-health-score-ring="empty"/);
+    assert.match(html, /data-health-score-ring="empty"|data-dot-shape="gauge"/);
     assert.doesNotMatch(html, /data-ring-cell="(lit|tip|target)"|data-health-score="/);
     assert.equal(/Calculating/.test(text), "computedAt" in over);
     assert.match(html, /href="[^"]*\/health"/, "Agent health stays a click away");

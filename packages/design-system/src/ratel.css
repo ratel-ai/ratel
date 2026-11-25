@@ -267,3 +267,41 @@
     animation: live-dot 1.4s ease-in-out infinite;
   }
 }
+
+/* A picture of what is not there yet (components/dot-shape.tsx): it holds, dissolves into noise
+ * and forms again. One loop is DOT_SHAPE_MS; it starts and ends formed, so nothing jumps when it
+ * starts and when it stops. Opacity only: each layer is composited. */
+@keyframes dot-shape {
+  0%, 8% {
+    opacity: var(--dot-formed);
+  }
+  24%, 36% {
+    opacity: var(--dot-noise);
+  }
+  47% {
+    opacity: var(--dot-formed);
+  }
+  64% {
+    opacity: var(--dot-shimmer);
+  }
+  82%, 100% {
+    opacity: var(--dot-formed);
+  }
+}
+
+.dot-shape-layer {
+  opacity: var(--dot-formed);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-dot-shape-run] .dot-shape-layer {
+    animation: dot-shape 4.4s ease-in-out var(--dot-delay) 3;
+  }
+  [data-dot-shape-run="paused"] .dot-shape-layer {
+    animation-play-state: paused;
+  }
+  /* A part of the page that takes no press, such as a widget while the page is arranged. */
+  [inert] .dot-shape-layer {
+    animation: none;
+  }
+}
