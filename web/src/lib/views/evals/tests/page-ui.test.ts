@@ -161,6 +161,14 @@ test("the experiment page shows the raw counts of each case, and links each tria
           status: "fail",
           reason: "tools ne refund_order: the value is there.",
         },
+        {
+          scorerId: "j",
+          name: "Polite",
+          kind: "judge",
+          gating: true,
+          status: "not_scored",
+          reason: "The judge budget of this organization for today (100 USD) is used.",
+        },
       ],
     }),
     trial({ index: 2, result: "invalid", reason: "timed_out: no result", traceId: null }),
@@ -172,6 +180,8 @@ test("the experiment page shows the raw counts of each case, and links each tria
     assert.ok(text.includes(part), part);
   }
   assert.match(text, /No refund\s*gating\s*tools ne refund_order/);
+  // A judge that could not run shows its reason next to the fail of the trial.
+  assert.match(text, /Trial 2\s*Fail[\s\S]*Not scored\s*Polite\s*gating\s*The judge budget [\s\S]*100 USD/);
   assert.match(html, new RegExp(`traces/${"c".repeat(32)}`));
 });
 

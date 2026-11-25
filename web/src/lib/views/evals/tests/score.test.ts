@@ -10,6 +10,7 @@ import {
   snapshotOf,
   type TrialRecord,
 } from "../domain/score";
+import { scoreRun } from "../experiments";
 import { NO_REFUND } from "./support";
 
 const trial = (over: Partial<TrialRecord> = {}): TrialRecord => ({
@@ -118,23 +119,80 @@ test("a gating judge decides", () => {
   assert.equal(score(judge(true), said(true)).result, "pass");
 });
 
-test("a judge refused by the budget: advisory is not scored, gating makes invalid", () => {
-  const advisory = score(judge(false), refused);
-  assert.equal(advisory.result, "pass");
-  assert.deepEqual(
-    [advisory.scorers[1]?.status, advisory.scorers[1]?.reason],
-    ["not_scored", refused.status === "not_scored" ? refused.reason : ""],
+const noEngine: JudgeOutcome = {
+  status: "not_scored",
+  code: "not_configured",
+  reason: "No judge is configured.",
+};
+const refund = trial({ toolCalls: [{ name: "refund_order", arguments: {} }] });
+/** The result, and what is stored of the judge. */
+const outcome = (record: TrialRecord, gating: boolean, judged: JudgeOutcome) => {
+  const { result, invalidReason, scorers } = scoreTrial(
+    record,
+    [NO_REFUND, judge(gating)],
+    new Map([["j", judged]]),
   );
-  const gating = score(judge(true), refused);
-  assert.equal(gating.result, "invalid");
-  assert.match(gating.invalidReason ?? "", /Polite.*100 USD/);
+  return { result, invalidReason, judge: [scorers[1]?.status, scorers[1]?.reason] };
+};
+const BUDGET = "The judge budget of this organization for today (100 USD) is used.";
+
+test("(a) a gating check fails, the gating judge is refused: a real gating failure wins", () => {
+  assert.deepEqual(outcome(refund, true, refused), {
+    result: "fail",
+    invalidReason: null,
+    judge: ["not_scored", BUDGET],
+  });
 });
 
-test("a gating check that fails is a fail, also when a gating judge has no result", () => {
-  const scorers = [NO_REFUND, judge(true)];
-  const record = trial({ toolCalls: [{ name: "refund_order", arguments: {} }] });
-  assert.equal(scoreTrial(record, scorers, new Map([["j", refused]])).result, "fail");
+test("(b) all gating checks pass, the gating judge is refused: invalid with the budget reason", () => {
+  assert.deepEqual(outcome(trial(), true, refused), {
+    result: "invalid",
+    invalidReason: `The gating scorer Polite has no result: ${BUDGET}`,
+    judge: ["not_scored", BUDGET],
+  });
 });
+
+test("(c) all gating checks pass, the gating judge has no engine: invalid", () => {
+  assert.deepEqual(outcome(trial(), true, noEngine), {
+    result: "invalid",
+    invalidReason: "The gating scorer Polite has no result: No judge is configured.",
+    judge: ["not_scored", "No judge is configured."],
+  });
+});
+
+test("(d) a gating check fails, the advisory judge is refused: fail", () => {
+  assert.deepEqual(outcome(refund, false, refused), {
+    result: "fail",
+    invalidReason: null,
+    judge: ["not_scored", BUDGET],
+  });
+});
+
+test("(e) all gating checks pass, the advisory judge is refused: pass", () => {
+  assert.deepEqual(outcome(trial(), false, refused), {
+    result: "pass",
+    invalidReason: null,
+    judge: ["not_scored", BUDGET],
+  });
+});
+
+for (const status of ["infra_error", "timed_out"] as const) {
+  test(`(f) the sandbox gives ${status}: invalid before any scoring`, async () => {
+    const run = { status, reason: "it stopped", traceId: null, result: null };
+    const scored = await scoreRun(
+      { scorerSnapshots: { v1: [snapshotOf(NO_REFUND), snapshotOf(judge(true))] } } as never,
+      { caseVersionId: "v1" } as never,
+      {} as never,
+      run as never,
+      // Any use of a scorer or of the judge reads this and throws.
+      new Proxy({}, { get: () => assert.fail("nothing is scored") }) as never,
+    );
+    assert.deepEqual(
+      [scored.result, scored.reason, scored.scorers],
+      ["invalid", `${status}: it stopped`, []],
+    );
+  });
+}
 
 test("the same definition has the same hash, and a changed one has another", () => {
   const hash = definitionHash(NO_REFUND.definition);
