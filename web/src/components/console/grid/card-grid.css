@@ -10,10 +10,23 @@
   transition: none;
   z-index: 2;
 }
+.react-grid-item [data-grid-exact] {
+  height: 100%;
+}
+.react-grid-item:not(.resizing) > [data-grid-exact] {
+  width: var(--exact-width);
+  margin-left: var(--exact-left);
+}
 .react-grid-item [data-grid-handle] {
   cursor: grab;
+  touch-action: none;
 }
-.react-grid-item.react-draggable-dragging [data-grid-handle] {
+@media (hover: hover) {
+  .react-grid-item [data-grid-surface] {
+    cursor: grab;
+  }
+}
+.react-grid-item.react-draggable-dragging :is([data-grid-handle], [data-grid-surface]) {
   cursor: grabbing;
 }
 .react-grid-item.resizing,
@@ -34,13 +47,7 @@
   width: 24px;
   height: 24px;
   cursor: se-resize;
-  opacity: 0;
   touch-action: none;
-  transition: opacity 120ms ease;
-}
-.react-grid-item:hover > .react-resizable-handle,
-.react-grid-item.resizing > .react-resizable-handle {
-  opacity: 1;
 }
 .react-grid-item > .react-resizable-handle::after {
   position: absolute;
@@ -53,14 +60,8 @@
   border-bottom-right-radius: 3px;
   content: "";
 }
-@media (hover: none) {
-  .react-grid-item > .react-resizable-handle {
-    opacity: 1;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .react-grid-item,
-  .react-grid-item > .react-resizable-handle {
+  .react-grid-item {
     transition: none;
   }
 }

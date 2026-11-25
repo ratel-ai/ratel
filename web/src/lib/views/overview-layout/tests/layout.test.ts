@@ -36,6 +36,11 @@ test("the default: Metrics, then Topology, then Health with Needs attention besi
   assert.ok(sameLayout(readLayout(storeLayout(DEFAULT_LAYOUT)), DEFAULT_LAYOUT));
 });
 
+test("the default is 16 rows, and no widget is below its minimum", () => {
+  assert.equal(Math.max(...DEFAULT_LAYOUT.map(({ y, h }) => y + h)), 16);
+  for (const { min, place } of WIDGET_CATALOG) assert.ok(place.w >= min.w && place.h >= min.h);
+});
+
 test("a layout that cannot be read is the default", () => {
   const whole = storeLayout(DEFAULT_LAYOUT);
   const [first, ...rest] = whole.widgets;
@@ -65,7 +70,7 @@ test("a widget that is not offered is not drawn; a missing one is at the end and
     ],
   });
   assert.deepEqual(order(layout), ["topology", "health", "attention", "metrics"]);
-  assert.deepEqual(places(layout).topology, [0, 0, 12, 8], "nothing is left free for it");
+  assert.deepEqual(places(layout).topology, [0, 0, 12, 7], "nothing is left free for it");
   // With nothing known, all of them are new.
   assert.deepEqual(
     order(readLayout({ version: 1, widgets: [] })).toSorted(),
@@ -81,15 +86,15 @@ test("a stored size below the minimum, or over the edge, is made whole", () => {
       widget.id === "metrics" ? { ...widget, x: 10, w: 2, h: 1 } : widget,
     ),
   });
-  assert.deepEqual(places(layout).metrics, [4, 0, 8, 4]);
+  assert.deepEqual(places(layout).metrics, [4, 0, 8, 3]);
 });
 
 test("remove closes the gap, and add puts the widget back where it was", () => {
   const gone = changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "topology" });
   assert.deepEqual(places(gone), {
-    metrics: [0, 0, 12, 4],
-    health: [0, 4, 4, 7],
-    attention: [4, 4, 8, 7],
+    metrics: [0, 0, 12, 3],
+    health: [0, 3, 4, 6],
+    attention: [4, 3, 8, 6],
     topology: "removed",
   });
   const reread = readLayout(storeLayout(gone));
@@ -109,9 +114,9 @@ test("all widgets can be removed", () => {
 
 test("move and resize are those of the grid; a removed widget has no place to move", () => {
   const moved = changeLayout(DEFAULT_LAYOUT, { kind: "move", widget: "attention", x: 4, y: 0 });
-  assert.deepEqual(places(moved).attention, [4, 0, 8, 7]);
+  assert.deepEqual(places(moved).attention, [4, 0, 8, 6]);
   const resized = changeLayout(DEFAULT_LAYOUT, { kind: "resize", widget: "metrics", w: 1, h: 1 });
-  assert.deepEqual(places(resized).metrics, [0, 0, 8, 4], "no smaller than its minimum");
+  assert.deepEqual(places(resized).metrics, [0, 0, 8, 3], "no smaller than its minimum");
   const gone = changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "health" });
   assert.ok(sameLayout(changeLayout(gone, { kind: "move", widget: "health", x: 0, y: 0 }), gone));
 });
@@ -165,7 +170,7 @@ test("a change from outside is checked", () => {
 const ALERTS = "alerts" as OverviewWidgetId;
 const FIVE: OfferedWidgets = [
   ...WIDGET_CATALOG,
-  { id: ALERTS, min: { w: 3, h: 3 }, place: { x: 0, y: 19, w: 6, h: 4 } },
+  { id: ALERTS, min: { w: 3, h: 3 }, place: { x: 0, y: 16, w: 6, h: 4 } },
 ];
 /** One visit: the page reads the row, a person changes it, the row is saved. */
 const visit = (row: unknown, offered: OfferedWidgets, ...changes: OverviewLayoutChange[]) =>
@@ -250,7 +255,7 @@ test("reset is the default of the offered widgets, and forgets the kept entries"
   assert.ok(Array.isArray(drawn(reset, FIVE).alerts), "the fifth joins as new");
   assert.deepEqual(
     places(changeLayout(DEFAULT_LAYOUT, { kind: "reset" }, FIVE)).alerts,
-    [0, 19, 6, 4],
+    [0, 16, 6, 4],
   );
 });
 

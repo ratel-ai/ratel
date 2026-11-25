@@ -38,7 +38,7 @@ export function TopologyMap({
   range: string;
   /** The Agents and MCP servers pages exist (`agentsPages`). */
   linked: boolean;
-  /** Inside a card, which is the frame: the map fills it and scrolls both ways. */
+  /** A widget, without a frame: the map fills it and scrolls both ways. */
   bare?: boolean;
 }) {
   const layout = topologyLayout(graph);
@@ -49,14 +49,14 @@ export function TopologyMap({
     <div
       className={cn(
         "flex min-w-0 flex-col",
-        bare ? "min-h-0 flex-1 border-t border-line" : "rounded-lg border border-line bg-raised",
+        bare ? "min-h-0 flex-1" : "rounded-lg border border-line bg-raised",
       )}
       data-topology=""
     >
       <div
         className={cn(
-          "flex flex-1 p-3",
-          bare ? "min-h-0 overflow-auto" : "items-center overflow-x-auto",
+          "flex flex-1",
+          bare ? "min-h-0 overflow-auto px-3" : "items-center overflow-x-auto p-3",
         )}
       >
         {/* biome-ignore lint/a11y/useSemanticElements: an SVG has no fieldset; it groups the linked boxes. */}
@@ -82,7 +82,10 @@ export function TopologyMap({
               x={edge.label.x}
               y={edge.label.y + 4}
               textAnchor="middle"
-              className="fill-fg-muted stroke-raised text-xs tabular-nums [paint-order:stroke]"
+              className={cn(
+                "fill-fg-muted text-xs tabular-nums [paint-order:stroke]",
+                bare ? "stroke-app" : "stroke-raised",
+              )}
               strokeWidth={4}
             >
               {formatInteger(edge.count)}
@@ -101,7 +104,12 @@ export function TopologyMap({
           <li key={`${edge.from}|${edge.to}`}>{edgeText(edge)}</li>
         ))}
       </ul>
-      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-xs text-fg-subtle">
+      <footer
+        className={cn(
+          "flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-fg-subtle",
+          bare ? "" : "border-t border-line",
+        )}
+      >
         <span className="min-w-0 flex-1 basis-64">{caption(graph)}</span>
         {linked && has("agent") ? (
           <SeeAll href={agentsHref(projectId, { range })}>See all agents</SeeAll>
@@ -119,7 +127,7 @@ function TopologyEmpty({ bare }: { bare: boolean }) {
     <div
       className={
         bare
-          ? "flex min-h-0 flex-1 flex-col justify-center overflow-auto border-t border-line"
+          ? "flex min-h-0 flex-1 flex-col justify-center overflow-auto"
           : "rounded-lg border border-line"
       }
       data-topology="empty"

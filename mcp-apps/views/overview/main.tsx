@@ -5,7 +5,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { ArrowUpRight, Inbox, LayoutDashboard } from "lucide-react";
 import { GridCells } from "@/components/console/grid/GridCells";
 import { widgetBodies } from "@/components/console/home/focused/widget-bodies";
-import { WIDGET_TITLES } from "@/components/console/home/focused/widgets";
+import { WIDGETS } from "@/components/console/home/focused/widgets";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
 import { visibleWidgets } from "@/lib/views/overview-layout/domain/layout";
 import { useRatelView } from "../../shell/bridge";
@@ -16,7 +16,7 @@ import view from "./bindings";
 import { readOverviewView } from "./overview";
 
 /**
- * The Overview: the console's own widgets, in the person's places, without the removed ones.
+ * The Overview: the console's own widgets in view mode, in the person's places, without the removed ones.
  * Nothing is arranged here: an agent does that with change_overview_layout.
  */
 function Overview({ result }: { result: ToolSuccess }) {
@@ -56,19 +56,17 @@ function Overview({ result }: { result: ToolSuccess }) {
           description="The Overview shows once the project sends its first event."
         />
       ) : cards.length === 0 ? (
-        <p className="text-sm text-fg-muted">Every widget is removed.</p>
+        <p className="text-sm text-fg-muted">The Overview has no widgets.</p>
       ) : (
         <GridCells cards={cards}>
           {(card) => (
             <section
-              aria-label={WIDGET_TITLES[card.id]}
+              aria-label={WIDGETS[card.id].title}
               data-overview-widget={card.id}
-              className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised"
+              className="flex h-full min-w-0 flex-col overflow-hidden"
             >
-              <h2 className="flex h-11 shrink-0 items-center px-4 text-sm font-semibold text-fg">
-                {WIDGET_TITLES[card.id]}
-              </h2>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">{bodies[card.id]?.body}</div>
+              <h2 className="sr-only">{WIDGETS[card.id].title}</h2>
+              {bodies[card.id]}
             </section>
           )}
         </GridCells>

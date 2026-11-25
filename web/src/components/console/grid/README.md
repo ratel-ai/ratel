@@ -5,5 +5,6 @@ an id, a place and a minimum size, and the arithmetic is `lib/console/grid/layou
 
 | File | Holds |
 |---|---|
-| `CardGrid.tsx`, `card-grid.css` | 12 columns, 40 px rows: drag by the header (`data-grid-handle`), resize by the corner, one `onArrange` when a drag or a resize ends. Without `onArrange` it is only drawn |
-| `GridCells.tsx` | the same places as CSS: the server's first paint, a skeleton, and the one column below `lg` |
+| `CardGrid.tsx`, `card-grid.css` | 12 columns, 40 px rows. Without `onArrange` it is only drawn, by CSS. With it, the cards can be arranged, and no pixel moves between the two |
+| `ArrangeGrid.tsx` | the drag and resize behavior, in its own chunk that loads with the first `onArrange`: a mouse drags the whole card (`data-grid-surface`), a finger its handle (`data-grid-handle`), the corner resizes, and one `onArrange` follows when a drag or a resize ends |
+| `GridCells.tsx` | the same places as CSS: the server's paint, a skeleton, and the one column below `lg` |

@@ -10,8 +10,9 @@ export function HealthWidget({ health, window }: { health: FocusedHealth; window
     <Link
       href={href}
       data-overview-health={card.kind}
-      className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-auto rounded-b-lg px-4 pt-1 pb-4 outline-none transition-colors duration-120 hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
+      className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-auto rounded-lg p-4 outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
     >
+      <span className="sr-only">Open Agent health</span>
       {card.kind === "score" ? (
         <span data-health-score={card.score.value}>
           <Gauge score={card.score} early={card.early} />

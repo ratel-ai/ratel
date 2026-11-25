@@ -1,7 +1,12 @@
 import { Badge } from "@ratel/design-system/badge";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import type { ReactNode } from "react";
-import { CustomizeButton, CustomizePanel } from "@/components/console/home/focused/Customize";
+import {
+  AddWidgetDialog,
+  EditBar,
+  EditButton,
+  HeaderInEditMode,
+} from "@/components/console/home/focused/EditMode";
 import { OverviewGrid } from "@/components/console/home/focused/OverviewGrid";
 import {
   OverviewLayoutProvider,
@@ -17,6 +22,7 @@ export function FocusedOverviewView({
   now,
   linked,
   save,
+  startEditing,
   actions,
   setup,
   contextPanel,
@@ -27,6 +33,8 @@ export function FocusedOverviewView({
   linked: boolean;
   /** Saves a change of the layout; null where nobody may change it. */
   save: SaveLayout | null;
+  /** Draws edit mode at first, in a test. */
+  startEditing?: boolean;
   /** Header actions owned by the page, such as the tour. */
   actions?: ReactNode;
   /** Shown instead of the cards until the first event arrives. */
@@ -36,32 +44,39 @@ export function FocusedOverviewView({
 }) {
   const { project, root, hasTelemetry } = data;
   return (
-    <OverviewLayoutProvider initial={data.layout} save={hasTelemetry ? save : null}>
+    <OverviewLayoutProvider
+      initial={data.layout}
+      save={hasTelemetry ? save : null}
+      startEditing={startEditing}
+    >
       <Page>
-        <PageHeader
-          title={
-            <span className="inline-flex items-center gap-2">
-              {project.name}
-              {project.isDemo ? <Badge tone="info">Sample data</Badge> : null}
-            </span>
-          }
-          actions={
-            <>
-              {data.telemetryRead || data.lastEventAt ? (
-                <TelemetryStatus lastEventAt={data.lastEventAt} now={now} />
-              ) : null}
-              {hasTelemetry ? <WindowSwitch root={root} window={data.window} /> : null}
-              <CustomizeButton />
-              {actions}
-            </>
-          }
-        />
+        <EditBar />
+        <HeaderInEditMode>
+          <PageHeader
+            title={
+              <span className="inline-flex items-center gap-2">
+                {project.name}
+                {project.isDemo ? <Badge tone="info">Sample data</Badge> : null}
+              </span>
+            }
+            actions={
+              <>
+                {data.telemetryRead || data.lastEventAt ? (
+                  <TelemetryStatus lastEventAt={data.lastEventAt} now={now} />
+                ) : null}
+                {hasTelemetry ? <WindowSwitch root={root} window={data.window} /> : null}
+                <EditButton />
+                {actions}
+              </>
+            }
+          />
+        </HeaderInEditMode>
         <PageBody>
           {project.isDemo ? <DemoNotice projectId={project.id} projectName={project.name} /> : null}
           {hasTelemetry ? <OverviewGrid bodies={widgetBodies(data, linked)} /> : setup}
         </PageBody>
         {contextPanel}
-        <CustomizePanel />
+        <AddWidgetDialog />
       </Page>
     </OverviewLayoutProvider>
   );

@@ -3,13 +3,12 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { EmptyState } from "@ratel/design-system/states";
 import { ArrowRight, CircleCheck } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { AttentionList } from "@/components/console/home/AttentionList";
 import { HealthWidget } from "@/components/console/home/focused/HealthWidget";
-import type { WidgetBody } from "@/components/console/home/focused/OverviewGrid";
 import { focusedStats } from "@/components/console/home/overview-stats";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
 import { fmtCount } from "@/lib/platform/format";
-import { agentsHref } from "@/lib/views/agents/paths";
 import type {
   FocusedAttention,
   FocusedOverviewData,
@@ -19,33 +18,27 @@ import type { OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout
 
 type PeekHref = (peek: string) => string;
 
-/** What each card holds, drawn on the server. Null for a widget the loader did not read. */
+/** What each widget holds, drawn on the server. Null for a widget the loader did not read. */
 export function widgetBodies(
   data: FocusedOverviewData,
   linked: boolean,
   /** Where a Panel opens from somewhere other than the page (an MCP App view); absent, in place. */
   peekHref?: PeekHref,
-): Record<OverviewWidgetId, WidgetBody | null> {
+): Record<OverviewWidgetId, ReactNode> {
   const { metrics, topology, health, attention, root, rangeParam } = data;
   const reload = data.window === 7 ? root : `${root}?range=${rangeParam}`;
   return {
-    metrics: metrics && {
-      link: { href: `${root}/traces?range=${rangeParam}`, label: "Open Traces" },
-      body:
-        metrics === "failed" ? (
-          <NotLoaded title="These numbers did not load." href={reload} />
-        ) : (
-          <Metrics data={metrics} peekHref={peekHref} />
-        ),
-    },
-    topology: topology && {
-      link: linked
-        ? { href: agentsHref(data.project.id, { range: rangeParam }), label: "Open Agents" }
-        : null,
-      body:
-        topology === "failed" ? (
-          <NotLoaded title="The map did not load." href={reload} />
-        ) : (
+    metrics:
+      metrics === "failed" ? (
+        <NotLoaded title="These numbers did not load." href={reload} />
+      ) : (
+        metrics && <Metrics data={metrics} peekHref={peekHref} />
+      ),
+    topology:
+      topology === "failed" ? (
+        <NotLoaded title="The map did not load." href={reload} />
+      ) : (
+        topology && (
           <TopologyMap
             projectId={data.project.id}
             graph={topology}
@@ -53,16 +46,12 @@ export function widgetBodies(
             linked={linked}
             bare
           />
-        ),
-    },
-    health: health && {
-      link: { href: health.href, label: "Open Agent health" },
-      body: <HealthWidget health={health} window={data.window} />,
-    },
-    attention: attention && {
-      link: { href: attention.healthHref, label: "Open Agent health" },
-      body: <NeedsAttention attention={attention} reload={reload} peekHref={peekHref} />,
-    },
+        )
+      ),
+    health: health && <HealthWidget health={health} window={data.window} />,
+    attention: attention && (
+      <NeedsAttention attention={attention} reload={reload} peekHref={peekHref} />
+    ),
   };
 }
 
@@ -73,8 +62,8 @@ function Metrics({ data, peekHref }: { data: MetricsData; peekHref?: PeekHref })
   return (
     <StatRow
       stats={stats}
-      // The card is the frame. A change that does not fit beside its number goes under it.
-      className="min-h-0 flex-1 overflow-auto rounded-none border-0 border-t lg:[&>div]:p-3 [&_dd]:flex-wrap"
+      // No frame: only the lines between the numbers. A change that does not fit beside its number goes under it.
+      className="min-h-0 flex-1 overflow-auto rounded-none border-0 lg:[&>div]:px-3 lg:[&>div]:py-2.5 [&>div:hover]:bg-app [&>div:hover_dt]:text-fg [&_dd]:flex-wrap"
     />
   );
 }
@@ -97,12 +86,20 @@ function NeedsAttention({
   if (items.length === 0 && partial)
     return <NotLoaded title="Needs attention did not load." href={reload} />;
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto border-t border-line">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       {items.length === 0 ? (
         <EmptyState
           icon={CircleCheck}
           title="Nothing needs you right now"
           description="Failed runs, issues and fixes show up here."
+          action={
+            <Link
+              href={healthHref}
+              className={buttonVariants({ variant: "secondary", size: "sm" })}
+            >
+              Open Agent health
+            </Link>
+          }
           className="py-6"
         />
       ) : (

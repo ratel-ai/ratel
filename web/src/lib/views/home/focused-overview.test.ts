@@ -7,6 +7,7 @@ import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
 import type { SaveLayout } from "@/components/console/home/focused/OverviewLayout";
+import { offeredTo } from "@/components/console/home/focused/widgets";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
 import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
 import { FocusedConsoleProvider } from "@/components/console/shell/focused-console-context";
@@ -147,10 +148,21 @@ const SAVE: SaveLayout = async () => ({ ok: true, layout: DEFAULT_LAYOUT });
 
 function page(
   data: FocusedOverviewData,
-  { linked = true, save = SAVE }: { linked?: boolean; save?: SaveLayout | null } = {},
+  {
+    linked = true,
+    save = SAVE,
+    edit = false,
+  }: { linked?: boolean; save?: SaveLayout | null; edit?: boolean } = {},
 ): string {
   const html = render(
-    createElement(FocusedOverviewView, { data, now: NOW, linked, save, setup: "SETUP GUIDE" }),
+    createElement(FocusedOverviewView, {
+      data,
+      now: NOW,
+      linked,
+      save,
+      startEditing: edit,
+      setup: "SETUP GUIDE",
+    }),
     { pathname: `/project/${PROJECT_ID}` },
   );
   const violations = [...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => findDsViolations(m[1]));
@@ -215,38 +227,69 @@ test("the page is the person's layout: their order, and no removed widget", asyn
   }
 });
 
-test("all hidden is one quiet line with Customize", async () => {
-  const html = page(await load({}, { layout: removed(...OVERVIEW_WIDGETS) }));
-  assert.deepEqual(order(html), []);
-  assert.match(html, /data-overview-hidden="all"[^>]*>Every widget is hidden\.<button/);
+test("no widgets is one line, with Edit, or with Add widget in edit mode", async () => {
+  const data = await load({}, { layout: removed(...OVERVIEW_WIDGETS) });
+  const line = /data-overview-empty=""[^>]*>The Overview has no widgets\.<button.*?<\/p>/;
+  const view = page(data);
+  assert.deepEqual(order(view), []);
+  assert.match(visibleText(view.match(line)?.[0] ?? ""), /Edit/);
+  assert.match(visibleText(page(data, { edit: true }).match(line)?.[0] ?? ""), /Add widget/);
+  assert.doesNotMatch(page(data, { save: null }), /<button[^>]*overview-edit/);
 });
 
-test("a person arranges by the header, the menu and Customize; a support session has none of them", async () => {
-  const data = await load();
-  const html = page(data);
-  assert.equal((html.match(/data-grid-handle/g) ?? []).length, 4);
-  for (const title of ["Metrics", "Agents and MCP servers", "Health score", "Needs attention"])
-    assert.match(html, new RegExp(`aria-label="Arrange ${title}"`));
-  assert.match(visibleText(html), /Customize/);
-  const support = page(data, { save: null });
-  assert.deepEqual(order(support), order(html));
-  assert.doesNotMatch(support, /data-grid-handle|aria-label="Arrange|Customize/);
-});
+const CONTROLS = /data-grid-handle|data-grid-surface|role="toolbar"|aria-label="(Arrange|Remove) /;
 
-test("each widget links to the page behind it", async () => {
+test("view mode is quiet: no visible title, border or control on a widget", async () => {
   const html = page(await load());
-  for (const [label, path] of [
-    ["Open Traces", "traces\\?range=7d"],
-    ["Open Agents", "agents"],
-    ["Open Agent health", "health\\?days=7"],
-  ])
-    assert.match(
-      html,
-      new RegExp(
-        `aria-label="${label}"[^>]*href="/project/${PROJECT_ID}/${path}|href="/project/${PROJECT_ID}/${path}[^"]*"[^>]*aria-label="${label}"|aria-label="${label}"`,
-      ),
-    );
-  assert.doesNotMatch(page(await load(), { linked: false }), /Open Agents"/);
+  assert.doesNotMatch(html, CONTROLS);
+  assert.doesNotMatch(html, /Customize|data-overview-edit-bar/);
+  for (const section of html.matchAll(/<section[^>]*data-overview-widget[^>]*>/g))
+    assert.match(section[0], /border-transparent/);
+  for (const heading of html.matchAll(/<h2[^>]*>/g)) assert.match(heading[0], /sr-only/);
+  assert.match(visibleText(html), /Edit/);
+});
+
+test("edit mode: a toolbar per widget, and a body that takes no press", async () => {
+  const data = await load();
+  const html = page(data, { edit: true });
+  for (const title of ["Metrics", "Agents and MCP servers", "Health score", "Needs attention"]) {
+    assert.match(html, new RegExp(`role="toolbar" aria-label="${title}"`));
+    assert.match(html, new RegExp(`aria-label="Arrange ${title}"`));
+    assert.match(html, new RegExp(`aria-label="Remove ${title}"`));
+  }
+  assert.equal((html.match(/data-grid-body="" inert=""/g) ?? []).length, 4);
+  for (const words of ["Add widget", "Reset", "Done"])
+    assert.match(visibleText(html), new RegExp(words));
+  assert.deepEqual(order(html), order(page(data)));
+});
+
+test("a read-only viewer has no Edit, and never edit mode", async () => {
+  const data = await load();
+  for (const edit of [false, true]) {
+    const html = page(data, { save: null, edit });
+    assert.deepEqual(order(html), order(page(data)));
+    assert.doesNotMatch(html, CONTROLS);
+    assert.doesNotMatch(html, /overview-edit|overview-add-widget/);
+  }
+});
+
+test("each widget leads somewhere", async () => {
+  const html = page(await load());
+  for (const path of ["traces\\?range=7d", "agents", "health"])
+    assert.match(html, new RegExp(`href="/project/${PROJECT_ID}/${path}`));
+  assert.match(visibleText(html), /See all agents/);
+  assert.doesNotMatch(visibleText(page(await load(), { linked: false })), /See all agents/);
+});
+
+test("the Add widget dialog lists what the server offers", () => {
+  assert.deepEqual(
+    offeredTo(DEFAULT_LAYOUT).map(({ id }) => id),
+    OVERVIEW_WIDGETS,
+  );
+  assert.deepEqual(
+    offeredTo(DEFAULT_LAYOUT.filter(({ id }) => id !== "health")).map(({ id }) => id),
+    ["metrics", "topology", "attention"],
+  );
 });
 
 test("the gauge shows Agent health's value and opens it in its window", async () => {
@@ -396,6 +439,6 @@ test("the skeleton and the tour say the recap with the flag, today's Overview wi
   assert.doesNotMatch(skeleton(false), /data-skeleton="focused"/);
   assert.equal(render(createElement(OverviewSkeleton)), skeleton(false));
   assert.equal(tourSteps(false), TOUR_STEPS);
-  assert.match(tourSteps(true)[0].body, /Drag, resize and hide the widgets/);
+  assert.match(tourSteps(true)[0].body, /Edit to add, remove, move and resize the widgets/);
   assert.deepEqual(tourSteps(true).slice(1), TOUR_STEPS.slice(1));
 });

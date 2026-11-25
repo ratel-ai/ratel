@@ -45,7 +45,7 @@ one page (the Health score, then the issues under the four categories it counts 
 
 | Item | Answers | Contains |
 |---|---|---|
-| Overview | How is this project doing? | Widgets: Metrics, Agents and MCP servers, Health score, Needs attention |
+| Overview | How is this project doing? | Widgets: Metrics, Agents and MCP servers, Health score, Needs attention. View mode to read, Edit to arrange |
 | Agent health | What does my agent get wrong? | The Health score, Failing turns, Detours and corrections, Wasted calls and time, Tidying |
 | Self-corrections | Where does my agent go back on itself? | How often, where, what it said, what to change |
 
@@ -207,6 +207,7 @@ Built on Base UI where it has the part, styled with the tokens, merged with `cn`
 | Longer than a screen, or worth sharing | A **page** | An endless panel |
 | Confirm something irreversible | **Dialog**: the consequence in one sentence, a danger button named after the action | Nested dialogs |
 | Short create or edit form | **Dialog**, Enter submits | Long forms |
+| Add to a page that a person arranges | **Dialog** with every item, added or to add | A Panel beside the page |
 | Pick a value, filter, row action | **Popover** or **Menu** | A dialog |
 | Explain an icon, show a truncated value | **Tooltip** | Essential information |
 | Result of an action | **Toast**, Undo when reversible | A confirmation dialog for a reversible save |
@@ -216,11 +217,21 @@ Built on Base UI where it has the part, styled with the tokens, merged with `cn`
 **Page anatomy.** PageHeader, at most one Callout, the answer (StatRow or the primary list),
 then drill-downs.
 
-**Widgets.** Only on a page that a person arranges (Overview with `focusedConsole`). A widget is one
-card: a 44 px header (title, link, menu) and a body that fills it with no frame of its own, scrolls
-inside, and is whole at the widget's minimum size. Drag by the header, resize by the corner, and the
-same steps in the menu for the keyboard. `Customize` in the page header opens a Panel with a switch
-per widget and "Reset to default". Below `lg`, one column in reading order.
+**Arrangeable pages.** Only Overview with `focusedConsole`. A page that a person arranges has two modes, and a reload is
+view mode. View mode is content only: a widget has no title bar, border or control, also on hover. A
+heading for screen readers names it, its content links to the page behind it, and the gap between
+widgets is clear. `Edit` in the header starts edit mode, which is state of the page and not in its
+address. An edit bar over the header has `Reset`, `Add widget` and `Done` (the primary). Each widget
+shows its border, whose width is always reserved, and a toolbar that floats over its top edge: its
+name, the menu with the steps for the keyboard, and Remove. No content moves between the modes. A
+widget's body takes no press in edit mode: a mouse drags the whole widget, a finger its name, and the
+corner resizes. Remove is at once, with Undo in the toast. `Add widget` is a Dialog with every widget.
+Focus goes from Edit to Done and back, from Remove to the next widget or Add widget, and from the
+dialog to Add widget. Below `lg`, one column in reading order: add, remove and reset only. Without the
+right to edit there is no Edit.
+
+**Widgets.** A widget's body fills it with no frame of its own, keeps the lines between numbers or
+rows, scrolls inside, and is whole at the widget's minimum size.
 
 **Lists.** FilterBar above, DataTable below; a row click or `Enter` opens the Panel; bulk actions
 in a bar at the bottom.

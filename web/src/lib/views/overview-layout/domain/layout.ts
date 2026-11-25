@@ -33,10 +33,10 @@ export type OfferedWidgets = readonly OverviewWidget[];
 
 /** The metrics on top, then the topology, then the Health score with Needs attention beside it. */
 export const WIDGET_CATALOG: OfferedWidgets = [
-  { id: "metrics", min: { w: 8, h: 4 }, place: { x: 0, y: 0, w: 12, h: 4 } },
-  { id: "topology", min: { w: 4, h: 5 }, place: { x: 0, y: 4, w: 12, h: 8 } },
-  { id: "health", min: { w: 4, h: 6 }, place: { x: 0, y: 12, w: 4, h: 7 } },
-  { id: "attention", min: { w: 5, h: 4 }, place: { x: 4, y: 12, w: 8, h: 7 } },
+  { id: "metrics", min: { w: 8, h: 3 }, place: { x: 0, y: 0, w: 12, h: 3 } },
+  { id: "topology", min: { w: 4, h: 4 }, place: { x: 0, y: 3, w: 12, h: 7 } },
+  { id: "health", min: { w: 4, h: 5 }, place: { x: 0, y: 10, w: 4, h: 6 } },
+  { id: "attention", min: { w: 5, h: 3 }, place: { x: 4, y: 10, w: 8, h: 6 } },
 ];
 
 export interface OverviewPlacement extends GridItem {

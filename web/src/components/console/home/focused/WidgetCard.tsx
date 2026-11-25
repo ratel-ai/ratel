@@ -1,6 +1,7 @@
 "use client";
 
 import { IconButton } from "@ratel/design-system/button";
+import { cn } from "@ratel/design-system/cn";
 import {
   Menu,
   MenuContent,
@@ -14,21 +15,18 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  ArrowUpRight,
   EllipsisVertical,
-  EyeOff,
+  GripVertical,
   type LucideIcon,
   MoveHorizontal,
   MoveVertical,
+  X,
 } from "lucide-react";
-import Link from "next/link";
 import { type ReactNode, useId } from "react";
 import type { GridStep } from "@/lib/console/grid/layout";
 import type { OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
 
 export type StepName = GridStep;
-
-export const menuId = (id: OverviewWidgetId) => `overview-widget-${id}-menu`;
 
 const MOVES: readonly [GridStep, string, LucideIcon][] = [
   ["up", "Move up", ArrowUp],
@@ -43,22 +41,24 @@ const SIZES: readonly [GridStep, string, LucideIcon][] = [
   ["shorter", "Shorter", MoveVertical],
 ];
 
-/** One widget: its header (which a drag holds), then a body that fills the rest of the card. */
+/**
+ * One widget. Quiet: its content, with a heading for a screen reader only. In edit mode it gets a
+ * border, whose width is always reserved, and controls that float over its top edge, so its content
+ * does not move. The content takes no press then: a drag holds it, and its links lead nowhere.
+ */
 export function WidgetCard({
   id,
   title,
-  link,
   edit,
   children,
 }: {
   id: OverviewWidgetId;
   title: string;
-  link: { href: string; label: string } | null;
-  /** Null where nobody may change the layout. */
+  /** Null in view mode. */
   edit: {
     can: (step: GridStep) => boolean;
     step: (step: GridStep) => void;
-    hide: () => void;
+    remove: () => void;
   } | null;
   children: ReactNode;
 }) {
@@ -67,51 +67,76 @@ export function WidgetCard({
     <section
       aria-labelledby={headingId}
       data-overview-widget={id}
-      className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-raised"
+      data-grid-surface={edit ? "" : undefined}
+      className={cn(
+        "relative flex h-full min-w-0 flex-col rounded-lg border bg-app",
+        edit ? "border-line-strong" : "border-transparent",
+      )}
     >
-      <header
-        data-grid-handle={edit ? "" : undefined}
-        className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-4"
+      <h2 id={headingId} className="sr-only">
+        {title}
+      </h2>
+      <div
+        data-grid-body=""
+        inert={edit !== null}
+        className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[inherit]"
       >
-        <h2 id={headingId} className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
-          {title}
-        </h2>
-        {link ? (
-          <Link
-            href={link.href}
-            aria-label={link.label}
-            title={link.label}
-            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-subtle outline-none transition-colors duration-120 hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
+        {children}
+      </div>
+      {edit ? (
+        <div
+          id={toolbarId(id)}
+          role="toolbar"
+          aria-label={title}
+          className="absolute -top-4 right-2 left-2 z-sticky flex items-center gap-1"
+        >
+          <span
+            aria-hidden
+            data-grid-handle=""
+            className="flex h-6 min-w-0 items-center gap-1.5 rounded-md border border-line-strong bg-raised px-2 text-xs font-medium text-fg-muted select-none"
           >
-            <ArrowUpRight aria-hidden strokeWidth={1.5} className="size-4" />
-          </Link>
-        ) : null}
-        {edit ? (
-          <Menu>
-            <MenuTrigger
-              id={menuId(id)}
-              render={
-                <IconButton label={`Arrange ${title}`} size="icon-sm" icon={<EllipsisVertical />} />
-              }
-            />
-            <MenuContent align="end">
-              <div className="max-lg:hidden">
+            <GripVertical className="size-3.5 shrink-0 max-lg:hidden" />
+            <span className="truncate">{title}</span>
+          </span>
+          <span className="ml-auto flex h-6 shrink-0 items-center rounded-md border border-line-strong bg-raised">
+            <Menu>
+              <MenuTrigger
+                render={
+                  <IconButton
+                    label={`Arrange ${title}`}
+                    size="icon-sm"
+                    icon={<EllipsisVertical />}
+                    className="size-6 max-lg:hidden"
+                  />
+                }
+              />
+              <MenuContent align="end">
                 <Steps label="Move" steps={MOVES} edit={edit} />
                 <MenuSeparator />
                 <Steps label="Resize" steps={SIZES} edit={edit} />
-                <MenuSeparator />
-              </div>
-              <MenuItem icon={<EyeOff />} onClick={edit.hide}>
-                Hide
-              </MenuItem>
-            </MenuContent>
-          </Menu>
-        ) : null}
-      </header>
-      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+              </MenuContent>
+            </Menu>
+            <IconButton
+              label={`Remove ${title}`}
+              size="icon-sm"
+              icon={<X />}
+              className="relative size-6 pointer-coarse:after:absolute pointer-coarse:after:-inset-2"
+              onClick={edit.remove}
+            />
+          </span>
+        </div>
+      ) : null}
     </section>
   );
 }
+
+/** Its first control that is shown: the menu, or Remove where there is nothing to arrange. */
+export function focusToolbar(id: OverviewWidgetId) {
+  const buttons = document.getElementById(toolbarId(id))?.querySelectorAll("button") ?? [];
+  [...buttons].find((button) => button.offsetParent !== null)?.focus();
+}
+
+const toolbarId = (id: OverviewWidgetId) => `overview-widget-${id}-toolbar`;
 
 function Steps({
   label,

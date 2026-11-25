@@ -1,13 +1,19 @@
 "use client";
 
+import { Button } from "@ratel/design-system/button";
 import { Skeleton } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
+import { Plus } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { CardGrid } from "@/components/console/grid/CardGrid";
-import { CUSTOMIZE_ID, CustomizeButton } from "@/components/console/home/focused/Customize";
+import { ADD_ID, EDIT_ID, EditButton, focusSoon } from "@/components/console/home/focused/EditMode";
 import { useOverviewLayout } from "@/components/console/home/focused/OverviewLayout";
-import { menuId, type StepName, WidgetCard } from "@/components/console/home/focused/WidgetCard";
-import { WIDGET_TITLES } from "@/components/console/home/focused/widgets";
+import {
+  focusToolbar,
+  type StepName,
+  WidgetCard,
+} from "@/components/console/home/focused/WidgetCard";
+import { WIDGETS } from "@/components/console/home/focused/widgets";
 import {
   type OverviewPlacement,
   type OverviewWidgetId,
@@ -16,25 +22,19 @@ import {
   widgetMinimum,
 } from "@/lib/views/overview-layout/domain/layout";
 
-export interface WidgetBody {
-  /** The page behind the widget. */
-  link: { href: string; label: string } | null;
-  body: ReactNode;
-}
-
-/** The person's widgets, in their places. A widget just shown is a skeleton until the server has read it. */
+/** The person's widgets, in their places. A widget just added is a skeleton until the server has read it. */
 export function OverviewGrid({
   bodies,
 }: {
-  /** Null for a widget that the server did not read, because it was hidden. */
-  bodies: Readonly<Record<OverviewWidgetId, WidgetBody | null>>;
+  /** Null for a widget that the server did not read, because it was removed. */
+  bodies: Readonly<Record<OverviewWidgetId, ReactNode>>;
 }) {
-  const { layout, editable, change } = useOverviewLayout();
+  const { layout, editing, change } = useOverviewLayout();
   const cards = useMemo(
     () => visibleWidgets(layout).map((widget) => ({ ...widget, min: widgetMinimum(widget.id) })),
     [layout],
   );
-  if (cards.length === 0) return <AllHidden />;
+  if (cards.length === 0) return <NoWidgets />;
 
   function step(widget: OverviewWidgetId, name: StepName) {
     const next = stepChange(layout, widget, name);
@@ -43,35 +43,38 @@ export function OverviewGrid({
     change(
       next,
       place
-        ? `${WIDGET_TITLES[widget]}: row ${place.y + 1}, column ${place.x + 1}, ${place.w} wide, ${place.h} high`
+        ? `${WIDGETS[widget].title}: row ${place.y + 1}, column ${place.x + 1}, ${place.w} wide, ${place.h} high`
         : undefined,
     );
     // The cards' order in the page follows their places, which can take the focus away.
-    requestAnimationFrame(() => document.getElementById(menuId(widget))?.focus());
+    requestAnimationFrame(() => focusToolbar(widget));
   }
 
-  function hide(widget: OverviewWidgetId) {
-    change({ kind: "remove", widget }, `${WIDGET_TITLES[widget]} hidden`);
+  function remove(widget: OverviewWidgetId) {
+    const { title } = WIDGETS[widget];
+    const next = cards[cards.findIndex(({ id }) => id === widget) + 1];
+    change({ kind: "remove", widget }, `${title} removed`);
     toast({
-      title: `${WIDGET_TITLES[widget]} is hidden`,
+      title: `${title} is removed`,
       action: {
         label: "Undo",
-        onClick: () => change({ kind: "add", widget }, `${WIDGET_TITLES[widget]} shown`),
+        onClick: () => change({ kind: "add", widget }, `${title} added`),
       },
     });
-    requestAnimationFrame(() => document.getElementById(CUSTOMIZE_ID)?.focus());
+    if (next) requestAnimationFrame(() => focusToolbar(next.id));
+    else focusSoon(ADD_ID);
   }
 
   return (
     <CardGrid
       cards={cards}
       onArrange={
-        editable
+        editing
           ? (items) =>
               change({
                 kind: "arrange",
                 places: items.map(({ id, x, y, w, h }) => ({
-                  id: id as OverviewWidgetId,
+                  id,
                   x,
                   y,
                   w,
@@ -82,23 +85,22 @@ export function OverviewGrid({
       }
     >
       {(card: OverviewPlacement) => {
-        const widget = bodies[card.id];
+        const { title } = WIDGETS[card.id];
         return (
           <WidgetCard
             id={card.id}
-            title={WIDGET_TITLES[card.id]}
-            link={widget?.link ?? null}
+            title={title}
             edit={
-              editable
+              editing
                 ? {
                     can: (name) => stepChange(layout, card.id, name) !== null,
                     step: (name) => step(card.id, name),
-                    hide: () => hide(card.id),
+                    remove: () => remove(card.id),
                   }
                 : null
             }
           >
-            {widget?.body ?? <Waiting title={WIDGET_TITLES[card.id]} />}
+            {bodies[card.id] ?? <Waiting title={title} />}
           </WidgetCard>
         );
       }}
@@ -106,14 +108,22 @@ export function OverviewGrid({
   );
 }
 
-function AllHidden() {
+function NoWidgets() {
+  const { editing, editable, setAdding } = useOverviewLayout();
   return (
     <p
-      className="flex flex-wrap items-center gap-3 text-sm text-fg-muted"
-      data-overview-hidden="all"
+      className="flex min-h-7 flex-wrap items-center gap-3 text-sm text-fg-muted"
+      data-overview-empty=""
     >
-      Every widget is hidden.
-      <CustomizeButton id={`${CUSTOMIZE_ID}-empty`} />
+      The Overview has no widgets.
+      {editing ? (
+        <Button size="sm" aria-haspopup="dialog" onClick={() => setAdding(true)}>
+          <Plus aria-hidden />
+          Add widget
+        </Button>
+      ) : editable ? (
+        <EditButton id={`${EDIT_ID}-empty`} />
+      ) : null}
     </p>
   );
 }

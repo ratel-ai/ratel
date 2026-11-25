@@ -33,7 +33,7 @@ function draw(name: string) {
     React.createElement(
       React.Fragment,
       null,
-      GridCells({ cards, children: (card) => bodies[card.id]?.body }),
+      GridCells({ cards, children: (card) => bodies[card.id] }),
     ),
   );
   return { html, text: visibleText(html), ids: cards.map(({ id }) => id) };
