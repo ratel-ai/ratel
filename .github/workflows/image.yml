@@ -32,7 +32,7 @@ concurrency:
   group: image-${{ inputs.version || inputs.tag || github.ref }}
   # Only the merge of a release PR cancels the older edge runs. A called release build has `version`
   # and the same push event, so it must never cancel.
-  cancel-in-progress: ${{ !inputs.version && github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore(main): release ') }}
+  cancel-in-progress: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore(main): release ') && !inputs.version }}"
 
 jobs:
   publish:

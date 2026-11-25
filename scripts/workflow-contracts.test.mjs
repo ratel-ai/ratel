@@ -167,9 +167,10 @@ function concurrency(file, github, inputs) {
       startsWith,
     );
   const value = (key) => {
-    const raw = block[1].match(new RegExp(`^ {2}${key}: (?:>-\\n {4})?((?:.*)(?:\\n {4}.*)*)`, "m"));
+    const raw = block[1].match(new RegExp(`^ {2}${key}: (.*)`, "m"));
     assert.ok(raw, `${file} must set ${key}`);
-    return raw[1].replace(/\$\{\{([\s\S]*?)\}\}/g, (_, expression) => String(evaluate(expression.trim())));
+    assert.ok(raw[1].startsWith('"') || !raw[1].includes(": "), `${key}: YAML rejects ": " in a plain value`);
+    return raw[1].replace(/^"|"$/g, "").replace(/\$\{\{(.*?)\}\}/g, (_, expression) => String(evaluate(expression.trim())));
   };
   return { group: value("group"), cancel: value("cancel-in-progress") === "true" };
 }
