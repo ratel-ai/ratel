@@ -103,7 +103,7 @@ the sample files that every implementation must read and write byte for byte.
 | `signal` | `traces`, `logs`, `events` | Which process function runs. |
 | `contentType` | `application/x-protobuf`, `application/json` | How to decode, resolved by accept. `events` is always JSON. |
 | `contentEncoding` | `identity`, `gzip`, `deflate` | How the body is compressed, resolved by accept (`x-gzip` is `gzip`). `events` is always `identity`. |
-| `receivedAt` | integer | Unix milliseconds when accept took the request. |
+| `receivedAt` | integer, 0 to 253402300799999 | Unix milliseconds when accept took the request. |
 | `body` | bytes, 0 to 4,000,000 | The request body as received, not decoded. |
 
 UUIDs are lowercase with hyphens. The frame is binary, so a body is never re-encoded:
