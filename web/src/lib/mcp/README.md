@@ -25,10 +25,30 @@ identical.
 | `launch-access.ts` | the app's allowlist at the MCP door: a project key passes, a signed-in caller is decided by the edition (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
 | `operations/loop/` | the improvement loop as tools, listed for everyone with app access as upstream (RC-234), with its tasks (`tasks.ts`: task pages, scorers, eval sets, simulations, drafted tests) and fix eval sets (`eval-sets.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `evalGate` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `evalGate`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
+| `operations/monitoring/` | custom monitoring as tools (owned; behind `customMonitoring`, off refuses as forbidden): `scorers.ts` (`list_scorers`, `get_scorer`, `test_scorer`, `change_scorer`), `alerts.ts` (`list_alerts`, `get_alert`, `change_alert`, `list_alert_destinations`, `change_alert_destination`, `list_slack_channels`), `locations.ts` (`get_location_attributes`, `change_location_attributes`), `dashboards.ts` (`describe_monitoring_schema`, `query_monitoring`, `list_dashboards`, `get_dashboard`, `change_dashboard`, `import_dashboard`; `results.ts` caps a result and says it in one line). Each calls the same action as the console's server action (`deps.ts`: the caller in the session's place, and the refusals as MCP errors). No result holds a secret, and a param an operation names in `secretParams` is left out of the call's telemetry. `parity.ts` maps each console action of these modules to its operation, and `parity.test.ts` fails for one without |
 | `apps/` | MCP Apps (SEP-1865): the `ui://ratel/<view>` resources built by the `@ratel/mcp-apps` package (repository root `mcp-apps/`) and the tools bound to them, behind `mcpApps` (`apps/flag.ts`, owned); with the switch off the server is what it was, pinned by `route-handler.apps.test.ts` and `__fixtures__/flag-off-protocol.json` (owned). See `apps/README.md` |
 | `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]`; `toolStage` also reads an edition tool's own stage |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
 | `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real, `connect-ui.test.ts` the connect panel with and without browser sign-in (owned snippets, see below) |
+
+## Explore through MCP
+
+Explore (`views/explore`) stores nothing, so an agent has it with three operations that take the same
+query object. `query_monitoring` runs one query, or two to four panels with `queries`, under one
+window and one set of filters; its `href` is the Explore page with the same panels, filters and
+exact window, and a host with views draws the panels side by side. The filter of a query is a list of
+clauses that must all match: its own properties, then each one of `and`. All clauses with the filters
+of the dashboard or the call are 3,072 bytes of JSON at most.
+`change_dashboard` (`create`, `add_widget`) saves a panel, and `change_alert` (`create`) watches an
+ungrouped metric. `EXPLORE` in `operations/monitoring/parity.ts` is that list, and the parity test
+fails for an action of the page that is not in it.
+
+## Adding an operation
+
+The parity rule is in the repository's `AGENTS.md`. Declare the operation with `defineOperation` and
+list it in `operations/index.ts`, `stages.ts` and `operations/contract.test.ts`. Map the console
+action it stands for in `operations/monitoring/parity.ts`. Regenerate the tool list with
+`UPDATE_MCP_TOOLS_FIXTURE=1` on `route-handler.test.ts`. Bind it to a view in `mcp-apps/views/`.
 
 ## Owned files
 
@@ -56,7 +76,9 @@ These differ from their `ratel-cloud` origin ("upstream").
 - `operations/overview.ts` (no upstream counterpart): `get_overview` and `change_overview_layout`, the
   recap Overview and its layout through the web's own loader and action. `focusedConsole` off for the
   caller, they are not listed and the overview view is not published; off for the project's
-  organization, they refuse. `get_overview` with `widget` reads and draws one widget alone, with only its own reads, also when the person removed it; a new
+  organization, they refuse. `get_overview` with `widget` reads and draws one widget alone, with only its own reads, also when the person removed it.
+  A dashboard widget is named by `dashboardId` and `widgetId` in place of `widget`, in both operations:
+  `dashboardWidgets` has the numbers as `query_monitoring` gives them, or why there are none. A new
   widget needs an entry in `WIDGET_DATA` and no operation. `list_overview_changes`,
   `undo_overview_change` and `restore_overview_layout` are the web's History, Undo and Restore; the
   last two need the revision that the agent read, and answer `conflict` (`stale`) on another one. All

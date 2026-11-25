@@ -8,7 +8,7 @@ import {
   EMPTY_TRACE_FILTER_FACETS,
   getTraceFilterFacets,
 } from "@/lib/synthesis/traces/trace-filters";
-import { scorerOptions } from "./context";
+import { scorerOptions } from "@/lib/views/dashboards/scorer-options";
 
 /** What the widget fields offer: the filter values of the range, and the scorers (null while they are off). */
 export async function loadWidgetForm(

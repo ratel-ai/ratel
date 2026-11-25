@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
-import { parseGeoAttributes } from "@/lib/ingest/geo/parse-attributes";
+import { changeGeoAttributes } from "@/lib/ingest/geo/actions";
 import { saveGeoAttributes } from "@/lib/ingest/geo/store";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
@@ -18,28 +18,27 @@ export async function saveGeoAttributesAction(
   raw: unknown,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!isDbConfigured()) return { ok: false, error: "No database is connected." };
-  const scope = await findProjectScope(projectId);
-  if (!scope || scope.role !== "admin")
-    return { ok: false, error: "Only organization admins can change the location attributes." };
-  if (!(await featureEnabled("customMonitoring", { organizationId: scope.organization.id })))
-    return { ok: false, error: "Locations are off for this project." };
-  if (await isRestrictedBySupportSession())
-    return { ok: false, error: "A support session cannot change settings." };
-  const parsed = parseGeoAttributes(raw);
-  if (!parsed.ok) return parsed;
   try {
-    await saveGeoAttributes(scope.project.id, parsed.attributes);
-    await trackProductEvent(
-      "project_settings_updated",
-      {
-        externalId: scope.user.externalId,
-        orgId: scope.organization.id,
-        projectId: scope.project.id,
+    const result = await changeGeoAttributes(projectId, raw, {
+      findProjectScope: (id) => findProjectScope(id),
+      enabled: (subject) => featureEnabled("customMonitoring", subject),
+      isRestricted: isRestrictedBySupportSession,
+      save: (id, attributes) => saveGeoAttributes(id, attributes),
+      observe: async ({ project_id, organization_id, field }) => {
+        const scope = await findProjectScope(project_id);
+        await trackProductEvent(
+          "project_settings_updated",
+          {
+            externalId: scope?.user.externalId ?? "",
+            orgId: organization_id,
+            projectId: project_id,
+          },
+          { field },
+        );
+        revalidatePath(`/project/${project_id}/settings`);
       },
-      { field: "geo_attributes" },
-    );
-    revalidatePath(`/project/${scope.project.id}/settings`);
-    return { ok: true };
+    });
+    return result.ok ? { ok: true } : result;
   } catch (err) {
     logger.error({ err }, "geo attributes save failed");
     reportServerException(err, "system:settings", { operation: "geo_attributes" });

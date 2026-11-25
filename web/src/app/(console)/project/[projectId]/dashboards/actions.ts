@@ -25,9 +25,10 @@ import {
 import { dashboardsHref } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { resolveWidgetRange } from "@/lib/views/dashboards/range";
+import { scorerOptions } from "@/lib/views/dashboards/scorer-options";
 import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
-import { metricFeatures, scorerOptions } from "./context";
+import { metricFeatures } from "./context";
 
 const logger = getLogger("dashboards/actions");
 
@@ -41,7 +42,7 @@ export async function changeDashboardAction(
       findProjectScope,
       enabled: (subject) => featureEnabled("customMonitoring", subject),
       features: metricFeatures,
-      scorers: scorerOptions,
+      scorers: (projectId) => scorerOptions(projectId),
       isRestricted: isRestrictedBySupportSession,
       store,
       observe: async (fields) => {

@@ -2,9 +2,6 @@ import { findProjectScope, type ProjectScope } from "@/lib/console/scope/project
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
-import type { ScorerOption } from "@/lib/views/dashboards/types";
-import { hasVerdict } from "@/lib/views/scorers/format";
-import { listScorers } from "@/lib/views/scorers/store";
 
 /** The reader's project, or null where no database is connected. The project layout already guarded the id. */
 export async function dashboardsScope(projectId: string): Promise<ProjectScope | null> {
@@ -24,13 +21,4 @@ export async function metricFeatures(subject: {
   actor: string;
 }): Promise<MetricFeatures> {
   return { customMonitoring: await featureEnabled("customMonitoring", subject) };
-}
-
-/** The project's scorers as a widget names them. */
-export async function scorerOptions(projectId: string): Promise<ScorerOption[]> {
-  return (await listScorers(projectId)).map((scorer) => ({
-    id: scorer.id,
-    name: scorer.name,
-    verdict: hasVerdict(scorer),
-  }));
 }

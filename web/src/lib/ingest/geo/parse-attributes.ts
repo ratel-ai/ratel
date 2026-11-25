@@ -1,8 +1,14 @@
 import { z } from "zod";
+import { hasNoNul, NUL_PROBLEM } from "@/lib/contracts/json-text";
 import type { GeoAttributes } from "@/lib/ingest/geo/attributes";
 import { isContentFreeAttributeKey } from "@/lib/ingest/otlp/span-rows";
 
-const key = z.string().trim().min(1, "Give each attribute a name.").max(200);
+const key = z
+  .string()
+  .trim()
+  .min(1, "Give each attribute a name.")
+  .max(200)
+  .refine(hasNoNul, NUL_PROBLEM);
 /** What spans keep of an export would keep the address or the coordinates with it. */
 const unstored = key.refine((name) => !isContentFreeAttributeKey(name), {
   error: ({ input }) =>
