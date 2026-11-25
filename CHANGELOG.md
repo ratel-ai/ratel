@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/ratel-ai/ratel/compare/v0.3.1...v0.4.0) (2026-11-25)
+
+
+### Features
+
+* **overview:** draw one widget or the whole page in MCP Apps ([#455](https://github.com/ratel-ai/ratel/issues/455)) ([1d320b9](https://github.com/ratel-ai/ratel/commit/1d320b9e9e80824844afe3bc03fd7063235a8924))
+* **overview:** keep a history of layout changes with Undo and Restore ([#456](https://github.com/ratel-ai/ratel/issues/456)) ([1cc3dec](https://github.com/ratel-ai/ratel/commit/1cc3decc94266b5bd19ee24b94da195473905e2b))
+* **web:** a quiet Overview of widgets, with an edit mode ([#450](https://github.com/ratel-ai/ratel/issues/450)) ([e67982c](https://github.com/ratel-ai/ratel/commit/e67982c26bc2fed06129719b1a5d22541a93746c))
+* **web:** focus Agent health, Self-corrections and Overview behind focusedConsole ([#433](https://github.com/ratel-ai/ratel/issues/433)) ([c553674](https://github.com/ratel-ai/ratel/commit/c553674541c3442008bc1e66765e417a6c1b2ec6))
+
 ## [0.3.1](https://github.com/ratel-ai/ratel/compare/v0.3.0...v0.3.1) (2026-11-23)
 
 

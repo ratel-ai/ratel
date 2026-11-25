@@ -80,6 +80,7 @@ const FLAG_ENV = {
   mcpApps: "FF_MCP_APPS",
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
+  focusedConsole: "FF_FOCUSED_CONSOLE",
   sandboxes: "FF_SANDBOXES",
   evals: "FF_EVALS",
 } as const satisfies Record<CoreFlag, string>;
