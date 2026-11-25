@@ -32,7 +32,7 @@ identical.
 
 ## Owned files
 
-The rest mirror upstream (`scripts/platform-sync/map.json`).
+These differ from their `ratel-cloud` origin ("upstream").
 
 - `auth.ts`: upstream verifies an OAuth token with its identity provider here. This file hands a
   bearer that is not a key to `composition.mcpOAuth` (`lib/contracts/mcp-oauth.ts`) and builds

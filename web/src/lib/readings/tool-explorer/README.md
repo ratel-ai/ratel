@@ -24,7 +24,7 @@ It needs no model key and makes no outbound call.
 | `types.ts`, `units.ts` | the row shapes, the summary, and the turn and session units |
 | `ledger.ts` | `listSessionTurns`, the intents behind a turn's searches and the error message behind an error step, read from the ledger and the query-intents tables |
 
-**Owned files** (`owned` in `scripts/platform-sync/map.json`): `schema.ts`, the tool-explorer
+**Owned files** (they differ from their `ratel-cloud` origin, "upstream"): `schema.ts`, the tool-explorer
 partition of the upstream schema hub; `job.ts`, with no flag gates (the explorer runs for every
 project here, as the signal run does) and the crafter enqueue as a seam; and
 `job.integration.test.ts`, without the flag cases. Everything else mirrors upstream. Upstream's

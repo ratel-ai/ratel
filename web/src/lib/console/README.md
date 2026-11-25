@@ -33,5 +33,3 @@ traces handler into a local Postgres and drains the jobs it queued. On a fresh d
 organization, as a first console visit would. `pnpm --filter @ratel/platform seed:task-loop --project
 <id or slug> [--no-models]` runs `scripts/seed-task-loop.mts` on a project the seed built (with
 `--drain`): the task loop demo; `--no-models` uses the local stand-ins and calls nothing out.
-Copies and owned files are listed in
-`scripts/platform-sync/map.json`.

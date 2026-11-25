@@ -45,6 +45,6 @@ npm packages.
 | `api-keys/` | scoped keys (ratel-cloud #428): `scopes.ts` (every scope and the Full, read-only, ingest and custom presets), `policy.ts` (`apiKeyPolicy`, the one place that decides what a key may do), `authenticate.ts` (`authenticateApiKey`, the bearer decision every key route shares: 401, 403 with the missing scope, or the key and its policy) and `routes.ts` (`BEARER_ROUTE_SCOPES`, the scope each bearer route needs; `routes.test.ts` fails a route that authenticates a key without its entry) |
 | `format.ts` | `fmtCount`, `fmtCost`: the shared numeric display formatters |
 
-Owned here rather than synced (see `scripts/platform-sync/map.json`): the client, the schema and
+These differ from their `ratel-cloud` origin: the client, the schema and
 query fragments, session, entitlements, telemetry, environment, the OTel config and shutdown, and
 the tests that upstream wrote against Cloud-only fixtures.

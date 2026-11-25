@@ -32,5 +32,4 @@ here rather than in the design system.
 | `mcp-servers/` | Traces › MCP servers behind `agentsPages` (the approved RP-25 design): `McpServersView` (the KPI band, search and status filters, the status column, failing first) and `McpServerDetailView` (status chip, KPIs, tools by errors with their top error and callers, calling agents, recent errors) |
 | `intent-map/` | the Map's drawing: intents as blobs, the asks pack, the tool network and globe, their chrome, marks, labels and measurements; all copies |
 
-The navigation model behind the rail is `lib/console/navigation.ts`. Copies and owned files are
-listed in `scripts/platform-sync/map.json`.
+The navigation model behind the rail is `lib/console/navigation.ts`.

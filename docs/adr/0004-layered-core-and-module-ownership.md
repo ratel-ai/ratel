@@ -38,11 +38,9 @@ table. `jobs/` learns of modules only through the `registry` port. Migrations ar
 from the composed schema; an existing migration file is never edited, and `db:check` in CI
 fails when the schema has a change that no migration covers.
 
-**Code from `ratel-cloud` lands through `scripts/platform-sync/`** until that repository is
-retired. `map.json` gives each upstream file a mode: `copy` (mirrored on each sync, never
-edited here), `owned` (maintained here, with its reason in `$why`; comments mark such code
-"Owned") or `excluded` (never lands). The sync and `pnpm check:private` refuse any file that
-names a Cloud-only vendor, a private engine or a customer.
+**The code is maintained here.** It came from `ratel-cloud`, which is frozen; the sync that
+landed it is retired. Comments that say "upstream" or "Owned" record where code came from and
+bind no one.
 
 **The open-source edition runs with no vendor account.** Model use is server-side and opt-in
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). With no key there is no outbound call, and each
@@ -53,6 +51,4 @@ prompts or labels.
 
 - The layer check keeps the structure. A new folder under `src/lib` needs a level.
 - A module can be read, tested and removed as a unit.
-- Each `owned` file is a place where this tree and `ratel-cloud` can differ; the sync prints
-  the upstream diff for a person to port. The set ends with the sync when `ratel-cloud` is
-  retired.
+- Any file can be edited here; no tool overwrites it.

@@ -10,10 +10,6 @@ intelligence that reads them. One Next.js app, two editions
 - **Ratel, Cloud edition** (`RATEL_COMPOSITION=cloud`): the same tree plus the private modules checked out at
   `ee/src`. Not built here.
 
-> The application code is arriving from `ratel-cloud` slice by slice through
-> [`scripts/platform-sync`](../scripts/platform-sync/README.md). Until the move completes,
-> this folder is a subset of that app; the layout below is the target.
-
 ## Layout
 
 ```
