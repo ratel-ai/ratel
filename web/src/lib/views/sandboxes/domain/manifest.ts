@@ -11,7 +11,7 @@ export const secretNameSchema = z
   .string()
   .regex(/^[A-Z][A-Z0-9_]{0,127}$/, "A secret name has the letters A to Z, digits and _.")
   .refine((name) => !RESERVED_SECRET_PREFIXES.some((prefix) => name.startsWith(prefix)), {
-    message: "Ratel reserves the prefix of this name. Use another name.",
+    message: "The prefix of this name is reserved. Use another name.",
   });
 
 export const manifestSchema = z.object({

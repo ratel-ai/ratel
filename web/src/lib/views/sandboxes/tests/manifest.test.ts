@@ -32,7 +32,7 @@ test("the refusal of a reserved secret name has no name of a provider", () => {
     assert.ok(!refusal.success);
     assert.equal(
       refusal.error.issues[0]?.message,
-      "Ratel reserves the prefix of this name. Use another name.",
+      "The prefix of this name is reserved. Use another name.",
     );
   }
 });
