@@ -158,16 +158,24 @@ test("a claim is renewed while the handler runs", async () => {
   const { db, projectIds } = await pgliteDb();
   await insert(db, projectIds[0]);
   let deliveries = 0;
-  const queue = createPostgresQueue({ db, pollMs: 5, leaseMs: 150 });
-  const options = [queue, createPostgresQueue({ db, pollMs: 5, leaseMs: 150 })].map((each) =>
-    each.consume(async () => {
-      deliveries += 1;
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      return { outcome: "ack" };
-    }),
+  let settled = 0;
+  // The handler takes three leases, and a second consumer looks for a free claim all the time.
+  const consumers = [1, 2].map(() =>
+    createPostgresQueue({ db, pollMs: 5, leaseMs: 1_000 }).consume(
+      async () => {
+        deliveries += 1;
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        return { outcome: "ack" };
+      },
+      {
+        onSettled: () => {
+          settled += 1;
+        },
+      },
+    ),
   );
-  await new Promise((resolve) => setTimeout(resolve, 900));
-  await Promise.all(options.map((consumer) => consumer.stop()));
+  while (settled === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+  await Promise.all(consumers.map((consumer) => consumer.stop()));
   assert.equal(deliveries, 1);
   assert.equal((await db.select().from(ingestSpool)).length, 0);
 });
