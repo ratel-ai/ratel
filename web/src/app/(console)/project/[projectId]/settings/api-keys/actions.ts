@@ -10,6 +10,7 @@ import {
   type RevokeApiKeyState,
   revokeApiKeyHandler,
 } from "@/lib/platform/api-key-actions";
+import { apiKeyCreationRefusal } from "@/lib/platform/api-key-creation";
 import { keepApiKeySecret } from "@/lib/platform/api-key-secrets";
 import { generateApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -40,6 +41,8 @@ const apiKeyActionDeps: ApiKeyActionDeps = {
   getProjectBySlug,
   listApiKeysForProject,
   findApiKeyForProject,
+  keyCreationRefusal: (organizationId, projectId) =>
+    apiKeyCreationRefusal(organizationId, projectId),
   generateApiKey,
   createApiKey,
   revokeApiKey,

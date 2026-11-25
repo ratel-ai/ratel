@@ -40,6 +40,7 @@ function deps(overrides: Partial<ApiKeyActionDeps> = {}): ApiKeyActionDeps {
     getContext: async () => ({ ok: true, context }),
     actingAs: async () => null,
     getProjectBySlug: async () => ({ id: PROJECT_ID }),
+    keyCreationRefusal: async () => null,
     listApiKeysForProject: async () => [],
     findApiKeyForProject: async () => record(),
     generateApiKey: (kind) =>
@@ -445,4 +446,31 @@ test("the plaintext is never in the structured log, kept or not", async () => {
   );
   assert.ok(logged.length > 0);
   for (const line of logged) assert.ok(!line.includes("rtl_abcd1234secret"), line);
+});
+
+test("a blocked organization gets no new key, and the reason with its date; revoking still works", async () => {
+  const asked: string[][] = [];
+  let created = 0;
+  const blocked = deps({
+    keyCreationRefusal: async (...args) => {
+      asked.push(args);
+      return "New API keys become available on 2 December 2026.";
+    },
+    createApiKey: async () => {
+      created += 1;
+      return record();
+    },
+  });
+  assert.deepEqual(await createApiKeyHandler({ projectSlug: "support" }, undefined, blocked), {
+    ok: false,
+    error: "New API keys become available on 2 December 2026.",
+  });
+  assert.equal(created, 0);
+  assert.deepEqual(asked, [[context.organization.id, PROJECT_ID]]);
+  const revoked = await revokeApiKeyHandler(
+    { projectSlug: "support", keyId: "key-1" },
+    undefined,
+    blocked,
+  );
+  assert.equal(revoked.ok, true);
 });

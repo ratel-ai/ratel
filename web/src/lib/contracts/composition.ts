@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { AnalysisFilterPort } from "@/lib/contracts/analysis-filter";
+import type { ApiKeyCreationPort } from "@/lib/contracts/api-key-creation";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
@@ -281,6 +282,11 @@ export type CompositionPorts = {
    * a later reveal on its own pages, and the core's copy says the key can be revealed later.
    */
   apiKeySecrets?: ApiKeySecretsPort;
+  /**
+   * Absent in the open-source edition, where a new API key is never refused. With it, the edition
+   * may refuse an organization new keys until a date; existing keys keep working.
+   */
+  apiKeyCreation?: ApiKeyCreationPort;
   /**
    * How the edition names the product in copy. `full` opens the MCP server's instructions and,
    * as a slug, names the server and its 401 realm ("Ratel", `ratel`); `short` is the
