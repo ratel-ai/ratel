@@ -26,7 +26,7 @@ import { getLogger } from "@/lib/platform/logger";
 
 const logger = getLogger("ingest:kafka");
 
-/** A 4,000,000-byte body, its header and the record's own bytes (ADR-0009). */
+/** A 4,000,000-byte body, its header and the record's own bytes (ADR-0010). */
 const MAX_MESSAGE_BYTES = 4_200_000;
 const HEARTBEAT_MS = 3_000;
 const SESSION_TIMEOUT_MS = 45_000;
@@ -55,7 +55,7 @@ export interface KafkaQueue extends EnvelopeQueue {
 
 type Settings = Required<Omit<KafkaQueueOptions, "topic">> & Pick<KafkaQueueOptions, "topic">;
 
-/** The managed service's queue (ADR-0009). Loaded only with `INGEST_QUEUE=kafka`. */
+/** The managed service's queue (ADR-0010). Loaded only with `INGEST_QUEUE=kafka`. */
 export function createKafkaQueue(kafka: Kafka, options: KafkaQueueOptions): KafkaQueue {
   const settings: Settings = {
     ...options,

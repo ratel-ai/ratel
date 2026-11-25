@@ -279,10 +279,14 @@ describe("registry root", () => {
     // can carry events through turns, recurring asks, the graph and the engine, then the daily
     // task-score sweep, as upstream orders them. After-steps are
     // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
-    // What-if's prune runs with retention off: a timed-out run must free its budget hold.
+    // What-if's prune runs with retention off: a timed-out run must free its budget hold. The
+    // ingest queue (ADR-0009) reaps and reports first, and drains and prunes with ingest's steps,
+    // whatever retention says.
     assert.deepEqual(
       drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
       [
+        "before:ingest_batches_reap",
+        "before:ingest_queue_depth",
         "before:trace_turns_build_enqueue",
         "before:query_categorizations_enqueue",
         "before:intent_graph_fold_enqueue",
@@ -290,7 +294,8 @@ describe("registry root", () => {
         "before:task_scores_enqueue",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",
-        "after:ingest_dead_letters_prune",
+        "after:ingest_batches_drain",
+        "after:ingest_batches_prune",
         "after:intent_graph_revisions_prune:retention",
         "after:intent_engine_expire:retention",
         "after:trace_signal_sweep",

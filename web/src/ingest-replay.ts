@@ -1,13 +1,12 @@
 import { sql } from "drizzle-orm";
-import { MAX_LOG_RECORDS, MAX_SPANS } from "@/lib/ingest/otlp/body";
-import { decodeOtlp } from "@/lib/ingest/otlp/decode";
-import { decodeOtlpLogs } from "@/lib/ingest/otlp/decode-logs";
 import { toOtelLogRows } from "@/lib/ingest/otlp/log-rows";
+import { decodeLogExport, MAX_LOG_RECORDS } from "@/lib/ingest/otlp/logs-export";
+import { decodeTraceExport, MAX_SPANS } from "@/lib/ingest/otlp/traces-export";
 import type { Envelope } from "@/lib/ingest/queue/envelope";
 import type { EnvelopeHandler } from "@/lib/ingest/queue/port/envelope-queue";
-import { readOtlpItems } from "@/lib/ingest/queue/process";
-import { parseRuntimeEvents, readEventsBody } from "@/lib/ingest/trace-events/ingest-events";
-import { deterministicEventId } from "@/lib/ingest/trace-events/parse";
+import { readOtlpExport } from "@/lib/ingest/queue/process";
+import { deterministicEventId, parseTraceEvents } from "@/lib/ingest/trace-events/parse";
+import { MAX_BATCH_EVENTS, parseRuntimeEventsBody } from "@/lib/ingest/trace-events/route-handler";
 import type { getDb } from "@/lib/platform/db/client";
 
 /**
@@ -52,13 +51,13 @@ export function addToRange(range: ReplayRange, envelope: Envelope): void {
       add(range.traceIds, projectId, traceIdsOf(envelope));
       return;
     case "logs": {
-      const read = readOtlpItems(envelope, {
-        decode: decodeOtlpLogs,
-        maxItems: MAX_LOG_RECORDS,
-        itemName: "log records",
+      const read = readOtlpExport(envelope, {
+        decode: decodeLogExport,
+        limit: `${MAX_LOG_RECORDS} log records`,
       });
       if (!read.ok) return;
-      const { rows } = toOtelLogRows(projectId, read.items, new Date(envelope.receivedAt));
+      const { records } = read.decoded;
+      const { rows } = toOtelLogRows(projectId, records, new Date(envelope.receivedAt));
       add(
         range.logIds,
         projectId,
@@ -67,12 +66,12 @@ export function addToRange(range: ReplayRange, envelope: Envelope): void {
       return;
     }
     case "events": {
-      const body = readEventsBody(envelope.body);
-      if (!body.ok) return;
+      const events = parseRuntimeEventsBody(envelope.body);
+      if (!events || events.length > MAX_BATCH_EVENTS) return;
       add(
         range.eventIds,
         projectId,
-        parseRuntimeEvents(body.events).valid.map((event) =>
+        parseTraceEvents(events).valid.map((event) =>
           deterministicEventId(projectId, event.clientEventId),
         ),
       );
@@ -83,12 +82,10 @@ export function addToRange(range: ReplayRange, envelope: Envelope): void {
 
 export function traceIdsOf(envelope: Envelope): string[] {
   if (envelope.signal !== "traces") return [];
-  const read = readOtlpItems(envelope, {
-    decode: decodeOtlp,
-    maxItems: MAX_SPANS,
-    itemName: "spans",
-  });
-  return read.ok ? [...new Set(read.items.map((span) => span.traceId).filter(Boolean))] : [];
+  const read = readOtlpExport(envelope, { decode: decodeTraceExport, limit: `${MAX_SPANS} spans` });
+  return read.ok
+    ? [...new Set(read.decoded.spans.map((span) => span.traceId).filter(Boolean))]
+    : [];
 }
 
 const CHUNK = 500;

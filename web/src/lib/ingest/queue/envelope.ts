@@ -1,5 +1,5 @@
 /**
- * The queued ingest message and its one encoding (ADR-0009). Other writers and readers, in
+ * The queued ingest message and its one encoding (ADR-0010). Other writers and readers, in
  * other languages, must match it byte for byte: `__fixtures__` holds the samples they test
  * against.
  *

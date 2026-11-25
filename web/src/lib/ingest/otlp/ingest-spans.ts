@@ -79,7 +79,7 @@ export interface PersistSpansContext {
    */
   meterTraces?: boolean;
   /**
-   * When a queued export was accepted (ADR-0009): the clock for a span without a usable time, so
+   * When a queued export was accepted (ADR-0010): the clock for a span without a usable time, so
    * that a later or repeated run gives the same rows. Absent, now.
    */
   receivedAt?: Date;

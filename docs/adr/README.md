@@ -13,7 +13,8 @@ history holds the earlier records and how they changed.
 | [0006](0006-licensing.md) | Licensing: MIT, no copyleft |
 | [0007](0007-sdk-wire-contracts.md) | The platform serves the SDK's wire contracts |
 | [0008](0008-single-ci-gate.md) | One required `ci-gate` check |
-| [0009](0009-queued-ingest.md) | Ingest is accepted at the door and processed from a queue, chosen by `INGEST_QUEUE` |
+| [0009](0009-queued-ingest.md) | Ingest accepts a batch fast and a fair queue persists it |
+| [0010](0010-kafka-ingest.md) | A worker stores the telemetry that a gateway put on Kafka, with `INGEST_QUEUE=kafka` |
 
 The SDK decisions (engine, retrieval, bindings, adapters, rankers, releases) belong to
 [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), where that code lives.

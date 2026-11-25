@@ -1,25 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
-import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
-import { listDeadLetters } from "@/lib/ingest/queue/postgres/store";
 import {
-  acceptOnto,
   type Deployment,
   drain,
   dumpTables,
   envelopeHandler,
+  envelopeOf,
   type IngestBody,
   ingestLogs,
-  ingestRequest,
   ingestTraces,
   logsBody,
-  logsRouteDeps,
+  memoryStore,
   modelCallBody,
   processLogsDeps,
   SHARED_KEY,
   setupDeployment,
-  spoolQueue,
+  testQueue,
 } from "./test-support";
 
 const NOW = new Date("2026-11-20T10:00:00.000Z");
@@ -35,8 +32,8 @@ async function deployment(
     await ingestLogs(result, bodies);
     return result;
   }
-  const queue = spoolQueue(result);
-  await ingestLogs(result, bodies, acceptOnto(queue));
+  const queue = testQueue();
+  await ingestLogs(result, bodies, queue);
   await drain(queue, envelopeHandler(result), bodies.length);
   return result;
 }
@@ -52,7 +49,7 @@ for (const [label, key] of [
   ["a secret key", undefined],
   ["an append-only key", SHARED_KEY],
 ] as const) {
-  test(`${label}: a queued deployment stores the same rows as a direct one`, async () => {
+  test(`${label}: an envelope stores the same rows as a direct send`, async () => {
     const body = logsBody(key);
     const gzipped = {
       ...body,
@@ -63,7 +60,7 @@ for (const [label, key] of [
       const direct = await deployment(bodies, "direct");
       const queued = await deployment(bodies, "queued");
       const [expected, actual] = [await dumpTables(direct), await dumpTables(queued)];
-      // The record without a time takes the time of accept, and the store's time in direct mode.
+      // The record without a time takes the time of accept, and the store's time in a request.
       for (const dump of [expected, actual]) {
         dump.otel_logs = dump.otel_logs.map((row) =>
           row.includes('"ratel.note"') ? row.replace(/"occurred_at":"[^"]+"/, "") : row,
@@ -78,29 +75,26 @@ for (const [label, key] of [
   });
 }
 
-test("the route answers before it stores, without counts, and uses the time of accept", async () => {
+test("a record without a time takes the time of accept, and the body is kept once", async () => {
   const result = await setupDeployment();
-  const queue = spoolQueue(result);
-  const response = await handleLogsRequest(
-    ingestRequest("logs", logsBody()),
-    logsRouteDeps(result, { accept: acceptOnto(queue), now: () => NOW }),
-  );
-  assert.equal(response.status, 202);
-  assert.deepEqual(await response.json(), {});
-  assert.deepEqual([...(await logTimes(result)).keys()], []);
-  await drain(queue, envelopeHandler(result), 1);
+  const envelope = envelopeOf("logs", logsBody(), NOW.getTime());
+  const handler = envelopeHandler(result);
+  for (const attempt of [1, 2]) {
+    assert.deepEqual(await handler(envelope, { attempt }), { outcome: "ack" });
+  }
   assert.equal((await logTimes(result)).get("ratel.note"), NOW.toISOString());
   const raw = await result.client.query("select id from otlp_raw_exports");
-  assert.equal(raw.rows.length, 1);
+  assert.deepEqual(raw.rows, [{ id: envelope.id }]);
   await result.client.close();
 });
 
 test("a failed write or join is retried, and a body that does not decode is a dead letter", async () => {
   const result = await setupDeployment();
   await ingestTraces(result, [modelCallBody()]);
-  const queue = spoolQueue(result);
+  const store = memoryStore();
+  const queue = testQueue(store);
   const bad = { contentType: "application/json", bytes: new TextEncoder().encode("secret") };
-  await ingestLogs(result, [logsBody(), bad], acceptOnto(queue));
+  await ingestLogs(result, [logsBody(), bad], queue);
   const real = processLogsDeps(result);
   const join = real.genAiLogJoin;
   assert.ok(join);
@@ -134,7 +128,7 @@ test("a failed write or join is retried, and a body that does not decode is a de
     settled.map(({ outcome, attempt }) => `${outcome} ${attempt}`),
     ["retry 1", "retry 2", "ack 3", "dead-letter 1"],
   );
-  assert.equal((await listDeadLetters(result.db))[0].reason, "body does not decode as OTLP logs");
+  assert.equal(store.deadLetters[0].reason, "body does not decode as OTLP logs");
   const direct = await setupDeployment();
   await ingestTraces(direct, [modelCallBody()]);
   await ingestLogs(direct, [logsBody()]);
@@ -145,8 +139,8 @@ test("a failed write or join is retried, and a body that does not decode is a de
 test("a catalog definition that could not be written fails the delivery", async () => {
   const result = await setupDeployment();
   await result.client.exec("alter table runtime_catalog_entries rename to gone");
-  const queue = spoolQueue(result);
-  await ingestLogs(result, [logsBody()], acceptOnto(queue));
+  const queue = testQueue();
+  await ingestLogs(result, [logsBody()], queue);
   const [settled] = await drain(queue, envelopeHandler(result), 1);
   assert.equal(settled.outcome, "retry");
   await result.client.close();

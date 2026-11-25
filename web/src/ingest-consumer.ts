@@ -33,9 +33,9 @@ import {
 } from "@/lib/readings/intent-graph/queries";
 
 /**
- * The queue's consumer with its real dependencies: what the three ingest routes wire in direct
- * mode, for `instrumentation.node.ts`. Outside `lib`, because it wires modules of every layer, as
- * a route does. Null in direct mode.
+ * The Kafka consumer with its real dependencies: what the three ingest routes wire for their inline
+ * writes, for `instrumentation.node.ts`. Outside `lib`, because it wires modules of every layer, as a
+ * route does. Null without `INGEST_QUEUE=kafka`.
  */
 export async function startConfiguredIngestConsumer(): Promise<EnvelopeConsumer | null> {
   const queue = await ingestQueue();

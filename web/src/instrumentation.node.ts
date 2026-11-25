@@ -57,7 +57,7 @@ export async function registerNodeInstrumentation(
     { createSelfTelemetrySampler },
     { SelfTimeSpanProcessor },
     { createTelemetryShutdown, registerTelemetryShutdownHandlers },
-    { appRole, consumesIngestQueue },
+    { appRole, consumesKafkaIngest },
     { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
     { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
     { editionAnalyticsShutdown },
@@ -181,10 +181,10 @@ export async function registerNodeInstrumentation(
   // termination: it flushes buffered telemetry, then exits explicitly. The worker is the
   // exception: its own handler waits for the step in flight, so it runs this flush itself
   // (`bootBackground` hands it over) instead of being cut short by an exit from here.
-  // So is a process that reads the ingest queue: it finishes the message in hand first.
-  if (appRole(settings) !== "worker" && !consumesIngestQueue(settings)) {
+  const role = appRole(settings);
+  // So is a process that reads Kafka: it finishes the message in hand first.
+  if (role !== "worker" && role !== "persist" && !consumesKafkaIngest(settings))
     registerTelemetryShutdownHandlers(registeredShutdown);
-  }
   registered = true;
   return registeredShutdown;
 }
@@ -276,11 +276,12 @@ export async function assertComposition(): Promise<void> {
  * failure or an external scheduler with no `jobs.cronSecret` exits, like a bad composition:
  * never serve a misconfigured server. Nothing here runs without a `database.url`.
  *
- * With `ingest.queue` set, the process that runs background work (the worker, or the single `all`
- * process) also reads the ingest queue (ADR-0009). A queue that cannot be opened exits.
+ * With `ingest.queue` = `kafka`, the process that runs background work (the worker, or the single
+ * `all` process) also stores what a gateway put on Kafka (ADR-0010). A queue that cannot be opened
+ * exits.
  *
  * `flushTelemetry` is what `registerNodeInstrumentation` returned: the worker runs it after its
- * last step, before it exits, and so does an `all` process that reads the ingest queue.
+ * last step, before it exits, and so does an `all` process that reads Kafka.
  */
 export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promise<void> {
   const { getConfig } = await import("@/config");
@@ -299,8 +300,10 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
       console.error(error instanceof Error ? error.message : error);
       process.exit(1);
     }
-  } else if (plan.role === "worker") {
-    console.log("[migrate] skipped: the worker never migrates, the web process does");
+  } else {
+    const { skippedMigrationMessage } = await import("@/lib/jobs/boot-plan");
+    const skipped = skippedMigrationMessage(plan.role);
+    if (skipped) console.log(skipped);
   }
   const { assertCronConfig, startInProcessScheduler } = await import("@/lib/jobs/scheduler");
   try {
@@ -333,18 +336,18 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
       beforeExit: flushTelemetry,
     });
   }
+  // A persist-only process (RTL-314): the ingest queue's lane and nothing else.
+  if (plan.tick === "persist") {
+    const { startBackgroundWorker } = await import("@/lib/jobs/worker-start");
+    startBackgroundWorker(undefined, { beforeExit: flushTelemetry, lanesOnly: true });
+  }
 }
 
-/** The ingest queue's consumer, or null where this process has none. */
+/** The Kafka consumer, or null where this process has none. */
 async function startIngestConsumer(): Promise<EnvelopeConsumer | null> {
-  const { getConfig } = await import("@/config");
-  if (getConfig().ingest.queue === "direct") return null;
+  const { consumesKafkaIngest } = await import("@/lib/jobs/role");
+  if (!consumesKafkaIngest()) return null;
   try {
-    // An API-only process publishes: a queue it cannot open stops it here, not at the first request.
-    const { ingestQueue } = await import("@/lib/ingest/queue/ingest-queue");
-    await ingestQueue();
-    const { consumesIngestQueue } = await import("@/lib/jobs/role");
-    if (!consumesIngestQueue()) return null;
     const { startConfiguredIngestConsumer } = await import("./ingest-consumer");
     return await startConfiguredIngestConsumer();
   } catch (error) {

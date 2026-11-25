@@ -79,7 +79,7 @@ const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)
 
 /**
  * Filter and map normalized OTLP log records into standalone persistence rows. `receivedAt` is the
- * time of a record without a usable one (a queued export, ADR-0009); absent, now.
+ * time of a record without a usable one (a queued export, ADR-0010); absent, now.
  */
 export function toOtelLogRows(
   projectId: string,
@@ -95,14 +95,6 @@ export function toOtelLogRows(
     rows: accepted.map((record) => toOtelLogRow(projectId, record, receivedAt)),
     dropped: records.length - accepted.length,
   };
-}
-
-/**
- * The rows a key may store. An append-only key (RC-590) stores its records as logs, but they never
- * rewrite the project's runtime catalog definitions.
- */
-export function storableLogRows(rows: OtelLogRow[], appendOnly: boolean): OtelLogRow[] {
-  return appendOnly ? rows.map(({ catalogDefinition: _definition, ...row }) => row) : rows;
 }
 
 function toOtelLogRow(

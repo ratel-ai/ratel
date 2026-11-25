@@ -55,7 +55,7 @@ sent. Never log the hash.
   may use, worked out by the key's policy. Use `ingest` to decide.
 - `expiresAt` is ISO 8601 or null. A cache must not outlive it.
 - `keyPolicy.appendOnlyIngest` and `keyPolicy.sharedKeyLimits` go into the envelope
-  ([ADR 0009](adr/0009-queued-ingest.md)).
+  ([ADR 0010](adr/0010-kafka-ingest.md)).
 - `limits` are token buckets: `perMinute` is the refill, `burst` the size.
   - `shared`, for a key with `sharedKeyLimits`, else null: `requests` and `items`, each with
     `perKey` and `perSource`. One budget for traces, logs and events together. A source is a key
@@ -68,7 +68,7 @@ sent. Never log the hash.
 ## `POST /api/internal/ingest/{traces|logs|events}`
 
 Implemented by Ratel Cloud only, for the relay that delivers queued telemetry to it during the
-migration. This core reads its queue itself ([ADR 0009](adr/0009-queued-ingest.md)).
+migration. This core reads its queue itself ([ADR 0010](adr/0010-kafka-ingest.md)).
 
 One request is one envelope. The body is the export as received, byte for byte, with the envelope's
 `Content-Type` and `Content-Encoding`. The envelope's facts are headers:

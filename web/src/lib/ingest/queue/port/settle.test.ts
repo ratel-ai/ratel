@@ -5,7 +5,7 @@ import { errorCode, errorReason, RETRY_POLICY, settle } from "./settle";
 const retry = { outcome: "retry", reason: "busy" } as const;
 const outage = { outcome: "outage", reason: "down" } as const;
 
-test("a failing message is delivered 5 times, with the waits of ADR-0009", () => {
+test("a failing message is delivered 5 times, with the waits of ADR-0010", () => {
   const settlements = [1, 2, 3, 4, 5].map((attempt) =>
     settle(retry, { attempt, outages: 0 }, RETRY_POLICY),
   );

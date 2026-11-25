@@ -48,7 +48,7 @@ export type ConsolidateTraceEventsOptions = {
    */
   appendOnly?: boolean;
   /**
-   * When a queued batch was accepted (ADR-0009): the clock that bounds the facts' timestamps, so
+   * When a queued batch was accepted (ADR-0010): the clock that bounds the facts' timestamps, so
    * that a late run gives the same rows. Absent, the time of the transaction.
    */
   receivedAt?: Date;

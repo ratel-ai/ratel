@@ -176,14 +176,14 @@ jobs:
   # @ratel/platform tests (PGlite), sharded like private platform-tests. A WASM crash
   # then hits one shard. Shard names stay off the ruleset; ci-gate needs this job id.
   platform-test:
-    name: platform-test (${{ matrix.shard }}/4)
+    name: platform-test (${{ matrix.shard }}/6)
     needs: changes
     if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -195,25 +195,16 @@ jobs:
         run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
       - name: Test
         env:
-          TEST_SHARD: ${{ matrix.shard }}/4
+          TEST_SHARD: ${{ matrix.shard }}/6
         run: pnpm --filter @ratel/platform test
 
-  # The ingest queue drivers on real servers (ADR-0009): the same conformance suite on Postgres
-  # and on Kafka. platform-test runs the Postgres one on PGlite, which is a single connection.
-  queue-conformance:
+  # Kafka ingest on a real broker (ADR-0010): the driver's conformance, and that what it stores is what
+  # a direct send stores.
+  kafka-ingest:
     needs: changes
     if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: ratel
-          POSTGRES_DB: spool
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U ratel -d spool" --health-interval 2s --health-retries 30
       kafka:
         image: apache/kafka:3.9.1
         env:
@@ -237,17 +228,12 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
-      - name: Migrate
+      - name: Test
         env:
-          DATABASE_URL: postgres://ratel@localhost:5432/spool
-        run: pnpm --filter @ratel/platform migrate
-      - name: Conformance
-        env:
-          TEST_POSTGRES_URL: postgres://ratel@localhost:5432/spool
           TEST_KAFKA_BROKERS: localhost:9092
         run: >
           pnpm --filter @ratel/platform exec tsx --no-wasm-code-gc --test --test-force-exit
-          --test-concurrency=1 "src/lib/ingest/queue/**/*-queue.integration.test.ts"
+          --test-concurrency=1 "src/lib/ingest/queue/kafka/*.integration.test.ts"
 
   # The cloud deployer: deploy.sh and the modules under deploy/terraform, checked with both
   # engines (format, init, validate). It logs in to no cloud: nothing is planned or created.
@@ -300,7 +286,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and start
-        run: docker compose up --build --detach --wait --wait-timeout 180
+        # web, worker and demo in one build: the demo image, with the whole source tree, takes 45 s
+        # to export, and here that overlaps the Next build.
+        run: |
+          docker compose --profile demo build
+          docker compose up --detach --wait --wait-timeout 180
       - name: Scan the image (fixable HIGH and CRITICAL in app dependencies)
         # Same build as above, no second one. Operating-system packages are listed but do not
         # gate: the base tag moves under us and a Debian fix lands before the Node image does.
@@ -410,7 +400,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, design-system, platform-build, platform-test, queue-conformance, platform-compose, deploy, dependency-scan, secret-scan]
+    needs: [changes, design-system, platform-build, platform-test, kafka-ingest, platform-compose, deploy, dependency-scan, secret-scan]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -418,7 +408,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} queue-conformance=${{ needs.queue-conformance.result }} platform-compose=${{ needs.platform-compose.result }} deploy=${{ needs.deploy.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }}"
+          echo "changes=${{ needs.changes.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} kafka-ingest=${{ needs.kafka-ingest.result }} platform-compose=${{ needs.platform-compose.result }} deploy=${{ needs.deploy.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||

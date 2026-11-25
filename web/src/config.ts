@@ -125,7 +125,11 @@ const CONFIG_SCHEMA = schema({
     publicUrl: optional("APP_PUBLIC_URL", trimmed),
     environment: setting("APP_ENV", trimmed, D.app.environment),
     organizationName: optional("RATEL_ORG_NAME", trimmed),
-    role: setting("APP_ROLE", z.preprocess(lower, z.enum(["all", "api", "worker"])), D.app.role),
+    role: setting(
+      "APP_ROLE",
+      z.preprocess(lower, z.enum(["all", "api", "worker", "ingest", "persist"])),
+      D.app.role,
+    ),
   },
   /** Open-source edition only: every experimental flag on. */
   experimentalFeatures: setting("RATEL_EXPERIMENTAL_FEATURES", flagValue, D.experimentalFeatures),
@@ -217,12 +221,13 @@ const CONFIG_SCHEMA = schema({
   },
   ingest: {
     /**
-     * Where accept puts a request (ADR-0009). `direct`: nowhere, the request stores it. `postgres`
-     * or `kafka`: that queue, which the worker consumes.
+     * What the worker stores besides this deployment's own ingest (ADR-0010). `direct`: nothing.
+     * `kafka`: the topics that a gateway writes. The routes and their queue (`experimentalQueue`) do
+     * not depend on it.
      */
     queue: setting(
       "INGEST_QUEUE",
-      z.preprocess(lower, z.enum(["direct", "postgres", "kafka"])),
+      z.preprocess(lower, z.enum(["direct", "kafka"])),
       D.ingest.queue,
     ),
     /** Read only with `queue` = `kafka`. */
@@ -236,8 +241,6 @@ const CONFIG_SCHEMA = schema({
         D.ingest.kafka.security,
       ),
       region: optional("INGEST_KAFKA_REGION", trimmed),
-      /** Where accept publishes; unset, this deployment only consumes, and accept stays direct. */
-      topic: optional("INGEST_KAFKA_TOPIC", trimmed),
       /** The topics that the worker consumes, comma-separated: a list, never a pattern. */
       topics: optional("INGEST_KAFKA_TOPICS", trimmed),
       /** With `{topic}` here and in `deadLetterTopic`, each topic has a group of its own. */
@@ -282,6 +285,22 @@ const CONFIG_SCHEMA = schema({
       positive,
       D.ingest.otlpRawRetentionDays,
     ),
+    /** Queue accepted batches and persist them from workers (RTL-314, `lib/ingest/queue`). */
+    experimentalQueue: setting("EXPERIMENTAL_INGEST_QUEUE", one, D.ingest.experimentalQueue),
+    /** Batches one project may have persisting at once, across every process. 0 turns the cap off. */
+    persistPerProject: setting(
+      "INGEST_PERSIST_PER_PROJECT",
+      nonNegativeInt,
+      D.ingest.persistPerProject,
+    ),
+    /** Batches one process persists at once. */
+    persistConcurrency: setting(
+      "INGEST_PERSIST_CONCURRENCY",
+      positiveInt,
+      D.ingest.persistConcurrency,
+    ),
+    /** Tries before a batch is marked failed. */
+    batchMaxAttempts: setting("INGEST_BATCH_MAX_ATTEMPTS", positiveInt, D.ingest.batchMaxAttempts),
   },
   anthropic: {
     /** `bedrock`, or unset for the API; any other value turns Claude off. */

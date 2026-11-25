@@ -26,7 +26,6 @@ export async function openKafkaQueue(
     region: kafka.region,
   });
   return (perTopic ? createPerTopicKafkaQueue : createKafkaQueue)(client, {
-    ...(kafka.topic ? { topic: kafka.topic } : {}),
     topics: async () => [...new Set([...configured, ...(await editionTopics())])],
     groupId: kafka.groupId,
     deadLetterTopic: kafka.deadLetterTopic,

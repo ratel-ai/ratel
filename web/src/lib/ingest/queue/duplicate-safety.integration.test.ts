@@ -2,33 +2,26 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createPostgresQueue } from "@/lib/ingest/queue/postgres/postgres-queue";
-import { listDeadLetters } from "@/lib/ingest/queue/postgres/store";
 import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
 import { decodeEnvelope, type Envelope, encodeEnvelope } from "./envelope";
 import {
-  acceptOnto,
   type Deployment,
   deploymentOver,
-  drain,
   dumpTables,
   envelopeHandler,
+  envelopeOf,
   eventsBody,
   type IngestBody,
-  ingestEvents,
-  ingestLogs,
-  ingestTraces,
   killableClient,
   logsBody,
   modelCallBody,
   SHARED_KEY,
   setupDeployment,
-  spoolQueue,
   usageOf,
 } from "./test-support";
 
 /**
- * Delivery is at least once (ADR-0009): a message that is processed again, and a process that is
+ * Delivery is at least once (ADR-0010): a message that is processed again, and a process that is
  * killed at any statement, must leave every table as one clean run does. The exceptions are listed
  * in the ADR.
  */
@@ -54,20 +47,13 @@ interface Batch {
   events?: IngestBody[];
 }
 
-/** The envelopes of a batch, as accept publishes them. */
+/** The envelopes of a batch, as a gateway writes them and a consumer reads them. */
 async function envelopesOf({ traces = [], logs = [], events = [] }: Batch): Promise<Envelope[]> {
-  const deployment = await setupDeployment();
-  const published: Envelope[] = [];
-  const accept = acceptOnto({
-    publish: async (envelope) => {
-      published.push(decodeEnvelope(encodeEnvelope(envelope)));
-    },
-  });
-  await ingestTraces(deployment, traces, accept);
-  await ingestLogs(deployment, logs, accept);
-  await ingestEvents(deployment, events, accept);
-  await deployment.client.close();
-  return published;
+  return [
+    ...traces.map((body) => envelopeOf("traces", body)),
+    ...logs.map((body) => envelopeOf("logs", body)),
+    ...events.map((body) => envelopeOf("events", body)),
+  ].map((envelope) => decodeEnvelope(encodeEnvelope(envelope)));
 }
 
 async function processAll(deployment: Deployment, envelopes: readonly Envelope[]): Promise<void> {
@@ -142,44 +128,6 @@ test("the real fixtures, logs and events: processed twice equals processed once"
   await twice.client.close();
 });
 
-test("the real fixtures through the queue, with the consumer killed mid-batch, equals a clean run", async () => {
-  const envelopes = await envelopesOf({
-    traces: ["vercel-ai", "mcp-python-fastmcp", "pydantic-ai"].flatMap((name) => loadFixture(name)),
-    logs: [logsBody()],
-    events: [eventsBody(AT)],
-  });
-  const clean = await cleanRun(envelopes);
-  const healthy = await setupDeployment();
-  for (const envelope of envelopes) await spoolQueue(healthy).publish(envelope);
-
-  // Each process dies at another statement: in a claim, in a store, or between a store and its ack.
-  let killed = 0;
-  for (const at of [3, 17, 38, 45, 61]) {
-    const connection = killableClient(healthy.client, at);
-    const dying = deploymentOver(connection.client);
-    const queue = createPostgresQueue({ db: dying.db, pollMs: 2, leaseMs: 150 });
-    const consumer = queue.consume(envelopeHandler(dying));
-    const deadline = Date.now() + 10_000;
-    while (!connection.dead() && Date.now() < deadline && (await left(healthy)) > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-    if (connection.dead()) killed += 1;
-    // The stop cannot write anything: it only ends the loop of the dead process.
-    await consumer.stop();
-    // The claim of a message in hand ends.
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  assert.equal(killed, 5);
-  const remaining = await left(healthy);
-  assert.ok(remaining > 0, "the last process has work left");
-  await drain(spoolQueue(healthy), envelopeHandler(healthy), remaining);
-  assert.equal(await left(healthy), 0);
-  assert.deepEqual(await listDeadLetters(healthy.db), []);
-  assert.deepEqual(await tablesOf(healthy), clean.tables);
-  assert.ok((await usageOf(healthy)) <= clean.usage);
-  await healthy.client.close();
-});
-
 test("an event that an earlier crash left without metrics gets them on a replay", async () => {
   const envelopes = await envelopesOf({ traces: [loadFixture("vercel-ai")[0]] });
   const clean = await cleanRun(envelopes);
@@ -190,10 +138,3 @@ test("an event that an earlier crash left without metrics gets them on a replay"
   assert.deepEqual(await tablesOf(deployment), clean.tables);
   await deployment.client.close();
 });
-
-async function left({ client }: Deployment): Promise<number> {
-  const { rows } = await client.query<{ n: number }>(
-    "select count(*)::int as n from ingest_spool where dead_at is null",
-  );
-  return rows[0].n;
-}

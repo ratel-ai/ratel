@@ -507,7 +507,7 @@ export function toRow(projectId: string, call: GroupedCall, prices?: BatchPrices
  * batch than its producer counts once more, and a history call that a batch's first
  * call shows first is not recovered.
  *
- * With `receivedAt` (a queued export, ADR-0009), a call with a broken clock occurred then, and the
+ * With `receivedAt` (a queued export, ADR-0010), a call with a broken clock occurred then, and the
  * rows do not depend on when they are built. Without it, the call occurred at an unknown time.
  */
 export function toRows(

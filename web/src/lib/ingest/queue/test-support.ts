@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
@@ -19,12 +20,15 @@ import { handleTracesRequest, type TracesHandlerDeps } from "@/lib/ingest/otlp/r
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
-import type { AcceptDeps } from "@/lib/ingest/queue/accept";
+import { ENVELOPE_VERSION, type Envelope } from "@/lib/ingest/queue/envelope";
+import type { IngestPersistDeps } from "@/lib/ingest/queue/persist";
 import type { EnvelopeHandler, EnvelopeQueue } from "@/lib/ingest/queue/port/envelope-queue";
 import type { RetryPolicy } from "@/lib/ingest/queue/port/settle";
-import { createPostgresQueue } from "@/lib/ingest/queue/postgres/postgres-queue";
+import {
+  createMemoryQueue,
+  MemoryQueueStore,
+} from "@/lib/ingest/queue/port/test-support/memory-queue";
 import { createEnvelopeHandler } from "@/lib/ingest/queue/process";
-import { createQuotaGate } from "@/lib/ingest/queue/quota-gate";
 import { type ProcessEventsDeps, processEvents } from "@/lib/ingest/trace-events/process-events";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import {
@@ -46,7 +50,7 @@ import {
   syncIntentGraphLiveFromStatus,
 } from "@/lib/readings/intent-graph/queries";
 
-/** A deployment over PGlite, in direct mode and with a queue, for the queued-ingest tests. */
+/** A deployment over PGlite whose routes store, and one that stores envelopes (ADR-0010). */
 
 export const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 export const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -61,7 +65,7 @@ export type Db = ReturnType<typeof getDb>;
 /** Stands for the edition's counter (`incrementEventUsage`), which the core does not store. */
 const USAGE_TABLE = "test_event_usage";
 const ORGANIZATION = { id: ORGANIZATION_ID, name: "Acme", slug: "acme" };
-const FAST_POLICY: RetryPolicy = {
+export const FAST_POLICY: RetryPolicy = {
   waitsMs: [5, 5, 5, 5],
   outageWaitMs: { first: 5, max: 20 },
 };
@@ -101,7 +105,7 @@ export async function usageOf({ client }: Deployment): Promise<number> {
 
 const silent = { logWarn: () => undefined, shouldSampleSuccess: () => false };
 
-/** What a trace store needs, the same in both modes. */
+/** What a trace store needs, the same for a request and an envelope. */
 function storeDeps({ client, db }: Deployment) {
   return {
     insertEventsWithMetrics: (projectId, rows) => insertEventsWithMetrics(projectId, rows, db),
@@ -173,13 +177,8 @@ export function tracesRouteDeps(
     ...authDeps(deployment),
     ...storeDeps(deployment),
     checkEventQuota: async () => ({ ok: true }),
-    quotaGate: createQuotaGate(),
     ...over,
   };
-}
-
-export function acceptOnto(queue: Pick<EnvelopeQueue, "publish">): AcceptDeps {
-  return { queue, findOrganizationId: async () => ORGANIZATION_ID };
 }
 
 export interface ProcessOverrides {
@@ -249,8 +248,6 @@ export function eventsRouteDeps(
   over: Partial<RuntimeEventsHandlerDeps> = {},
 ): RuntimeEventsHandlerDeps {
   const auth = authDeps(deployment);
-  // As the route: with a queue, the consumer stamps the key.
-  if (over.accept) auth.touchApiKey = async () => undefined;
   return {
     scope: "ingest:events",
     resolveProjectFromBearer: (request, scope) => resolveProjectFromBearer(request, scope, auth),
@@ -275,6 +272,19 @@ export function processEventsDeps(
   };
 }
 
+/** What ADR-0009's lane persists with, over this deployment. */
+export function persistDeps(deployment: Deployment): IngestPersistDeps {
+  return {
+    getOrganizationByProjectId: async () => ORGANIZATION as never,
+    traces: storeDeps(deployment),
+    logs: logsStoreDeps(deployment),
+    events: eventsStoreDeps(deployment),
+    logError: () => undefined,
+    logWarn: () => undefined,
+    reportServerException: (() => undefined) as never,
+  };
+}
+
 export function envelopeHandler(
   deployment: Deployment,
   over: ProcessOverrides = {},
@@ -291,9 +301,12 @@ export function envelopeHandler(
   });
 }
 
-/** The deployment's spool. */
-export function spoolQueue({ db }: Deployment): EnvelopeQueue {
-  return createPostgresQueue({ db, policy: FAST_POLICY, pollMs: 5 });
+/** What the queues of one test share, as a broker's topic. */
+export const memoryStore = () => new MemoryQueueStore();
+
+/** A queue over the store; dead letters are in `store.deadLetters`. */
+export function testQueue(store: MemoryQueueStore = memoryStore()): EnvelopeQueue {
+  return createMemoryQueue(store, FAST_POLICY);
 }
 
 /** Runs a consumer until `count` deliveries ended, and stops it. */
@@ -335,47 +348,79 @@ export function ingestRequest(
   });
 }
 
-export async function ingestTraces(
-  deployment: Deployment,
+type Signal = Envelope["signal"];
+type Publisher = Pick<EnvelopeQueue, "publish">;
+
+/** The envelope that a gateway writes for a request it accepted. */
+export function envelopeOf(
+  signal: Signal,
+  { contentType, bytes, contentEncoding, key = SECRET_KEY }: IngestBody,
+  receivedAt = Date.now(),
+): Envelope {
+  const shared = key === SHARED_KEY;
+  return {
+    version: ENVELOPE_VERSION,
+    id: randomUUID(),
+    projectId: PROJECT_ID,
+    organizationId: ORGANIZATION_ID,
+    keyId: shared ? SHARED_KEY_ID : SECRET_KEY_ID,
+    keyPolicy: { appendOnlyIngest: shared, sharedKeyLimits: shared },
+    signal,
+    contentType: contentType as Envelope["contentType"],
+    contentEncoding: (contentEncoding?.replace(/^x-/, "") ??
+      "identity") as Envelope["contentEncoding"],
+    receivedAt,
+    body: bytes,
+  };
+}
+
+/** Sends the bodies to the route, which stores them; with a queue, publishes their envelopes. */
+async function ingest(
+  signal: Signal,
   bodies: readonly IngestBody[],
-  accept?: AcceptDeps,
+  send: (request: Request) => Promise<Response>,
+  queue: Publisher | undefined,
 ): Promise<void> {
   for (const body of bodies) {
-    const response = await handleTracesRequest(
-      ingestRequest("traces", body),
-      tracesRouteDeps(deployment, accept ? { accept } : {}),
-    );
+    if (queue) {
+      await queue.publish(envelopeOf(signal, body));
+      continue;
+    }
+    const response = await send(ingestRequest(signal, body));
     assert.equal(response.status, 202, await response.text());
   }
 }
 
-export async function ingestLogs(
+export const ingestTraces = (
   deployment: Deployment,
   bodies: readonly IngestBody[],
-  accept?: AcceptDeps,
-): Promise<void> {
-  for (const body of bodies) {
-    const response = await handleLogsRequest(
-      ingestRequest("logs", body),
-      logsRouteDeps(deployment, accept ? { accept } : {}),
-    );
-    assert.equal(response.status, 202, await response.text());
-  }
-}
+  queue?: Publisher,
+) =>
+  ingest(
+    "traces",
+    bodies,
+    (request) => handleTracesRequest(request, tracesRouteDeps(deployment)),
+    queue,
+  );
 
-export async function ingestEvents(
+export const ingestLogs = (
   deployment: Deployment,
   bodies: readonly IngestBody[],
-  accept?: AcceptDeps,
-): Promise<void> {
-  for (const body of bodies) {
-    const response = await handleRuntimeEventsRequest(
-      ingestRequest("events", body),
-      eventsRouteDeps(deployment, accept ? { accept } : {}),
-    );
-    assert.equal(response.status, 202, await response.text());
-  }
-}
+  queue?: Publisher,
+) =>
+  ingest("logs", bodies, (request) => handleLogsRequest(request, logsRouteDeps(deployment)), queue);
+
+export const ingestEvents = (
+  deployment: Deployment,
+  bodies: readonly IngestBody[],
+  queue?: Publisher,
+) =>
+  ingest(
+    "events",
+    bodies,
+    (request) => handleRuntimeEventsRequest(request, eventsRouteDeps(deployment)),
+    queue,
+  );
 
 /** Columns that differ between two runs of the same input: random ids, and the time of the store. */
 const VOLATILE: Record<string, readonly string[]> = {
@@ -390,9 +435,6 @@ const VOLATILE: Record<string, readonly string[]> = {
   trace_event_hits: ["id"],
 };
 
-/** Tables of the queue itself. */
-const QUEUE_TABLES = new Set(["ingest_spool"]);
-
 /** Every row of every table, sorted, without the volatile columns. A metrics row names its event. */
 export async function dumpTables(
   { client }: Deployment,
@@ -404,7 +446,6 @@ export async function dumpTables(
   );
   const dump: Record<string, string[]> = {};
   for (const { name } of names) {
-    if (QUEUE_TABLES.has(name)) continue;
     const { rows } = await client.query<{ row: Record<string, unknown> }>(
       name === "event_metrics"
         ? `select to_jsonb(t) || jsonb_build_object('event', e.dedupe_hash) as row

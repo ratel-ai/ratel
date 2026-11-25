@@ -47,7 +47,7 @@ const POLICY: RetryPolicy = {
 };
 const ACK: IngestResult = { outcome: "ack" };
 
-/** The suite that every driver passes (ADR-0009). */
+/** The suite that every driver passes (ADR-0010). */
 export function runQueueConformance(
   name: string,
   createHarness: QueueHarnessFactory,

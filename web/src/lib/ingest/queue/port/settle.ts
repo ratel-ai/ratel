@@ -1,7 +1,7 @@
 import type { IngestDelivery, IngestHandler, IngestResult } from "@/lib/contracts/ingest-queue";
 import { decodeEnvelope, type Envelope, EnvelopeError } from "@/lib/ingest/queue/envelope";
 
-/** What every driver does with a failed delivery (ADR-0009). Tests shorten the waits. */
+/** What every driver does with a failed delivery (ADR-0010). Tests shorten the waits. */
 export interface RetryPolicy {
   /** The wait after each failed delivery; one more failure than waits is a dead letter. */
   waitsMs: readonly number[];

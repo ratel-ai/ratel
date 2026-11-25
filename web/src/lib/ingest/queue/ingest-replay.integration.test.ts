@@ -14,7 +14,6 @@ import type { Envelope } from "@/lib/ingest/queue/envelope";
 import type { EnvelopeHandler } from "@/lib/ingest/queue/port/envelope-queue";
 import { createEnvelopeHandler } from "@/lib/ingest/queue/process";
 import {
-  acceptOnto,
   type Deployment,
   dumpTables,
   envelopeHandler,
@@ -82,11 +81,11 @@ function runtimeEvent(type: string, over: Record<string, unknown> = {}) {
 async function ingested(): Promise<{ deployment: Deployment; envelopes: Envelope[] }> {
   const deployment = await setupDeployment();
   const envelopes: Envelope[] = [];
-  const accept = acceptOnto({ publish: async (envelope) => void envelopes.push(envelope) });
+  const queue = { publish: async (envelope: Envelope) => void envelopes.push(envelope) };
   await ingestTraces(
     deployment,
     [traces(chatSpan(TRACE_A, "a".repeat(16), 10)), traces(chatSpan(TRACE_B, "b".repeat(16), 20))],
-    accept,
+    queue,
   );
   await ingestLogs(
     deployment,
@@ -113,7 +112,7 @@ async function ingested(): Promise<{ deployment: Deployment; envelopes: Envelope
         ],
       }),
     ],
-    accept,
+    queue,
   );
   await ingestEvents(
     deployment,
@@ -130,7 +129,7 @@ async function ingested(): Promise<{ deployment: Deployment; envelopes: Envelope
         ],
       }),
     ],
-    accept,
+    queue,
   );
   const handler = envelopeHandler(deployment);
   await deliver(handler, envelopes);
@@ -224,11 +223,9 @@ test("REBUILD of a range leaves other traces alone, and makes a trace that began
   const [a, b] = envelopes;
   // The same trace A, one more envelope inside the range.
   const more: Envelope[] = [];
-  await ingestTraces(
-    deployment,
-    [traces(chatSpan(TRACE_A, "c".repeat(16), 30))],
-    acceptOnto({ publish: async (envelope) => void more.push(envelope) }),
-  );
+  await ingestTraces(deployment, [traces(chatSpan(TRACE_A, "c".repeat(16), 30))], {
+    publish: async (envelope) => void more.push(envelope),
+  });
   await deliver(envelopeHandler(deployment), more);
   const before = await stored(deployment);
   await deployment.client.exec(`update otel_spans set name = 'kept' where trace_id = '${TRACE_B}'`);

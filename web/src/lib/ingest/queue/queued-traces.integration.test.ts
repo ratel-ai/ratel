@@ -4,23 +4,21 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
-import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
-import { listDeadLetters } from "@/lib/ingest/queue/postgres/store";
 import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
 import {
-  acceptOnto,
   type Deployment,
   drain,
   dumpTables,
   envelopeHandler,
+  envelopeOf,
   type IngestBody,
-  ingestRequest,
   ingestTraces,
+  memoryStore,
   ORGANIZATION_ID,
   PROJECT_ID,
   SECRET_KEY_ID,
   setupDeployment,
-  spoolQueue,
+  testQueue,
   tracesRouteDeps,
 } from "./test-support";
 
@@ -32,15 +30,16 @@ const FIXTURES = readdirSync(REAL, { withFileTypes: true })
 async function queued(
   bodies: readonly IngestBody[],
   over: Parameters<typeof envelopeHandler>[1] = {},
+  store = memoryStore(),
 ): Promise<Deployment> {
   const deployment = await setupDeployment();
-  const queue = spoolQueue(deployment);
-  await ingestTraces(deployment, bodies, acceptOnto(queue));
+  const queue = testQueue(store);
+  await ingestTraces(deployment, bodies, queue);
   await drain(queue, envelopeHandler(deployment, over), bodies.length);
   return deployment;
 }
 
-test("the real fixtures: a queued deployment stores the same rows as a direct one", async () => {
+test("the real fixtures: an envelope stores the same rows as a direct send", async () => {
   assert.ok(FIXTURES.length >= 18);
   for (const name of FIXTURES) {
     const bodies = loadFixture(name);
@@ -55,33 +54,14 @@ test("the real fixtures: a queued deployment stores the same rows as a direct on
   }
 });
 
-test("a gzip body is stored as it came, and the queued answers hold no counts", async () => {
+test("a gzip body is kept as it came", async () => {
   const [body] = loadFixture("vercel-ai");
   const gzipped = {
     ...body,
     bytes: new Uint8Array(gzipSync(body.bytes)),
     contentEncoding: "x-gzip",
   };
-  const deployment = await setupDeployment();
-  const queue = spoolQueue(deployment);
-  const response = await handleTracesRequest(
-    ingestRequest("traces", gzipped),
-    tracesRouteDeps(deployment, { accept: acceptOnto(queue) }),
-  );
-  assert.equal(response.status, 202);
-  const protobuf = body.contentType === "application/x-protobuf";
-  assert.equal(response.headers.get("content-type"), body.contentType);
-  assert.equal(await response.text(), protobuf ? "" : "{}");
-  assert.deepEqual(
-    [...response.headers.keys()].filter((name) => name.startsWith("x-ratel")),
-    [],
-  );
-  const { rows } = await deployment.client.query<{ n: number }>(
-    "select count(*)::int as n from events",
-  );
-  assert.equal(rows[0].n, 0, "nothing is stored in the request");
-
-  await drain(queue, envelopeHandler(deployment), 1);
+  const deployment = await queued([gzipped]);
   const raw = await deployment.client.query<{ id: string; body: Uint8Array }>(
     "select id, body from otlp_raw_exports",
   );
@@ -93,8 +73,8 @@ test("a storage failure is retried by the queue, and the client never sees it", 
   const [body] = loadFixture("vercel-ai");
   let failures = 2;
   const deployment = await setupDeployment();
-  const queue = spoolQueue(deployment);
-  await ingestTraces(deployment, [body], acceptOnto(queue));
+  const queue = testQueue();
+  await ingestTraces(deployment, [body], queue);
 
   const real = tracesRouteDeps(deployment).insertOtelSpans;
   const settled = await drain(
@@ -128,8 +108,8 @@ test("a store that is down is an outage: no delivery counts and nothing is dead-
   const [body] = loadFixture("vercel-ai");
   let failures = 8;
   const deployment = await setupDeployment();
-  const queue = spoolQueue(deployment);
-  await ingestTraces(deployment, [body], acceptOnto(queue));
+  const queue = testQueue();
+  await ingestTraces(deployment, [body], queue);
   const real = tracesRouteDeps(deployment).insertEventsWithMetrics;
   const settled = await drain(
     queue,
@@ -168,13 +148,14 @@ test("a body that can never be stored is a dead letter whose reason quotes nothi
       contentEncoding: "gzip",
     },
   ];
-  const deployment = await queued(bodies);
-  const letters = await listDeadLetters(deployment.db);
+  const store = memoryStore();
+  const deployment = await queued(bodies, {}, store);
+  const letters = store.deadLetters;
   assert.deepEqual(letters.map(({ reason }) => reason).sort(), [
     "body does not decode as OTLP traces",
     "body does not decode as OTLP traces",
     "body does not decode as OTLP traces",
-    "body has 5001 spans (max 5000)",
+    "body has more than 5000 spans",
     "body is not valid gzip",
     "body is over 16000000 bytes decompressed",
   ]);
@@ -185,13 +166,9 @@ test("a body that can never be stored is a dead letter whose reason quotes nothi
 test("a project that does not exist is a dead letter", async () => {
   const deployment = await setupDeployment();
   const handler = envelopeHandler(deployment);
-  const queue = {
-    publish: async (envelope: Parameters<typeof handler>[0]) => {
-      const result = await handler({ ...envelope, projectId: ORGANIZATION_ID }, { attempt: 1 });
-      assert.deepEqual(result, { outcome: "dead-letter", reason: "project does not exist" });
-    },
-  };
-  await ingestTraces(deployment, [loadFixture("vercel-ai")[0]], acceptOnto(queue));
+  const envelope = envelopeOf("traces", loadFixture("vercel-ai")[0]);
+  const result = await handler({ ...envelope, projectId: ORGANIZATION_ID }, { attempt: 1 });
+  assert.deepEqual(result, { outcome: "dead-letter", reason: "project does not exist" });
   await deployment.client.close();
 });
 
@@ -200,8 +177,8 @@ test("refused and dropped traces are final: acknowledged, logged, not stored", a
   const spans = decodeOtlp(body.contentType, body.bytes);
   for (const outcome of ["refused", "dropped"] as const) {
     const deployment = await setupDeployment();
-    const queue = spoolQueue(deployment);
-    await ingestTraces(deployment, [body], acceptOnto(queue));
+    const queue = testQueue();
+    await ingestTraces(deployment, [body], queue);
     const [settled] = await drain(
       queue,
       envelopeHandler(deployment, {
@@ -226,11 +203,10 @@ test("refused and dropped traces are final: acknowledged, logged, not stored", a
 test("the last use of a key is when accept took the request, and never moves back", async () => {
   const [body] = loadFixture("vercel-ai");
   const deployment = await setupDeployment();
-  const queue = spoolQueue(deployment);
+  const queue = testQueue();
   const tracked: string[] = [];
-  const at = (iso: string) => ({ now: () => new Date(iso), accept: acceptOnto(queue) });
   for (const iso of ["2026-11-20T10:00:00Z", "2026-11-19T10:00:00Z"]) {
-    await handleTracesRequest(ingestRequest("traces", body), tracesRouteDeps(deployment, at(iso)));
+    await queue.publish(envelopeOf("traces", body, Date.parse(iso)));
   }
   await drain(
     queue,
@@ -282,14 +258,8 @@ test("a span without a usable time takes the time of accept in every table", asy
     ),
   };
   const deployment = await setupDeployment();
-  const queue = spoolQueue(deployment);
-  await handleTracesRequest(
-    ingestRequest("traces", body),
-    tracesRouteDeps(deployment, {
-      now: () => new Date("2026-11-20T10:00:00Z"),
-      accept: acceptOnto(queue),
-    }),
-  );
+  const queue = testQueue();
+  await queue.publish(envelopeOf("traces", body, Date.parse("2026-11-20T10:00:00Z")));
   await drain(queue, envelopeHandler(deployment), 1);
   const { rows } = await deployment.client.query<{ at: Date }>(`
     select occurred_at as at from events where project_id = '${PROJECT_ID}'

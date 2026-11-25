@@ -7,9 +7,14 @@ import { type Config, getConfig } from "@/config";
  * - `api`: serves requests and only queues jobs. Customers' requests never wait
  *   behind analysis.
  * - `worker`: runs the job loop and the scheduled sweeps; serves no customer
- *   traffic (no load balancer in front of it).
+ *   traffic (no load balancer in front of it). With the ingest queue on it also
+ *   persists queued ingest batches (its ingest lane).
+ * - `ingest`: serves the ingest routes and only queues, like `api`, but never
+ *   migrates: a deployment routes `/api/v1/traces`, `/logs` and `/events` to it.
+ * - `persist`: runs only the ingest lane (RTL-314): it persists queued batches
+ *   and nothing else, so Cloud can scale it on the queue's depth.
  */
-export type AppRole = "all" | "api" | "worker";
+export type AppRole = "all" | "api" | "worker" | "ingest" | "persist";
 
 /** `app.role` (APP_ROLE). */
 export function appRole(config: Pick<Config, "app"> = getConfig()): AppRole {
@@ -32,10 +37,23 @@ export function runsJobsAfterResponse(config: Pick<Config, "app"> = getConfig())
   return appRole(config) === "all";
 }
 
+/** Whether this process persists queued ingest batches right after a request's response. */
+export function persistsIngestAfterResponse(config: Pick<Config, "app"> = getConfig()): boolean {
+  return appRole(config) === "all";
+}
+
+/** Whether this process runs the ingest lane: a loop persisting queued ingest batches. */
+export function runsIngestLane(config: Pick<Config, "app"> = getConfig()): boolean {
+  const role = appRole(config);
+  return role === "worker" || role === "persist";
+}
+
 /**
- * Whether this process reads the ingest queue (ADR-0009): the one that runs background work, when
- * a queue is configured. An API-only process publishes and never consumes.
+ * Whether this process stores the telemetry that a gateway put on Kafka (ADR-0010): the one that runs
+ * background work, with `INGEST_QUEUE=kafka`. The ingest lane's own processes (`ingest`, `persist`) do
+ * not.
  */
-export function consumesIngestQueue(config: Pick<Config, "app" | "ingest"> = getConfig()): boolean {
-  return config.ingest.queue !== "direct" && appRole(config) !== "api";
+export function consumesKafkaIngest(config: Pick<Config, "app" | "ingest"> = getConfig()): boolean {
+  const role = appRole(config);
+  return config.ingest.queue === "kafka" && (role === "worker" || role === "all");
 }

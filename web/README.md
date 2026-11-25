@@ -37,6 +37,7 @@ pnpm --filter @ratel/platform lint         # biome
 pnpm --filter @ratel/platform test         # node:test; integration tests run on an embedded Postgres (pglite)
 pnpm --filter @ratel/platform seed         # Site Copilot OTLP + catalog into the local database
 pnpm --filter @ratel/platform seed:quality # Quality: its searches, answer key, runs and rewrites (needs the seed above)
+pnpm --filter @ratel/platform load-test:ingest -- --mode queued  # ADR-0009's load test, local database only
 pnpm check:boundary && pnpm check:layers   # from the repository root: the structural rules
 ```
 
@@ -78,7 +79,9 @@ takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides,
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
 `APP_ROLE=worker` makes it run them, which is how `docker-compose.yml` runs `web` and `worker`
-([`lib/jobs/README.md`](src/lib/jobs/README.md)).
+([`lib/jobs/README.md`](src/lib/jobs/README.md)). With the experimental ingest queue
+(`EXPERIMENTAL_INGEST_QUEUE=1`, [ADR-0009](../docs/adr/0009-queued-ingest.md)) two more roles
+exist: `ingest` only queues ingest batches and never migrates, `persist` only persists them.
 
 `BASE_URL` is where the console's SDK snippets point: this deployment's origin. The console adds
 `/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in

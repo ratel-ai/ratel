@@ -59,13 +59,13 @@ test("env only", () => {
 
 test("INGEST_QUEUE names a known queue, from the environment or the file", () => {
   const queue = (value: string) => resolveConfig({ env: { INGEST_QUEUE: value } }).ingest.queue;
-  assert.equal(queue(" Postgres "), "postgres");
-  assert.equal(queue("kafka"), "kafka");
+  assert.equal(queue(" Kafka "), "kafka");
   assert.equal(queue("  "), "direct");
-  const configPath = configFile("ingest-queue.json", { ingest: { queue: "postgres" } });
-  assert.equal(resolveConfig({ configPath }).ingest.queue, "postgres");
-  const error = configErrorOf(() => queue("memory"));
-  assert.match(error.message, /INGEST_QUEUE/);
+  const configPath = configFile("ingest-queue.json", { ingest: { queue: "kafka" } });
+  assert.equal(resolveConfig({ configPath }).ingest.queue, "kafka");
+  for (const value of ["memory", "postgres"]) {
+    assert.match(configErrorOf(() => queue(value)).message, /INGEST_QUEUE/);
+  }
 });
 
 test("file only", () => {

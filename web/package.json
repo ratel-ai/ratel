@@ -22,6 +22,7 @@
     "seed:quality": "tsx scripts/seed-site-copilot-quality.mts",
     "seed:task-loop": "tsx scripts/seed-task-loop.mts",
     "bedrock:smoke": "ANTHROPIC_BACKEND=bedrock tsx scripts/bedrock-smoke.mts",
+    "load-test:ingest": "tsx scripts/load-test-ingest-queue.mts",
     "otlp-raw:keys": "tsx scripts/otlp-raw-keys.ts",
     "otlp-raw:reprocess": "tsx scripts/reprocess-otlp-raw.ts",
     "backfill:costs": "tsx scripts/backfill-costs.ts",

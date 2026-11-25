@@ -47,7 +47,7 @@ export async function agentHealthToolRows(
   deps: AgentHealthBridgeDeps,
   /** The export's span dimensions, derived one time by ingest. Absent, a tool row names no MCP server. */
   dimensions?: SpanDimensionsById,
-  /** The clock of a queued export (ADR-0009). Absent, now. */
+  /** The clock of a queued export (ADR-0010). Absent, now. */
   receivedAt?: Date,
 ): Promise<ParsedTraceEvent[]> {
   if (!deps.traceTurns) return [];

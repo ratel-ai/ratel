@@ -1,5 +1,6 @@
 import type { IngestResult } from "@/lib/contracts/ingest-queue";
-import { inflateBody, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/body";
+import type { OtlpTransport } from "@/lib/ingest/otlp/http";
+import { inflateBody, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/route-handler";
 import type { Envelope, EnvelopeSignal } from "@/lib/ingest/queue/envelope";
 import type { EnvelopeHandler } from "@/lib/ingest/queue/port/envelope-queue";
 import { storeFailure } from "@/lib/ingest/queue/port/store-failure";
@@ -28,7 +29,7 @@ export interface EnvelopeHandlerDeps extends Record<EnvelopeSignal, ProcessSigna
   findProject: (projectId: string) => Promise<{ organization: Organization | null } | null>;
 }
 
-/** The consumer's handler: process (ADR-0009) for one envelope. */
+/** The consumer's handler: process (ADR-0010) for one envelope. */
 export function createEnvelopeHandler(deps: EnvelopeHandlerDeps): EnvelopeHandler {
   return async (envelope) => {
     try {
@@ -81,22 +82,30 @@ export function reportProcessFailure(
   }
 }
 
+type DecodedExport = { ok: true } | { ok: false; reason: "malformed" | "oversized" };
+
+export function transportOf({ contentType }: Envelope): OtlpTransport {
+  return contentType === "application/json" ? "json" : "protobuf";
+}
+
 /**
- * The items of an OTLP envelope. A body that does not inflate or decode, or holds too many items,
- * can never pass. The reasons quote nothing of the body: a decoder's own message does.
+ * An OTLP envelope through the decode of the routes (`decodeTraceExport`, `decodeLogExport`). A body
+ * that does not inflate or decode, or holds too many items, can never pass. The reasons quote nothing
+ * of the body: a decoder's own message does.
  */
-export function readOtlpItems<Item>(
+export function readOtlpExport<Decoded extends DecodedExport>(
   envelope: Envelope,
   {
     decode,
-    maxItems,
-    itemName,
+    limit,
   }: {
-    decode: (contentType: string, bytes: Uint8Array) => Item[];
-    maxItems: number;
-    itemName: string;
+    decode: (transport: OtlpTransport, bytes: Uint8Array) => Decoded;
+    /** What an oversized export has too many of. */
+    limit: string;
   },
-): { ok: true; items: Item[]; bytes: Uint8Array } | { ok: false; processed: Processed } {
+):
+  | { ok: true; decoded: Extract<Decoded, { ok: true }>; bytes: Uint8Array }
+  | { ok: false; processed: Processed } {
   const inflated = inflateBody(envelope.body, envelope.contentEncoding);
   if (!inflated.ok) {
     return refuse(
@@ -105,16 +114,20 @@ export function readOtlpItems<Item>(
         : `body is not valid ${envelope.contentEncoding}`,
     );
   }
-  let items: Item[];
+  let decoded: Decoded;
   try {
-    items = decode(envelope.contentType, inflated.bytes);
+    decoded = decode(transportOf(envelope), inflated.bytes);
   } catch {
     return refuse(`body does not decode as OTLP ${envelope.signal}`);
   }
-  if (items.length > maxItems) {
-    return refuse(`body has ${items.length} ${itemName} (max ${maxItems})`);
+  if (!decoded.ok) {
+    return refuse(
+      decoded.reason === "oversized"
+        ? `body has more than ${limit}`
+        : `body does not decode as OTLP ${envelope.signal}`,
+    );
   }
-  return { ok: true, items, bytes: inflated.bytes };
+  return { ok: true, decoded: decoded as Extract<Decoded, { ok: true }>, bytes: inflated.bytes };
 }
 
 function refuse(reason: string): { ok: false; processed: Processed } {

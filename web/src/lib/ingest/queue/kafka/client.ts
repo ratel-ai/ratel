@@ -30,7 +30,7 @@ export async function createKafkaClient({
     brokers,
     connectionTimeout: 5_000,
     requestTimeout: 8_000,
-    // A publish answers within 10 s (ADR-0009), so the client gives up before that.
+    // A publish answers within 10 s (ADR-0010), so the client gives up before that.
     retry: { initialRetryTime: 200, maxRetryTime: 2_000, retries: 4 },
     logLevel: logLevel.WARN,
     logCreator: () => (entry) => {

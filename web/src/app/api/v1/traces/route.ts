@@ -1,4 +1,5 @@
 import { composition } from "@/lib/composition/ports";
+import { ingestQueueRouteDeps } from "@/lib/composition/registry";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import {
   findStoredOtelSpans,
@@ -10,7 +11,6 @@ import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
-import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
@@ -85,7 +85,7 @@ async function handlePost(req: Request) {
     modelPricing: {
       loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
     },
-    // With INGEST_QUEUE set, the request is only accepted (ADR-0009). Undefined in direct mode.
-    accept: await ingestAccept(),
+    // Queue the batch for a worker when EXPERIMENTAL_INGEST_QUEUE=1 (RTL-314).
+    ingestQueue: ingestQueueRouteDeps(),
   });
 }

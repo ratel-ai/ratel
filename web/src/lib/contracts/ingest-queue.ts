@@ -1,5 +1,5 @@
 /**
- * The queue between accept and process (ADR-0009). The message type is the caller's: the core's
+ * The queue that a gateway writes and process reads (ADR-0010). The message type is the caller's: the core's
  * is the envelope (`lib/ingest/queue`). A driver has no offset, partition or topic here.
  */
 export interface IngestQueue<Message> {

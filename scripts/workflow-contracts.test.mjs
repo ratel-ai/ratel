@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 const ciWorkflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const imageWorkflow = readFileSync(new URL("../.github/workflows/image.yml", import.meta.url), "utf8");
 const prTitleWorkflow = readFileSync(
   new URL("../.github/workflows/pr-title.yml", import.meta.url),
   "utf8",
@@ -39,21 +42,119 @@ test("platform-compose scans the image it built, pinned by digest", () => {
   assert.match(body, /aquasec\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
 });
 
+// The demo image exports for 45 s: in the same build it does that while the Next build runs.
+test("platform-compose builds the demo image with the app images", () => {
+  const body = jobBody(ciWorkflow, "platform-compose");
+  const build = body.indexOf("docker compose --profile demo build");
+  assert.notEqual(build, -1, "one build for web, worker and demo");
+  assert.ok(build < body.indexOf("docker compose up "), "build before the stack starts");
+});
+
+// A shard index without a matching total would skip or repeat test files.
+test("platform-test runs every shard of one total", () => {
+  const body = jobBody(ciWorkflow, "platform-test");
+  const shards = body.match(/shard: \[([\d, ]+)\]/)[1].split(",").map(Number);
+  assert.deepEqual(shards, [1, 2, 3, 4, 5, 6]);
+  assert.match(body, /name: platform-test \(\$\{\{ matrix\.shard \}\}\/6\)/);
+  assert.match(body, /TEST_SHARD: \$\{\{ matrix\.shard \}\}\/6\n/);
+});
+
 test("platform-compose builds from source through the override", () => {
   assert.match(jobBody(ciWorkflow, "platform-compose"), /COMPOSE_FILE: docker-compose\.yml:docker-compose\.build\.yml/);
 });
 
 test("image.yml publishes the app image and the demo image with the same tags", () => {
-  const image = readFileSync(new URL("../.github/workflows/image.yml", import.meta.url), "utf8");
-  assert.match(image, /\{ target: oss, image: ratelai\/ratel, /);
-  assert.match(image, /\{ target: demo, image: ratelai\/ratel-demo, /);
+  const merge = jobBody(imageWorkflow, "merge");
+  assert.match(merge, /\{ target: oss, image: ratelai\/ratel \}/);
+  assert.match(merge, /\{ target: demo, image: ratelai\/ratel-demo \}/);
+  for (const tag of [
+    "type=semver,pattern={{version}},value=${{ inputs.version }}",
+    "type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}",
+    "type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}",
+    "type=edge,branch=main,enable=${{ inputs.version == '' && inputs.tag == '' }}",
+  ]) {
+    assert.ok(imageWorkflow.includes(tag), tag);
+  }
 });
+
+// The arm64 Next build takes 11 to 19 minutes under QEMU and about 1.5 on a native runner.
+test("image.yml builds each platform of each image on a native runner", () => {
+  const build = jobBody(imageWorkflow, "build");
+  assert.match(build, /\{ platform: amd64, runner: ubuntu-24\.04 \}/);
+  assert.match(build, /\{ platform: arm64, runner: ubuntu-24\.04-arm \}/);
+  assert.match(build, /target: \[oss, demo\]/);
+  assert.match(build, /runs-on: \$\{\{ matrix\.arch\.runner \}\}/);
+  assert.match(build, /platforms: linux\/\$\{\{ matrix\.arch\.platform \}\}/);
+  assert.doesNotMatch(imageWorkflow, /setup-qemu-action|cache-(from|to):/);
+});
+
+// A tag must never name one platform only: the builds push by digest, and only `merge` tags.
+test("image.yml tags an image only after both platforms are pushed", () => {
+  assert.match(jobBody(imageWorkflow, "build"), /outputs: .*push-by-digest=true/);
+  assert.match(jobBody(imageWorkflow, "merge"), /needs: build\n/);
+  assert.match(jobBody(imageWorkflow, "merge"), /imagetools create/);
+  assert.match(jobBody(imageWorkflow, "smoke"), /needs: merge\n/);
+});
+
+test("image.yml keeps labels, annotations, provenance and SBOM on each platform", () => {
+  const build = jobBody(imageWorkflow, "build");
+  assert.match(build, /labels: \$\{\{ steps\.meta\.outputs\.labels \}\}/);
+  assert.match(build, /annotations: \$\{\{ steps\.meta\.outputs\.annotations \}\}/);
+  assert.match(build, /provenance: mode=max\n/);
+  assert.match(build, /sbom: true\n/);
+});
+
+// release-please.yml calls image.yml on the same push event, so only `inputs` tells that build apart.
+test("a release merge cancels the older edge build, and nothing else does", () => {
+  const push = { event_name: "push", ref: "refs/heads/main", run_id: 1 };
+  const release = { ...push, event: { head_commit: { message: "chore(main): release 0.5.0 (#460)\n\nbody" } } };
+  const feature = { ...push, event: { head_commit: { message: "feat: undo chore(main): release 0.5.0 (#461)" } } };
+  const tag = { ...release, ref: "refs/tags/v0.5.0" };
+  const dispatch = { ...push, event_name: "workflow_dispatch", event: {} };
+  for (const [name, github, inputs, expected] of [
+    ["release merge", release, {}, { group: "image-refs/heads/main", cancel: true }],
+    ["ordinary push", feature, {}, { group: "image-refs/heads/main", cancel: false }],
+    ["release build", release, { version: "0.5.0" }, { group: "image-0.5.0", cancel: false }],
+    ["tag push", tag, {}, { group: "image-refs/tags/v0.5.0", cancel: false }],
+    ["dispatch", dispatch, { tag: "0.0.0-test" }, { group: "image-0.0.0-test", cancel: false }],
+  ]) {
+    assert.deepEqual(concurrency("image.yml", github, inputs), expected, name);
+  }
+});
+
+test("no workflow cancels release-please", () => {
+  const github = { event_name: "push", ref: "refs/heads/main", event: { head_commit: { message: "chore(main): release 0.5.0" } } };
+  assert.deepEqual(concurrency("release-please.yml", github, {}), { group: "release-please", cancel: false });
+});
+// The merge step is the one place where the tags are made: run it against a stub `docker`.
+for (const [name, digests, ok] of [
+  ["merges both platforms under every tag", ["a", "b"], true],
+  ["refuses to tag one platform only", ["a"], false],
+]) {
+  test(`image.yml ${name}`, () => {
+    const dir = mkdtempSync(join(tmpdir(), "merge-"));
+    const hex = digests.map((d) => d.repeat(64));
+    for (const d of hex) writeFileSync(join(dir, d), "");
+    const script = runBlock(jobBody(imageWorkflow, "merge"), "Create the manifest list");
+    const result = spawnSync("bash", ["-eo", "pipefail", "-c", `docker() { echo "docker $*"; }\n${script}`], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, IMAGE: "docker.io/o/i", TAGS: "docker.io/o/i:1.2.3\ndocker.io/o/i:latest\n" },
+    });
+    rmSync(dir, { recursive: true });
+    assert.equal(result.status === 0, ok, result.stderr);
+    if (!ok) return assert.doesNotMatch(result.stdout, /create/);
+    assert.equal(
+      result.stdout.trim().split("\n")[0],
+      `docker buildx imagetools create -t docker.io/o/i:1.2.3 -t docker.io/o/i:latest ${hex.map((d) => `docker.io/o/i@sha256:${d}`).join(" ")}`,
+    );
+  });
+}
 
 // Next accepts only letters, digits, - and _ in a deployment id: `0.3.0` fails the build.
 test("image.yml makes a valid Next deployment id from any image version", () => {
-  const image = readFileSync(new URL("../.github/workflows/image.yml", import.meta.url), "utf8");
-  assert.match(image, /build-args: NEXT_DEPLOYMENT_ID=\$\{\{ steps\.deployment\.outputs\.id \}\}/);
-  const script = image.match(/- id: deployment\n(?: {8}.*\n)*? {8}run: (.*)\n/);
+  assert.match(imageWorkflow, /build-args: NEXT_DEPLOYMENT_ID=\$\{\{ steps\.deployment\.outputs\.id \}\}/);
+  const script = imageWorkflow.match(/- id: deployment\n(?: {8}.*\n)*? {8}run: (.*)\n/);
   assert.ok(script, "image.yml must have a deployment step");
   for (const [version, id] of [["0.3.1", "0-3-1"], ["1.0.0-rc.1", "1-0-0-rc-1"], ["edge", "edge"]]) {
     const result = spawnSync("bash", ["-c", script[1].replace('>> "$GITHUB_OUTPUT"', "")], {
@@ -130,6 +231,28 @@ test("pr-title runs no pull-request code and needs no permission", () => {
   assert.match(jobBody(prTitleWorkflow, "pr-title"), /name: pr-title\n/);
 });
 
+// Evaluates the workflow-level concurrency. The expressions it accepts are also valid JavaScript,
+// once a missing property reads as empty.
+function concurrency(file, github, inputs) {
+  const workflow = readFileSync(new URL(`../.github/workflows/${file}`, import.meta.url), "utf8");
+  const block = workflow.match(/^concurrency:\n((?: {2}.*\n)+)/m);
+  assert.ok(block, `${file} must set concurrency`);
+  const startsWith = (text, prefix) => (text ?? "").toLowerCase().startsWith(prefix.toLowerCase());
+  const evaluate = (expression) =>
+    new Function("github", "inputs", "startsWith", `return ${expression.replace(/(\w)\.(?=[a-z])/g, "$1?.")}`)(
+      github,
+      inputs,
+      startsWith,
+    );
+  const value = (key) => {
+    const raw = block[1].match(new RegExp(`^ {2}${key}: (.*)`, "m"));
+    assert.ok(raw, `${file} must set ${key}`);
+    assert.ok(raw[1].startsWith('"') || !raw[1].includes(": "), `${key}: YAML rejects ": " in a plain value`);
+    return raw[1].replace(/^"|"$/g, "").replace(/\$\{\{(.*?)\}\}/g, (_, expression) => String(evaluate(expression.trim())));
+  };
+  return { group: value("group"), cancel: value("cancel-in-progress") === "true" };
+}
+
 function prTitleStatus(title) {
   const { status } = spawnSync("bash", ["-eo", "pipefail", "-c", prTitleScript()], {
     env: { PATH: process.env.PATH, PR_TITLE: title },
@@ -141,6 +264,12 @@ function prTitleScript() {
   const run = prTitleWorkflow.match(/^ +run: \|\n((?: {10}.*\n|\n)+)/m);
   assert.ok(run, "pr-title must have one run script");
   return run[1].replace(/^ {10}/gm, "");
+}
+
+function runBlock(job, step) {
+  const block = job.match(new RegExp(`- name: ${step}\\n(?:(?! {6}- ).*\\n)*? {8}run: \\|\\n((?: {10}.*\\n|\\n)+)`));
+  assert.ok(block, `missing step: ${step}`);
+  return block[1].replace(/^ {10}/gm, "");
 }
 
 function jobBody(workflow, job) {

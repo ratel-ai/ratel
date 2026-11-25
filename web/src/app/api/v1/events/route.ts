@@ -1,13 +1,9 @@
-import { SECRET_KEY_EVENTS_BUCKET } from "@/lib/ingest/ingest-limits";
-import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
+import { ingestQueueRouteDeps } from "@/lib/composition/registry";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-handler";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
-import {
-  resolveProjectFromBearer,
-  resolveProjectFromBearerUnstamped,
-} from "@/lib/platform/api-key-bearer";
+import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
@@ -23,8 +19,8 @@ import {
 export const runtime = "nodejs";
 
 const runtimeEventsRateLimiter = createTokenBucketRateLimiter({
-  limitPerMinute: SECRET_KEY_EVENTS_BUCKET.perMinute,
-  burst: SECRET_KEY_EVENTS_BUCKET.burst,
+  limitPerMinute: 120,
+  burst: 240,
 });
 
 /**
@@ -36,12 +32,9 @@ const runtimeEventsRateLimiter = createTokenBucketRateLimiter({
 export const POST = withRequestLog(handlePost);
 
 async function handlePost(request: Request): Promise<Response> {
-  // With INGEST_QUEUE set, the request is only accepted (ADR-0009). Undefined in direct mode.
-  const accept = await ingestAccept();
   return handleRuntimeEventsRequest(request, {
     scope: BEARER_ROUTE_SCOPES["POST /api/v1/events"],
-    resolveProjectFromBearer: accept ? resolveProjectFromBearerUnstamped : resolveProjectFromBearer,
-    accept,
+    resolveProjectFromBearer,
     getOrganizationByProjectId,
     insertTraceEvents: (projectId, events, db, options) =>
       insertTraceEvents(projectId, events, db, {
@@ -62,5 +55,7 @@ async function handlePost(request: Request): Promise<Response> {
     scheduleProjectDrain,
     setRequestLogContext,
     trackServerEvent,
+    // Queue the batch for a worker when EXPERIMENTAL_INGEST_QUEUE=1 (RTL-314).
+    ingestQueue: ingestQueueRouteDeps(),
   });
 }

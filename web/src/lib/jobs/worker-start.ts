@@ -1,3 +1,5 @@
+import { workerLanes } from "@/lib/composition/registry";
+import type { WorkerLane } from "@/lib/contracts/registry";
 import { runDrainTick } from "@/lib/jobs/drain";
 import { type DrainObserverDeps, drainTimeoutMs, timedDrain } from "@/lib/jobs/drain-observer";
 import { RUN_IMPORT_JOB } from "@/lib/jobs/kinds";
@@ -16,6 +18,8 @@ export interface BackgroundWorkerDeps {
   drain: WorkerDeps["drain"];
   /** The import lane (RC-40): `run_import` only, so a long import never holds analysis back. */
   drainImports?: WorkerDeps["drainImports"];
+  /** The registrations' lanes (the ingest queue's persist lane, RTL-314). Read once, at start. */
+  lanes?: () => readonly WorkerLane[];
   /** The day's most expensive statements, logged once a day (`reportTopQueries`). */
   reportTopQueries?: () => Promise<void>;
   /** One cron tick (`runDrainTick`): the sweeps and safety nets, plus a drain. */
@@ -29,6 +33,7 @@ export interface BackgroundWorkerDeps {
 const defaultDeps = (): BackgroundWorkerDeps => ({
   drain: () => drainProjectJobs(undefined, undefined, { kinds: { except: [RUN_IMPORT_JOB] } }),
   drainImports: () => drainProjectJobs(undefined, undefined, { kinds: { only: [RUN_IMPORT_JOB] } }),
+  lanes: () => workerLanes(),
   reportTopQueries: () => reportTopQueries(),
   tick: workerTick(),
   startWorker,
@@ -60,13 +65,22 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
  */
 export function startBackgroundWorker(
   deps: BackgroundWorkerDeps = defaultDeps(),
-  options: { beforeExit?: () => Promise<void>; beside?: WorkerHandle } = {},
+  options: {
+    beforeExit?: () => Promise<void>;
+    /** A persist-only process (APP_ROLE=persist): the registrations' lanes and nothing else. */
+    lanesOnly?: boolean;
+    /** Runs next to the loop and is stopped with it (the Kafka consumer). */
+    beside?: WorkerHandle;
+  } = {},
 ): WorkerHandle {
   const globals = globalThis as Record<symbol, WorkerHandle | undefined>;
   const existing = globals[GLOBAL_KEY];
   if (existing) return existing;
   const drainImports = deps.drainImports;
+  const lanesOnly = options.lanesOnly === true;
   const handle = deps.startWorker({
+    ...(lanesOnly ? { analysis: false } : {}),
+    extraLanes: deps.lanes?.() ?? [],
     drain: () => deps.drain(),
     ...(drainImports ? { drainImports: () => drainImports() } : {}),
     sweep: async () => {
@@ -78,7 +92,8 @@ export function startBackgroundWorker(
   });
   globals[GLOBAL_KEY] = handle;
   const topQueries = deps.reportTopQueries;
-  const report = topQueries ? setInterval(() => void topQueries(), TOP_QUERIES_EVERY_MS) : null;
+  const report =
+    topQueries && !lanesOnly ? setInterval(() => void topQueries(), TOP_QUERIES_EVERY_MS) : null;
   report?.unref();
   const stopBeside = async () => {
     try {

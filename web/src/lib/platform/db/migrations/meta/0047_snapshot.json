@@ -1,6 +1,6 @@
 {
-  "id": "84ade8a1-406d-46d6-b20a-770bef480e45",
-  "prevId": "b4861c37-b1f1-4fe2-80f4-877e1b1df633",
+  "id": "792c8c6a-0969-493c-9dea-056eb75ccc22",
+  "prevId": "3b843511-b5dc-415b-b0fd-192d66b0e61a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2107,32 +2107,16 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.ingest_spool": {
-      "name": "ingest_spool",
+    "public.ingest_batches": {
+      "name": "ingest_batches",
       "schema": "",
       "columns": {
-        "seq": {
-          "name": "seq",
-          "type": "bigint",
+        "id": {
+          "name": "id",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "ingest_spool_seq_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
-        },
-        "message_id": {
-          "name": "message_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
+          "default": "gen_random_uuid()"
         },
         "project_id": {
           "name": "project_id",
@@ -2140,32 +2124,63 @@
           "primaryKey": false,
           "notNull": true
         },
-        "frame": {
-          "name": "frame",
+        "signal": {
+          "name": "signal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type": {
+          "name": "content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_encoding": {
+          "name": "content_encoding",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body": {
+          "name": "body",
           "type": "bytea",
           "primaryKey": false,
           "notNull": true
         },
-        "enqueued_at": {
-          "name": "enqueued_at",
+        "body_bytes": {
+          "name": "body_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "context": {
+          "name": "context",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'queued'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "received_at": {
+          "name": "received_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deliveries": {
-          "name": "deliveries",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "outages": {
-          "name": "outages",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "available_at": {
           "name": "available_at",
@@ -2174,46 +2189,34 @@
           "notNull": true,
           "default": "now()"
         },
-        "claim_token": {
-          "name": "claim_token",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "claimed_until": {
-          "name": "claimed_until",
+        "started_at": {
+          "name": "started_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
-        "reason": {
-          "name": "reason",
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "first_failed_at": {
-          "name": "first_failed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_failed_at": {
-          "name": "last_failed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dead_at": {
-          "name": "dead_at",
-          "type": "timestamp with time zone",
+        "result": {
+          "name": "result",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "ingest_spool_queued_idx": {
-          "name": "ingest_spool_queued_idx",
+        "ingest_batches_queued_idx": {
+          "name": "ingest_batches_queued_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -2222,58 +2225,20 @@
               "nulls": "last"
             },
             {
-              "expression": "seq",
+              "expression": "received_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"ingest_spool\".\"dead_at\" is null",
+          "where": "\"ingest_batches\".\"status\" = 'queued'",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "ingest_spool_claimed_idx": {
-          "name": "ingest_spool_claimed_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"ingest_spool\".\"claimed_until\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ingest_spool_dead_idx": {
-          "name": "ingest_spool_dead_idx",
-          "columns": [
-            {
-              "expression": "dead_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"ingest_spool\".\"dead_at\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ingest_spool_dead_project_idx": {
-          "name": "ingest_spool_dead_project_idx",
+        "ingest_batches_running_idx": {
+          "name": "ingest_batches_running_idx",
           "columns": [
             {
               "expression": "project_id",
@@ -2282,23 +2247,45 @@
               "nulls": "last"
             },
             {
-              "expression": "dead_at",
+              "expression": "started_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"ingest_spool\".\"dead_at\" is not null",
+          "where": "\"ingest_batches\".\"status\" = 'running'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ingest_batches_finished_idx": {
+          "name": "ingest_batches_finished_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "finished_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"ingest_batches\".\"status\" in ('done', 'failed')",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
       "foreignKeys": {
-        "ingest_spool_project_id_projects_id_fk": {
-          "name": "ingest_spool_project_id_projects_id_fk",
-          "tableFrom": "ingest_spool",
+        "ingest_batches_project_id_projects_id_fk": {
+          "name": "ingest_batches_project_id_projects_id_fk",
+          "tableFrom": "ingest_batches",
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
@@ -2313,7 +2300,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "ingest_batches_signal_check": {
+          "name": "ingest_batches_signal_check",
+          "value": "\"ingest_batches\".\"signal\" in ('traces', 'logs', 'events')"
+        },
+        "ingest_batches_status_check": {
+          "name": "ingest_batches_status_check",
+          "value": "\"ingest_batches\".\"status\" in ('queued', 'running', 'done', 'failed')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.runtime_catalog_entries": {

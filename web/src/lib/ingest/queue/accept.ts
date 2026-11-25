@@ -1,84 +1,81 @@
-import { randomUUID } from "node:crypto";
-import { ENVELOPE_VERSION, type Envelope } from "@/lib/ingest/queue/envelope";
-import type { EnvelopeQueue } from "@/lib/ingest/queue/port/envelope-queue";
-import { errorReason } from "@/lib/ingest/queue/port/settle";
-import type { ApiKeyPolicy } from "@/lib/platform/api-keys/policy";
-import { getLogger } from "@/lib/platform/logger";
+import type { LogError } from "@/lib/platform/logger";
+import type { NewIngestBatch } from "./queries";
+import type { IngestBatchSignal } from "./schema";
 
-const logger = getLogger("ingest:accept");
-
-/** A publish that does not confirm in this time is a failure (ADR-0009). */
-export const PUBLISH_TIMEOUT_MS = 10_000;
-
-/** What a route needs to accept a request onto the queue. Absent, the route runs in direct mode. */
-export interface AcceptDeps {
-  queue: Pick<EnvelopeQueue, "publish">;
-  /** The project's organization id, from its row; null when the project is gone. */
-  findOrganizationId: (projectId: string) => Promise<string | null>;
-  publishTimeoutMs?: number;
+/**
+ * The request half of the ingest queue (RTL-314): store the accepted body durably and kick a
+ * drain. The route has already authenticated, checked the plan cap and the body's size; nothing
+ * here decodes.
+ */
+export interface IngestQueueAcceptDeps {
+  /** `EXPERIMENTAL_INGEST_QUEUE`, read per request. */
+  enabled: () => boolean;
+  enqueue: (batch: NewIngestBatch) => Promise<{ id: string }>;
+  /** Persist soon: after the response on an all-in-one process, nothing where a worker does. */
+  scheduleDrain: () => void;
 }
 
-export interface AcceptedRequest
-  extends Pick<
-    Envelope,
-    | "projectId"
-    | "organizationId"
-    | "keyId"
-    | "signal"
-    | "contentType"
-    | "contentEncoding"
-    | "receivedAt"
-    | "body"
-  > {
-  policy: Pick<ApiKeyPolicy, "appendOnlyIngest" | "sharedKeyLimits">;
+export interface OtlpBatchInput {
+  projectId: string;
+  signal: Extract<IngestBatchSignal, "traces" | "logs">;
+  transport: "json" | "protobuf";
+  /** The body as it arrived, before any inflate. */
+  received: Uint8Array;
+  contentEncoding: string | null;
+  appendOnly: boolean;
 }
 
-/** Publishes one accepted request. False when the queue did not confirm it. */
-export async function publishRequest(
-  { policy, ...request }: AcceptedRequest,
-  { queue, publishTimeoutMs = PUBLISH_TIMEOUT_MS }: AcceptDeps,
-): Promise<boolean> {
-  const envelope: Envelope = {
-    version: ENVELOPE_VERSION,
-    id: randomUUID(),
-    ...request,
-    keyPolicy: {
-      appendOnlyIngest: policy.appendOnlyIngest,
-      sharedKeyLimits: policy.sharedKeyLimits,
+export type EnqueueResult = { ok: true; id: string } | { ok: false };
+
+/**
+ * Queue an OTLP export. A compressed body is kept compressed (the worker inflates it again,
+ * cheaply), so the stored bytes stay what the exporter sent.
+ */
+export async function enqueueOtlpBatch(
+  input: OtlpBatchInput,
+  deps: IngestQueueAcceptDeps,
+  observers: { logError: LogError; captureFailure: (error: unknown) => void },
+): Promise<EnqueueResult> {
+  return enqueueBatch(
+    {
+      projectId: input.projectId,
+      signal: input.signal,
+      contentType: input.transport === "json" ? "application/json" : "application/x-protobuf",
+      contentEncoding: storedEncoding(input.contentEncoding),
+      body: input.received,
+      context: { appendOnly: input.appendOnly },
     },
-  };
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new PublishTimeoutError()), publishTimeoutMs);
-    });
-    await Promise.race([queue.publish(envelope), timeout]);
-    return true;
-  } catch (error) {
-    logger.error(
-      {
-        reason: errorReason(error),
-        project_id: envelope.projectId,
-        signal: envelope.signal,
-        message_id: envelope.id,
-        bytes: envelope.body.byteLength,
-      },
-      "publish ingest message failed",
-    );
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-class PublishTimeoutError extends Error {
-  override name = "PublishTimeoutError";
-}
-
-/** The one refusal that only the queue adds. */
-export function queueUnavailableResponse(): Response {
-  return Response.json(
-    { error: "Ingestion is not available. Try again." },
-    { status: 503, headers: { "Retry-After": "5" } },
+    deps,
+    observers,
   );
+}
+
+/** Queue any batch, logging and reporting a failed write; the caller answers 500 on `ok: false`. */
+export async function enqueueBatch(
+  batch: NewIngestBatch,
+  deps: IngestQueueAcceptDeps,
+  observers: { logError: LogError; captureFailure: (error: unknown) => void },
+): Promise<EnqueueResult> {
+  let id: string;
+  try {
+    ({ id } = await deps.enqueue(batch));
+  } catch (error) {
+    observers.logError("ingest batch enqueue failed", error, {
+      project_id: batch.projectId,
+      signal: batch.signal,
+      body_bytes: batch.body.byteLength,
+    });
+    observers.captureFailure(error);
+    return { ok: false };
+  }
+  deps.scheduleDrain();
+  return { ok: true, id };
+}
+
+/** `gzip` or `deflate` for a body still compressed; null for one sent as is. */
+export function storedEncoding(contentEncoding: string | null): "gzip" | "deflate" | null {
+  const encoding = (contentEncoding ?? "").trim().toLowerCase();
+  if (encoding === "gzip" || encoding === "x-gzip") return "gzip";
+  if (encoding === "deflate") return "deflate";
+  return null;
 }

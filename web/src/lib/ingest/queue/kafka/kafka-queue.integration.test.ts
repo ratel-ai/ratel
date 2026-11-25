@@ -14,7 +14,7 @@ import { createKafkaClient } from "./client";
 import { createKafkaQueue, type KafkaQueue } from "./kafka-queue";
 
 /**
- * Against a real broker: `TEST_KAFKA_BROKERS` (the CI job `kafka-conformance` starts one). Without
+ * Against a real broker: `TEST_KAFKA_BROKERS` (the CI job `kafka-ingest` starts one). Without
  * it, nothing runs here.
  */
 const brokers = process.env.TEST_KAFKA_BROKERS?.split(",");

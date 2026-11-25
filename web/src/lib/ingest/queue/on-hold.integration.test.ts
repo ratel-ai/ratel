@@ -8,15 +8,17 @@ import { listProjectsWithUnfoldedEvents } from "@/lib/readings/intent-graph/quer
 import { enqueueDueQueryCategorizations } from "@/lib/readings/query-intents/queries";
 import { refreshQualitySnapshots } from "@/lib/synthesis/quality/snapshot";
 import { pruneExpiredOtelSpans } from "@/lib/synthesis/traces/queries";
+import { persistIngestBatch } from "./persist";
+import { claimNextIngestBatch, enqueueIngestBatch, markIngestBatchDone } from "./queries";
 import {
-  acceptOnto,
   drain,
   envelopeHandler,
   ingestTraces,
   ORGANIZATION_ID,
   PROJECT_ID,
+  persistDeps,
   setupDeployment,
-  spoolQueue,
+  testQueue,
 } from "./test-support";
 
 /** An organization on hold: what it sends is stored, and nothing acts on it until the hold ends. */
@@ -34,8 +36,8 @@ test("telemetry is stored, jobs wait, and clearing the hold starts them", async 
   `);
   await setHold(HOLD, db);
   const bodies = loadFixture("vercel-ai");
-  const queue = spoolQueue(deployment);
-  await ingestTraces(deployment, bodies, acceptOnto(queue));
+  const queue = testQueue();
+  await ingestTraces(deployment, bodies, queue);
   await drain(queue, envelopeHandler(deployment), bodies.length);
   await enqueueJob({ projectId: OTHER, kind: "categorize_queries" }, db);
 
@@ -59,6 +61,43 @@ test("telemetry is stored, jobs wait, and clearing the hold starts them", async 
 
   assert.equal(await clearHold(HOLD, db), 1);
   assert.equal((await claimNextQueuedJob(undefined, undefined, db))?.projectId, PROJECT_ID);
+});
+
+test("ADR-0009's lane stores a held organization's batches too, and their jobs wait", async () => {
+  const deployment = await setupDeployment();
+  const { client, db } = deployment;
+  await setHold(HOLD, db);
+  const bodies = loadFixture("vercel-ai");
+  for (const body of bodies) {
+    await enqueueIngestBatch(
+      {
+        projectId: PROJECT_ID,
+        signal: "traces",
+        contentType: body.contentType,
+        contentEncoding: null,
+        body: body.bytes,
+        context: {},
+      },
+      db,
+    );
+  }
+  let persisted = 0;
+  for (;;) {
+    const batch = await claimNextIngestBatch(db, { perProject: 1 });
+    if (!batch) break;
+    assert.equal((await persistIngestBatch(batch, persistDeps(deployment))).kind, "done");
+    await markIngestBatchDone(batch.id, batch.attempts, {}, db);
+    persisted += 1;
+  }
+  assert.equal(persisted, bodies.length);
+  const { rows } = await client.query<{ spans: number; jobs: number }>(`
+    select (select count(*)::int from otel_spans where project_id = '${PROJECT_ID}') as spans,
+      (select count(*)::int from jobs where project_id = '${PROJECT_ID}' and status = 'queued') as jobs`);
+  assert.ok((rows[0]?.spans ?? 0) > 0 && (rows[0]?.jobs ?? 0) > 0);
+  assert.equal(await claimNextQueuedJob(PROJECT_ID, undefined, db), null);
+  await clearHold(HOLD, db);
+  assert.equal((await claimNextQueuedJob(PROJECT_ID, undefined, db))?.projectId, PROJECT_ID);
+  await client.close();
 });
 
 test("the scheduled sweeps skip a held project and take the other", async () => {
@@ -117,7 +156,7 @@ test("held before it exists: what arrives with it is swept by nothing, and its t
     insert into jobs (project_id, kind, status) values ('${PROJECT_ID}', 'x', 'queued');
     commit;`);
   const bodies = loadFixture("vercel-ai");
-  const queue = spoolQueue(deployment);
+  const queue = testQueue();
   for (const body of bodies) {
     await queue.publish({
       version: 1,

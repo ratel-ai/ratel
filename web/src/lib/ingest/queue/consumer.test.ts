@@ -7,7 +7,7 @@ import { resolveConfig } from "@/config";
 import type { IngestResult, SettledDelivery } from "@/lib/contracts/ingest-queue";
 import { envelope } from "@/lib/ingest/queue/port/test-support/conformance";
 import { createMemoryQueue } from "@/lib/ingest/queue/port/test-support/memory-queue";
-import { consumesIngestQueue } from "@/lib/jobs/role";
+import { consumesKafkaIngest } from "@/lib/jobs/role";
 import { COUNTS_EVERY_MS, startIngestConsumer, stopConsumerOnSignal } from "./consumer";
 
 type Line = { level: string; message: string; fields: Record<string, unknown> };
@@ -123,16 +123,15 @@ test("the counts are one line a minute, and none when nothing happened", async (
   );
 });
 
-test("an api process, and any process in direct mode, never consumes", () => {
+test("only the process that runs background work reads Kafka, and only with INGEST_QUEUE=kafka", () => {
   const consumes = (APP_ROLE: string, INGEST_QUEUE: string) =>
-    consumesIngestQueue(resolveConfig({ env: { APP_ROLE, INGEST_QUEUE } }));
-  for (const queue of ["postgres", "kafka"]) {
-    assert.equal(consumes("api", queue), false);
-    assert.equal(consumes("worker", queue), true);
-    assert.equal(consumes("all", queue), true);
-    assert.equal(consumes("", queue), true);
+    consumesKafkaIngest(resolveConfig({ env: { APP_ROLE, INGEST_QUEUE } }));
+  for (const role of ["worker", "all", ""]) assert.equal(consumes(role, "kafka"), true, role);
+  for (const role of ["api", "ingest", "persist"])
+    assert.equal(consumes(role, "kafka"), false, role);
+  for (const role of ["api", "worker", "all", "ingest", "persist"]) {
+    assert.equal(consumes(role, "direct"), false, role);
   }
-  for (const role of ["api", "worker", "all"]) assert.equal(consumes(role, "direct"), false);
 });
 
 test("a second signal exits at once; without an exit of its own, the stop leaves it to Next", async () => {
