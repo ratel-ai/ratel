@@ -6,11 +6,12 @@ import {
   type ProcessContext,
   type Processed,
   readOtlpItems,
+  reportProcessFailure,
   STORED,
 } from "@/lib/ingest/queue/process";
 import { getLogger, type LogError, type LogWarn } from "@/lib/platform/logger";
 import type { touchApiKeyAt as touchApiKeyAtFn } from "@/lib/platform/projects/queries";
-import { reportServerException } from "@/lib/platform/telemetry";
+import type { reportServerException } from "@/lib/platform/telemetry";
 import { MAX_SPANS } from "./body";
 import { decodeOtlp } from "./decode";
 import { type IngestLogDeps, logTracesIngested } from "./ingest-log";
@@ -61,7 +62,7 @@ export async function processTraces(
   let failure: unknown;
   const captureFailure = (error: unknown) => {
     failure = error;
-    reportFailure(error, projectId, deps.reportServerException, logError);
+    reportProcessFailure(error, { endpoint: ENDPOINT, projectId, deps, logError });
   };
   const meterTraces =
     organization && deps.traceMetering
@@ -129,17 +130,4 @@ export async function processTraces(
   const counts = { accepted: persisted.accepted, calls: persisted.calls, spans: spans.length };
   await trackAcceptedIngestRequest(counts, observation);
   return { result: STORED, counts: refused > 0 ? { ...counts, refused } : counts };
-}
-
-function reportFailure(
-  error: unknown,
-  projectId: string,
-  report = reportServerException,
-  logError: LogError,
-): void {
-  try {
-    report(error, `project:${projectId}`, { endpoint: ENDPOINT, project_id: projectId });
-  } catch (captureError) {
-    logError("exception capture failed", captureError, { project_id: projectId });
-  }
 }

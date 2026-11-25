@@ -363,12 +363,14 @@ const otelLogsLogger = getLogger("db/otel-logs");
 /**
  * Idempotently persist a bounded batch of mapped OTLP log events, and the runtime catalog
  * definitions they carry. Duplicate deterministic ids are collapsed before writing, and each
- * statement stays below the PostgreSQL parameter ceiling.
+ * statement stays below the PostgreSQL parameter ceiling. A failed catalog upsert is logged and
+ * reported, or with `redelivers` (the caller stores the same batch again) thrown.
  */
 export async function insertOtelLogs(
   projectId: string,
   rows: Array<NewOtelLog & { catalogDefinition?: Omit<NewRuntimeCatalogEntry, "projectId"> }>,
   db: OtelLogsDb = getDb(),
+  { redelivers = false }: { redelivers?: boolean } = {},
 ): Promise<{ accepted: number }> {
   if (rows.length === 0) return { accepted: 0 };
 
@@ -406,6 +408,7 @@ export async function insertOtelLogs(
     try {
       await upsertRuntimeCatalogEntries([...definitions.values()], "events", db);
     } catch (error) {
+      if (redelivers) throw error;
       otelLogsLogger.error(
         { err: error, project_id: projectId, definition_count: definitions.size },
         "runtime catalog upsert failed",

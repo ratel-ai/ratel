@@ -3,7 +3,9 @@ import { inflateBody, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/body";
 import type { Envelope, EnvelopeSignal } from "@/lib/ingest/queue/envelope";
 import type { EnvelopeHandler } from "@/lib/ingest/queue/port/envelope-queue";
 import { storeFailure } from "@/lib/ingest/queue/port/store-failure";
+import type { LogError } from "@/lib/platform/logger";
 import type { Organization } from "@/lib/platform/organizations";
+import { reportServerException } from "@/lib/platform/telemetry";
 
 /** The current rows of an envelope's project, which process reads for every delivery. */
 export interface ProcessContext {
@@ -52,6 +54,31 @@ export function deadLetter(reason: string): Processed {
 
 export function failed(error: unknown): Processed {
   return { result: storeFailure(error), counts: {} };
+}
+
+/** Reports a failure that process handles itself. Never throws. */
+export function reportProcessFailure(
+  error: unknown,
+  {
+    endpoint,
+    projectId,
+    deps,
+    logError,
+  }: {
+    endpoint: string;
+    projectId: string;
+    deps: { reportServerException?: typeof reportServerException };
+    logError: LogError;
+  },
+): void {
+  try {
+    (deps.reportServerException ?? reportServerException)(error, `project:${projectId}`, {
+      endpoint,
+      project_id: projectId,
+    });
+  } catch (captureError) {
+    logError("exception capture failed", captureError, { project_id: projectId });
+  }
 }
 
 /**

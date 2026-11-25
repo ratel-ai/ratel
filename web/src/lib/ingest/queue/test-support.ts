@@ -4,12 +4,15 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import type { SettledDelivery } from "@/lib/contracts/ingest-queue";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
+import { handleLogsRequest, type LogsHandlerDeps } from "@/lib/ingest/otlp/logs-route-handler";
+import { type ProcessLogsDeps, processLogs } from "@/lib/ingest/otlp/process-logs";
 import type { ProcessTracesDeps } from "@/lib/ingest/otlp/process-traces";
 import { processTraces } from "@/lib/ingest/otlp/process-traces";
 import {
   findStoredOtelSpans,
   findTracesWithModelCalls,
   insertEventsWithMetrics,
+  insertOtelLogs,
   insertOtelSpans,
 } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest, type TracesHandlerDeps } from "@/lib/ingest/otlp/route-handler";
@@ -159,21 +162,50 @@ export function acceptOnto(queue: Pick<EnvelopeQueue, "publish">): AcceptDeps {
 
 export interface ProcessOverrides {
   traces?: Partial<ProcessTracesDeps>;
+  logs?: Partial<ProcessLogsDeps>;
 }
 
 export function processTracesDeps(
   deployment: Deployment,
   over: Partial<ProcessTracesDeps> = {},
 ): ProcessTracesDeps {
+  return { ...storeDeps(deployment), ...observeDeps(deployment), ...over };
+}
+
+function observeDeps({ db, logs }: Deployment) {
   return {
-    ...storeDeps(deployment),
     ...silent,
-    logWarn: (message, fields) => deployment.logs.push({ message, fields }),
-    logError: (message, _error, fields) => deployment.logs.push({ message, fields }),
+    logWarn: (message, fields) => logs.push({ message, fields }),
+    logError: (message, _error, fields) => logs.push({ message, fields }),
     reportServerException: (() => undefined) as never,
-    touchApiKeyAt: (id, at) => touchApiKeyAt(id, at, deployment.db),
-    ...over,
-  };
+    touchApiKeyAt: (id, at) => touchApiKeyAt(id, at, db),
+  } satisfies Partial<ProcessTracesDeps>;
+}
+
+function logsStoreDeps({ db }: Deployment) {
+  return {
+    insertOtelLogs: (projectId, rows, _db, options) => insertOtelLogs(projectId, rows, db, options),
+    genAiLogJoin: {
+      store: createGenAiLogStore(() => db),
+      modelPricing: { loadOverrides: (projectId: string) => loadPriceOverrides(projectId, db) },
+    },
+    otlpRawCapture: { store: createOtlpRawStore({ db, dailyCapBytes: 1_000_000_000 }) },
+    ingestLog: { sink: { info: () => undefined }, lookupLabels: async () => null },
+  } satisfies Partial<ProcessLogsDeps>;
+}
+
+export function logsRouteDeps(
+  deployment: Deployment,
+  over: Partial<LogsHandlerDeps> = {},
+): LogsHandlerDeps {
+  return { scope: "ingest:logs", ...authDeps(deployment), ...logsStoreDeps(deployment), ...over };
+}
+
+export function processLogsDeps(
+  deployment: Deployment,
+  over: Partial<ProcessLogsDeps> = {},
+): ProcessLogsDeps {
+  return { ...logsStoreDeps(deployment), ...observeDeps(deployment), ...over };
 }
 
 export function envelopeHandler(
@@ -186,7 +218,8 @@ export function envelopeHandler(
       projectId === PROJECT_ID ? { organization: ORGANIZATION as never } : null,
     traces: (envelope, context) =>
       processTraces(envelope, context, processTracesDeps(deployment, over.traces)),
-    logs: unexpected,
+    logs: (envelope, context) =>
+      processLogs(envelope, context, processLogsDeps(deployment, over.logs)),
     events: unexpected,
   });
 }
@@ -249,6 +282,20 @@ export async function ingestTraces(
   }
 }
 
+export async function ingestLogs(
+  deployment: Deployment,
+  bodies: readonly IngestBody[],
+  accept?: AcceptDeps,
+): Promise<void> {
+  for (const body of bodies) {
+    const response = await handleLogsRequest(
+      ingestRequest("logs", body),
+      logsRouteDeps(deployment, accept ? { accept } : {}),
+    );
+    assert.equal(response.status, 202, await response.text());
+  }
+}
+
 /** Columns that differ between two runs of the same input: random ids, and the time of the store. */
 const VOLATILE: Record<string, readonly string[]> = {
   "*": ["received_at", "created_at", "updated_at"],
@@ -299,4 +346,75 @@ export async function dumpTables(
 function sortedKeys(_key: string, value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
   return Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1)));
+}
+
+const TRACE_ID = "0123456789abcdef0123456789abcdef";
+const SPAN_ID = "0123456789abcdef";
+const START_NANO = "1763632800000000000"; // 2025-11-20T10:00:00Z
+
+const json = (value: unknown): IngestBody => ({
+  contentType: "application/json",
+  bytes: new TextEncoder().encode(JSON.stringify(value)),
+});
+
+const attributes = (values: Record<string, string | boolean>) =>
+  Object.entries(values).map(([key, value]) => ({
+    key,
+    value: typeof value === "boolean" ? { boolValue: value } : { stringValue: value },
+  }));
+
+/** One model call, whose content comes in {@link logsBody}. */
+export function modelCallBody(startTimeUnixNano = START_NANO): IngestBody {
+  const span = {
+    traceId: TRACE_ID,
+    spanId: SPAN_ID,
+    name: "chat",
+    startTimeUnixNano,
+    endTimeUnixNano: startTimeUnixNano,
+    attributes: [
+      ...attributes({ "gen_ai.operation.name": "chat", "gen_ai.request.model": "gpt-5.5" }),
+      { key: "gen_ai.usage.input_tokens", value: { intValue: "10" } },
+    ],
+  };
+  return json({ resourceSpans: [{ scopeSpans: [{ spans: [span] }] }] });
+}
+
+/** The call's content, a catalog definition, a record without a time, and one that is not kept. */
+export function logsBody(key = SECRET_KEY): IngestBody {
+  const logRecords = [
+    {
+      timeUnixNano: START_NANO,
+      eventName: "gen_ai.client.inference.operation.details",
+      traceId: TRACE_ID,
+      spanId: SPAN_ID,
+      attributes: attributes({
+        "gen_ai.operation.name": "chat",
+        "gen_ai.input.messages":
+          '[{"role":"user","parts":[{"type":"text","content":"Weather in Rome?"}]}]',
+        "gen_ai.output.messages":
+          '[{"role":"assistant","parts":[{"type":"text","content":"Sunny."}],"finish_reason":"stop"}]',
+      }),
+    },
+    {
+      timeUnixNano: START_NANO,
+      eventName: "ratel.catalog.definition",
+      attributes: [
+        ...attributes({
+          "ratel.catalog.kind": "tool",
+          "ratel.catalog.id": "send_invoice",
+          "ratel.catalog.name": "send_invoice",
+          "ratel.catalog.description": "Sends an invoice",
+          "ratel.catalog.input_schema": "true",
+          "ratel.catalog.output_schema": "true",
+          "ratel.catalog.searchable_description": "Sends an invoice",
+          "ratel.catalog.searchable_description_overridden": false,
+          "ratel.catalog.content_hash": "b".repeat(64),
+        }),
+        { key: "ratel.catalog.tags", value: { arrayValue: { values: [] } } },
+      ],
+    },
+    { eventName: "ratel.note", attributes: attributes({ "ratel.event.id": "note-1" }) },
+    { timeUnixNano: START_NANO, eventName: "app.log", body: { stringValue: "not kept" } },
+  ];
+  return { ...json({ resourceLogs: [{ scopeLogs: [{ logRecords }] }] }), key };
 }

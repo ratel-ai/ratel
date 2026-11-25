@@ -11,6 +11,7 @@ import {
 } from "@/lib/ingest/otlp/semconv/gen-ai-log-join";
 import { distinctSpanKeys } from "@/lib/ingest/otlp/semconv/gen-ai-logs";
 import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import type { AcceptDeps } from "@/lib/ingest/queue/accept";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
 import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
@@ -23,6 +24,7 @@ import type {
 } from "@/lib/platform/projects/queries";
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { acceptOtlpRequest } from "./accept-otlp";
 import {
   admitOtlpKey,
   checkOtlpHeaders,
@@ -34,7 +36,7 @@ import { inflateBody, isGzipEncoding, MAX_LOG_RECORDS } from "./body";
 import { decodeOtlpLogs, OtlpDecodeError } from "./decode-logs";
 import { otlpSuccessResponse } from "./http";
 import { type IngestObservabilityDeps, trackAcceptedIngestRequest } from "./ingest-observability";
-import { toOtelLogRows } from "./log-rows";
+import { storableLogRows, toOtelLogRows } from "./log-rows";
 
 export { MAX_BODY_BYTES, MAX_LOG_RECORDS } from "./body";
 
@@ -65,6 +67,8 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   genAiLogJoin?: GenAiLogJoinDeps;
   /** Where the Datadog ingest line goes; absent, the app log and the cached project lookup. */
   ingestLog?: IngestLogDeps;
+  /** Accept onto the queue (ADR-0009) instead of storing in the request. Absent, direct mode. */
+  accept?: AcceptDeps;
 }
 
 export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Promise<Response> {
@@ -78,6 +82,13 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
   const admission = admitOtlpKey(req, auth, deps);
   if (!admission.ok) return reject(admission.refusal, admission.projectId);
   const { apiKey, policy } = admission;
+  if (deps.accept) {
+    return acceptOtlpRequest(
+      req,
+      { signal: "logs", startedAt, reject, transport, admission, maxItems: MAX_LOG_RECORDS },
+      { ...deps, accept: deps.accept },
+    );
+  }
 
   // Resolve the org for request-log context. Unlike /v1/traces, retained log
   // records are quota-free telemetry — the raw-span-tap sibling, and per-plan
@@ -148,10 +159,8 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
   }
 
   const { rows, dropped } = toOtelLogRows(apiKey.projectId, records);
-  // An append-only key (RC-590) stores its records as logs, but they never
-  // rewrite the project's runtime catalog definitions.
   const appendOnly = policy.appendOnlyIngest;
-  const stored = appendOnly ? rows.map(({ catalogDefinition: _definition, ...row }) => row) : rows;
+  const stored = storableLogRows(rows, appendOnly);
   let accepted = 0;
   if (stored.length > 0) {
     try {
