@@ -1,10 +1,13 @@
+import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import {
   type SummaryImports,
   SummaryNoDatabase,
   type SummaryShare,
   SummaryView,
+  type SummaryViewProps,
 } from "@/components/console/health/v2/SummaryView";
 import { composition } from "@/lib/composition";
+import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -64,7 +67,8 @@ export const metadata = { title: "Agent health" };
  *
  * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise); the limits and plans from the entitlements port.
- * The importer and the share dialog are the edition's.
+ * The importer and the share dialog are the edition's. With `focusedConsole`, the score and its
+ * categories only (`FocusedHealthView`).
  */
 export default async function AgentHealthPage({
   params,
@@ -85,6 +89,7 @@ export default async function AgentHealthPage({
   const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
+  const focused = await focusedConsoleEnabled(organization);
   // toolRunInsights (RC-828): a reading from 10 turns on shows, marked low confidence.
   const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
     ? LOW_CONFIDENCE_FLOOR
@@ -120,22 +125,27 @@ export default async function AgentHealthPage({
         fallback: null,
         load: () => loadFixes({ projectId: project.id, organization, topics: false }),
       }),
-      loadOrFallback({
-        operation: "agent_health_self_corrections_card",
-        distinctId,
-        fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
-        load: () => loadSelfCorrectionsCard(project.id, windowDays),
-      }),
-      // Behind `sentimentAnalysis`, with Root cause analysis it leads to. A failed read hides the row.
-      loadOrFallback<TaskCompletionCard | null>({
-        operation: "agent_health_task_completion",
-        distinctId,
-        fallback: null,
-        load: async () =>
-          (await sentimentAnalysisEnabled(organization))
-            ? loadTaskCompletionCard(project.id, windowDays)
-            : null,
-      }),
+      focused
+        ? null
+        : loadOrFallback({
+            operation: "agent_health_self_corrections_card",
+            distinctId,
+            fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
+            load: () => loadSelfCorrectionsCard(project.id, windowDays),
+          }),
+      // Behind `sentimentAnalysis`, with Root cause analysis it leads to; on the classic Summary only. A
+      // failed read hides the row.
+      focused
+        ? null
+        : loadOrFallback<TaskCompletionCard | null>({
+            operation: "agent_health_task_completion",
+            distinctId,
+            fallback: null,
+            load: async () =>
+              (await sentimentAnalysisEnabled(organization))
+                ? loadTaskCompletionCard(project.id, windowDays)
+                : null,
+          }),
     ]);
   // The example allowance, kept for when an issue is opened (the model carries none).
   const model = {
@@ -202,25 +212,26 @@ export default async function AgentHealthPage({
     ),
   );
 
-  return (
-    <SummaryView
-      projectId={project.id}
-      projectName={project.name}
-      model={model}
-      state={state}
-      windowOptions={windowOptionsForPlan(limits.agentHealthWindowDays)}
-      billingHref={billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null}
-      lockedPlan={fullAgentHealthPlanName()}
-      tasks={tasks}
-      fixes={fixes}
-      corrections={corrections}
-      reportHref={healthReportHref(project.id, windowDays)}
-      imports={imports}
-      share={share}
-      partial={partial}
-      inferredTools={inferredTools}
-      taskCompletion={taskCompletion}
-    />
+  const view: Omit<SummaryViewProps, "corrections"> = {
+    projectId: project.id,
+    projectName: project.name,
+    model,
+    state,
+    windowOptions: windowOptionsForPlan(limits.agentHealthWindowDays),
+    billingHref: billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null,
+    lockedPlan: fullAgentHealthPlanName(),
+    tasks,
+    fixes,
+    reportHref: healthReportHref(project.id, windowDays),
+    imports,
+    share,
+    partial,
+    inferredTools,
+  };
+  return focused ? (
+    <FocusedHealthView {...view} />
+  ) : (
+    <SummaryView {...view} corrections={corrections} taskCompletion={taskCompletion} />
   );
 }
 

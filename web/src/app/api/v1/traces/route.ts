@@ -1,5 +1,7 @@
+import { composition } from "@/lib/composition/ports";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import {
+  findStoredOtelSpans,
   findTracesWithModelCalls,
   insertEventsWithMetrics,
   insertOtelSpans,
@@ -50,11 +52,13 @@ async function handlePost(req: Request) {
     touchApiKey,
     insertEventsWithMetrics,
     insertOtelSpans,
+    findStoredOtelSpans,
     insertTraceEvents,
     trackServerEvent,
     getOrganizationByProjectId,
     checkEventQuota,
     incrementEventUsage,
+    traceMetering: composition.traceMetering,
     setRequestLogContext,
     // Agent health: the host's own tool-call spans as ledger invocations, built after the response.
     traceTurns: {

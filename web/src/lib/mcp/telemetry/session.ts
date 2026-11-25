@@ -21,7 +21,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 export const DERIVED_SESSION_WINDOW_MS = 30 * 60 * 1000;
 
 const SESSION_HEADER = "mcp-session-id";
-const UNKNOWN_CLIENT = "unknown";
+export const UNKNOWN_CLIENT = "unknown";
 
 export type McpSession = { id: string; source: "header" | "derived" };
 

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { countSkills } from "@/lib/catalog/queries";
 import { composition } from "@/lib/composition/ports";
+import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import type { CoreFlag } from "@/lib/contracts/feature-flags";
 import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
 import { MCP_APPS_FLAG, mcpAppsFlagSubject } from "@/lib/mcp/apps/flag";
@@ -68,6 +69,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "sentimentAnalysis",
     note: "The console's Sentiment analysis page under Traces, and task completion with its root causes on Agent health. No tool reads them yet.",
   },
+  {
+    key: "focusedConsole",
+    note: "the simplified console: Overview as a recap, Agent health as the score and its categories, Self-corrections under Insights",
+  },
 ];
 
 export interface AccountOperationDeps {
@@ -84,6 +89,8 @@ export interface AccountOperationDeps {
   editionToolListed: (id: string) => boolean;
   /** A core switch for whoever asks: the edition's flags port when it has one, else the configuration. */
   featureEnabled: typeof featureEnabled;
+  /** `focusedConsole`, as the rail and the pages decide it. */
+  focusedConsoleEnabled: (organization: { id: string }) => Promise<boolean>;
 }
 
 export const defaultAccountDeps: AccountOperationDeps = {
@@ -97,6 +104,7 @@ export const defaultAccountDeps: AccountOperationDeps = {
   now: () => new Date(),
   editionToolListed: (id) => editionToolListed(id),
   featureEnabled: (flag, subject) => featureEnabled(flag, subject),
+  focusedConsoleEnabled: (organization) => focusedConsoleEnabled(organization),
 };
 
 const QUOTA_KEYS: readonly QuotaKey[] = ["maxProjects", "maxSkillsPerProject", "maxMembers"];
@@ -180,10 +188,19 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
         // Each switch with its gate's subject: MCP Apps for the connection, the others for the project.
         const subjectOf = (key: CoreFlag) =>
           key === MCP_APPS_FLAG ? mcpAppsFlagSubject(ctx.auth) : subject;
+        // The rail and the pages decide focusedConsole for the organization alone.
+        const focusedConsole = async () => {
+          const id =
+            ctx.organizationId ?? (await deps.getOrganizationByProjectId(ctx.projectId))?.id;
+          return id !== undefined && deps.focusedConsoleEnabled({ id });
+        };
         const flags = await Promise.all(
           DEPLOYMENT_SWITCHES.map(async ({ key, note }) => ({
             key,
-            enabled: await deps.featureEnabled(key, subjectOf(key)),
+            enabled:
+              key === "focusedConsole"
+                ? await focusedConsole()
+                : await deps.featureEnabled(key, subjectOf(key)),
             note,
           })),
         );

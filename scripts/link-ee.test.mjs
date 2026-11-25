@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -138,6 +139,37 @@ test("with no edition, nothing is placed", () => {
   assert.deepEqual(readdirSync(join(root, "web/public")), ["icon.png"]);
   assert.deepEqual(readdirSync(join(root, "web")).sort(), ["public", "src"]);
   assert.deepEqual(readdirSync(join(root, "web/src")), ["app"]);
+});
+
+const runAuto = () => spawnSync("node", [join(root, "scripts/link-ee.mjs"), "--auto"], { encoding: "utf8" });
+
+function installer(body) {
+  mkdirSync(join(root, "ee/src/scripts"), { recursive: true });
+  writeFileSync(join(root, "ee/src/scripts/install-hooks.sh"), body);
+}
+
+test("--auto runs the checkout's hook installer from the repository root", () => {
+  checkout();
+  installer("pwd -P > installed-from\n");
+  link("--auto");
+  assert.equal(readFileSync(join(root, "installed-from"), "utf8").trim(), realpathSync(root));
+});
+
+test("a hook installer that fails warns, and the routes are still installed", () => {
+  checkout();
+  installer("echo 'no git here' >&2\nexit 3\n");
+  const run = runAuto();
+  assert.equal(run.status, 0);
+  assert.match(run.stderr, /no git here/);
+  assert.match(run.stderr, /could not install the git hooks/);
+  assert.ok(existsSync(route()));
+});
+
+test("a checkout with no hook installer prints nothing", () => {
+  checkout();
+  const run = runAuto();
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout + run.stderr, "");
 });
 
 test("the files placed in this repository are git-ignored", () => {

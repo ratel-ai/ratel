@@ -34,16 +34,6 @@ export const SCRIPT_OWNERS = {
   "scripts/check-ee-boundary.mjs": "platform",
   "scripts/link-ee.mjs": "platform",
   "scripts/link-ee.test.mjs": "platform",
-  "scripts/platform-sync/map.json": "platform",
-  "scripts/platform-sync/private-strings.mjs": "platform",
-  "scripts/platform-sync/private-strings.txt": "platform",
-  "scripts/platform-sync/README.md": "platform",
-  "scripts/platform-sync/rewrite-imports.mjs": "platform",
-  "scripts/platform-sync/rewrites.json": "platform",
-  "scripts/platform-sync/source.json": "platform",
-  "scripts/platform-sync/sync.mjs": "platform",
-  "scripts/platform-sync/sync.test.mjs": "platform",
-  "scripts/platform-sync/undecided.mjs": "platform",
   "scripts/quick-start.test.mjs": "platform",
   "scripts/install.test.mjs": "platform",
   "scripts/deploy.test.mjs": "platform",
@@ -192,15 +182,9 @@ function isDocOnly(file) {
 function isUnclaimed(file) {
   if (isDocOnly(file)) return false;
   if (file.startsWith("scripts/")) {
-    return SCRIPT_OWNERS[file] === undefined && !scriptDirOwned(file);
+    return SCRIPT_OWNERS[file] === undefined;
   }
   return !CLAIMS.some((g) => matches(g, file));
-}
-
-function scriptDirOwned(file) {
-  // platform-sync/** is owned as a directory of named files in SCRIPT_OWNERS.
-  // Any new file under an owned prefix that is not listed is unowned.
-  return false;
 }
 
 /** Every glob that claims a path (so the catch-all can detect unknowns). */

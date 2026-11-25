@@ -79,8 +79,8 @@ test("setup-branch-ruleset.sh sets every output", () => {
   assertTrue(r, OUTPUTS);
 });
 
-test("platform-sync change runs platform only", () => {
-  const r = on(["scripts/platform-sync/sync.mjs"]);
+test("layer check change runs platform only", () => {
+  const r = on(["scripts/check-layers.mjs"]);
   assertTrue(r, ["platform"]);
   assertFalse(r, ["design_system", "compose", "lockfiles"]);
 });

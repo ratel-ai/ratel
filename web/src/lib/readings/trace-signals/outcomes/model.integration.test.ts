@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
-import {
-  type ClosedQuestionClient,
-  type ClosedQuestionRequest,
-} from "@/lib/contracts/closed-questions";
+import type { ClosedQuestionClient, ClosedQuestionRequest } from "@/lib/contracts/closed-questions";
 import { listClosedTurnsPage } from "@/lib/ledger/closed-turns";
 import type { AskDeps } from "@/lib/readings/trace-signals/outcomes/ask";
 import {

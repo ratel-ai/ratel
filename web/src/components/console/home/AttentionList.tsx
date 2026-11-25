@@ -88,9 +88,21 @@ const TONE_TEXT: Record<AttentionTone, string> = {
 const ROW =
   "group flex min-h-11 items-center gap-3 px-4 py-2 outline-none transition-colors duration-120 hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset";
 
-export function AttentionList({ items }: { items: readonly AttentionItem[] }) {
+export function AttentionList({
+  items,
+  bare = false,
+}: {
+  items: readonly AttentionItem[];
+  /** Inside a card, which is the frame. */
+  bare?: boolean;
+}) {
   return (
-    <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+    <ul
+      className={cn(
+        "divide-y divide-line",
+        !bare && "overflow-hidden rounded-lg border border-line",
+      )}
+    >
       {items.map((item) => {
         const Icon = MARK_ICONS[item.mark];
         return (
