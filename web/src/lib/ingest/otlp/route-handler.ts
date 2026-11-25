@@ -6,6 +6,7 @@ import {
   publishableIngestLimits,
 } from "@/lib/ingest/ingest-limits";
 import type {
+  findStoredOtelSpans as findStoredOtelSpansFn,
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
@@ -103,6 +104,7 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   insertEventsWithMetrics: typeof insertEventsWithMetricsFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
+  findStoredOtelSpans?: typeof findStoredOtelSpansFn;
   // Optional monthly-event-cap enforcement, wired by the route; unit tests omit these deps.
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   checkEventQuota?: CheckEventQuota;

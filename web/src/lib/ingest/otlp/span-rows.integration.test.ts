@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
+import { findStoredOtelSpans, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { getTraceFacets, type TraceQueriesDb } from "@/lib/synthesis/traces/queries";
-import { toOtelSpanRows } from "./span-rows";
+import { otelSpanRowId, toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
 
 /** The resource environment reaches the traces facet. */
@@ -45,4 +45,30 @@ async function facets() {
 
 test("the environment facet returns the resource's deployment.environment.name", async () => {
   assert.deepEqual((await facets()).environment, [{ value: "prod", count: 1 }]);
+});
+
+test("an insert says how many new rows each trace got, and a lookup finds the stored ones", async () => {
+  const client = await createMigratedPGlite();
+  await client.exec(`
+    insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
+    insert into projects (id, organization_id, name, slug) values ('${PROJECT_ID}', '${ORGANIZATION_ID}', 'Agent', 'agent');
+  `);
+  const db = drizzle(client, { schema }) as unknown as TestDb;
+  const other = { ...SPAN, traceId: "f".repeat(32) };
+  const next = { ...SPAN, spanId: "fedcba9876543210" };
+  const insert = async (...spans: DecodedSpan[]) => {
+    const rows = toOtelSpanRows(PROJECT_ID, spans);
+    const { acceptedByTrace } = await insertOtelSpans(PROJECT_ID, rows, db, { countByTrace: true });
+    return [...(acceptedByTrace ?? [])];
+  };
+  assert.deepEqual(await insert(SPAN), [[SPAN.traceId, 1]]);
+  assert.deepEqual(await insert(SPAN, next, other), [
+    [SPAN.traceId, 1],
+    [other.traceId, 1],
+  ]);
+  assert.deepEqual(await insert(SPAN, next, other), []);
+  const id = otelSpanRowId(PROJECT_ID, SPAN);
+  const stored = await findStoredOtelSpans(PROJECT_ID, [{ id }, { id: "missing" }], db);
+  assert.deepEqual([...stored], [id]);
+  await client.close();
 });

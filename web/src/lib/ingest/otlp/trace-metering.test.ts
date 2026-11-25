@@ -258,3 +258,74 @@ test("the raw body of a partly refused export is not kept", async () => {
   await refused.send([ANALYZED, DROPPED]);
   assert.equal(captured.length, 1);
 });
+
+/** A meter that counts as the Cloud's does, and a storage that dedupes span and call ids. */
+function metered(limit: number) {
+  const counts = new Map<string, number>();
+  const storedSpans = new Set<string>();
+  const storedCalls = new Set<string>();
+  const add = (id: string, n: number) => counts.set(id, (counts.get(id) ?? 0) + n);
+  const deps: Partial<TracesHandlerDeps> = {
+    traceMetering: {
+      isMetered: async () => true,
+      meterTraceBatch: async (_scope, spans) =>
+        new Map(
+          [...spans].map(([id, n]) => {
+            if ((counts.get(id) ?? 0) + n > limit) return [id, "refused" as const];
+            add(id, n);
+            return [id, "analyzed" as const];
+          }),
+        ),
+      releaseSpans: async (_scope, spans) => {
+        for (const [id, n] of spans) add(id, -n);
+      },
+    },
+    insertEventsWithMetrics: async (_p, rows) => {
+      const fresh = rows.filter((row) => !storedCalls.has(row.event.dedupeHash ?? ""));
+      for (const row of fresh) storedCalls.add(row.event.dedupeHash ?? "");
+      return fresh.length;
+    },
+    insertTraceEvents: async () => ({ accepted: 0 }),
+    insertOtelSpans: async (_p, rows) => {
+      const acceptedByTrace = new Map<string, number>();
+      for (const { id, traceId } of rows) {
+        if (storedSpans.has(id)) continue;
+        storedSpans.add(id);
+        acceptedByTrace.set(traceId, (acceptedByTrace.get(traceId) ?? 0) + 1);
+      }
+      return { accepted: storedSpans.size, acceptedByTrace };
+    },
+    findStoredOtelSpans: async (_p, spans) =>
+      new Set(spans.map(({ id }) => id).filter((id) => storedSpans.has(id))),
+  };
+  return { send: setup(deps).send, counts };
+}
+
+test("a resend of a stored export counts once, also when it filled the bound", async () => {
+  const { send, counts } = metered(3);
+  for (const _attempt of [1, 2, 3, 4]) assert.equal((await send([ANALYZED])).status, 202);
+  assert.equal(counts.get(ANALYZED), 3);
+  // The same trace id with new span ids still stops at the bound.
+  assert.equal((await send([DROPPED, ANALYZED])).headers.get("x-ratel-refused"), "3");
+  assert.equal(counts.get(ANALYZED), 3);
+});
+
+test("old span ids that bring new calls are counted", async () => {
+  const { send, counts } = metered(100);
+  await send([ANALYZED]);
+  let calls = 0;
+  const again: Partial<TracesHandlerDeps> = {
+    traceMetering: {
+      isMetered: async () => true,
+      meterTraceBatch: async () => new Map([[ANALYZED, "analyzed"]]),
+      releaseSpans: async (_scope, spans) => {
+        for (const n of spans.values()) calls += n;
+      },
+    },
+    insertEventsWithMetrics: async () => 3,
+    insertOtelSpans: async () => ({ accepted: 0, acceptedByTrace: new Map() }),
+  };
+  await setup(again).send([ANALYZED]);
+  assert.equal(calls, 0);
+  assert.equal(counts.get(ANALYZED), 3);
+});
