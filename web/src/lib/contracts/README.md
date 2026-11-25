@@ -10,6 +10,8 @@ side annotates against it, so the two shapes cannot drift. Its optional `product
 edition names the product in copy (`full` for the MCP server, `short` for the service in a
 sentence); without it the copy keeps its neutral words.
 
+`check.ts` is what a check reads of a trace and how it compares, for check scorers and evals.
+
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
