@@ -68,7 +68,11 @@ test("an insert says how many new rows each trace got, and a lookup finds the st
   ]);
   assert.deepEqual(await insert(SPAN, next, other), []);
   const id = otelSpanRowId(PROJECT_ID, SPAN);
-  const stored = await findStoredOtelSpans(PROJECT_ID, [{ id }, { id: "missing" }], db);
+  const stored = await findStoredOtelSpans(
+    PROJECT_ID,
+    [{ id }, { id: otelSpanRowId(PROJECT_ID, { ...SPAN, spanId: "0".repeat(15) + "1" }) }],
+    db,
+  );
   assert.deepEqual([...stored], [id]);
   await client.close();
 });
