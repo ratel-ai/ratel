@@ -35,9 +35,9 @@ export interface AgentListExtras {
   mcpServers: Map<string, number>;
 }
 
-/** The calls of one agent to one MCP server, client side. */
+/** The calls of one agent to one MCP server. */
 export interface AgentMcpCalls {
-  /** The agent's key after merges; null when the span names no agent. */
+  /** The agent's key after merges; null when neither the span nor its parent names one. */
   agent: string | null;
   server: string;
   calls: number;
@@ -282,21 +282,40 @@ export function agentMcpServerCountsQuery(
 }
 
 /**
- * Client-side calls and errors per (agent, MCP server). It starts from the MCP
- * spans, not the agent spans, so the calls with no agent come back too.
+ * Calls and errors per (calling agent, MCP server), over both sides of a call, so a call that only
+ * the server recorded counts too. Within one trace the side that recorded more calls of an agent
+ * to a server stands for both. The server's span with no known caller counts only when no client
+ * recorded a call to that server: in a trace of its own it may be a client's call again.
  */
 export function agentMcpCallsQuery(
   projectId: string,
   window: EntityWindow,
   merges: ReadonlyMap<string, string> = new Map(),
 ): SQL {
-  const merge = mergeJoin(merges);
+  const merge = mergeJoin(merges, sql`c.agent`);
   return sql`
-    select ${merge.key} as agent, s.mcp_server as server,
-      count(*)::int as calls,
-      count(*) filter (where ${IS_ERROR})::int as errors
-    from otel_spans s${merge.join}
-    where ${serverSpans(projectId, window)} and s.mcp_role = 'consumed'
+    with calls as (
+      select ${CALLING_AGENT} as agent, s.mcp_server as server, s.mcp_role as role, s.trace_id,
+        ${IS_ERROR} as failed
+      from otel_spans s
+      ${PARENT_JOIN}
+      where ${serverSpans(projectId, window)}
+    ), sides as (
+      select ${merge.key} as agent, c.server, c.role, c.trace_id,
+        count(*)::int as calls, count(*) filter (where c.failed)::int as errors
+      from calls c${merge.join}
+      group by 1, 2, 3, 4
+    ), once as (
+      select distinct on (agent, server, trace_id) agent, server, calls, errors
+      from (
+        select sides.*, bool_or(role = 'consumed') over (partition by server) as has_client
+        from sides
+      ) known
+      where role = 'consumed' or agent is not null or not has_client
+      order by agent, server, trace_id, calls desc, role
+    )
+    select agent, server, sum(calls)::int as calls, sum(errors)::int as errors
+    from once
     group by 1, 2
     order by calls desc, 1, 2
     limit ${MAX_ROWS}
@@ -526,15 +545,18 @@ function dayOf(column: SQL, window: EntityWindow): SQL {
 }
 
 /** The agent key read through the merges, as `views/agents` reads it. */
-function mergeJoin(merges: ReadonlyMap<string, string>): { key: SQL; join: SQL } {
-  if (merges.size === 0) return { key: sql`s.agent_key`, join: sql`` };
+function mergeJoin(
+  merges: ReadonlyMap<string, string>,
+  column: SQL = sql`s.agent_key`,
+): { key: SQL; join: SQL } {
+  if (merges.size === 0) return { key: column, join: sql`` };
   const pairs = sql.join(
     [...merges].map(([source, target]) => sql`(${source}, ${target})`),
     sql`, `,
   );
   return {
-    key: sql`coalesce(m.to_key, s.agent_key)`,
-    join: sql` left join (values ${pairs}) as m(from_key, to_key) on m.from_key = s.agent_key`,
+    key: sql`coalesce(m.to_key, ${column})`,
+    join: sql` left join (values ${pairs}) as m(from_key, to_key) on m.from_key = ${column}`,
   };
 }
 

@@ -8,6 +8,7 @@ import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { createDrizzleAgentStore } from "../agents/adapters/drizzle-store";
+import { getMcpServer } from "../mcp-servers/queries";
 import { readTopology, type Topology } from "./topology";
 
 /**
@@ -79,6 +80,97 @@ test("a hidden agent does not appear and a merged agent counts as its target", a
   }
 });
 
+test("a call only the server recorded comes from its parent's agent", async () => {
+  const { client, db } = await seeded();
+  try {
+    await insertOtelSpans(
+      PROJECT_ID,
+      [
+        span(20, 600, 1, { ...provided("own"), parentSpanId: spanId(1) }),
+        span(21, 700, 1, { ...provided("own", true), parentSpanId: spanId(4) }),
+        span(22, 800, 9, provided("own")),
+      ],
+      db,
+    );
+    const graph = await read(db);
+    assert.equal(counts(graph)["mcp:own"], 3);
+    const own = Object.entries(edges(graph)).filter(([edge]) => edge.endsWith("mcp:own"));
+    assert.deepEqual(Object.fromEntries(own), {
+      "agent:claude > mcp:own": [1, 0],
+      "agent:Explore > mcp:own": [1, 1],
+      "project > mcp:own": [1, 0],
+    });
+    const page = await getMcpServer(
+      PROJECT_ID,
+      { key: "own", role: "provided" },
+      { ...WINDOW, environment: null },
+      db,
+    );
+    assert.deepEqual(
+      (page?.agents ?? []).map(({ agent, calls }) => [agent, calls]).sort(),
+      [
+        ["Explore", 1],
+        ["claude", 1],
+        [null, 1],
+      ].sort(),
+      "the same callers as the MCP server's page",
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("a client call with no agent of its own comes from its parent's agent, through the merges", async () => {
+  const { client, db } = await seeded();
+  try {
+    await insertOtelSpans(
+      PROJECT_ID,
+      [span(20, 600, 1, { ...call("split"), parentSpanId: spanId(4) })],
+      db,
+    );
+    assert.deepEqual(edges(await read(db))["agent:Explore > mcp:split"], [1, 0]);
+    assert.equal(counts(await read(db)).project, 1, "still only the call with no agent at all");
+    await client.exec(`
+      insert into agent_overrides (project_id, agent_key, display_name, hidden, merged_into, updated_by)
+      values ('${PROJECT_ID}', 'Explore', null, false, 'claude', 'test');
+    `);
+    assert.deepEqual(edges(await read(db))["agent:claude > mcp:split"], [1, 0]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("a call both sides recorded counts once, and one more that only the server recorded counts too", async () => {
+  const { client, db } = await seeded();
+  try {
+    await insertOtelSpans(
+      PROJECT_ID,
+      [
+        // The server's span under the client's.
+        span(20, 210, 1, { ...provided("board"), parentSpanId: spanId(3) }),
+        // The server's span under a transport span of the client.
+        span(21, 600, 1, { agentKey: "claude", agentSource: "sdk", parentSpanId: spanId(2) }),
+        span(22, 610, 1, { ...provided("board"), parentSpanId: spanId(21) }),
+        // The server's span in a trace of its own: whose call it is cannot be known.
+        span(23, 620, 9, provided("board")),
+      ],
+      db,
+    );
+    assert.deepEqual(edges(await read(db))["agent:claude > mcp:board"], [3, 1]);
+    assert.equal(edges(await read(db))["project > mcp:board"], undefined);
+    await insertOtelSpans(
+      PROJECT_ID,
+      [span(24, 700, 1, { ...provided("board"), parentSpanId: spanId(4) })],
+      db,
+    );
+    const graph = edges(await read(db));
+    assert.deepEqual(graph["agent:claude > mcp:board"], [3, 1]);
+    assert.deepEqual(graph["agent:Explore > mcp:board"], [1, 0]);
+  } finally {
+    await client.close();
+  }
+});
+
 function read(db: TestDb): Promise<Topology> {
   return readTopology(PROJECT_ID, WINDOW, { agents: createDrizzleAgentStore(db), db });
 }
@@ -94,6 +186,27 @@ function edges(graph: Topology): Record<string, [number, number | null]> {
 }
 
 // — Seed ———————————————————————————————————————————————————————————————————
+
+const call = (server: string, agentKey?: string, failed = false): Partial<NewOtelSpan> => ({
+  name: "execute_tool search",
+  spanClass: "tool",
+  mcpServer: server,
+  mcpRole: "consumed",
+  ...(agentKey ? { agentKey, agentSource: "sdk" } : {}),
+  ...(failed ? { statusCode: 2 } : {}),
+});
+
+const provided = (server: string, failed = false): Partial<NewOtelSpan> => ({
+  name: "tools/call search",
+  spanClass: "tool",
+  mcpServer: server,
+  mcpRole: "provided",
+  ...(failed ? { statusCode: 2 } : {}),
+});
+
+function spanId(index: number): string {
+  return index.toString(16).padStart(16, "0");
+}
 
 async function seeded(): Promise<{ client: PGlite; db: TestDb }> {
   const client = await createMigratedPGlite();
@@ -111,14 +224,6 @@ async function seeded(): Promise<{ client: PGlite; db: TestDb }> {
     agentSource: "sdk",
     ...(caller ? { callerAgentKey: caller } : {}),
   });
-  const call = (server: string, agentKey?: string, failed = false): Partial<NewOtelSpan> => ({
-    name: "execute_tool search",
-    spanClass: "tool",
-    mcpServer: server,
-    mcpRole: "consumed",
-    ...(agentKey ? { agentKey, agentSource: "sdk" } : {}),
-    ...(failed ? { statusCode: 2 } : {}),
-  });
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -130,12 +235,7 @@ async function seeded(): Promise<{ client: PGlite; db: TestDb }> {
       span(6, 500, 1, invoke("Plan", "claude")),
       span(7, DAY, 2, invoke("claude")),
       span(8, DAY + 100, 2, call("board", "claude")),
-      span(9, DAY + 110, 2, {
-        name: "tools/call search",
-        spanClass: "tool",
-        mcpServer: "board",
-        mcpRole: "provided",
-      }),
+      span(9, DAY + 110, 2, provided("board")),
       span(10, DAY + 200, 2, invoke("Explore", "claude")),
       span(11, DAY + 300, 3, call("docs")),
       span(12, -DAY, 4, call("board", "claude")),
@@ -161,7 +261,7 @@ function span(
     projectId: PROJECT_ID,
     receivedAt: new Date(T0 + at),
     traceId: trace.toString(16).padStart(32, "0"),
-    spanId: index.toString(16).padStart(16, "0"),
+    spanId: spanId(index),
     parentSpanId: null,
     name: "span",
     kind: 1,

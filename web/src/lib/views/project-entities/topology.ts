@@ -128,12 +128,27 @@ function agentNodes(rows: TopologyRows): TopologyNode[] {
   return [...nodes.values()];
 }
 
-/** The two roles count the same calls from two processes, so the busier one stands for the server. */
+/**
+ * The two roles count the same calls from two processes, so the busier one stands for the server.
+ * Where each recorded calls that the other did not, its edges add up to more than either.
+ */
 function serverNodes(rows: TopologyRows): TopologyNode[] {
+  const inbound = new Map<string, number>();
+  for (const { server, calls } of rows.calls)
+    inbound.set(server, (inbound.get(server) ?? 0) + calls);
   const nodes = new Map<string, TopologyNode>();
   for (const row of [...rows.servers].sort((a, b) => b.calls - a.calls))
     if (!nodes.has(row.key))
-      nodes.set(row.key, node("mcp", row.key, row.displayName, row.calls, row.errorRate));
+      nodes.set(
+        row.key,
+        node(
+          "mcp",
+          row.key,
+          row.displayName,
+          Math.max(row.calls, inbound.get(row.key) ?? 0),
+          row.errorRate,
+        ),
+      );
   return [...nodes.values()];
 }
 
