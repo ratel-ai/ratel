@@ -3,10 +3,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createVersionSchema, manifestSchema } from "../domain/manifest";
+import { runResultSchema } from "../domain/run";
 
 // Copies of the conformance vectors of protocol/sandbox/v1 (ratel-sdk).
 const VECTORS = join(import.meta.dirname, "vectors");
-const SCHEMAS = { manifest: manifestSchema, "create-version.request": createVersionSchema };
+const SCHEMAS = {
+  manifest: manifestSchema,
+  "create-version.request": createVersionSchema,
+  "run-result": runResultSchema,
+};
 
 for (const kind of ["valid", "invalid"] as const) {
   for (const [prefix, schema] of Object.entries(SCHEMAS)) {

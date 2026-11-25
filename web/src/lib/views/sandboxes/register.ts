@@ -2,11 +2,14 @@ import type { Registration } from "@/lib/contracts/registry";
 import { SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { getDb } from "@/lib/platform/db/client";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleBuildStore } from "./adapters/drizzle-build-store";
 import { sandboxProvider } from "./adapters/provider-from-env";
 import { sandboxesEnabledForProject } from "./gate";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
+import { runDeps } from "./run-deps";
+import { sweepRuns } from "./run-sweep";
 
 /** A version that waits longer than this with no job was left by a process that ended. */
 const UNQUEUED_MS = 2 * 60_000;
@@ -14,7 +17,7 @@ const UNQUEUED_MS = 2 * 60_000;
 /**
  * What Ratel sandboxes contribute to the background machinery: the image build, which the reaper
  * spares while it sends heartbeats (it can outlast the stale-job window), and the sweeps that end
- * an interrupted build and queue a build that was never queued.
+ * an interrupted build, queue a build that was never queued, and end runs and their instances.
  */
 export const sandboxesRegistration: Registration = {
   jobs: {
@@ -49,6 +52,16 @@ export const sandboxesRegistration: Registration = {
         }
         return { interruptedBuilds, queuedBuilds: unqueued.length };
       },
+    },
+    {
+      name: "sandbox_runs",
+      phase: "before",
+      run: () =>
+        sweepRuns({
+          ...runDeps(),
+          organizationIdOf: async (projectId) =>
+            (await getOrganizationByProjectId(projectId))?.id ?? null,
+        }),
     },
   ],
 };

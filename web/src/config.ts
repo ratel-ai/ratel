@@ -448,6 +448,8 @@ const CONFIG_SCHEMA = schema({
     modalApp: setting("MODAL_APP", trimmed, D.sandboxes.modalApp),
     /** Where builds and instances run. */
     region: setting("SANDBOX_REGION", trimmed, D.sandboxes.region),
+    /** The address at which an instance reaches this deployment; the public URL when unset. */
+    callbackUrl: optional("SANDBOX_CALLBACK_URL", trimmed),
     /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */
     bundleDir: optional("SANDBOX_BUNDLE_DIR", trimmed),
     /** Each project's limits. A value above the hard limit counts as the hard limit. */

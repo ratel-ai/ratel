@@ -1,7 +1,9 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -12,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 import type { SandboxManifest } from "./domain/manifest";
+import type { RunInput, RunResult } from "./domain/run";
 
 /** The tables of Ratel sandboxes (the `sandboxes` flag). */
 
@@ -77,4 +80,49 @@ export const sandboxSecrets = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.name] })],
+);
+
+/** One run of a version in one new instance. */
+export const sandboxRuns = pgTable(
+  "sandbox_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => sandboxVersions.id, { onDelete: "cascade" }),
+    // `run-input.schema.json`: the input, the params, the tool policy and the fixtures.
+    runInput: jsonb("run_input").$type<RunInput>().notNull(),
+    // "queued" | "running" | "completed" | "failed" | "infra_error" | "timed_out"
+    status: text("status").notNull().default("queued"),
+    // `run-result.schema.json`, as the runner posted it.
+    result: jsonb("result").$type<RunResult>(),
+    // Why a run has no result.
+    reason: text("reason"),
+    traceId: text("trace_id"),
+    // SHA-256 of the run token.
+    tokenHash: text("token_hash").notNull(),
+    instanceRef: text("instance_ref"),
+    timeoutS: integer("timeout_s").notNull(),
+    // Who or what started it.
+    requestedBy: text("requested_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    instanceStoppedAt: timestamp("instance_stopped_at", { withTimezone: true }),
+    usageRecordedAt: timestamp("usage_recorded_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("sandbox_runs_token_hash_idx").on(t.tokenHash),
+    index("sandbox_runs_project_created_idx").on(t.projectId, t.createdAt),
+    index("sandbox_runs_version_created_idx").on(t.versionId, t.createdAt),
+    // The sweep reads the runs that still have work; a finished run leaves the index.
+    index("sandbox_runs_open_idx")
+      .on(t.createdAt)
+      .where(
+        sql`${t.status} in ('queued', 'running') or (${t.instanceRef} is not null and (${t.instanceStoppedAt} is null or ${t.usageRecordedAt} is null))`,
+      ),
+  ],
 );
