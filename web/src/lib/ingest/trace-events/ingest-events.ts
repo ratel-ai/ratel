@@ -97,15 +97,20 @@ export interface RuntimeEventJobsDeps extends IntentGraphFoldScheduleDeps {
   trackServerEvent?: typeof trackServerEventFn;
 }
 
-/** The jobs a stored batch starts, and its product event. */
+/**
+ * The jobs a stored batch starts, and its product event. With `redelivers` (the queue) a batch
+ * without a new event starts them too: the delivery that stored it can have ended before that.
+ */
 export async function followRuntimeEvents(
   projectId: string,
   organization: Organization | null,
   batch: RuntimeEventsBatch,
   accepted: number,
   deps: RuntimeEventJobsDeps,
+  { redelivers = false }: { redelivers?: boolean } = {},
 ): Promise<void> {
-  if (accepted > 0 && batch.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
+  const starting = redelivers ? batch.valid.length : accepted;
+  if (starting > 0 && batch.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
     await scheduleIntentGraphFold(deps, projectId, EVENTS_ENDPOINT);
   }
   await deps.trackServerEvent?.(
@@ -123,7 +128,7 @@ export async function followRuntimeEvents(
     projectId,
     organization,
     eventTypes: batch.valid.map((event) => event.type),
-    accepted,
+    accepted: starting,
     logError: deps.logError,
     reportServerException: deps.reportServerException,
   });

@@ -43,8 +43,6 @@ export async function processEvents(
   if (!body.ok) return deadLetter(REFUSALS[body.reason]);
   const batch = parseRuntimeEvents(body.events);
 
-  // The rejects first: the jobs follow the events at once, so a failure after the events are
-  // stored cannot cost the next delivery its jobs.
   await deps.insertTraceEventRejects(projectId, batch.rejectRows);
   const accepted = await storeRuntimeEvents(
     projectId,
@@ -52,7 +50,7 @@ export async function processEvents(
     { appendOnly: envelope.keyPolicy.appendOnlyIngest, receivedAt },
     deps.insertTraceEvents,
   );
-  await followRuntimeEvents(projectId, organization, batch, accepted, deps);
+  await followRuntimeEvents(projectId, organization, batch, accepted, deps, { redelivers: true });
   await deps.touchApiKeyAt(envelope.keyId, receivedAt).catch(() => null);
   return {
     result: STORED,

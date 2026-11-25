@@ -4,9 +4,6 @@
 
 Accepted
 
-The envelope and its codec come first (`web/src/lib/ingest/queue/`). The port, the drivers and
-the queued routes follow. Until a route is queued, it runs as `INGEST_QUEUE=direct` describes.
-
 ## Context
 
 `POST /v1/traces`, `POST /v1/logs` and `POST /api/v1/events` authenticate, decode, store and
@@ -52,7 +49,7 @@ the core's routes and from any other writer.
 | Store, and `appendOnlyIngest` from the envelope | | yes | The flag as it was at accept. |
 | `incrementEventUsage` | | yes | By rows stored, so a redelivery adds nothing. |
 | `rejoinLateGenAiLogs`, `rejoinStoredModelCalls` | | yes | Unchanged: both sides store first and read after, so they do not depend on order. |
-| Fold, clustering and turn-build jobs | | yes | Enqueued only. The worker drains them. |
+| Fold, clustering and turn-build jobs | | yes | Enqueued only. The worker drains them. A delivery without a new row enqueues them too, because the one that stored the rows can have ended before. |
 | Raw capture (`otlp_raw_exports`) | | yes | After a complete store. The row id is the envelope id, so a redelivery adds no row. |
 | `last_used_at` | | yes | After the store, for all three signals: the later of the stored value and `receivedAt`. Best effort. A refused request no longer counts as a use. |
 | First-trace event, ingest counts, `runtime_events_ingested` | | yes | From the stored counts. Accept logs the request and its refusals. |
@@ -177,10 +174,21 @@ suite.
   stop in [ADR-0005](0005-background-worker.md); a second signal exits at once, and the message
   is delivered again.
 
-**What a second delivery can change.** A crash between `events` and `event_metrics` leaves a
-call without metrics, and a later delivery does not add them. A crash after `meterTraceBatch`
-and before the store can count a trace's spans twice against its bound. Both are open until
-the consumer is proven against double delivery.
+**What a second delivery can change.** `queue/duplicate-safety.integration.test.ts` kills the
+process at every statement of each signal, delivers the message again and compares every table
+with one clean run. `events` and `event_metrics` are one transaction, and an event that an older
+build left without its metrics gets them when it is sent again (the check command is in
+`web/src/lib/ingest/README.md`). `tool_usage_counters` move with new rows in the transaction that
+stores them. `otlp_raw_exports` is keyed on the envelope id. The match-quality label occurrences
+are not written by ingest. These differences are accepted:
+
+| What | Can change | Why it stays |
+|---|---|---|
+| The monthly counter (`incrementEventUsage`) | A crash between the store and the count leaves one message's events uncounted. Never counted twice. | The counter is the edition's, outside the transaction, and the error favours the customer. |
+| The span bound of a trace (`meterTraceBatch`) | A crash between the meter and the store counts the message's spans twice against the bound. A trace's outcome does not change. | The meter is the edition's and has no message id. At most one message per crash. |
+| `last_used_at`, product events, ingest log lines | A crash can repeat a log line or lose a product event. | Best effort in direct mode too. |
+| Values read at process time: prices, stored logs, SDK invokes near a tool span | A message that is processed late reads the current ones. A stored row keeps its first values. | The same as a late request in direct mode. |
+| A client's own retry | Is a new envelope, so raw capture keeps both bodies. Every other table drops the duplicates. | As in direct mode. |
 
 ### `INGEST_QUEUE`
 
