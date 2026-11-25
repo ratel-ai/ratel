@@ -92,9 +92,36 @@ test("nothing yet is a designed state", () => {
     visibleText(map(graph, true, "before")),
     /No traces in the last 7 days.*Show 30 days/,
   );
-  // The drawing is a picture and not data: hidden from a screen reader, no text, and it is still.
-  assert.match(none, /aria-hidden="true"[^>]*><svg[^>]*data-topology-ghost/);
-  assert.doesNotMatch(none, /<text|data-topology-node|animate-/);
+});
+
+test("the example map is the real drawing, and never reads as data", () => {
+  const none = map(
+    topologyModel({ ...ROWS, agents: [], handoffs: [], servers: [], calls: [] }),
+    true,
+    "none",
+  );
+  const svgs = [
+    ...none.matchAll(/<svg[^>]*data-topology-example="([^"]+)"[^>]*>([\s\S]*?<\/g>)<\/svg>/g),
+  ];
+  assert.deepEqual(
+    svgs.map((svg) => svg[1]),
+    ["wide", "full", "row", "tall", "pair"],
+  );
+  for (const [svg, size] of svgs) {
+    assert.match(svg, /aria-hidden="true"/, size);
+    assert.match(svg, /data-topology-node="agent"[\s\S]*data-topology-node="mcp"/, size);
+    assert.match(svg, /data-topology-edge="call"/, size);
+    assert.doesNotMatch(
+      svg,
+      /<a\b|href=|<title>|color-danger|animate-/,
+      `${size} is still and inert`,
+    );
+    assert.doesNotMatch(svg.replace(/<[^>]+>/g, " "), /\d/, `${size} has no number`);
+  }
+  const words = svgs[0][0].replace(/<[^>]+>/g, "|");
+  for (const name of ["Your agent", "Research agent", "Support agent", "Search", "CRM", "Database"])
+    assert.ok(words.includes(name), name);
+  assert.match(none, /aria-hidden="true"[^>]*><span[^>]*>Example</);
 });
 
 test("what the caps left out is counted", () => {

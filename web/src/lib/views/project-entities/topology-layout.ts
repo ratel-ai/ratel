@@ -55,18 +55,32 @@ const SPREAD = 12;
 const LABEL = { width: 34, height: 13 } as const;
 const LABEL_STOPS = [0.5, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85];
 
-export function topologyLayout(graph: Topology): TopologyLayout {
+/** The map's own measures by default; the example map of an empty widget draws tighter or wider. */
+export interface TopologySpacing {
+  boxWidth?: number;
+  columnGap?: number;
+  padding?: number;
+}
+
+export function topologyLayout(
+  graph: Topology,
+  {
+    boxWidth = TOPOLOGY_BOX.width,
+    columnGap = TOPOLOGY_BOX.columnGap,
+    padding = PADDING,
+  }: TopologySpacing = {},
+): TopologyLayout {
   const columns = columnsOf(graph);
   if (columns.length === 0) return { nodes: [], edges: [], width: 0, height: 0 };
-  const { width: boxWidth, height: boxHeight, rowGap, columnGap } = TOPOLOGY_BOX;
+  const { height: boxHeight, rowGap } = TOPOLOGY_BOX;
   const tallest = Math.max(...columns.map(stackHeight));
-  const height = tallest + PADDING * 2;
+  const height = tallest + padding * 2;
   const nodes = columns.flatMap((column, index) =>
     column.map((node, row): PlacedNode => {
       const top = (height - stackHeight(column)) / 2;
       return {
         ...node,
-        x: PADDING + index * (boxWidth + columnGap),
+        x: padding + index * (boxWidth + columnGap),
         y: top + row * (boxHeight + rowGap),
         width: boxWidth,
         height: boxHeight,
@@ -76,7 +90,7 @@ export function topologyLayout(graph: Topology): TopologyLayout {
   return {
     nodes,
     edges: placeEdges(graph.edges, nodes),
-    width: PADDING * 2 + columns.length * boxWidth + (columns.length - 1) * columnGap,
+    width: padding * 2 + columns.length * boxWidth + (columns.length - 1) * columnGap,
     height,
   };
 }
@@ -222,7 +236,7 @@ function route(
       : Math.max(...column.map((node) => node.y + node.height)) + TOPOLOGY_BOX.rowGap / 2;
     // Edges that share a lane run beside each other.
     const lane = y + ((index % 5) - 2) * 4;
-    const [near, far] = forward ? [x, x + TOPOLOGY_BOX.width] : [x + TOPOLOGY_BOX.width, x];
+    const [near, far] = forward ? [x, x + from.width] : [x + from.width, x];
     points.push({ x: near, y: lane }, { x: far, y: lane });
   }
   return [...points, end];

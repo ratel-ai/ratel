@@ -1,8 +1,12 @@
 import { cn } from "@ratel/design-system/cn";
-import { Bot, Box, type LucideIcon, Server } from "lucide-react";
 import Link from "next/link";
 import type { EmptyWindow } from "@/components/console/home/focused/WidgetEmpty";
 import { TopologyEmpty } from "@/components/console/topology/TopologyEmpty";
+import {
+  TopologyArrows,
+  TopologyEdgePath,
+  TopologyNodeCard,
+} from "@/components/console/topology/TopologyParts";
 import { formatInteger, formatPercent } from "@/lib/synthesis/traces/v2/format";
 import { agentHref, agentsHref } from "@/lib/views/agents/paths";
 import { mcpServerHref, mcpServersHref } from "@/lib/views/mcp-servers/paths";
@@ -17,9 +21,6 @@ import {
   type PlacedNode,
   topologyLayout,
 } from "@/lib/views/project-entities/topology-layout";
-
-const ICONS: Record<TopologyNodeKind, LucideIcon> = { agent: Bot, mcp: Server, project: Box };
-const NAME_LENGTH = 19;
 
 /**
  * The topology of a project: its agents by handoff depth, left to right, then
@@ -80,12 +81,15 @@ export function TopologyMap({
           height={layout.height}
           className={cn("block shrink-0", bare ? "m-auto" : "mx-auto")}
         >
-          <defs>
-            <Arrow id="topology-arrow" color="var(--color-fg-subtle)" />
-            <Arrow id="topology-arrow-failing" color="var(--color-danger)" />
-          </defs>
+          <TopologyArrows id="topology-arrow" failing />
           {layout.edges.map((edge) => (
-            <Edge key={`${edge.from}|${edge.to}`} edge={edge} />
+            <TopologyEdgePath
+              key={`${edge.from}|${edge.to}`}
+              edge={edge}
+              arrow="topology-arrow"
+              failing={edge.errors !== null && edge.errors > edge.count * AGENT_ERROR_PILL_RATE}
+              title={edgeText(edge)}
+            />
           ))}
           {layout.edges.map((edge) => (
             <text
@@ -104,7 +108,7 @@ export function TopologyMap({
             </text>
           ))}
           {layout.nodes.map((node) => (
-            <Node key={node.id} node={node} href={hrefOf(node)} />
+            <LinkedNode key={node.id} node={node} href={hrefOf(node)} />
           ))}
         </svg>
       </div>
@@ -134,75 +138,13 @@ export function TopologyMap({
   );
 }
 
-function Arrow({ id, color }: { id: string; color: string }) {
-  return (
-    <marker
-      id={id}
-      viewBox="0 0 8 8"
-      refX="7"
-      refY="4"
-      markerUnits="userSpaceOnUse"
-      markerWidth="9"
-      markerHeight="9"
-      orient="auto-start-reverse"
-    >
-      <path d="M0,0 L8,4 L0,8 z" fill={color} />
-    </marker>
-  );
-}
-
-function Edge({ edge }: { edge: PlacedEdge }) {
-  const failing = edge.errors !== null && edge.errors > edge.count * AGENT_ERROR_PILL_RATE;
-  return (
-    <path
-      d={edge.path}
-      fill="none"
-      stroke={failing ? "var(--color-danger)" : "var(--color-fg-subtle)"}
-      strokeOpacity={0.7}
-      strokeWidth={edge.width}
-      markerEnd={failing ? "url(#topology-arrow-failing)" : "url(#topology-arrow)"}
-      data-topology-edge={edge.kind}
-    >
-      <title>{edgeText(edge)}</title>
-    </path>
-  );
-}
-
-function Node({ node, href }: { node: PlacedNode; href: string | null }) {
-  const Icon = ICONS[node.kind];
+function LinkedNode({ node, href }: { node: PlacedNode; href: string | null }) {
   const box = (
-    <g data-topology-node={node.kind}>
-      <title>{nodeText(node)}</title>
-      <rect
-        x={node.x}
-        y={node.y}
-        width={node.width}
-        height={node.height}
-        rx={6}
-        fill={node.failing ? "var(--color-danger-subtle)" : "var(--color-app)"}
-        stroke={node.failing ? "var(--color-danger)" : "var(--color-line-strong)"}
-      />
-      <Icon
-        aria-hidden
-        x={node.x + 11}
-        y={node.y + 14}
-        width={16}
-        height={16}
-        strokeWidth={1.5}
-        className={node.failing ? "text-danger" : "text-fg-muted"}
-      />
-      <text x={node.x + 36} y={node.y + 19} className="fill-fg text-xs font-semibold">
-        {shortName(node.name)}
-      </text>
-      <text
-        x={node.x + 36}
-        y={node.y + 34}
-        className={`text-xs tabular-nums ${node.failing ? "fill-danger" : "fill-fg-subtle"}`}
-      >
-        {countText(node)}
-        {node.failing ? `, ${formatPercent(node.errorRate)} errors` : null}
-      </text>
-    </g>
+    <TopologyNodeCard
+      node={node}
+      title={nodeText(node)}
+      detail={`${countText(node)}${node.failing ? `, ${formatPercent(node.errorRate)} errors` : ""}`}
+    />
   );
   if (!href) return box;
   return (
@@ -268,8 +210,4 @@ function omittedText({ agents, servers, atLeast }: Topology["omitted"]): string 
 
 function plural(count: number, noun: string): string {
   return `${formatInteger(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function shortName(name: string): string {
-  return name.length > NAME_LENGTH ? `${name.slice(0, NAME_LENGTH - 1)}…` : name;
 }
