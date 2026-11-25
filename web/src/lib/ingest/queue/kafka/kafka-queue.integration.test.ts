@@ -41,7 +41,7 @@ if (!brokers) {
         .map(({ offset }) => Number(offset))
         .reduce((sum, offset) => sum + Math.max(0, offset), 0);
     const steps: string[] = [];
-    let release = () => undefined as void;
+    let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });

@@ -2,6 +2,21 @@
 
 What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 
+The three telemetry routes run in one of two modes
+([ADR-0009](../../../../docs/adr/0009-queued-ingest.md)). In direct mode (`INGEST_QUEUE` unset) the
+request decodes, stores and answers with counts. With a queue, *accept* decides from the headers,
+the key and the size, publishes one envelope and answers 202, and *process* decodes and stores it in
+the consumer. Both modes call the same store functions, so they leave the same rows:
+
+```
+request ── admit ── accept ── publish ──> queue ──> consumer ── process ── the same store as direct
+                └── direct: decode, store, answer
+```
+
+A process function answers `ack`, `retry`, `outage` or `dead-letter`. Every write gives the same
+rows the second time, and the consumer passes `redelivers`, so a write that direct mode only logs
+fails the delivery and is tried again.
+
 | Path | Holds |
 |---|---|
 | `cloud-schema.ts` | `CloudEvent`: the shape one LLM call reduces to, rebuilt from OTLP spans and stored in `events.payload` |
@@ -15,6 +30,8 @@ What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 | `queue/process.ts` | process (ADR-0009): the consumer's handler, which reads the project and calls the process function of the signal (`otlp/process-traces.ts`, `otlp/process-logs.ts`, `trace-events/process-events.ts`). `port/store-failure.ts` tells an outage from a failure of one message |
 | `queue/port/` | the core's queue, which is the port of `contracts/ingest-queue.ts` over an `Envelope`: what a driver does with a failed delivery (`settle.ts`), and in `test-support/` the conformance suite that every driver passes (`runQueueConformance`) with an in-memory driver for tests |
 | `queue/postgres/` | the driver of `INGEST_QUEUE=postgres`: the spool table (`schema.ts`, migration `0046`), the claim that holds one message of a project at a time with a lease (`store.ts`), the consumer loop (`postgres-queue.ts`), and the prune of dead letters past 14 days (`register.ts`). `listDeadLetters` and `readDeadLetterFrame` read the dead letters. The integration test also runs on a real server with `TEST_POSTGRES_URL` |
+| `queue/consumer.ts` | the consumer of one process: a log line for each retry (`ingest_message_retried`), outage (`ingest_store_unavailable`) and dead letter (`ingest_message_dead_lettered`), the counts once a minute (`ingest_queue_processed`), and the stop on a signal. `src/ingest-consumer.ts` wires the process functions to their real dependencies, as a route does, and `instrumentation.node.ts` starts it |
+| `queue/test-support.ts` | a direct and a queued deployment over PGlite, the sample bodies, and the dump of every table that the queued tests compare |
 | `queue/kafka/` | the driver of `INGEST_QUEUE=kafka`, loaded only then: `open.ts` reads the settings, `client.ts` connects (plaintext, TLS or Amazon MSK's IAM login), `kafka-queue.ts` publishes with the project id as the key and consumes an explicit topic list that it reads again while it runs. An offset is committed after its handler succeeded, a message that keeps failing goes to the dead-letter topic, and a wait holds the whole partition. The integration test needs `TEST_KAFKA_BROKERS` (the CI job `queue-conformance`) |
 | `otlp/` | OTLP decode, the event/span/log writes, and the `/v1/traces` and `/v1/logs` handlers (each checks its key's scope through `platform/api-keys/authenticate.ts`, and an ingest-only key's shared limits); a model call counts only the tool calls it produced (upstream's `cloud-otlp-produced-tool-calls`, retired upstream too: there is no switch). the trace shapes the tool-count tests ingest are in `ledger/turns/tool-count-fixtures.ts` |
 | `otlp/schema.ts` | `events`, `event_metrics`, `otel_spans`, `otel_logs`, `tool_count_backfill_backups` (upstream's tool-count backfill keeps its rollback rows there; the script is not part of this edition, the table is, migration `0032`) (the two OTel tables and `otel_trace_summaries` carry autovacuum storage options set by migration `0031_otel_autovacuum`, which the schema cannot express; `otlp/queries.integration.test.ts` checks them) |

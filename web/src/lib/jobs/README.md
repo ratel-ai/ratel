@@ -14,14 +14,14 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 | `store.ts` | `drainProjectJobs`: the runner wired to the database and the registered handlers, after reaping zombies |
 | `observability.ts` | typed background events and exception reports through the telemetry shim |
 | `route-helpers.ts` | `enqueueForProjectId` and `scheduleProjectDrain`: enqueue, then drain after the HTTP response with Next's `after()` |
-| `role.ts` | `APP_ROLE`: `all` (the default) also drains after a response; `api` only queues; `worker` runs the job loop |
+| `role.ts` | `APP_ROLE`: `all` (the default) also drains after a response; `api` only queues; `worker` runs the job loop. `consumesIngestQueue`: with `INGEST_QUEUE` set, `all` and `worker` also read the ingest queue |
 | `boot-plan.ts` | what a process does at boot, from `APP_ROLE` and `RATEL_CRON`: whether it migrates, and who runs its tick |
 | `drain.ts` | one cron tick: `before` steps, the drain, `after` steps (retention-only ones gated by `DATA_RETENTION_ENABLED=1`); the `cron_drain_completed` heartbeat with upstream's per-area `*Errors` lists |
 | `background-drain.ts` | `GET /api/cron/drain` (upstream's background drain): closed without `CRON_SECRET`, 202 at once, the tick after the response, one at a time per process (`drain_skipped_busy`) under the `CRON_DRAIN_TIMEOUT_MS` watchdog (`drain_timed_out` frees the slot); an API-only process answers 202 and runs nothing |
 | `drain-observer.ts` | the drain's outcome in the logs for the deployment's Datadog drain monitors (owned port of upstream's `observeDrain`): `drain_started`, `drain_completed` with the age of the oldest queued job of tier 0 or 1 (`readOldestQueuedJobAgeMs`; tier 2 sweeps wait on purpose), `job_queue_lagging` past 10 minutes, `drain_failed`; the cron route and the worker's sweep both report through it. The worker's sweep also has upstream's watchdog (`timedDrain`): `drain_progress` after each finished job, `drain_timed_out` after `CRON_DRAIN_TIMEOUT_MS` (10 minutes by default, `0` turns it off) with no finished job, and `drain_skipped_hung` while two sweeps are unsettled, so a hung sweep never stops the analysis lane |
 | `scheduler.ts` | the in-process timer an all-in-one process runs the tick with (`RATEL_CRON=inprocess`, the OSS default); Cloud uses an external caller |
 | `worker.ts` | the worker's loop: one step at a time, the tick every 60 s, a drain otherwise, a 3 s wait when nothing is queued |
-| `worker-start.ts` | the loop wired to `drainProjectJobs` (an analysis lane and an import lane) and `runDrainTick` (observed, `workerTick`), started once per process; once a day `reportTopQueries` logs the database's most expensive statements as `db_top_query` and resets the counts; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits |
+| `worker-start.ts` | the loop wired to `drainProjectJobs` (an analysis lane and an import lane) and `runDrainTick` (observed, `workerTick`), started once per process; once a day `reportTopQueries` logs the database's most expensive statements as `db_top_query` and resets the counts; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits. What runs `beside` the loop (the ingest queue's consumer) is stopped with it, before that flush |
 
 ## Roles
 
@@ -33,7 +33,16 @@ One image, three roles ([ADR-0005](../../../../docs/adr/0005-background-worker.m
 | `api` (`web` in `docker-compose.yml`) | only queues | none | 202, skipped | yes |
 | `worker` | serves no traffic | `worker.ts` | runs a tick | never |
 
+With `INGEST_QUEUE=postgres` or `kafka`
+([ADR-0009](../../../../docs/adr/0009-queued-ingest.md)) the `worker` process, or the single `all`
+process, also reads the ingest queue, in its own loop next to the jobs' (`lib/ingest/queue`, started
+by `instrumentation.node.ts`). An `api` process publishes and never consumes. The consumer only
+enqueues jobs; the loop or the minute tick runs them.
+
 Every path meets in `drainProjectJobs`, and the atomic claim keeps two processes from picking
 the same job. The worker needs `NEXT_MANUAL_SIG_HANDLE=true` to stop cleanly: without it Next
 exits on SIGTERM before the step in flight finishes. A job cut short stays `running` until the
-reaper fails it (`STALE_JOB_MS`, ten minutes), and holds its project's other jobs until then.
+reaper fails it (`STALE_JOB_MS`, ten minutes), and holds its project's other jobs until then. The
+same goes for an `all` process that reads the ingest queue: with `NEXT_MANUAL_SIG_HANDLE=true` it
+finishes and acknowledges the message in hand; without it, Next may exit first and the message is
+delivered again.
