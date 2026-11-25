@@ -67,7 +67,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "focusedConsole",
-    note: "the simplified console: Agent health as the score and its categories, Self-corrections under Insights",
+    note: "the simplified console: Overview as a recap, Agent health as the score and its categories, Self-corrections under Insights",
   },
 ];
 

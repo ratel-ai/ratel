@@ -287,7 +287,8 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       return true;
     },
   });
-  const flags = result.data.flags as { key: string; enabled: boolean }[];
+  const flags = result.data.flags as { key: string; enabled: boolean; note: string }[];
+  assert.match(flags.find(({ key }) => key === "focusedConsole")?.note ?? "", /Overview/);
   assert.deepEqual(
     flags.map(({ key, enabled }) => [key, enabled]),
     [
