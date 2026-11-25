@@ -377,26 +377,28 @@ export async function handleTracesRequest(
   await logTracesIngested(apiKey.projectId, spans, persisted.rows, deps.ingestLog);
 
   // Raw capture after a stored export, so garbage and retried failures are
-  // never kept. Fails open: it never changes the response.
-  await captureOtlpRawExport(
-    {
-      projectId: apiKey.projectId,
-      signal: "traces",
-      contentType: transport === "json" ? "application/json" : "application/x-protobuf",
-      body: bytes,
-      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
-      itemCount: spans.length,
-      traceIds: [...new Set(spans.map((span) => span.traceId))],
-    },
-    organization,
-    deps.otlpRawCapture,
-    {
-      logError,
-      logWarn: deps.logWarn ?? defaultLogWarn,
-      captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
-      trackServerEvent: deps.trackServerEvent,
-    },
-  );
+  // never kept. Nor is a partly refused one: its body holds the refused spans. Fails open: it never
+  // changes the response.
+  if (!persisted.refused)
+    await captureOtlpRawExport(
+      {
+        projectId: apiKey.projectId,
+        signal: "traces",
+        contentType: transport === "json" ? "application/json" : "application/x-protobuf",
+        body: bytes,
+        gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
+        itemCount: spans.length,
+        traceIds: [...new Set(spans.map((span) => span.traceId))],
+      },
+      organization,
+      deps.otlpRawCapture,
+      {
+        logError,
+        logWarn: deps.logWarn ?? defaultLogWarn,
+        captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
+        trackServerEvent: deps.trackServerEvent,
+      },
+    );
 
   // Best-effort heartbeat; must never turn a successful insert into a 500.
   await deps.touchApiKey(apiKey.id).catch(() => {});

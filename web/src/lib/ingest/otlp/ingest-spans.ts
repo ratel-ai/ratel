@@ -85,7 +85,7 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   insertOtelSpans: typeof insertOtelSpansFn;
   incrementEventUsage?: IncrementEventUsage;
   /** Decides each trace's outcome; used only when the context sets `meterTraces`. */
-  traceMetering?: Pick<TraceMeteringPort, "meterTraceBatch">;
+  traceMetering?: Pick<TraceMeteringPort, "meterTraceBatch" | "releaseSpans">;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   /** The span dimension derivation (`lib/ingest/otlp/dimensions`). Absent, the real one; a test passes one that throws. */
   deriveSpanDimensions?: typeof deriveSpanDimensions;
@@ -124,7 +124,39 @@ export type PersistSpansResult =
   | { ok: true; accepted: number; calls: number; rows: EventWithMetric[]; refused?: number }
   | { ok: false; stage: "events" | "derived" | "refused" };
 
+/** An OTLP trace id has 32 characters. Some exporters send their own, longer ones. */
+const MAX_METERED_TRACE_ID = 256;
+
+/** Store a decoded batch. Spans that a meter admitted and that are not stored are given back. */
 export async function persistDecodedSpans(
+  spans: DecodedSpan[],
+  context: PersistSpansContext,
+  deps: PersistSpansDeps,
+): Promise<PersistSpansResult> {
+  let admitted: ReadonlyMap<string, number> = new Map();
+  const release = async () => {
+    const { organization, projectId } = context;
+    if (admitted.size === 0 || !organization) return;
+    await deps.traceMetering
+      ?.releaseSpans?.({ organization, projectId }, admitted)
+      .catch((err: unknown) => {
+        deps.logError("trace meter release failed", err, { project_id: projectId });
+        deps.captureFailure(err);
+      });
+  };
+  try {
+    const result = await storeDecodedSpans(spans, context, deps, (batch) => {
+      admitted = batch;
+    });
+    if (!result.ok) await release();
+    return result;
+  } catch (err) {
+    await release();
+    throw err;
+  }
+}
+
+async function storeDecodedSpans(
   spans: DecodedSpan[],
   {
     projectId,
@@ -136,6 +168,7 @@ export async function persistDecodedSpans(
     meterTraces = false,
   }: PersistSpansContext,
   deps: PersistSpansDeps,
+  onAdmitted: (spansByTrace: ReadonlyMap<string, number>) => void,
 ): Promise<PersistSpansResult> {
   const { logError } = deps;
   // Speak one vocabulary downstream: additively re-key Vercel AI SDK `ai.*`
@@ -156,12 +189,14 @@ export async function persistDecodedSpans(
   // Trace meters before anything is stored: a trace's first batch decides it for every later one.
   // A dropped trace stores nothing; an ingested-only one stores its spans and calls but writes no
   // analysis ledger rows, so no analysis job reads it. Best-effort: when the meter fails, the
-  // batch is analyzed. A span without a trace id is in no trace, so it is never counted: OTLP calls
-  // it invalid, and it is not stored.
+  // batch is analyzed. A span without a trace id is in no trace, so it is never counted, and an
+  // oversized id breaks the count of its whole batch. OTLP calls both invalid: they are not stored.
   const skipAnalysis = new Set<string>();
   let refused = 0;
   if (meterTraces && organization && deps.traceMetering) {
-    spans = spans.filter((span) => span.traceId.length > 0);
+    spans = spans.filter(
+      (span) => span.traceId.length > 0 && span.traceId.length <= MAX_METERED_TRACE_ID,
+    );
     if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
     try {
       const outcomes = await deps.traceMetering.meterTraceBatch(
@@ -174,6 +209,7 @@ export async function persistDecodedSpans(
       spans = spans.filter(
         (span) => !["dropped", "refused"].includes(outcomes.get(span.traceId) ?? ""),
       );
+      onAdmitted(spansByTrace(spans));
       if (spans.length === 0) {
         if (refused > 0) return { ok: false, stage: "refused" };
         return { ok: true, accepted: 0, calls: 0, rows: [] };

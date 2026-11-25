@@ -33,4 +33,12 @@ export interface TraceMeteringPort {
     scope: TraceMeteringScope,
     spansByTrace: ReadonlyMap<string, number>,
   ): Promise<ReadonlyMap<string, IngestOutcome>>;
+  /**
+   * Gives back spans that `meterTraceBatch` admitted and the batch could not store, so that the
+   * retry does not count two times. Absent, the edition bounds no span.
+   */
+  releaseSpans?(
+    scope: TraceMeteringScope,
+    spansByTrace: ReadonlyMap<string, number>,
+  ): Promise<void>;
 }

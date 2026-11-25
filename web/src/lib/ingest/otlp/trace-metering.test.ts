@@ -210,3 +210,51 @@ test("a refused trace stores nothing: 429 when the whole export is refused, else
   assert.deepEqual(ids(mixed.stored.spans), [ANALYZED]);
   assert.deepEqual(ids(mixed.stored.calls), [ANALYZED]);
 });
+
+test("a span with an oversized trace id is not stored when metered: it cannot break the meter", async () => {
+  const huge = "ab".repeat(1_400);
+  const { send, asked, stored } = setup();
+  await send([huge, ANALYZED]);
+  assert.deepEqual(asked, [[ANALYZED]]);
+  assert.deepEqual(ids(stored.spans), [ANALYZED]);
+});
+
+test("a storage failure gives the metered spans back, so the retry is not refused", async () => {
+  const released: [string, number][] = [];
+  const { send } = setup({
+    insertEventsWithMetrics: async () => {
+      throw new Error("database down");
+    },
+    traceMetering: {
+      isMetered: async () => true,
+      meterTraceBatch: async () =>
+        new Map([
+          [ANALYZED, "analyzed"],
+          [INGESTED, "refused"],
+          [DROPPED, "dropped"],
+        ]),
+      releaseSpans: async (_scope, spansByTrace) => {
+        released.push(...spansByTrace);
+      },
+    },
+  });
+  assert.equal((await send(ALL)).status, 500);
+  assert.deepEqual(released, [[ANALYZED, 3]]);
+});
+
+test("the raw body of a partly refused export is not kept", async () => {
+  const captured: string[] = [];
+  const otlpRawCapture = {
+    store: {
+      store: async () => {
+        captured.push("raw");
+        return { stored: true };
+      },
+    },
+  };
+  const kept = setup({ otlpRawCapture } as never);
+  await kept.send([ANALYZED]);
+  const refused = setup({ otlpRawCapture, outcomes: { [DROPPED]: "refused" } } as never);
+  await refused.send([ANALYZED, DROPPED]);
+  assert.equal(captured.length, 1);
+});
