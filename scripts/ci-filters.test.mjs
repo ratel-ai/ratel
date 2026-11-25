@@ -79,8 +79,8 @@ test("setup-branch-ruleset.sh sets every output", () => {
   assertTrue(r, OUTPUTS);
 });
 
-test("dependency allowlist change runs platform only", () => {
-  const r = on(["scripts/dependencies-allow.json"]);
+test("layer check change runs platform only", () => {
+  const r = on(["scripts/check-layers.mjs"]);
   assertTrue(r, ["platform"]);
   assertFalse(r, ["design_system", "compose", "lockfiles"]);
 });

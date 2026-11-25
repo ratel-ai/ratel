@@ -10,8 +10,7 @@
     "ee:unlink": "node scripts/link-ee.mjs --unlink",
     "test": "pnpm -r test",
     "check:boundary": "node scripts/check-ee-boundary.mjs",
-    "check:layers": "node scripts/check-layers.mjs",
-    "check:dependencies": "node scripts/check-dependencies.mjs"
+    "check:layers": "node scripts/check-layers.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13"

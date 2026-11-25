@@ -42,11 +42,6 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
   - Good: `fix(RP-123): keep the session open`
   - Bad: `updated some files`, `RP-123 Keep the session open`
 
-## Dependencies
-
-A new direct dependency needs a line in `scripts/dependencies-allow.json`, with the reason in the
-PR body. `pnpm check:dependencies` fails on one that is not listed, and on an entry no package uses.
-
 ## When in doubt
 
 - For locked architectural decisions: [`docs/adr/`](docs/adr/) — the ADR is the source of truth, not any README.

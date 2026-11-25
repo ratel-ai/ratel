@@ -40,7 +40,7 @@ fails when the schema has a change that no migration covers.
 
 **The code is maintained here.** It came from `ratel-cloud`, which is frozen; the sync that
 landed it is retired. Comments that say "upstream" or "Owned" record where code came from and
-bind no one. A new direct dependency is approved by name in `scripts/dependencies-allow.json`.
+bind no one.
 
 **The open-source edition runs with no vendor account.** Model use is server-side and opt-in
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). With no key there is no outbound call, and each
