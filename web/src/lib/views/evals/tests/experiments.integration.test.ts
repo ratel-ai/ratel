@@ -733,3 +733,40 @@ test("params that are too deep are refused, not a server error", async () => {
   const response = await handleStartByKey(new Request("http://x", { method: "POST", body }), deps);
   assert.equal(response.status, 400);
 });
+
+test("a trial that the concurrency limit refused waits for the next step", async () => {
+  const t = await setup();
+  await t.approvedCase("a");
+  const experiment = await t.start({ trialsPerCase: 3 });
+  const full = (max: number) => ({
+    ok: false as const,
+    reason: "limit_reached" as const,
+    limit: "sandbox_concurrent_instances" as const,
+    max,
+    current: max,
+    message: "full",
+  });
+  t.setRefuse((n) => (n === 0 ? null : full(1)));
+  await t.step(experiment);
+  assert.deepEqual(
+    (await t.trials(experiment.id)).map(({ state }) => state).sort(),
+    ["pending", "pending", "running"],
+  );
+  t.setRefuse(null);
+  for (let round = 0; round < 3; round += 1) {
+    for (const run of t.runs.values()) if (run.status === "running") t.end(run);
+    await t.step(experiment);
+  }
+  assert.deepEqual(countTrials(await t.trials(experiment.id)), {
+    pass: 3,
+    fail: 0,
+    invalid: 0,
+    open: 0,
+  });
+
+  // A limit of zero gives no place to wait for.
+  const none = await t.start({ trialsPerCase: 1 });
+  t.setRefuse(() => full(0));
+  await t.step(none);
+  assert.equal((await t.trials(none.id))[0]?.result, "invalid");
+});
