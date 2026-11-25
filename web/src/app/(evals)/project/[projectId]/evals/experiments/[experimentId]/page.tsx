@@ -6,6 +6,7 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
+import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { experimentPageModel } from "@/lib/views/evals/page-model";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,8 @@ export default async function ExperimentPage({
   params: Promise<{ projectId: string; experimentId: string }>;
 }) {
   const { projectId, experimentId } = await params;
+  // Next renders a page next to its layout: the layout's 404 does not stop this data.
+  if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Evals">

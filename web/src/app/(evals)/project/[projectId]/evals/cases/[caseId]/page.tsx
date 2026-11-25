@@ -7,6 +7,7 @@ import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
+import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { caseEditorModel } from "@/lib/views/evals/page-model";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export default async function EvalCasePage({
   params: Promise<{ projectId: string; caseId: string }>;
 }) {
   const { projectId, caseId } = await params;
+  // Next renders a page next to its layout: the layout's 404 does not stop this data.
+  if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Evals">

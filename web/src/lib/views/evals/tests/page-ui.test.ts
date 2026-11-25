@@ -109,7 +109,7 @@ test("the turn page shows the action behind the flag, and the pages are under th
     );
   const page = source("project/[projectId]/traces/turns/[turnId]/page.tsx");
   assert.match(page, /evalsEnabledForProject\(project\.id\)\) \? \(\s*<SaveAsEvalCase/);
-  assert.match(source("(evals)/project/[projectId]/layout.tsx"), /notFound\(\)/);
+  assert.match(source("../(evals)/project/[projectId]/layout.tsx"), /notFound\(\)/);
 });
 
 test("the experiment page shows the raw counts of each case, and links each trial to its trace", () => {
