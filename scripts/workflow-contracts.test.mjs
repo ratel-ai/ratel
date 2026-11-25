@@ -104,6 +104,28 @@ test("image.yml keeps labels, annotations, provenance and SBOM on each platform"
   assert.match(build, /sbom: true\n/);
 });
 
+// release-please.yml calls image.yml on the same push event, so only `inputs` tells that build apart.
+test("a release merge cancels the older edge build, and nothing else does", () => {
+  const push = { event_name: "push", ref: "refs/heads/main", run_id: 1 };
+  const release = { ...push, event: { head_commit: { message: "chore(main): release 0.5.0 (#460)\n\nbody" } } };
+  const feature = { ...push, event: { head_commit: { message: "feat: undo chore(main): release 0.5.0 (#461)" } } };
+  const tag = { ...release, ref: "refs/tags/v0.5.0" };
+  const dispatch = { ...push, event_name: "workflow_dispatch", event: {} };
+  for (const [name, github, inputs, expected] of [
+    ["release merge", release, {}, { group: "image-refs/heads/main", cancel: true }],
+    ["ordinary push", feature, {}, { group: "image-refs/heads/main", cancel: false }],
+    ["release build", release, { version: "0.5.0" }, { group: "image-0.5.0", cancel: false }],
+    ["tag push", tag, {}, { group: "image-refs/tags/v0.5.0", cancel: false }],
+    ["dispatch", dispatch, { tag: "0.0.0-test" }, { group: "image-0.0.0-test", cancel: false }],
+  ]) {
+    assert.deepEqual(concurrency("image.yml", github, inputs), expected, name);
+  }
+});
+
+test("no workflow cancels release-please", () => {
+  const github = { event_name: "push", ref: "refs/heads/main", event: { head_commit: { message: "chore(main): release 0.5.0" } } };
+  assert.deepEqual(concurrency("release-please.yml", github, {}), { group: "release-please", cancel: false });
+});
 // The merge step is the one place where the tags are made: run it against a stub `docker`.
 for (const [name, digests, ok] of [
   ["merges both platforms under every tag", ["a", "b"], true],
@@ -208,6 +230,28 @@ test("pr-title runs no pull-request code and needs no permission", () => {
   assert.match(prTitleWorkflow, /types: \[opened, edited, synchronize, reopened, ready_for_review\]/);
   assert.match(jobBody(prTitleWorkflow, "pr-title"), /name: pr-title\n/);
 });
+
+// Evaluates the workflow-level concurrency. The expressions it accepts are also valid JavaScript,
+// once a missing property reads as empty.
+function concurrency(file, github, inputs) {
+  const workflow = readFileSync(new URL(`../.github/workflows/${file}`, import.meta.url), "utf8");
+  const block = workflow.match(/^concurrency:\n((?: {2}.*\n)+)/m);
+  assert.ok(block, `${file} must set concurrency`);
+  const startsWith = (text, prefix) => (text ?? "").toLowerCase().startsWith(prefix.toLowerCase());
+  const evaluate = (expression) =>
+    new Function("github", "inputs", "startsWith", `return ${expression.replace(/(\w)\.(?=[a-z])/g, "$1?.")}`)(
+      github,
+      inputs,
+      startsWith,
+    );
+  const value = (key) => {
+    const raw = block[1].match(new RegExp(`^ {2}${key}: (.*)`, "m"));
+    assert.ok(raw, `${file} must set ${key}`);
+    assert.ok(raw[1].startsWith('"') || !raw[1].includes(": "), `${key}: YAML rejects ": " in a plain value`);
+    return raw[1].replace(/^"|"$/g, "").replace(/\$\{\{(.*?)\}\}/g, (_, expression) => String(evaluate(expression.trim())));
+  };
+  return { group: value("group"), cancel: value("cancel-in-progress") === "true" };
+}
 
 function prTitleStatus(title) {
   const { status } = spawnSync("bash", ["-eo", "pipefail", "-c", prTitleScript()], {
