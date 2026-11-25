@@ -7,6 +7,7 @@ import {
   EditButton,
   HeaderInEditMode,
 } from "@/components/console/home/focused/EditMode";
+import { HistoryDialog } from "@/components/console/home/focused/HistoryDialog";
 import { OverviewGrid } from "@/components/console/home/focused/OverviewGrid";
 import {
   type LayoutActions,
@@ -81,6 +82,7 @@ export function FocusedOverviewView({
         </PageBody>
         {contextPanel}
         <AddWidgetDialog />
+        <HistoryDialog />
       </Page>
     </OverviewLayoutProvider>
   );

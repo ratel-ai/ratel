@@ -304,9 +304,18 @@ test("restore goes to any kept state as an entry, and undo takes the restore bac
   assert.deepEqual(await removedOf(at), ["topology"]);
   const [latest] = (await historyOf(at)).entries;
   assert.deepEqual([latest.id, latest.kind, latest.current], [4, "restore", true]);
+  const current = (await historyOf(at)).entries.filter((entry) => entry.current);
+  assert.deepEqual(
+    current.map(({ id }) => id),
+    [4, 1],
+    "each entry with the layout of now",
+  );
   assert.ok((await undo(at)).ok);
   assert.deepEqual(await removedOf(at), []);
-  const same = await restore(5, at);
+  const again = await restore(4, at);
+  assert.ok(again.ok && again.changed === restored.changed, "no words inside words");
+  assert.ok((await undo(at)).ok);
+  const same = await restore(7, at);
   assert.ok(same.ok && same.changed === null, "already there");
   assert.deepEqual(await restore(99, at), { ok: false, reason: "not_kept" });
   assert.deepEqual(await restore(Number.NaN, at), { ok: false, reason: "not_kept" });

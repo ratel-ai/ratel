@@ -3,7 +3,6 @@ import {
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewPlacement,
-  sameLayout,
   WIDGET_TITLES,
 } from "./layout";
 import {
@@ -134,16 +133,9 @@ export function describeChange(
 export const describeUndo = ({ summary }: Pick<UndoTarget, "summary">) =>
   clipped(`Took back: ${summary}`);
 
-export const describeRestore = ({ summary }: Pick<LayoutChangeEntry, "summary">) =>
-  clipped(`Restored the layout after: ${summary}`);
-
-/** Names the entry whose layout is the current one, so that nobody restores what is there. */
-export function currentEntry(record: LayoutRecord, offered: OfferedWidgets): number | null {
-  const [latest] = record.entries;
-  if (!latest || isUnreadable(record.layout) || isUnreadable(latest.layout)) return null;
-  const at = (stored: unknown) => readArrangement(stored, offered).layout;
-  return sameLayout(at(latest.layout), at(record.layout)) ? latest.seq : null;
-}
+/** A restore of a restore is of the same layout, and says the same. */
+export const describeRestore = ({ kind, summary }: Pick<LayoutChangeEntry, "kind" | "summary">) =>
+  kind === "restore" ? summary : clipped(`Restored the layout after: ${summary}`);
 
 // — Helpers ——————————————————————————————————————————————————————————————————
 

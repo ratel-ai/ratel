@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "@ratel/design-system/toast";
+import { useRouter } from "next/navigation";
 import {
   createContext,
   type ReactNode,
@@ -87,6 +88,7 @@ export function OverviewLayoutProvider({
   startEditing?: boolean;
   children: ReactNode;
 }) {
+  const router = useRouter();
   const [layout, setLayout] = useState(initial.layout);
   const [undoable, setUndoable] = useState(initial.undo);
   const [editing, setEditMode] = useState(startEditing);
@@ -132,36 +134,47 @@ export function OverviewLayoutProvider({
   }, []);
 
   /** Runs a write after the ones before it, on the revision they left. */
-  const enqueue = useCallback((write: (base: string) => Promise<Saved>): Promise<Saved> => {
-    changes.current += 1;
-    waiting.current += 1;
-    setPending((count) => count + 1);
-    const mine = line.current;
-    const run = async (): Promise<Saved> => {
-      if (mine !== line.current) return DROPPED;
-      const result = await write(saved.current.revision).catch(() => FAILED);
-      if (result.ok || result.current) {
-        const { layout, revision, undo } = result.ok ? result : (result.current as LayoutSnapshot);
-        saved.current = { layout, revision, undo };
-        setUndoable(undo);
-      }
-      if (!result.ok && result.current) line.current += 1;
-      if (!result.ok) {
-        setLayout(saved.current.layout);
-        setSaid("");
-      } else if (waiting.current === 1) {
-        // Nothing else is drawn on top of it.
-        setLayout(result.layout);
-      }
-      return result;
-    };
-    const done = queue.current.then(run).finally(() => {
-      waiting.current -= 1;
-      setPending((count) => count - 1);
-    });
-    queue.current = done;
-    return done;
-  }, []);
+  const enqueue = useCallback(
+    (write: (base: string) => Promise<Saved>): Promise<Saved> => {
+      changes.current += 1;
+      waiting.current += 1;
+      setPending((count) => count + 1);
+      const mine = line.current;
+      const run = async (): Promise<Saved> => {
+        if (mine !== line.current) return DROPPED;
+        const result = await write(saved.current.revision).catch(() => FAILED);
+        if (result.ok || result.current) {
+          const { layout, revision, undo } = result.ok
+            ? result
+            : (result.current as LayoutSnapshot);
+          saved.current = { layout, revision, undo };
+          setUndoable(undo);
+        }
+        if (!result.ok && result.current) {
+          line.current += 1;
+          // A widget that came back in another place has no body on this page yet.
+          router.refresh();
+        }
+        if (!result.ok) {
+          // Nothing was saved, so there is no change of this page's to take back.
+          changes.current += 1;
+          setLayout(saved.current.layout);
+          setSaid("");
+        } else if (waiting.current === 1) {
+          // Nothing else is drawn on top of it.
+          setLayout(result.layout);
+        }
+        return result;
+      };
+      const done = queue.current.then(run).finally(() => {
+        waiting.current -= 1;
+        setPending((count) => count - 1);
+      });
+      queue.current = done;
+      return done;
+    },
+    [router],
+  );
 
   const change = useCallback(
     (next: OverviewLayoutChange, announcement = "") => {
@@ -204,13 +217,15 @@ export function OverviewLayoutProvider({
     await queue.current;
     const result = await actions.history().catch(() => FAILED);
     // What the list shows is what the page shows, so Restore is on the list that was read.
-    if (result.ok && waiting.current === 0) {
+    if (result.ok && waiting.current === 0 && result.snapshot.revision !== saved.current.revision) {
+      changes.current += 1;
+      router.refresh();
       saved.current = result.snapshot;
       setLayout(result.snapshot.layout);
       setUndoable(result.snapshot.undo);
     }
     return result;
-  }, [actions]);
+  }, [actions, router]);
 
   const editable = actions !== null;
   const state = useMemo(

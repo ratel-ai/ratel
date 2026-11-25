@@ -1,6 +1,5 @@
 import {
   type ChangeSource,
-  currentEntry,
   describeChange,
   describeRestore,
   describeUndo,
@@ -12,7 +11,12 @@ import {
   revisionOf,
   undoTarget,
 } from "./domain/history";
-import { defaultLayout, type OfferedWidgets, type OverviewLayout } from "./domain/layout";
+import {
+  defaultLayout,
+  type OfferedWidgets,
+  type OverviewLayout,
+  sameLayout,
+} from "./domain/layout";
 import {
   changeArrangement,
   isUnreadable,
@@ -62,7 +66,7 @@ export interface LayoutHistoryEntry {
   summary: string;
   /** The layout after it; null when this build cannot read it. */
   layout: OverviewLayout | null;
-  /** It is what the person sees now. */
+  /** The layout after it is what the person sees now, so there is nothing to restore. */
   current: boolean;
 }
 
@@ -187,20 +191,23 @@ export async function readOverviewHistory(
   if (typeof key === "string") return { ok: false, reason: key };
   const offered = await deps.offered(projectId);
   const record = await deps.store().read(key);
-  const current = currentEntry(record, offered);
+  const now = isUnreadable(record.layout) ? null : readArrangement(record.layout, offered).layout;
   return {
     ok: true,
     snapshot: snapshotOf(record, offered),
-    entries: record.entries.map(({ seq, kind, source, at, summary, layout }) => ({
-      id: seq,
-      kind,
-      personId: key.personId,
-      source,
-      at,
-      summary,
-      layout: keptArrangement(layout, offered)?.layout ?? null,
-      current: seq === current,
-    })),
+    entries: record.entries.map(({ seq, kind, source, at, summary, layout: stored }) => {
+      const layout = keptArrangement(stored, offered)?.layout ?? null;
+      return {
+        id: seq,
+        kind,
+        personId: key.personId,
+        source,
+        at,
+        summary,
+        layout,
+        current: now !== null && layout !== null && sameLayout(layout, now),
+      };
+    }),
   };
 }
 
