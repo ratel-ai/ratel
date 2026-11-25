@@ -6,7 +6,8 @@ import { OVERVIEW_WIDGETS } from "@/lib/views/overview-layout/domain/layout";
 import { render, visibleText } from "@/lib/views/tasks/test-support";
 import view from "./bindings";
 import fixtures from "./fixtures";
-import { type OverviewView, readOverviewView } from "./overview";
+import { HistoryBody } from "./history-body";
+import { type OverviewView, readHistoryView, readOverviewView } from "./overview";
 import { OverviewBody } from "./overview-body";
 
 // tsx compiles the console's components with the classic runtime from this package.
@@ -14,13 +15,13 @@ Object.assign(globalThis, { React });
 
 /** The overview view reads its fixtures, and draws the person's widgets in their order. */
 
-function viewOf(name: string) {
+function arrived(name: string) {
   const result = fixtures[name]?.result as { _meta?: Record<string, unknown> } | undefined;
   // As it arrives: JSON.
-  return readOverviewView({
-    view: JSON.parse(JSON.stringify(result?._meta?.[VIEW_META_KEY] ?? null)) ?? undefined,
-  });
+  return { view: JSON.parse(JSON.stringify(result?._meta?.[VIEW_META_KEY] ?? null)) ?? undefined };
 }
+
+const viewOf = (name: string) => readOverviewView(arrived(name));
 
 function draw(name: string, change: (view: OverviewView) => OverviewView = (view) => view) {
   const read = viewOf(name);
@@ -117,4 +118,34 @@ test("a change of the layout draws the Overview that it made", () => {
   const { ids } = draw("change_overview_layout");
   assert.deepEqual(ids, draw("get_overview · removed widget").ids);
   assert.ok(view.bindings.some(({ tool }) => tool === "change_overview_layout"));
+});
+
+function drawHistory(name: string) {
+  const view = readHistoryView(arrived(name));
+  assert.ok(view, name);
+  const html = render(React.createElement(HistoryBody, { view, openInConsole: () => undefined }));
+  return { html, text: visibleText(html) };
+}
+
+test("the history: what, who, where and when, newest first, and nothing to press in it", () => {
+  const { html, text } = drawHistory("list_overview_changes");
+  assert.match(text, /History of your layout.*Support agent/);
+  assert.match(
+    text,
+    /Took back: Removed Metrics ?You on the web, ?just now ?Current layout.*Removed Metrics ?You through claude-code, ?4m ago.*You through an MCP client, ?2h ago ?Made by a newer version.*Resized Agents and MCP servers ?You on the web, ?33h ago/,
+  );
+  assert.equal((html.match(/<button/g) ?? []).length, 1, "Open in Ratel only");
+  assert.match(drawHistory("list_overview_changes · none").text, /No changes yet/);
+});
+
+test("an undo and a restore draw the Overview that they made", () => {
+  assert.deepEqual(draw("undo_overview_change").ids, draw("get_overview").ids);
+  assert.deepEqual(draw("restore_overview_layout").ids, draw("change_overview_layout").ids);
+  assert.equal(readHistoryView(arrived("get_overview")), null);
+  assert.equal(viewOf("list_overview_changes"), null);
+  for (const tool of ["list_overview_changes", "undo_overview_change", "restore_overview_layout"])
+    assert.ok(
+      view.bindings.some((binding) => binding.tool === tool),
+      tool,
+    );
 });

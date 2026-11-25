@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "@ratel/design-system/toast";
+import { useRouter } from "next/navigation";
 import {
   createContext,
   type ReactNode,
@@ -8,22 +9,35 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
+import {
+  createLayoutQueue,
+  DROPPED,
+  FAILED,
+  type Refused,
+  type Saved,
+} from "@/components/console/home/focused/layout-queue";
 import { offeredTo } from "@/components/console/home/focused/widgets";
+import type { LayoutHistoryEntry, LayoutSnapshot } from "@/lib/views/overview-layout/actions";
 import {
   changeLayout,
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewWidgetId,
-  sameLayout,
 } from "@/lib/views/overview-layout/domain/layout";
 
-/** The server action, bound to the project. Null where nobody may change the layout. */
-export type SaveLayout = (
-  change: OverviewLayoutChange,
-) => Promise<{ ok: true; layout: OverviewLayout } | { ok: false; message: string }>;
+export type LayoutHistory =
+  | { ok: true; entries: LayoutHistoryEntry[]; snapshot: LayoutSnapshot }
+  | Refused;
+
+/** The server actions, bound to the project. `base` is the revision that the page shows. */
+export interface LayoutActions {
+  save: (change: OverviewLayoutChange, base: string) => Promise<Saved>;
+  undo: (base: string) => Promise<Saved>;
+  restore: (entryId: number, base: string) => Promise<Saved>;
+  history: () => Promise<LayoutHistory>;
+}
 
 interface LayoutState {
   layout: OverviewLayout;
@@ -39,8 +53,18 @@ interface LayoutState {
   setAdded: (added: readonly OverviewWidgetId[]) => void;
   /** A save is on its way. */
   saving: boolean;
-  /** Applies at once, then saves. `said` is for a screen reader. */
-  change: (change: OverviewLayoutChange, said?: string) => void;
+  /** Applies at once, then saves. `said` is for a screen reader. The number names this change. */
+  change: (change: OverviewLayoutChange, said?: string) => number;
+  /** What Undo takes back, in plain words; null when there is nothing. */
+  undoable: string | null;
+  /** Takes back the latest change. With `only`, another change after that one puts `otherwise` instead. */
+  undo: (only?: { change: number; otherwise: OverviewLayoutChange }) => void;
+  restore: (entryId: number) => Promise<Saved>;
+  /** After the changes that wait. */
+  readHistory: () => Promise<LayoutHistory>;
+  /** The History dialog. */
+  browsing: boolean;
+  setBrowsing: (browsing: boolean) => void;
   said: string;
 }
 
@@ -48,73 +72,112 @@ const LayoutContext = createContext<LayoutState | null>(null);
 
 /**
  * The layout as this page shows it, and whether the person edits it. A change is drawn at once and
- * saved once; saves run one after another. A save that fails puts back the last saved layout and
- * says so.
+ * saved once; saves run one after another, each on the revision of the one before it. A save that
+ * fails puts back the last saved layout and says so. A layout that changed in another place is
+ * shown, never overwritten, and the changes that wait are dropped, as they were made on the old one
+ * (`layout-queue.ts`).
  */
 export function OverviewLayoutProvider({
   initial,
-  save,
+  actions,
   startEditing = false,
   children,
 }: {
-  initial: OverviewLayout;
-  save: SaveLayout | null;
+  initial: LayoutSnapshot;
+  /** Null where nobody may change the layout. */
+  actions: LayoutActions | null;
   /** Draws edit mode at first, in a test. */
   startEditing?: boolean;
   children: ReactNode;
 }) {
-  const [layout, setLayout] = useState(initial);
+  const router = useRouter();
+  const [layout, setLayout] = useState(initial.layout);
+  const [undoable, setUndoable] = useState(initial.undo);
   const [editing, setEditMode] = useState(startEditing);
   const [adding, setAdding] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const [added, setAdded] = useState<readonly OverviewWidgetId[]>([]);
   const [said, setSaid] = useState("");
-  const [seen, setSeen] = useState(initial);
   const [pending, setPending] = useState(0);
-  const saved = useRef(initial);
-  const queue = useRef<Promise<void>>(Promise.resolve());
+  const [queue] = useState(() =>
+    createLayoutQueue(initial, {
+      show: setLayout,
+      undoable: setUndoable,
+      pending: setPending,
+      refused: () => setSaid(""),
+      changedElsewhere: () => router.refresh(),
+    }),
+  );
 
-  // A fresh render of the server's: another tab or an agent may have changed the layout.
-  if (!sameLayout(seen, initial) && pending === 0) {
-    setSeen(initial);
-    setLayout(initial);
-  }
-
+  // Another tab or an agent may have changed the layout.
+  const { layout: served, revision, undo: servedUndo } = initial;
   useEffect(() => {
-    saved.current = initial;
-  }, [initial]);
+    if (pending === 0) queue.served({ layout: served, revision, undo: servedUndo });
+  }, [queue, served, revision, servedUndo, pending]);
+
+  // A change that waits would be lost with the page, and its entry too.
+  useEffect(() => {
+    if (pending === 0) return;
+    const ask = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", ask);
+    return () => window.removeEventListener("beforeunload", ask);
+  }, [pending]);
 
   const setEditing = useCallback((next: boolean) => {
     setEditMode(next);
     setAdding(false);
+    setBrowsing(false);
     setAdded([]);
     setSaid(next ? "Edit mode. Add, move, resize or remove widgets." : "Edit mode is off.");
   }, []);
 
   const change = useCallback(
     (next: OverviewLayoutChange, announcement = "") => {
-      if (!save) return;
+      if (!actions) return queue.latest();
       setLayout((current) => changeLayout(current, next, offeredTo(current)));
       setSaid(announcement);
-      setPending((count) => count + 1);
-      queue.current = queue.current.then(async () => {
-        const result = await save(next).catch(() => FAILED);
-        if (result.ok) {
-          saved.current = result.layout;
-        } else {
-          setLayout(saved.current);
-          setSaid("");
-          toast({
-            title: "The layout was not saved",
-            description: `${result.message} The last saved layout is back.`,
-            tone: "danger",
-          });
-        }
-        setPending((count) => count - 1);
-      });
+      void queue.enqueue((base) => actions.save(next, base)).then(report);
+      return queue.latest();
     },
-    [save],
+    [actions, queue],
   );
-  const editable = save !== null;
+
+  const undo = useCallback(
+    (only?: { change: number; otherwise: OverviewLayoutChange }) => {
+      if (!actions) return;
+      if (only && only.change !== queue.latest()) {
+        change(only.otherwise);
+        return;
+      }
+      void queue
+        .enqueueUndo((base) => actions.undo(base))
+        .then((result) => {
+          if (result.ok && result.changed) setSaid(result.changed);
+          report(result);
+        });
+    },
+    [actions, change, queue],
+  );
+
+  const restore = useCallback(
+    async (entryId: number) => {
+      if (!actions) return FAILED;
+      const result = await queue.enqueue((base) => actions.restore(entryId, base));
+      if (result.ok && result.changed) setSaid(result.changed);
+      return result;
+    },
+    [actions, queue],
+  );
+
+  const readHistory = useCallback(async () => {
+    if (!actions) return FAILED;
+    await queue.idle();
+    const result = await actions.history().catch(() => FAILED);
+    if (result.ok) queue.read(result.snapshot);
+    return result;
+  }, [actions, queue]);
+
+  const editable = actions !== null;
   const state = useMemo(
     () => ({
       layout,
@@ -123,13 +186,34 @@ export function OverviewLayoutProvider({
       setEditing,
       adding: editable && editing && adding,
       setAdding,
+      browsing: editable && editing && browsing,
+      setBrowsing,
       added,
       setAdded,
       saving: pending > 0,
       change,
+      undoable,
+      undo,
+      restore,
+      readHistory,
       said,
     }),
-    [layout, editable, editing, setEditing, adding, added, pending, change, said],
+    [
+      layout,
+      editable,
+      editing,
+      setEditing,
+      adding,
+      browsing,
+      added,
+      pending,
+      change,
+      undoable,
+      undo,
+      restore,
+      readHistory,
+      said,
+    ],
   );
   return (
     <LayoutContext.Provider value={state}>
@@ -147,4 +231,18 @@ export function useOverviewLayout(): LayoutState {
   return state;
 }
 
-const FAILED = { ok: false, message: "The server did not answer." } as const;
+function report(result: Saved) {
+  if (result.ok || result === DROPPED) return;
+  toast(
+    result.current
+      ? {
+          title: "The layout changed in another place",
+          description: "This is the latest layout. Your last change was not saved.",
+        }
+      : {
+          title: "The layout was not saved",
+          description: `${result.message} The last saved layout is back.`,
+          tone: "danger",
+        },
+  );
+}

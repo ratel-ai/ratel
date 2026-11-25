@@ -2,6 +2,8 @@ import type { OverviewLayout, OverviewWidgetId } from "@/lib/views/overview-layo
 
 /** The decisions of edit mode. Pure. */
 
+export const HISTORY_ID = "overview-history";
+
 /** What is on the page when a key goes down, before anything reacts to it. */
 export interface KeyMoment {
   key: string;

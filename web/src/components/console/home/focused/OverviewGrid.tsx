@@ -31,7 +31,7 @@ export function OverviewGrid({
   /** Null for a widget that the server did not read, because it was removed. */
   bodies: Readonly<Record<OverviewWidgetId, ReactNode>>;
 }) {
-  const { layout, editing, change } = useOverviewLayout();
+  const { layout, editing, change, undo } = useOverviewLayout();
   useReveal(bodies);
   const cards = useMemo(
     () => visibleWidgets(layout).map((widget) => ({ ...widget, min: widgetMinimum(widget.id) })),
@@ -56,12 +56,12 @@ export function OverviewGrid({
   function remove(widget: OverviewWidgetId) {
     const { title } = WIDGETS[widget];
     const next = cards[cards.findIndex(({ id }) => id === widget) + 1];
-    change({ kind: "remove", widget }, `${title} removed`);
+    const removal = change({ kind: "remove", widget }, `${title} removed`);
     toast({
       title: `${title} is removed`,
       action: {
         label: "Undo",
-        onClick: () => change({ kind: "add", widget }, `${title} added`),
+        onClick: () => undo({ change: removal, otherwise: { kind: "add", widget } }),
       },
     });
     if (next) requestAnimationFrame(() => focusToolbar(next.id));
@@ -73,9 +73,10 @@ export function OverviewGrid({
       cards={cards}
       onArrange={
         editing
-          ? (items) =>
+          ? (items, taken) =>
               change({
                 kind: "arrange",
+                widget: taken,
                 places: items.map(({ id, x, y, w, h }) => ({
                   id,
                   x,

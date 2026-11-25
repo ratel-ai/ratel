@@ -4,6 +4,7 @@ import {
   type OverviewLayout,
   type OverviewWidgetId,
   WIDGET_CATALOG,
+  WIDGET_TITLES,
 } from "@/lib/views/overview-layout/domain/layout";
 
 /** What the Overview calls each widget, in its heading, in edit mode and in the Add widget dialog. */
@@ -11,22 +12,22 @@ export const WIDGETS: Readonly<
   Record<OverviewWidgetId, { title: string; description: string; icon: LucideIcon }>
 > = {
   metrics: {
-    title: "Metrics",
+    title: WIDGET_TITLES.metrics,
     description: "Runs, failed runs, median duration and spend.",
     icon: ChartNoAxesColumn,
   },
   topology: {
-    title: "Agents and MCP servers",
+    title: WIDGET_TITLES.topology,
     description: "Who hands work to whom, and what they call.",
     icon: Waypoints,
   },
   health: {
-    title: "Health score",
+    title: WIDGET_TITLES.health,
     description: "One number for how well your agents work.",
     icon: HeartPulse,
   },
   attention: {
-    title: "Needs attention",
+    title: WIDGET_TITLES.attention,
     description: "Failed runs, issues and fixes to look at.",
     icon: Bell,
   },

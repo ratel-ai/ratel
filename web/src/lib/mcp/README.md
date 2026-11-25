@@ -57,8 +57,10 @@ These differ from their `ratel-cloud` origin ("upstream").
   recap Overview and its layout through the web's own loader and action. `focusedConsole` off for the
   caller, they are not listed and the overview view is not published; off for the project's
   organization, they refuse. `get_overview` with `widget` reads and draws one widget alone, with only its own reads, also when the person removed it; a new
-  widget needs an entry in `WIDGET_DATA` and no operation. Both tools draw the overview view. An API
-  key reads the default layout and cannot change one.
+  widget needs an entry in `WIDGET_DATA` and no operation. `list_overview_changes`,
+  `undo_overview_change` and `restore_overview_layout` are the web's History, Undo and Restore; the
+  last two need the revision that the agent read, and answer `conflict` (`stale`) on another one. All
+  draw the overview view. An API key reads the default layout, cannot change one and has no history.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `mcpApps`; upstream asks its flag service per project key or person, with timeouts and a

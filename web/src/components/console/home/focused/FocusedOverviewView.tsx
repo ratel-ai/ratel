@@ -7,21 +7,24 @@ import {
   EditButton,
   HeaderInEditMode,
 } from "@/components/console/home/focused/EditMode";
+import { HistoryDialog } from "@/components/console/home/focused/HistoryDialog";
 import { OverviewGrid } from "@/components/console/home/focused/OverviewGrid";
 import {
+  type LayoutActions,
   OverviewLayoutProvider,
-  type SaveLayout,
 } from "@/components/console/home/focused/OverviewLayout";
 import { widgetBodies } from "@/components/console/home/focused/widget-bodies";
 import { DemoNotice, TelemetryStatus, WindowSwitch } from "@/components/console/home/OverviewView";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
+import type { LayoutSnapshot } from "@/lib/views/overview-layout/actions";
 
 /** The recap Overview: the widgets a person chose, where they put them. Everything else is a click away. */
 export function FocusedOverviewView({
   data,
   now,
   linked,
-  save,
+  saved,
+  layoutActions,
   startEditing,
   actions,
   setup,
@@ -31,8 +34,10 @@ export function FocusedOverviewView({
   now: Date;
   /** The Agents and MCP servers pages exist. */
   linked: boolean;
-  /** Saves a change of the layout; null where nobody may change it. */
-  save: SaveLayout | null;
+  /** The state that `data.layout` is of. */
+  saved: Pick<LayoutSnapshot, "revision" | "undo">;
+  /** Changes the layout; null where nobody may. */
+  layoutActions: LayoutActions | null;
   /** Draws edit mode at first, in a test. */
   startEditing?: boolean;
   /** Header actions owned by the page, such as the tour. */
@@ -45,8 +50,8 @@ export function FocusedOverviewView({
   const { project, root, hasTelemetry } = data;
   return (
     <OverviewLayoutProvider
-      initial={data.layout}
-      save={hasTelemetry ? save : null}
+      initial={{ layout: data.layout, ...saved }}
+      actions={hasTelemetry ? layoutActions : null}
       startEditing={startEditing}
     >
       <Page>
@@ -77,6 +82,7 @@ export function FocusedOverviewView({
         </PageBody>
         {contextPanel}
         <AddWidgetDialog />
+        <HistoryDialog />
       </Page>
     </OverviewLayoutProvider>
   );

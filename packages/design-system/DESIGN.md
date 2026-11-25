@@ -221,12 +221,14 @@ then drill-downs.
 view mode. View mode is content only: a widget has no title bar, border or control, also on hover. A
 heading for screen readers names it, its content links to the page behind it, and the gap between
 widgets is clear. `Edit` in the header starts edit mode, which is state of the page and not in its
-address. An edit bar over the header has `Reset`, `Add widget` and `Done` (the primary). Each widget
+address. An edit bar over the header has `Undo` and `History` (icons), `Reset`, `Add widget` and `Done` (the primary); below `sm`, `Add widget` is its icon. Each widget
 shows its border, whose width is always reserved, and a toolbar that floats over its top edge: its
 name, the menu with the steps for the keyboard, and Remove. No content moves between the modes. A
 widget's body takes no press in edit mode: a mouse drags the whole widget, a finger its name, and the
 corner resizes. Remove is at once, with Undo in the toast. `Add widget` is a Dialog with every widget.
-Focus goes from Edit to Done and back, from Remove to the next widget or Add widget, and from the
+`Undo` takes back the latest change, and the toast's Undo is the same action. `History` is a Dialog with the
+last changes, what, who, where and when, and Restore on each. A layout that changed in another place is
+shown, never overwritten, and a toast says so. Focus goes from Edit to Done and back, from Remove to the next widget or Add widget, and from the
 dialog to Add widget, and the page scrolls to a widget that was added out of view. Escape is Done when
 no layer, drag or text field takes it. Below `lg`, one column in reading order: add, remove and reset only. Without the
 right to edit there is no Edit.

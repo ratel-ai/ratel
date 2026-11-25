@@ -6,7 +6,8 @@ import { PathParamsContext } from "next/dist/shared/lib/hooks-client-context.sha
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
-import type { SaveLayout } from "@/components/console/home/focused/OverviewLayout";
+import { HistoryBody } from "@/components/console/home/focused/HistoryDialog";
+import type { LayoutActions } from "@/components/console/home/focused/OverviewLayout";
 import { offeredTo } from "@/components/console/home/focused/widgets";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
 import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
@@ -26,6 +27,7 @@ import {
   healthCard,
   loadFocusedOverview,
 } from "@/lib/views/home/focused-load";
+import type { LayoutHistoryEntry } from "@/lib/views/overview-layout/actions";
 import {
   changeLayout,
   DEFAULT_LAYOUT,
@@ -144,22 +146,31 @@ const NO_SPANS = async () => ({
   latestSpanAt: null,
 });
 
-const SAVE: SaveLayout = async () => ({ ok: true, layout: DEFAULT_LAYOUT });
+const SNAPSHOT = { layout: DEFAULT_LAYOUT, revision: "0.0", undo: null };
+const SAVED = async () => ({ ok: true as const, changed: null, ...SNAPSHOT });
+const ACTIONS: LayoutActions = {
+  save: SAVED,
+  undo: SAVED,
+  restore: SAVED,
+  history: async () => ({ ok: true, entries: [], snapshot: SNAPSHOT }),
+};
 
 function page(
   data: FocusedOverviewData,
   {
     linked = true,
-    save = SAVE,
+    save = ACTIONS,
+    undo = null,
     edit = false,
-  }: { linked?: boolean; save?: SaveLayout | null; edit?: boolean } = {},
+  }: { linked?: boolean; save?: LayoutActions | null; undo?: string | null; edit?: boolean } = {},
 ): string {
   const html = render(
     createElement(FocusedOverviewView, {
       data,
       now: NOW,
       linked,
-      save,
+      saved: { revision: "0.0", undo },
+      layoutActions: save,
       startEditing: edit,
       setup: "SETUP GUIDE",
     }),
@@ -261,6 +272,81 @@ test("edit mode: a toolbar per widget, and a body that takes no press", async ()
   for (const words of ["Add widget", "Reset", "Done"])
     assert.match(visibleText(html), new RegExp(words));
   assert.deepEqual(order(html), order(page(data)));
+});
+
+test("Undo and History are in edit mode only, and Undo says what it takes back", async () => {
+  const data = await load();
+  const buttons = (html: string) =>
+    [...html.matchAll(/<button[^>]*aria-label="((?:Undo|History)[^"]*)"[^>]*>/g)].map(
+      ([tag, label]) => [label, /aria-disabled="true"/.test(tag)],
+    );
+  for (const undo of [null, "Removed Metrics"]) {
+    assert.deepEqual(buttons(page(data, { undo })), []);
+    assert.deepEqual(buttons(page(data, { undo, save: null, edit: true })), []);
+  }
+  assert.deepEqual(buttons(page(data, { edit: true })), [
+    ["Undo", true],
+    ["History", false],
+  ]);
+  assert.deepEqual(buttons(page(data, { edit: true, undo: "Removed Metrics" })), [
+    ["Undo: Removed Metrics", false],
+    ["History", false],
+  ]);
+});
+
+const ENTRY: LayoutHistoryEntry = {
+  id: 2,
+  kind: "change",
+  personId: "user_1",
+  source: { kind: "mcp", client: "claude-code" },
+  at: new Date(NOW.getTime() - 5 * 60_000),
+  summary: "Removed Metrics",
+  layout: DEFAULT_LAYOUT,
+  readable: true,
+  current: false,
+};
+
+function historyHtml(over: Partial<Parameters<typeof HistoryBody>[0]> = {}): string {
+  return render(
+    createElement(HistoryBody, {
+      history: {
+        ok: true,
+        snapshot: SNAPSHOT,
+        entries: [
+          { ...ENTRY, id: 3, source: { kind: "web" }, summary: "Resized Metrics", current: true },
+          ENTRY,
+          { ...ENTRY, id: 1, summary: "Moved Metrics", layout: null, readable: false },
+        ],
+      },
+      notice: null,
+      restoring: null,
+      now: NOW,
+      onRestore: () => undefined,
+      onRetry: () => undefined,
+      ...over,
+    }),
+  );
+}
+
+test("the history: who, where, when and what, and Restore where there is something to restore", () => {
+  const html = historyHtml();
+  const text = visibleText(html);
+  assert.match(text, /Resized Metrics ?You on the web, ?5m ago ?Current layout/);
+  assert.match(text, /Removed Metrics ?You through claude-code, ?5m ago ?Restore/);
+  assert.match(text, /Moved Metrics.*Made by a newer version/);
+  assert.equal((html.match(/aria-label="Restore the layout after: /g) ?? []).length, 1);
+  assert.match(html, /<time dateTime="[^"]+" title="[^"]+ UTC"/);
+});
+
+test("the history: loading, empty, failed, stale and a failed restore each have their own state", () => {
+  assert.match(historyHtml({ history: null }), /role="status"/);
+  const empty = { ok: true as const, entries: [], snapshot: SNAPSHOT };
+  assert.match(visibleText(historyHtml({ history: empty })), /No changes yet/);
+  const failed = historyHtml({ history: { ok: false, message: "The server did not answer." } });
+  assert.match(visibleText(failed), /The history did not load.*did not answer.*Try again/);
+  assert.match(visibleText(historyHtml({ notice: { kind: "stale" } })), /changed in another place/);
+  const refused = historyHtml({ notice: { kind: "failed", message: "Gone." } });
+  assert.match(visibleText(refused), /The layout was not restored.*Gone\./);
 });
 
 test("a read-only viewer has no Edit, and never edit mode", async () => {

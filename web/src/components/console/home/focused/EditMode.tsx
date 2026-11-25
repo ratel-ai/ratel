@@ -1,10 +1,10 @@
 "use client";
 
-import { Button } from "@ratel/design-system/button";
+import { Button, IconButton } from "@ratel/design-system/button";
 import { Dialog, DialogContent } from "@ratel/design-system/dialog";
-import { Check, Pencil, Plus } from "lucide-react";
+import { Check, History, Pencil, Plus, Undo2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef } from "react";
-import { keyLeavesEditMode } from "@/components/console/home/focused/edit-mode";
+import { HISTORY_ID, keyLeavesEditMode } from "@/components/console/home/focused/edit-mode";
 import { useOverviewLayout } from "@/components/console/home/focused/OverviewLayout";
 import { offeredTo, WIDGETS } from "@/components/console/home/focused/widgets";
 import {
@@ -47,9 +47,10 @@ export function HeaderInEditMode({ children }: { children: ReactNode }) {
   );
 }
 
-/** Add widget, Reset and Done, over the header. It takes no room, so nothing moves when it comes, and it stays in reach when the page scrolls. */
+/** Undo, History, Reset, Add widget and Done, over the header. It takes no room, so nothing moves when it comes, and it stays in reach when the page scrolls. */
 export function EditBar() {
-  const { editing, setEditing, layout, change, setAdding } = useOverviewLayout();
+  const { editing, setEditing, layout, change, undoable, undo, saving, setAdding, setBrowsing } =
+    useOverviewLayout();
   const leave = useCallback(() => {
     setEditing(false);
     focusSoon(EDIT_ID);
@@ -61,11 +62,26 @@ export function EditBar() {
         <section
           aria-label="Edit Overview"
           data-overview-edit-bar=""
-          className="flex h-13 items-center justify-end gap-2 border-b border-line-strong bg-app px-6 lg:px-8"
+          className="flex h-13 items-center justify-end gap-2 border-b border-line-strong bg-app px-6 max-sm:gap-1 max-sm:px-4 lg:px-8"
         >
           <p className="min-w-0 flex-1 truncate text-ui text-fg-muted max-sm:hidden">
             Edit Overview. <span className="max-lg:hidden">Only you see this layout.</span>
           </p>
+          <IconButton
+            label={undoable ? `Undo: ${undoable}` : "Undo"}
+            icon={<Undo2 aria-hidden />}
+            // A change that is on its way can be taken back too.
+            disabled={undoable === null && !saving}
+            focusableWhenDisabled
+            onClick={() => undo()}
+          />
+          <IconButton
+            id={HISTORY_ID}
+            label="History"
+            icon={<History aria-hidden />}
+            aria-haspopup="dialog"
+            onClick={() => setBrowsing(true)}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -75,9 +91,15 @@ export function EditBar() {
           >
             Reset
           </Button>
-          <Button id={ADD_ID} aria-haspopup="dialog" size="sm" onClick={() => setAdding(true)}>
+          <Button
+            id={ADD_ID}
+            aria-label="Add widget"
+            aria-haspopup="dialog"
+            size="sm"
+            onClick={() => setAdding(true)}
+          >
             <Plus aria-hidden />
-            Add widget
+            <span className="max-sm:hidden">Add widget</span>
           </Button>
           <Button id={DONE_ID} variant="primary" size="sm" onClick={leave}>
             Done

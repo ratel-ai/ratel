@@ -1,5 +1,6 @@
 import { healthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
+import type { ChangeSource } from "@/lib/views/overview-layout/domain/history";
 import {
   changeLayout,
   DEFAULT_LAYOUT,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/views/overview-layout/domain/layout";
 import { errorResult, okResult, type ViewFixture, type ViewFixtures } from "../../shell/types";
 
-/** The scenarios of get_overview and change_overview_layout, with the view model that the server sends. */
+/** The scenarios of the Overview's tools, with the view model that the server sends. */
 
 const PROJECT = "3f1c9a52-7d4e-4b8a-9c11-5e2d6f0a8b73";
 const ROOT = `/project/${PROJECT}`;
@@ -194,6 +195,39 @@ const ARRANGED = changeLayout(
   },
 );
 
+const entry = (
+  id: number,
+  minutes: number,
+  summary: string,
+  source: ChangeSource = { kind: "web" },
+) => ({
+  id,
+  source,
+  summary,
+  readable: id !== 2,
+  current: id === 4,
+  at: new Date(Date.parse("2026-11-24T10:00:00.000Z") - minutes * 60_000).toISOString(),
+});
+
+function history(entries: readonly ReturnType<typeof entry>[]): ViewFixture {
+  const project = { id: PROJECT, name: DATA.project.name };
+  return {
+    tool: "list_overview_changes",
+    result: okResult(
+      { project, changes: entries.map(({ summary, ...rest }) => ({ ...rest, what: summary })) },
+      {
+        view: {
+          kind: "overview-history",
+          project,
+          root: ROOT,
+          now: "2026-11-24T10:00:00.000Z",
+          entries,
+        },
+      },
+    ),
+  };
+}
+
 const fixtures: ViewFixtures = {
   get_overview: fixture(),
   "get_overview · removed widget": fixture({ topology: null }, ARRANGED),
@@ -230,6 +264,27 @@ const fixtures: ViewFixtures = {
   change_overview_layout: {
     ...fixture({ topology: null }, ARRANGED),
     tool: "change_overview_layout",
+  },
+  list_overview_changes: history([
+    entry(4, 0, "Took back: Removed Metrics"),
+    entry(3, 4, "Removed Metrics", { kind: "mcp", client: "claude-code" }),
+    entry(2, 90, "Moved Needs attention", { kind: "mcp", client: null }),
+    entry(1, 2_000, "Resized Agents and MCP servers"),
+  ]),
+  "list_overview_changes · none": history([]),
+  undo_overview_change: { ...fixture(), tool: "undo_overview_change", input: { revision: "3.a" } },
+  restore_overview_layout: {
+    ...fixture({ topology: null }, ARRANGED),
+    tool: "restore_overview_layout",
+    input: { changeId: 2, revision: "4.b" },
+  },
+  "undo_overview_change · stale": {
+    tool: "undo_overview_change",
+    input: { revision: "3.a" },
+    result: errorResult(
+      "conflict",
+      "The layout changed in another place. Nothing was overwritten. Call list_overview_changes to read the latest changes and the revision.",
+    ),
   },
   "get_overview · text only": {
     tool: "get_overview",

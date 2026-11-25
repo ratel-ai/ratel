@@ -29,6 +29,14 @@ export interface OverviewWidget {
   place: GridPlace;
 }
 
+/** What every surface calls each widget, and a history entry too. */
+export const WIDGET_TITLES: Readonly<Record<OverviewWidgetId, string>> = {
+  metrics: "Metrics",
+  topology: "Agents and MCP servers",
+  health: "Health score",
+  attention: "Needs attention",
+};
+
 /** The widgets that are offered: the page, the dialog and the default layout know no other. */
 export type OfferedWidgets = readonly OverviewWidget[];
 
@@ -53,8 +61,8 @@ export type OverviewLayoutChange =
   | { kind: "move"; widget: OverviewWidgetId; x: number; y: number }
   | { kind: "resize"; widget: OverviewWidgetId; w: number; h: number }
   | { kind: "add" | "remove"; widget: OverviewWidgetId }
-  /** Where the grid in a browser left the visible widgets. */
-  | { kind: "arrange"; places: readonly OverviewPlace[] }
+  /** Where the grid in a browser left the visible widgets. `widget`: the one the person took; the others made room. */
+  | { kind: "arrange"; places: readonly OverviewPlace[]; widget?: string }
   | { kind: "reset" };
 
 /** A place from a browser, which may draw a widget that is no longer offered. */
@@ -109,6 +117,7 @@ export function stepChange(
   return (
     items && {
       kind: "arrange",
+      widget,
       places: items.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })),
     }
   );
