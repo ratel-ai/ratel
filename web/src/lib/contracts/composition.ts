@@ -14,6 +14,7 @@ import type { RegistryPort } from "@/lib/contracts/registry";
 import type { Organization, SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
 import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
+import type { UsageLimitsPort } from "@/lib/contracts/usage-limits";
 
 /**
  * The port set a composition supplies (ADR-0004). It lives among the contracts because both
@@ -292,6 +293,12 @@ export type CompositionPorts = {
    * configuration forces still comes first. Read through `featureEnabled` (`lib/platform/experimental-features.ts`).
    */
   featureFlags?: FeatureFlagsPort;
+  /**
+   * The limits of each project and the record of what it used. Absent, the core's own adapter
+   * (`lib/adapters/oss/usage-limits.ts`) enforces the hard limits and keeps no usage records.
+   * Read through `usageLimits` (`lib/platform/usage-limits.ts`).
+   */
+  usageLimits?: UsageLimitsPort;
 };
 
 export const PORT_NAMES = [

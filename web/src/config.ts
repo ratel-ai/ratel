@@ -19,6 +19,7 @@ import { ConfigError, field, type InferSchema, resolve, schema } from "zfig";
 import { z } from "zod";
 import { CONFIG_DEFAULTS as D } from "@/config-defaults";
 import type { CoreFlag } from "@/lib/contracts/feature-flags";
+import { SANDBOX_HARD_LIMITS as HARD } from "@/lib/contracts/usage-limits";
 
 type Env = Readonly<Record<string, string | undefined>>;
 type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
@@ -67,6 +68,8 @@ const flagValue = z.preprocess(
   },
   z.boolean({ error: FLAG_VALUES }),
 );
+/** A whole number of 0 or more, lowered to `max`. */
+const atMost = (max: number) => nonNegativeInt.transform((value) => Math.min(value, max));
 const trimmed = z.string().trim();
 const configured = trimmed.transform((value) => (value === SECRET_PLACEHOLDER ? undefined : value));
 
@@ -77,6 +80,7 @@ const FLAG_ENV = {
   mcpApps: "FF_MCP_APPS",
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
+  sandboxes: "FF_SANDBOXES",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -433,6 +437,38 @@ const CONFIG_SCHEMA = schema({
       positiveCount,
       D.toolExplorer.maxCallsPerSession,
     ),
+  },
+  sandboxes: {
+    /** Seals sandbox secrets: 32 random bytes in base64 (`lib/platform/sealed-secrets.ts`). */
+    secretsKey: optional("SANDBOX_SECRETS_KEY", configured, { sensitive: true }),
+    /** Each project's limits. A value above the hard limit counts as the hard limit. */
+    limits: {
+      sandbox_concurrent_instances: setting(
+        "SANDBOX_CONCURRENT_INSTANCES",
+        atMost(HARD.sandbox_concurrent_instances),
+        D.sandboxes.limits.sandbox_concurrent_instances,
+      ),
+      sandbox_run_seconds: setting(
+        "SANDBOX_RUN_SECONDS",
+        atMost(HARD.sandbox_run_seconds),
+        D.sandboxes.limits.sandbox_run_seconds,
+      ),
+      sandbox_runs_per_day: setting(
+        "SANDBOX_RUNS_PER_DAY",
+        atMost(HARD.sandbox_runs_per_day),
+        D.sandboxes.limits.sandbox_runs_per_day,
+      ),
+      sandbox_versions_per_day: setting(
+        "SANDBOX_VERSIONS_PER_DAY",
+        atMost(HARD.sandbox_versions_per_day),
+        D.sandboxes.limits.sandbox_versions_per_day,
+      ),
+      sandbox_bundle_bytes: setting(
+        "SANDBOX_BUNDLE_BYTES",
+        atMost(HARD.sandbox_bundle_bytes),
+        D.sandboxes.limits.sandbox_bundle_bytes,
+      ),
+    },
   },
   topics: {
     maxTurns: setting("TOPICS_MAX_TURNS", positiveCount, D.topics.maxTurns),

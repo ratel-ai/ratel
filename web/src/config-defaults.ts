@@ -1,4 +1,5 @@
 import type { Config } from "@/config";
+import { SANDBOX_HARD_LIMITS } from "@/lib/contracts/usage-limits";
 import { WORKFLOW_THRESHOLDS as WF } from "@/lib/readings/trace-signals/workflows/detect";
 
 /**
@@ -191,6 +192,7 @@ export const CONFIG_DEFAULTS = {
     maxSessions: 100_000,
     maxCallsPerSession: 500,
   },
+  sandboxes: { limits: SANDBOX_HARD_LIMITS },
   topics: {
     maxTurns: 20_000,
     newMinTurns: 5,

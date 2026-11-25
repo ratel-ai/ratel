@@ -15,6 +15,8 @@ export const CORE_FLAGS = [
   "mcpApps",
   "agentsPages",
   "toolRunInsights",
+  // Ratel sandboxes. Owner: rstagi. Remove once `sandboxes` is on for every organization.
+  "sandboxes",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];
