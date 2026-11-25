@@ -4,6 +4,7 @@ import {
   index,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -60,4 +61,20 @@ export const sandboxVersions = pgTable(
     index("sandbox_versions_project_created_idx").on(t.projectId, t.createdAt),
     index("sandbox_versions_sandbox_created_idx").on(t.sandboxId, t.createdAt),
   ],
+);
+
+/** The secrets of a project's sandboxes. The value is sealed (`lib/platform/sealed-secrets.ts`). */
+export const sandboxSecrets = pgTable(
+  "sandbox_secrets",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sealedValue: text("sealed_value").notNull(),
+    // The identity provider's user id.
+    updatedBy: text("updated_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.name] })],
 );

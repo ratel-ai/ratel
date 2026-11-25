@@ -316,6 +316,13 @@
       "when": 1795591270136,
       "tag": "0044_sandboxes",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1795592388883,
+      "tag": "0045_sandbox_secrets",
+      "breakpoints": true
     }
   ]
 }
