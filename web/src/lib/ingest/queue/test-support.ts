@@ -20,8 +20,10 @@ import { handleTracesRequest, type TracesHandlerDeps } from "@/lib/ingest/otlp/r
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
+import type { IngestQueueAcceptDeps } from "@/lib/ingest/queue/accept";
+import { drainIngestBatches, type IngestQueueStore } from "@/lib/ingest/queue/drain";
 import { ENVELOPE_VERSION, type Envelope } from "@/lib/ingest/queue/envelope";
-import type { IngestPersistDeps } from "@/lib/ingest/queue/persist";
+import { type IngestPersistDeps, persistIngestBatch } from "@/lib/ingest/queue/persist";
 import type { EnvelopeHandler, EnvelopeQueue } from "@/lib/ingest/queue/port/envelope-queue";
 import type { RetryPolicy } from "@/lib/ingest/queue/port/settle";
 import {
@@ -29,6 +31,13 @@ import {
   MemoryQueueStore,
 } from "@/lib/ingest/queue/port/test-support/memory-queue";
 import { createEnvelopeHandler } from "@/lib/ingest/queue/process";
+import {
+  claimNextIngestBatch,
+  enqueueIngestBatch,
+  failIngestBatch,
+  markIngestBatchDone,
+  retryIngestBatch,
+} from "@/lib/ingest/queue/queries";
 import { type ProcessEventsDeps, processEvents } from "@/lib/ingest/trace-events/process-events";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import {
@@ -70,15 +79,8 @@ export const FAST_POLICY: RetryPolicy = {
   outageWaitMs: { first: 5, max: 20 },
 };
 
-export interface Deployment {
-  client: PGlite;
-  db: Db;
-  logs: { message: string; fields?: Record<string, unknown> }[];
-}
-
-export async function setupDeployment(): Promise<Deployment> {
-  const client = await createMigratedPGlite();
-  await client.exec(`
+/** An organization with one project and its two keys, over a migrated database. */
+export const SEED_SQL = `
     create table ${USAGE_TABLE} (n integer not null);
     insert into ${USAGE_TABLE} values (0);
     insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
@@ -88,7 +90,17 @@ export async function setupDeployment(): Promise<Deployment> {
       ('${SECRET_KEY_ID}', '${PROJECT_ID}', 'hashed:${SECRET_KEY}', 'rtl_s', '{*}'),
       ('${SHARED_KEY_ID}', '${PROJECT_ID}', 'hashed:${SHARED_KEY}', 'rtl_p',
        '{ingest:traces,ingest:logs,ingest:events}');
-  `);
+  `;
+
+export interface Deployment {
+  client: PGlite;
+  db: Db;
+  logs: { message: string; fields?: Record<string, unknown> }[];
+}
+
+export async function setupDeployment(): Promise<Deployment> {
+  const client = await createMigratedPGlite();
+  await client.exec(SEED_SQL);
   return deploymentOver(client);
 }
 
@@ -351,6 +363,13 @@ export function ingestRequest(
 type Signal = Envelope["signal"];
 type Publisher = Pick<EnvelopeQueue, "publish">;
 
+/** What a test sends, of each signal. */
+export interface Sent {
+  traces: IngestBody[];
+  logs: IngestBody[];
+  events: IngestBody[];
+}
+
 /** The envelope that a gateway writes for a request it accepted. */
 export function envelopeOf(
   signal: Signal,
@@ -379,7 +398,7 @@ async function ingest(
   signal: Signal,
   bodies: readonly IngestBody[],
   send: (request: Request) => Promise<Response>,
-  queue: Publisher | undefined,
+  queue?: Publisher,
 ): Promise<void> {
   for (const body of bodies) {
     if (queue) {
@@ -422,6 +441,45 @@ export const ingestEvents = (
     queue,
   );
 
+/** ADR-0009's queue over this deployment, as `EXPERIMENTAL_INGEST_QUEUE=1` wires it. */
+export function laneStore({ db }: Deployment): IngestQueueStore {
+  return {
+    claim: (options) => claimNextIngestBatch(db, options),
+    done: (id, attempt, result) => markIngestBatchDone(id, attempt, result, db),
+    fail: (id, attempt, error) => failIngestBatch(id, attempt, error, db),
+    retry: (id, attempt, error, options) => retryIngestBatch(id, attempt, error, options, db),
+  };
+}
+
+/** Sends everything to the routes with the queue on. A shared key's requests are stored inline. */
+export async function ingestThroughLane(deployment: Deployment, sent: Sent): Promise<void> {
+  const ingestQueue: IngestQueueAcceptDeps = {
+    enabled: () => true,
+    enqueue: (batch) => enqueueIngestBatch(batch, deployment.db),
+    scheduleDrain: () => undefined,
+  };
+  const { traces, logs, events } = sent;
+  await ingest("traces", traces, (request) =>
+    handleTracesRequest(request, tracesRouteDeps(deployment, { ingestQueue })),
+  );
+  await ingest("logs", logs, (request) =>
+    handleLogsRequest(request, logsRouteDeps(deployment, { ingestQueue })),
+  );
+  await ingest("events", events, (request) =>
+    handleRuntimeEventsRequest(request, eventsRouteDeps(deployment, { ingestQueue })),
+  );
+}
+
+/** One worker's lane until the queue is empty. */
+export function drainLane(deployment: Deployment, maxAttempts = 5) {
+  const silentLog = { info: () => undefined, warn: () => undefined, error: () => undefined };
+  return drainIngestBatches(
+    laneStore(deployment),
+    (batch) => persistIngestBatch(batch, persistDeps(deployment)),
+    { perProject: 0, maxAttempts, max: 10_000, log: silentLog },
+  );
+}
+
 /** Columns that differ between two runs of the same input: random ids, and the time of the store. */
 const VOLATILE: Record<string, readonly string[]> = {
   "*": ["received_at", "created_at", "updated_at"],
@@ -446,6 +504,8 @@ export async function dumpTables(
   );
   const dump: Record<string, string[]> = {};
   for (const { name } of names) {
+    // The queue itself.
+    if (name === "ingest_batches") continue;
     const { rows } = await client.query<{ row: Record<string, unknown> }>(
       name === "event_metrics"
         ? `select to_jsonb(t) || jsonb_build_object('event', e.dedupe_hash) as row

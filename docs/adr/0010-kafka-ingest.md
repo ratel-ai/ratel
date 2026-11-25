@@ -28,10 +28,15 @@ wrote, or give one back.
 | Read by | the ingest lane (`all`, `worker`, `persist`) | a consumer in `worker`, or the single `all` process |
 | Order | none: round robin across projects, several tries at once | per project, one at a time |
 | Retry | 5 s doubling, 5 tries, then `failed` in the table | 1 s, 5 s, 30 s, 120 s, then a dead-letter topic; an outage does not count |
-| Clock of a span without a time | the time of the store | `receivedAt`, the time the gateway took it |
+| Clock of an item without a time, and of the bounds of facts | the time of the store | `receivedAt`, the time the gateway took it |
 | Stores through | `storeTraceExport`, `storeLogExport`, `storeRuntimeEvents` | the same three functions |
 
-Neither switch reads the other, and both can be on. This core never writes to Kafka: its routes do not
+Neither switch reads the other, and both can be on: a project can send both ways at once. Each row is
+stored once, because the ids are the same on both ways (`kafka/both-queues.integration.test.ts`, also with
+workers that are killed). What each request keeps of its own, a raw copy, is kept per request. Out of order
+are: two ways to each other, the lane's batches after a retry or with more than one worker, and a shared
+key's requests, which stay inline and overtake the queued ones. Where a row keeps what came first (a tool
+call that its client and its server both report, one event id sent by two keys), that decides its content. This core never writes to Kafka: its routes do not
 know of it.
 
 **The shared store takes three optional facts** (`RedeliveredContext`): `receivedAt`, `redelivers` (every
@@ -219,6 +224,11 @@ it can be handed over with its offsets.
 ## Consequences
 
 - A deployment can take over a topic where another reader stopped, and give it back.
+- After a backlog the lane's clock is late: for six hours of it, an item without a time, its metrics and its
+  derived events are six hours late, `events.occurred_at` is null, and `facts_started_at` and the first use of
+  a tool move to five minutes before the store. Items with a time of their own keep it. Measured, not changed.
+- The released SDK (`@ratel-ai/cloud-sdk` 0.6.0) and the OTLP exporters take both answers: one request, no
+  reject (`sdk-answers.integration.test.ts`). Its own counter shows 0 accepted for the lane's answer.
 - Two queues exist. They share the store, not the retry, the order or the clock; joining them is open.
 - An envelope can hold an address that this core would not have stored. Until that is decided, an organization
   with `customMonitoring` on is not put on a topic.

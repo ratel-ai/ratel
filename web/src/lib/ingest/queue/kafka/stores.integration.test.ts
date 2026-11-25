@@ -8,6 +8,7 @@ import type { EnvelopeHandler } from "../port/envelope-queue";
 import {
   type Deployment,
   deploymentOver,
+  drainLane,
   dumpTables,
   envelopeHandler,
   envelopeOf,
@@ -16,10 +17,12 @@ import {
   type IngestBody,
   ingestEvents,
   ingestLogs,
+  ingestThroughLane,
   ingestTraces,
   killableClient,
   logsBody,
   modelCallBody,
+  type Sent,
   SHARED_KEY,
   setupDeployment,
   usageOf,
@@ -38,17 +41,17 @@ const FIXTURES = readdirSync(REAL, { withFileTypes: true })
   .map(({ name }) => name);
 const AT = Date.now() - 60_000;
 
-interface Sent {
-  traces: IngestBody[];
-  logs: IngestBody[];
-  events: IngestBody[];
-}
-
 const EVERYTHING: Sent = {
   traces: [...FIXTURES.flatMap((name) => loadFixture(name)), modelCallBody()],
   logs: [logsBody(), logsBody(SHARED_KEY)],
   events: [eventsBody(AT), eventsBody(AT, SHARED_KEY)],
 };
+
+/**
+ * What goes through ADR-0009's queue: a shared key's requests stay inline there, so they overtake the
+ * queued ones, and which of two senders of one event id comes first changes what is kept.
+ */
+const SECRET_KEY_ONLY: Sent = { ...EVERYTHING, logs: [logsBody()], events: [eventsBody(AT)] };
 
 /** A few exports of each signal: what several dying workers can go through in a test. */
 const SOME: Sent = {
@@ -63,12 +66,18 @@ const envelopesOf = ({ traces, logs, events }: Sent) => [
   ...events.map((body) => envelopeOf("events", body)),
 ];
 
-/** Rows as a direct send leaves them. */
-async function direct({ traces, logs, events }: Sent) {
+/** Rows as a direct send leaves them: stored in the request, or through ADR-0009's lane. */
+async function direct(sent: Sent, lane = false) {
   const deployment = await setupDeployment();
-  await ingestTraces(deployment, traces);
-  await ingestLogs(deployment, logs);
-  await ingestEvents(deployment, events);
+  if (lane) {
+    await ingestThroughLane(deployment, sent);
+    const { done, failed, retried } = await drainLane(deployment);
+    assert.ok(done > 0 && failed === 0 && retried === 0);
+  } else {
+    await ingestTraces(deployment, sent.traces);
+    await ingestLogs(deployment, sent.logs);
+    await ingestEvents(deployment, sent.events);
+  }
   const result = { tables: await tablesOf(deployment), usage: await usageOf(deployment) };
   await deployment.client.close();
   return result;
@@ -137,11 +146,18 @@ async function readToEnd(t: Broker, handler: EnvelopeHandler): Promise<void> {
 if (!brokers) {
   test("kafka stores", { skip: "TEST_KAFKA_BROKERS is not set" }, () => undefined);
 } else {
-  for (const times of [1, 2]) {
-    test(`all three signals through Kafka ${times === 1 ? "once" : "twice"} store what a direct send stores`, async () => {
-      const expected = await direct(EVERYTHING);
+  for (const [times, lane] of [
+    [1, false],
+    [2, false],
+    [1, true],
+    [2, true],
+  ] as const) {
+    const flag = lane ? "on" : "off";
+    test(`all three signals through Kafka, ${times} time(s), store what a direct send stores with EXPERIMENTAL_INGEST_QUEUE ${flag}`, async () => {
+      const sent = lane ? SECRET_KEY_ONLY : EVERYTHING;
+      const expected = await direct(sent, lane);
       const t = await broker(brokers);
-      const envelopes = envelopesOf(EVERYTHING);
+      const envelopes = envelopesOf(sent);
       const publisher = t.open();
       for (let i = 0; i < times; i++) {
         for (const envelope of envelopes) await publisher.publish(envelope);
@@ -152,45 +168,46 @@ if (!brokers) {
       assert.deepEqual(await tablesOf(deployment), expected.tables);
       assert.equal(await usageOf(deployment), expected.usage);
       assert.equal(await t.high(`${t.topic}.dead`), 0, "nothing is dead-lettered");
-      assert.ok(expected.tables.otel_spans.length > 50 && expected.tables.trace_events.length > 6);
+      assert.ok(expected.tables.otel_spans.length > 50 && expected.tables.trace_events.length > 5);
       await deployment.client.close();
       await t.admin.disconnect();
     });
   }
 
-  test("workers that die mid-batch: the next one goes on, and the rows are a direct send's", async () => {
-    const expected = await direct(SOME);
-    const t = await broker(brokers);
-    const publisher = t.open();
-    for (const envelope of envelopesOf(SOME)) await publisher.publish(envelope);
-    await publisher.close();
-    const deployment = await setupDeployment();
+  for (const lane of [false, true])
+    test(`workers that die mid-batch: the rows are a direct send's with EXPERIMENTAL_INGEST_QUEUE ${lane ? "on" : "off"}`, async () => {
+      const expected = await direct(SOME, lane);
+      const t = await broker(brokers);
+      const publisher = t.open();
+      for (const envelope of envelopesOf(SOME)) await publisher.publish(envelope);
+      await publisher.close();
+      const deployment = await setupDeployment();
 
-    // Each worker's database connection ends at another statement: before, in and after a store. What it
-    // had in hand is never acknowledged, so the next worker gets it again.
-    let killed = 0;
-    for (const at of [3, 17, 38, 61]) {
-      const connection = killableClient(deployment.client, at);
-      const store = envelopeHandler(deploymentOver(connection.client));
-      const queue = t.open();
-      const consumer = queue.consume(async (envelope, delivery) => {
-        const result = await store(envelope, delivery);
-        // A dead process answers nothing: its message stays in hand until the stop gives it back.
-        return connection.dead() ? { outcome: "outage", reason: "the process is gone" } : result;
-      });
-      if (await until(() => connection.dead(), 30_000)) killed += 1;
-      await consumer.stop();
-      await queue.close();
-    }
-    assert.equal(killed, 4);
-    const left = (await t.high(t.topic)) - (await t.committed());
-    assert.ok(left > 0, "the last worker leaves work");
+      // Each worker's database connection ends at another statement: before, in and after a store. What it
+      // had in hand is never acknowledged, so the next worker gets it again.
+      let killed = 0;
+      for (const at of [3, 17, 38, 61]) {
+        const connection = killableClient(deployment.client, at);
+        const store = envelopeHandler(deploymentOver(connection.client));
+        const queue = t.open();
+        const consumer = queue.consume(async (envelope, delivery) => {
+          const result = await store(envelope, delivery);
+          // A dead process answers nothing: its message stays in hand until the stop gives it back.
+          return connection.dead() ? { outcome: "outage", reason: "the process is gone" } : result;
+        });
+        if (await until(() => connection.dead(), 30_000)) killed += 1;
+        await consumer.stop();
+        await queue.close();
+      }
+      assert.equal(killed, 4);
+      const left = (await t.high(t.topic)) - (await t.committed());
+      assert.ok(left > 0, "the last worker leaves work");
 
-    await readToEnd(t, envelopeHandler(deployment));
-    assert.deepEqual(await tablesOf(deployment), expected.tables);
-    assert.ok((await usageOf(deployment)) <= expected.usage);
-    assert.equal(await t.high(`${t.topic}.dead`), 0);
-    await deployment.client.close();
-    await t.admin.disconnect();
-  });
+      await readToEnd(t, envelopeHandler(deployment));
+      assert.deepEqual(await tablesOf(deployment), expected.tables);
+      assert.ok((await usageOf(deployment)) <= expected.usage);
+      assert.equal(await t.high(`${t.topic}.dead`), 0);
+      await deployment.client.close();
+      await t.admin.disconnect();
+    });
 }
