@@ -13,7 +13,7 @@ stay one command.
 
 ## Decision
 
-**One image, three roles.** `APP_ROLE` picks what a process does with background work. Unset
+**One image, five roles.** `APP_ROLE` picks what a process does with background work. Unset
 or unknown means `all`.
 
 | `APP_ROLE` | After a response | Minute tick | Migrates on boot |
@@ -21,6 +21,11 @@ or unknown means `all`.
 | `all` (default) | drains the project's jobs | the in-process timer, or an external caller with `RATEL_CRON=external` | yes |
 | `api` | only queues | none | yes |
 | `worker` | serves no traffic | the worker loop | never |
+| `ingest` | only queues | none | never |
+| `persist` | serves no traffic | none: only the ingest lane | never |
+
+`ingest` and `persist` exist for the ingest queue ([ADR-0009](0009-queued-ingest.md)): Cloud routes
+the ingest paths to an ingest-only service and scales persist-only processes on the queue's depth.
 
 **The worker starts from instrumentation, in the same Next server.** The image is a Next
 standalone build, so a separate entry script would need a second bundle of every job handler.

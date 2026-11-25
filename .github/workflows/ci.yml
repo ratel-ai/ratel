@@ -176,14 +176,14 @@ jobs:
   # @ratel/platform tests (PGlite), sharded like private platform-tests. A WASM crash
   # then hits one shard. Shard names stay off the ruleset; ci-gate needs this job id.
   platform-test:
-    name: platform-test (${{ matrix.shard }}/4)
+    name: platform-test (${{ matrix.shard }}/6)
     needs: changes
     if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -195,7 +195,7 @@ jobs:
         run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
       - name: Test
         env:
-          TEST_SHARD: ${{ matrix.shard }}/4
+          TEST_SHARD: ${{ matrix.shard }}/6
         run: pnpm --filter @ratel/platform test
 
   # The cloud deployer: deploy.sh and the modules under deploy/terraform, checked with both
@@ -249,7 +249,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and start
-        run: docker compose up --build --detach --wait --wait-timeout 180
+        # web, worker and demo in one build: the demo image, with the whole source tree, takes 45 s
+        # to export, and here that overlaps the Next build.
+        run: |
+          docker compose --profile demo build
+          docker compose up --detach --wait --wait-timeout 180
       - name: Scan the image (fixable HIGH and CRITICAL in app dependencies)
         # Same build as above, no second one. Operating-system packages are listed but do not
         # gate: the base tag moves under us and a Debian fix lands before the Node image does.

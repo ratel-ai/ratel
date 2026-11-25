@@ -14,24 +14,26 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 | `store.ts` | `drainProjectJobs`: the runner wired to the database and the registered handlers, after reaping zombies |
 | `observability.ts` | typed background events and exception reports through the telemetry shim |
 | `route-helpers.ts` | `enqueueForProjectId` and `scheduleProjectDrain`: enqueue, then drain after the HTTP response with Next's `after()` |
-| `role.ts` | `APP_ROLE`: `all` (the default) also drains after a response; `api` only queues; `worker` runs the job loop |
+| `role.ts` | `APP_ROLE`: `all` (the default) also drains after a response; `api` only queues; `worker` runs the job loop; `ingest` only queues ingest batches and never migrates; `persist` runs only the ingest lane (ADR-0009). `persistsIngestAfterResponse` and `runsIngestLane` say who persists ingest batches |
 | `boot-plan.ts` | what a process does at boot, from `APP_ROLE` and `RATEL_CRON`: whether it migrates, and who runs its tick |
 | `drain.ts` | one cron tick: `before` steps, the drain, `after` steps (retention-only ones gated by `DATA_RETENTION_ENABLED=1`); the `cron_drain_completed` heartbeat with upstream's per-area `*Errors` lists |
 | `background-drain.ts` | `GET /api/cron/drain` (upstream's background drain): closed without `CRON_SECRET`, 202 at once, the tick after the response, one at a time per process (`drain_skipped_busy`) under the `CRON_DRAIN_TIMEOUT_MS` watchdog (`drain_timed_out` frees the slot); an API-only process answers 202 and runs nothing |
 | `drain-observer.ts` | the drain's outcome in the logs for the deployment's Datadog drain monitors (owned port of upstream's `observeDrain`): `drain_started`, `drain_completed` with the age of the oldest queued job of tier 0 or 1 (`readOldestQueuedJobAgeMs`; tier 2 sweeps wait on purpose), `job_queue_lagging` past 10 minutes, `drain_failed`; the cron route and the worker's sweep both report through it. The worker's sweep also has upstream's watchdog (`timedDrain`): `drain_progress` after each finished job, `drain_timed_out` after `CRON_DRAIN_TIMEOUT_MS` (10 minutes by default, `0` turns it off) with no finished job, and `drain_skipped_hung` while two sweeps are unsettled, so a hung sweep never stops the analysis lane |
 | `scheduler.ts` | the in-process timer an all-in-one process runs the tick with (`RATEL_CRON=inprocess`, the OSS default); Cloud uses an external caller |
-| `worker.ts` | the worker's loop: one step at a time, the tick every 60 s, a drain otherwise, a 3 s wait when nothing is queued |
-| `worker-start.ts` | the loop wired to `drainProjectJobs` (an analysis lane and an import lane) and `runDrainTick` (observed, `workerTick`), started once per process; once a day `reportTopQueries` logs the database's most expensive statements as `db_top_query` and resets the counts; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits |
+| `worker.ts` | the worker's loop: one step at a time, the tick every 60 s, a drain otherwise, a 3 s wait when nothing is queued; plus the registrations' lanes (`Registration.workerLanes`, the ingest queue's persist lane), `concurrency` copies each; `analysis: false` runs only those |
+| `worker-start.ts` | the loop wired to `drainProjectJobs` (an analysis lane and an import lane), the registrations' lanes and `runDrainTick` (observed, `workerTick`), started once per process (`lanesOnly` for `APP_ROLE=persist`); once a day `reportTopQueries` logs the database's most expensive statements as `db_top_query` and resets the counts; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits |
 
 ## Roles
 
-One image, three roles ([ADR-0005](../../../../docs/adr/0005-background-worker.md)):
+One image, five roles ([ADR-0005](../../../../docs/adr/0005-background-worker.md); `ingest` and `persist` serve the ingest queue, [ADR-0009](../../../../docs/adr/0009-queued-ingest.md)):
 
 | `APP_ROLE` | After a response | Minute tick | `GET /api/cron/drain` | Migrates |
 |---|---|---|---|---|
 | `all` (default; `pnpm dev`, one container) | drains | `scheduler.ts`, or the caller with `RATEL_CRON=external` | runs a tick | yes |
 | `api` (`web` in `docker-compose.yml`) | only queues | none | 202, skipped | yes |
 | `worker` | serves no traffic | `worker.ts` | runs a tick | never |
+| `ingest` | only queues | none | 202, skipped | never |
+| `persist` | serves no traffic; runs the ingest lane | none | 202, skipped | never |
 
 Every path meets in `drainProjectJobs`, and the atomic claim keeps two processes from picking
 the same job. The worker needs `NEXT_MANUAL_SIG_HANDLE=true` to stop cleanly: without it Next
