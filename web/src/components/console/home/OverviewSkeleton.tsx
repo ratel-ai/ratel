@@ -2,12 +2,15 @@
 
 import { Skeleton } from "@ratel/design-system/states";
 import type { ReactNode } from "react";
+import { GridCells } from "@/components/console/grid/GridCells";
 import { useFocusedConsole } from "@/components/console/shell/focused-console-context";
+import { DEFAULT_LAYOUT, visibleWidgets } from "@/lib/views/overview-layout/domain/layout";
 
 /**
  * Overview while it loads: the same header, stat row, product tiles, list
  * and narrow runs column, so nothing moves when the data lands (DESIGN.md,
- * Every state is designed). With `focusedConsole`, the recap's two cards.
+ * Every state is designed). With `focusedConsole`, the recap's
+ * widgets where the default layout has them.
  */
 export function OverviewSkeleton() {
   const focused = useFocusedConsole();
@@ -29,15 +32,13 @@ export function OverviewSkeleton() {
   );
 }
 
+/** The default layout: what most people have. */
 function FocusedCards() {
   return (
-    <div className="flex flex-col gap-8" data-skeleton="focused">
-      {["h-64", "h-96"].map((height) => (
-        <div key={height} className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className={`w-full rounded-lg ${height}`} />
-        </div>
-      ))}
+    <div data-skeleton="focused">
+      <GridCells cards={visibleWidgets(DEFAULT_LAYOUT)}>
+        {() => <Skeleton className="h-full min-h-44 w-full rounded-lg" />}
+      </GridCells>
     </div>
   );
 }

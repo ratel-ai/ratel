@@ -53,6 +53,10 @@ These differ from their `ratel-cloud` origin ("upstream").
 - `operations/agents.ts` and `operations/mcp-servers.ts`: the default gate is the core's
   `agentsPages` (`views/project-entities/flag.ts`), not upstream's flag service; off, the four
   tools refuse as forbidden. `operations/entities-gate.test.ts` (no upstream counterpart) pins it.
+- `operations/overview.ts` (no upstream counterpart): `get_overview` and `change_overview_layout`, the
+  recap Overview and its layout through the web's own loader and action. `focusedConsole` off for the
+  caller, they are not listed and the overview view is not published; off for the project's
+  organization, they refuse. An API key reads the default layout and cannot change one.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `mcpApps`; upstream asks its flag service per project key or person, with timeouts and a

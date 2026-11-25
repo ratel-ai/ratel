@@ -2,6 +2,7 @@ import { CodeBlock } from "@ratel/design-system/code";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { composition } from "@/lib/composition/ports";
+import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import { agentToolCount } from "@/lib/mcp/operations";
 import { mcpOriginFromHeaders } from "@/lib/mcp/public-origin";
@@ -38,7 +39,7 @@ export async function IntegrationsPage({ slug }: { slug: string }) {
       ]),
     ),
   ) as Record<string, string[]>;
-  const toolCount = agentToolCount();
+  const toolCount = agentToolCount({ focusedConsole: await focusedConsoleEnabled(organization) });
 
   return (
     <Page>

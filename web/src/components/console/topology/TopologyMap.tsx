@@ -1,3 +1,4 @@
+import { cn } from "@ratel/design-system/cn";
 import { EmptyState } from "@ratel/design-system/states";
 import { Bot, Box, type LucideIcon, Server, Waypoints } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +30,7 @@ export function TopologyMap({
   graph,
   range,
   linked,
+  bare = false,
 }: {
   projectId: string;
   graph: Topology;
@@ -36,14 +38,27 @@ export function TopologyMap({
   range: string;
   /** The Agents and MCP servers pages exist (`agentsPages`). */
   linked: boolean;
+  /** A widget, without a frame: the map fills it and scrolls both ways. */
+  bare?: boolean;
 }) {
   const layout = topologyLayout(graph);
   const hrefOf = (node: TopologyNode) => (linked ? nodeHref(projectId, node, range) : null);
   const has = (kind: TopologyNodeKind) => graph.nodes.some((node) => node.kind === kind);
-  if (graph.nodes.length === 0) return <TopologyEmpty />;
+  if (graph.nodes.length === 0) return <TopologyEmpty bare={bare} />;
   return (
-    <div className="flex min-w-0 flex-col rounded-lg border border-line bg-raised" data-topology="">
-      <div className="flex flex-1 items-center overflow-x-auto p-3">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col",
+        bare ? "min-h-0 flex-1" : "rounded-lg border border-line bg-raised",
+      )}
+      data-topology=""
+    >
+      <div
+        className={cn(
+          "flex flex-1",
+          bare ? "min-h-0 overflow-auto px-3" : "items-center overflow-x-auto p-3",
+        )}
+      >
         {/* biome-ignore lint/a11y/useSemanticElements: an SVG has no fieldset; it groups the linked boxes. */}
         <svg
           role="group"
@@ -51,7 +66,7 @@ export function TopologyMap({
           viewBox={`0 0 ${layout.width} ${layout.height}`}
           width={layout.width}
           height={layout.height}
-          className="mx-auto block shrink-0"
+          className={cn("block shrink-0", bare ? "m-auto" : "mx-auto")}
         >
           <defs>
             <Arrow id="topology-arrow" color="var(--color-fg-subtle)" />
@@ -67,7 +82,10 @@ export function TopologyMap({
               x={edge.label.x}
               y={edge.label.y + 4}
               textAnchor="middle"
-              className="fill-fg-muted stroke-raised text-xs tabular-nums [paint-order:stroke]"
+              className={cn(
+                "fill-fg-muted text-xs tabular-nums [paint-order:stroke]",
+                bare ? "stroke-app" : "stroke-raised",
+              )}
               strokeWidth={4}
             >
               {formatInteger(edge.count)}
@@ -86,7 +104,12 @@ export function TopologyMap({
           <li key={`${edge.from}|${edge.to}`}>{edgeText(edge)}</li>
         ))}
       </ul>
-      <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-2.5 text-xs text-fg-subtle">
+      <footer
+        className={cn(
+          "flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-fg-subtle",
+          bare ? "" : "border-t border-line",
+        )}
+      >
         <span className="min-w-0 flex-1 basis-64">{caption(graph)}</span>
         {linked && has("agent") ? (
           <SeeAll href={agentsHref(projectId, { range })}>See all agents</SeeAll>
@@ -99,9 +122,16 @@ export function TopologyMap({
   );
 }
 
-function TopologyEmpty() {
+function TopologyEmpty({ bare }: { bare: boolean }) {
   return (
-    <div className="rounded-lg border border-line" data-topology="empty">
+    <div
+      className={
+        bare
+          ? "flex min-h-0 flex-1 flex-col justify-center overflow-auto"
+          : "rounded-lg border border-line"
+      }
+      data-topology="empty"
+    >
       <EmptyState
         icon={Waypoints}
         title="No agents or MCP servers in this window"

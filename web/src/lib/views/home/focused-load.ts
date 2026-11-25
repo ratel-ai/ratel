@@ -1,5 +1,5 @@
 import { projectRoot } from "@/lib/console/navigation";
-import { getDailyAggregates, getPromptCacheTotals } from "@/lib/ingest/otlp/queries";
+import type { DailyAggregateRow } from "@/lib/ingest/otlp/queries";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -23,36 +23,77 @@ import {
   promptCacheHitRate,
   type Suggestion,
 } from "@/lib/synthesis/dashboard";
-import {
-  getTracesIngestDiagnostics,
-  type TracesIngestDiagnostics,
+import type {
+  TraceAggregateSummary,
+  TraceDailyAggregate,
+  TracesIngestDiagnostics,
 } from "@/lib/synthesis/traces/queries";
 import { resolveTraceListView } from "@/lib/synthesis/traces/view";
 import { createDrizzleAgentStore } from "@/lib/views/agents/adapters/drizzle-store";
 import { pageGap } from "@/lib/views/health/data-gaps-model";
 import { type IssueCategory, issueCategories } from "@/lib/views/health/issue-categories";
-import { loadHealthPageModel } from "@/lib/views/health/page-model";
+import { pendingHealthModel } from "@/lib/views/health/page-model";
+import type { Attention } from "@/lib/views/home/attention";
 import {
-  latestEventAt,
-  latestSdkEventAt,
-  newest,
+  type FixesSlice,
+  type IntentsRead,
+  intentsGlance,
+  READ_FAILED,
+  type TasksRead,
+  tasksGlance,
+} from "@/lib/views/home/glance";
+import {
+  firstTryTile,
+  type OverviewData,
   type OverviewProject,
+  overviewAttention,
+  overviewDaily,
+  overviewSdk,
 } from "@/lib/views/home/load";
 import {
   buildContextSplit,
   type ContextSplit,
+  dailyCounts,
   type OverviewWindow,
   overviewRangeParam,
+  previousWindow,
 } from "@/lib/views/home/overview-model";
+import {
+  latestEventAt,
+  newest,
+  type OverviewReadScope,
+  readDailyAggregates,
+  readDailyTraces,
+  readFixes,
+  readHealth,
+  readIntentsGlance,
+  readPendingRewrites,
+  readPreviousTraces,
+  readPromptCache,
+  readSdkDays,
+  readSdkLatestAt,
+  readSdkPrevious,
+  readTasksGlance,
+  readTelemetry,
+  readTraces,
+  type SdkActivity,
+  type SdkDay,
+} from "@/lib/views/home/overview-reads";
+import {
+  DEFAULT_LAYOUT,
+  type OverviewLayout,
+  visibleWidgets,
+} from "@/lib/views/overview-layout/domain/layout";
 import { readTopology, type Topology } from "@/lib/views/project-entities/topology";
 
 /**
- * The recap Overview's reads (`focusedConsole`): when telemetry last arrived,
- * the Agent health reading and the topology, nothing else. Each degrades on
- * its own. The context Panel's read runs only when the Panel is asked for.
+ * The recap Overview's reads (`focusedConsole`): when telemetry last arrived, and what the widgets
+ * a person keeps need. A removed widget reads nothing. Each read degrades on its own, and one that
+ * several widgets share runs once. The context Panel's read runs only when the Panel is asked for.
  */
 
-type LimitOrganization = Parameters<typeof getAgentHealthLimits>[0] & { id: string };
+export type LimitOrganization = Parameters<typeof getAgentHealthLimits>[0] &
+  OverviewReadScope["organization"];
 
 export type HealthCard =
   | {
@@ -73,11 +114,26 @@ export interface FocusedHealth {
   card: HealthCard;
 }
 
+/** What the stat row draws from (`focusedStats`). */
+export type MetricsData = Pick<
+  OverviewData,
+  "root" | "window" | "rangeParam" | "previous" | "series" | "daily" | "sdk" | "health"
+> & { traces: TraceAggregateSummary };
+
+export interface FocusedAttention extends Attention {
+  healthHref: string;
+  /** Some of what it checks could not be read: an empty list is then not "nothing". */
+  partial: boolean;
+}
+
 export interface FocusedOverviewContext {
   split: ContextSplit | null;
   suggestions: Suggestion[];
   promptCacheHitRate: number | null;
 }
+
+/** A widget whose read failed. */
+export type Failed = "failed";
 
 export interface FocusedOverviewData {
   project: OverviewProject;
@@ -89,67 +145,114 @@ export interface FocusedOverviewData {
   telemetryRead: boolean;
   /** False only when nothing has ever arrived: the page is the setup guide. */
   hasTelemetry: boolean;
-  health: FocusedHealth;
-  /** Null when it could not be read. */
-  topology: Topology | null;
+  layout: OverviewLayout;
+  /** Each widget is null when it is removed. */
+  metrics: MetricsData | Failed | null;
+  topology: Topology | Failed | null;
+  health: FocusedHealth | null;
+  attention: FocusedAttention | null;
   /** Null unless the Panel is open and its read came back. */
   context: FocusedOverviewContext | null;
 }
 
 /** Each read, replaceable in tests. All of them may throw. */
 export interface FocusedReads {
-  telemetry: (projectId: string) => Promise<TracesIngestDiagnostics>;
-  sdkLatestAt: (projectId: string) => Promise<Date | null>;
+  telemetry: (at: OverviewReadScope) => Promise<TracesIngestDiagnostics>;
+  sdkLatestAt: (at: OverviewReadScope) => Promise<Date | null>;
+  traces: (at: OverviewReadScope) => Promise<TraceAggregateSummary>;
+  previous: (at: OverviewReadScope) => Promise<TraceAggregateSummary>;
+  dailyTraces: (at: OverviewReadScope) => Promise<TraceDailyAggregate[]>;
+  sdkDays: (at: OverviewReadScope) => Promise<SdkDay[]>;
+  sdkPrevious: (at: OverviewReadScope) => Promise<SdkActivity>;
   health: (
-    projectId: string,
+    at: OverviewReadScope,
     windowDays: WindowDays,
-    organization: LimitOrganization,
     limits: AgentHealthPlanLimits,
   ) => Promise<HealthPageModel>;
-  topology: (projectId: string, window: { since: Date; until: Date }) => Promise<Topology>;
-  context: (
-    projectId: string,
-    range: { since: Date; until: Date; days: readonly string[] },
-  ) => Promise<FocusedOverviewContext>;
+  topology: (at: OverviewReadScope) => Promise<Topology>;
+  fixes: (at: OverviewReadScope) => Promise<FixesSlice>;
+  pendingRewrites: (at: OverviewReadScope) => Promise<number>;
+  intents: (at: OverviewReadScope) => Promise<IntentsRead | null>;
+  tasks: (at: OverviewReadScope) => Promise<TasksRead | null>;
+  dailyAggregates: (at: OverviewReadScope) => Promise<DailyAggregateRow[]>;
+  context: (at: OverviewReadScope, days: readonly string[]) => Promise<FocusedOverviewContext>;
 }
 
 /** A failed read, which is never the same as an empty one. */
 const FAILED = Symbol("failed");
+type Read<T> = T | typeof FAILED;
 
 export async function loadFocusedOverview({
   project,
   organization,
   window,
+  layout = DEFAULT_LAYOUT,
   contextOpen = false,
   now = new Date(),
-  reads = READS,
+  reads = FOCUSED_READS,
   limits = getAgentHealthLimits(organization),
+  db,
 }: {
   project: OverviewProject;
   organization: LimitOrganization;
   window: OverviewWindow;
+  /** The person's layout: only its visible widgets are read. */
+  layout?: OverviewLayout;
   /** The context Panel is open. */
   contextOpen?: boolean;
   now?: Date;
   reads?: FocusedReads;
   limits?: AgentHealthPlanLimits;
+  /** Another database than the pool's, in tests. */
+  db?: OverviewReadScope["db"];
 }): Promise<FocusedOverviewData> {
   const { range } = resolveTraceListView({ range: overviewRangeParam(window) }, now);
   const windowDays = parseWindowDays(String(window), limits.agentHealthWindowDays);
-  const degrade = <T>(operation: string, load: () => Promise<T>) =>
-    loadOrFallback<T | typeof FAILED>({
-      operation: `overview_focused_${operation}`,
+  const scope: OverviewReadScope = {
+    projectId: project.id,
+    organization,
+    current: { since: range.since, until: range.until },
+    before: previousWindow(range, window, now),
+    now,
+    db,
+  };
+  const read = <K extends keyof FocusedReads, T>(
+    name: K,
+    load: (run: FocusedReads[K]) => Promise<T>,
+  ): Promise<Read<T>> =>
+    loadOrFallback<Read<T>>({
+      operation: `overview_focused_${name}`,
       distinctId: `project:${project.id}`,
       fallback: FAILED,
-      load,
+      load: () => load(reads[name]),
     });
-  const [telemetry, sdkLatestAt, health, topology, context] = await Promise.all([
-    degrade("telemetry", () => reads.telemetry(project.id)),
-    degrade("sdk_latest", () => reads.sdkLatestAt(project.id)),
-    degrade("agent_health", () => reads.health(project.id, windowDays, organization, limits)),
-    degrade("topology", () => reads.topology(project.id, range)),
-    contextOpen ? degrade("context", () => reads.context(project.id, range)) : null,
-  ]);
+  const shared = {
+    traces: once(() => read("traces", (run) => run(scope))),
+    health: once(async () => {
+      const model = await read("health", (run) => run(scope, windowDays, limits));
+      return model === FAILED ? FAILED : applyPlanLimits(model, limits);
+    }),
+  };
+  // The gauge is Agent health's reading; the numbers and Needs attention are the old Overview's.
+  const usualHealth = once(async () => {
+    const model = await shared.health();
+    return model === FAILED ? FAILED : withoutLowConfidence(model);
+  });
+  const widgets = new Set(visibleWidgets(layout).map(({ id }) => id));
+  const ifVisible = <T>(id: OverviewLayout[number]["id"], load: () => Promise<T>) =>
+    widgets.has(id) ? load() : null;
+
+  const [telemetry, sdkLatestAt, metrics, topology, health, attention, context] = await Promise.all(
+    [
+      read("telemetry", (run) => run(scope)),
+      read("sdkLatestAt", (run) => run(scope)),
+      ifVisible("metrics", metricsWidget),
+      ifVisible("topology", () => read("topology", (run) => run(scope))),
+      ifVisible("health", healthWidget),
+      ifVisible("attention", attentionWidget),
+      contextOpen ? read("context", (run) => run(scope, range.days)) : null,
+    ],
+  );
   const lastEventAt = newest(
     telemetry === FAILED ? null : latestEventAt(telemetry),
     sdkLatestAt === FAILED ? null : sdkLatestAt,
@@ -163,14 +266,106 @@ export async function loadFocusedOverview({
     lastEventAt,
     telemetryRead,
     hasTelemetry: !telemetryRead || lastEventAt !== null,
-    health: {
-      href: agentHealthHref(project.id, windowDays),
-      windowDays,
-      card: healthCard(health === FAILED ? null : applyPlanLimits(health, limits)),
-    },
-    topology: topology === FAILED ? null : topology,
+    layout,
+    metrics,
+    topology: topology === FAILED ? "failed" : topology,
+    health,
+    attention,
     context: context === FAILED ? null : context,
   };
+
+  async function metricsWidget(): Promise<MetricsData | Failed> {
+    const [traces, previous, dailyTraces, sdkDays, sdkPrevious] = await Promise.all([
+      shared.traces(),
+      read("previous", (run) => run(scope)),
+      read("dailyTraces", (run) => run(scope)),
+      read("sdkDays", (run) => run(scope)),
+      read("sdkPrevious", (run) => run(scope)),
+    ]);
+    if (traces === FAILED) return "failed";
+    const rows = {
+      traces,
+      dailyTraces: orNull(dailyTraces),
+      sdkDays: orNull(sdkDays),
+      sdkPrevious: orNull(sdkPrevious),
+    };
+    const sdk = overviewSdk(rows, range.days);
+    // Only the numbers of a project without runs show the first try tile.
+    const model = sdk && traces.count === 0 ? await usualHealth() : FAILED;
+    return {
+      root: projectRoot(project.id),
+      window,
+      rangeParam: overviewRangeParam(window),
+      traces,
+      previous: orNull(previous),
+      series: dailyCounts(traces.volume, range.days),
+      daily: overviewDaily(rows, range.days),
+      sdk,
+      health:
+        model === FAILED
+          ? null
+          : {
+              href: agentHealthHref(project.id, windowDays),
+              windowDays,
+              firstTry: firstTryTile(model),
+            },
+    };
+  }
+
+  async function healthWidget(): Promise<FocusedHealth> {
+    return {
+      href: agentHealthHref(project.id, windowDays),
+      windowDays,
+      card: healthCard(orNull(await shared.health())),
+    };
+  }
+
+  async function attentionWidget(): Promise<FocusedAttention> {
+    const fixesRead = read("fixes", (run) => run(scope));
+    const [traces, health, fixes, pendingRewrites, intents, tasks, aggregates] = await Promise.all([
+      shared.traces(),
+      usualHealth(),
+      fixesRead,
+      // Fixes counts them, when it could be read.
+      fixesRead.then((fixes) =>
+        fixes === FAILED ? read("pendingRewrites", (run) => run(scope)) : 0,
+      ),
+      read("intents", (run) => run(scope)),
+      read("tasks", (run) => run(scope)),
+      read("dailyAggregates", (run) => run(scope)),
+    ]);
+    const dashboard = buildDashboardModel(aggregates === FAILED ? [] : aggregates, [...range.days]);
+    return {
+      ...overviewAttention({
+        projectId: project.id,
+        window,
+        traces: orNull(traces),
+        health:
+          health === FAILED ? applyPlanLimits(pendingHealthModel(windowDays), limits) : health,
+        healthWindow: windowDays,
+        fixes: orNull(fixes),
+        pendingRewrites: orNull(pendingRewrites),
+        tasks: tasksGlance(project.id, tasks === FAILED ? READ_FAILED : tasks),
+        unanswered: intentsGlance(project.id, intents === FAILED ? READ_FAILED : intents)
+          .unanswered,
+        contextSuggestions: buildSuggestions(dashboard),
+        contextSplit: buildContextSplit(dashboard),
+      }),
+      healthHref: agentHealthHref(project.id, windowDays),
+      partial: [traces, health, pendingRewrites, intents, tasks, aggregates].includes(FAILED),
+    };
+  }
+}
+
+/**
+ * The reading by the usual floor, from one that may show a small project's numbers early
+ * (`toolRunInsights`): the same issues, and not ready until its turns reach the floor. The low
+ * floor changes nothing else that the Overview reads, so this costs no second read.
+ */
+export function withoutLowConfidence(model: HealthPageModel): HealthPageModel {
+  if (!model.lowConfidence) return model;
+  const { lowConfidence, ...usual } = model;
+  return { ...usual, floor: lowConfidence.firmsUpAt };
 }
 
 /** The score as Agent health shows it, or in one line why there is none. Null: the read failed. */
@@ -203,37 +398,41 @@ export function healthCard(model: HealthPageModel | null): HealthCard {
   return state("Collecting: no turns in this window yet.");
 }
 
-// — Helpers ——————————————————————————————————————————————————————————————————
-
-const READS: FocusedReads = {
-  telemetry: (projectId) =>
-    bounded("overview_focused_telemetry", (db) => getTracesIngestDiagnostics(projectId, db)),
-  sdkLatestAt: (projectId) =>
-    bounded("overview_focused_sdk_latest", (db) => latestSdkEventAt(projectId, db)),
-  health: async (projectId, windowDays, organization, limits) =>
-    // The same reading as Agent health's, without example turns.
-    loadHealthPageModel(
+/** The pool's reads. */
+export const FOCUSED_READS: FocusedReads = {
+  telemetry: readTelemetry,
+  sdkLatestAt: readSdkLatestAt,
+  traces: readTraces,
+  previous: readPreviousTraces,
+  dailyTraces: readDailyTraces,
+  sdkDays: readSdkDays,
+  sdkPrevious: readSdkPrevious,
+  // The same reading as Agent health's.
+  health: async (at, windowDays, limits) =>
+    readHealth(
+      at,
+      windowDays,
+      limits,
+      (await toolRunInsightsEnabled(at.projectId, at.organization))
+        ? LOW_CONFIDENCE_FLOOR
+        : undefined,
+    ),
+  topology: (at) =>
+    withStatementTimeout(
+      (db) => readTopology(at.projectId, at.current, { agents: createDrizzleAgentStore(db), db }),
       {
-        projectId,
-        windowDays,
-        lowConfidenceFloor: (await toolRunInsightsEnabled(projectId, organization))
-          ? LOW_CONFIDENCE_FLOOR
-          : undefined,
+        operation: "overview_focused_topology",
+        timeoutMs: supplementaryReadTimeoutMs(),
+        db: at.db,
       },
-      process.env.NODE_ENV,
-      { getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }) },
     ),
-  topology: (projectId, { since, until }) =>
-    bounded("overview_focused_topology", (db) =>
-      readTopology(projectId, { since, until }, { agents: createDrizzleAgentStore(db), db }),
-    ),
-  context: async (projectId, { since, until, days }) => {
-    const [daily, cache] = await Promise.all([
-      getDailyAggregates(projectId, since, until),
-      bounded("overview_focused_prompt_cache", (db) =>
-        getPromptCacheTotals(projectId, since, until, db),
-      ),
-    ]);
+  fixes: readFixes,
+  pendingRewrites: readPendingRewrites,
+  intents: readIntentsGlance,
+  tasks: readTasksGlance,
+  dailyAggregates: readDailyAggregates,
+  context: async (at, days) => {
+    const [daily, cache] = await Promise.all([readDailyAggregates(at), readPromptCache(at)]);
     const dashboard = buildDashboardModel(daily, [...days]);
     return {
       split: buildContextSplit(dashboard),
@@ -243,11 +442,18 @@ const READS: FocusedReads = {
   },
 };
 
-function bounded<T>(
-  operation: string,
-  read: Parameters<typeof withStatementTimeout<T>>[0],
-): Promise<T> {
-  return withStatementTimeout(read, { operation, timeoutMs: supplementaryReadTimeoutMs() });
+// — Helpers ——————————————————————————————————————————————————————————————————
+
+function once<T>(load: () => Promise<T>): () => Promise<T> {
+  let running: Promise<T> | undefined;
+  return () => {
+    running ??= load();
+    return running;
+  };
+}
+
+function orNull<T>(value: Read<T>): T | null {
+  return value === FAILED ? null : value;
 }
 
 function state(line: string, failed = false): HealthCard {

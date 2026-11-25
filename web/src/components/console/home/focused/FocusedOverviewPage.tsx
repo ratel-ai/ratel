@@ -1,3 +1,4 @@
+import { saveOverviewLayout } from "@/app/(console)/project/[projectId]/overview-actions";
 import { ContextBreakdown } from "@/components/console/home/ContextBreakdown";
 import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
@@ -7,11 +8,12 @@ import { BASE_URL } from "@/lib/platform/app-config";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import { CONTEXT_PEEK, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
+import { pageLayout } from "@/lib/views/overview-layout/readers";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 type LoadOrganization = Parameters<typeof loadFocusedOverview>[0]["organization"];
 
-/** Overview with `focusedConsole`: the Health score and the topology. */
+/** Overview with `focusedConsole`: the widgets, as this person arranged them. */
 export async function FocusedOverviewPage({
   project,
   organization,
@@ -29,8 +31,16 @@ export async function FocusedOverviewPage({
 }) {
   const window = parseOverviewWindow(range);
   const now = new Date();
+  const { layout, read } = await pageLayout(project.id);
   const [data, linked] = await Promise.all([
-    loadFocusedOverview({ project, organization, window, now, contextOpen: peek === CONTEXT_PEEK }),
+    loadFocusedOverview({
+      project,
+      organization,
+      window,
+      layout,
+      now,
+      contextOpen: peek === CONTEXT_PEEK,
+    }),
     projectEntitiesEnabled(organization),
   ]);
   return (
@@ -38,6 +48,7 @@ export async function FocusedOverviewPage({
       data={data}
       now={now}
       linked={linked}
+      save={inSupportSession || !read ? null : saveOverviewLayout.bind(null, project.id)}
       actions={
         // The tour points at the rail, which is a drawer below md.
         <span className="max-md:hidden">
