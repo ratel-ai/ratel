@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { HELD_PROJECT_IDS } from "@/lib/platform/org-hold/sql";
 import type { ExperimentWindow } from "@/lib/synthesis/experiments/service";
 import { recordCatalogFingerprint } from "@/lib/synthesis/quality/fingerprint";
 import {
@@ -117,7 +118,10 @@ export async function refreshQualitySnapshots(
     since: addDays(startOfUtcDay(now), -ACTIVE_PROJECT_WINDOW_DAYS),
     until: addDays(startOfUtcDay(now), 1),
   };
-  const projects = await pickProjectsForPass(await listQualityProjects(activeWindow, db), db);
+  const projects = await pickProjectsForPass(
+    await withoutHeldProjects(await listQualityProjects(activeWindow, db), db),
+    db,
+  );
 
   let calibrationsRolledUp = 0;
   let daysWritten = 0;
@@ -160,6 +164,19 @@ export async function refreshQualitySnapshots(
     fingerprintsChanged,
     skipped: false,
   };
+}
+
+/** A project on hold keeps the rows it has (lib/platform/org-hold). */
+async function withoutHeldProjects<T extends { projectId: string }>(
+  projects: readonly T[],
+  db: QualitySnapshotDb,
+): Promise<T[]> {
+  if (projects.length === 0) return [];
+  const held = await db.execute<{ project_id: string }>(
+    sql`select project_id from ${HELD_PROJECT_IDS} held`,
+  );
+  const ids = new Set(held.rows.map((row) => row.project_id));
+  return projects.filter((project) => !ids.has(project.projectId));
 }
 
 /**

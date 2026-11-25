@@ -302,6 +302,12 @@ export type CompositionPorts = {
    */
   traceMetering?: TraceMeteringPort;
   /**
+   * Kafka topics the worker consumes besides the configured ones (`INGEST_KAFKA_TOPICS`), read
+   * again every few seconds while it runs, so that a topic can come or go without a restart. A
+   * list, never a pattern. Absent in the open-source edition.
+   */
+  ingestTopics?: () => Promise<readonly string[]>;
+  /**
    * What keeps analysis off a trace that was stored but not analyzed. Absent, the composition uses
    * the open-source default: no filter.
    */

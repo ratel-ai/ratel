@@ -196,7 +196,7 @@ are not written by ingest. These differences are accepted:
 |---|---|---|
 | `direct` (default) | nothing: the request decodes, stores and answers as before | |
 | `postgres` | a spool table, apart from the jobs table | the process whose `APP_ROLE` is `worker` or `all` |
-| `kafka` | the configured topic | the same, from an explicit list of topics. The driver loads only with this value |
+| `kafka` | the configured topic | the same, from an explicit list of topics (configured, and the edition's, read again while it runs). The driver loads only with this value. Without a topic to publish to, the deployment only consumes and its own routes stay direct |
 
 `direct` stays the default until the migration from Ratel Cloud closes. Then `direct` is
 removed and `postgres` becomes the default. A process with `APP_ROLE=api` publishes and never

@@ -1,4 +1,5 @@
 import { getConfig } from "@/config";
+import { composition } from "@/lib/composition/ports";
 import type { AcceptDeps } from "@/lib/ingest/queue/accept";
 import type { EnvelopeQueue } from "@/lib/ingest/queue/port/envelope-queue";
 import { getProjectById } from "@/lib/platform/projects/queries";
@@ -23,7 +24,7 @@ async function open(): Promise<EnvelopeQueue> {
   const { ingest } = getConfig();
   if (ingest.queue === "kafka") {
     const { openKafkaQueue } = await import("@/lib/ingest/queue/kafka/open");
-    return openKafkaQueue(ingest);
+    return openKafkaQueue(ingest, composition.ingestTopics);
   }
   const { createPostgresQueue } = await import("@/lib/ingest/queue/postgres/postgres-queue");
   return createPostgresQueue();
@@ -34,8 +35,13 @@ export function resetIngestQueueForTests(): void {
   opened = undefined;
 }
 
-/** What an ingest route accepts with; undefined in direct mode. */
+/**
+ * What an ingest route accepts with; undefined in direct mode, and with Kafka that this deployment
+ * only consumes (no topic to publish to): its own routes then store as in direct mode.
+ */
 export async function ingestAccept(): Promise<AcceptDeps | undefined> {
+  const { ingest } = getConfig();
+  if (ingest.queue === "kafka" && !ingest.kafka.topic) return undefined;
   const queue = await ingestQueue();
   if (!queue) return undefined;
   return {

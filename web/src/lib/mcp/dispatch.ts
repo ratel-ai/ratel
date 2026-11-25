@@ -17,6 +17,7 @@ import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { mcpOperationScope } from "@/lib/platform/api-keys/routes";
 import { missingScopeMessage } from "@/lib/platform/api-keys/scopes";
 import { getLogger } from "@/lib/platform/logger";
+import { organizationOnHold, projectOnHold } from "@/lib/platform/org-hold/state";
 
 export interface DispatchSuccess {
   ok: true;
@@ -46,6 +47,8 @@ export interface DispatchDeps {
     truncated: boolean;
   }) => void;
   now?: () => number;
+  /** Whether the project or organization is on hold; absent, the stored holds. */
+  onHold?: (scope: ResolvedScope, auth: McpAuthContext) => Promise<boolean>;
   /** The result renders in an MCP Apps view (OperationContext.forView). */
   forView?: boolean;
 }
@@ -122,6 +125,14 @@ export async function authorizeProject(
   return { projectId: scope.projectId, organizationId: owner.organizationId };
 }
 
+async function scopeOnHold(scope: ResolvedScope, auth: McpAuthContext): Promise<boolean> {
+  const organizationId = scope.organizationId ?? authOrganizationId(auth);
+  if (organizationId !== null && (await organizationOnHold(organizationId))) return true;
+  return scope.projectId
+    ? projectOnHold({ id: scope.projectId, organizationId: organizationId ?? "" })
+    : false;
+}
+
 export async function dispatchOperation(
   operationId: string,
   rawParams: unknown,
@@ -164,6 +175,16 @@ export async function dispatchOperation(
     let scope = resolveScope(deps.auth, operation, requestedProjectId);
     if (deps.projectOwner) {
       scope = await authorizeProject(deps.auth, scope, deps.projectOwner);
+    }
+
+    // On hold until it opens (lib/platform/org-hold): a project key may read, nobody else may call.
+    if (
+      (operation.mutates || deps.auth.kind === "oauth") &&
+      (await (deps.onHold ?? scopeOnHold)(scope, deps.auth))
+    ) {
+      throw new McpOperationError("unavailable", "This workspace is not open yet.", {
+        reason: "on_hold",
+      });
     }
 
     const parsed = operation.params.safeParse(params);

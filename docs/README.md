@@ -8,6 +8,7 @@ Project documentation that doesn't belong in a code folder.
 adr/                              Architecture decision records
 assets/                           Images and other static assets
 baseline-capture-distributed.md   Collecting seeding evidence from a multi-instance host
+internal-api.md                   The service-to-service routes, off by default
 ```
 
 ## Guides
