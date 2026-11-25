@@ -13,6 +13,7 @@ import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
+import { sandboxesRegistration } from "@/lib/views/sandboxes/register";
 import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
 import { taskEvalsRegistration } from "@/lib/views/task-evals/register";
 import { taskScorersRegistration } from "@/lib/views/task-scorers/register";
@@ -39,6 +40,7 @@ const CORE: Registration[] = [
   sessionReplayRegistration,
   taskScorersRegistration,
   taskEvalsRegistration,
+  sandboxesRegistration,
 ];
 
 export function collectRegistrations(

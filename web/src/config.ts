@@ -441,6 +441,8 @@ const CONFIG_SCHEMA = schema({
   sandboxes: {
     /** Seals sandbox secrets: 32 random bytes in base64 (`lib/platform/sealed-secrets.ts`). */
     secretsKey: optional("SANDBOX_SECRETS_KEY", configured, { sensitive: true }),
+    /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */
+    bundleDir: optional("SANDBOX_BUNDLE_DIR", trimmed),
     /** Each project's limits. A value above the hard limit counts as the hard limit. */
     limits: {
       sandbox_concurrent_instances: setting(

@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
+import type { BundleStore } from "@/lib/contracts/bundle-store";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
 import type { CoreFlag, FeatureFlagsPort } from "@/lib/contracts/feature-flags";
@@ -299,6 +300,11 @@ export type CompositionPorts = {
    * Read through `usageLimits` (`lib/platform/usage-limits.ts`).
    */
   usageLimits?: UsageLimitsPort;
+  /**
+   * Where pushed sandbox bundles are. Absent, the core keeps them in a folder of the machine
+   * (`sandboxes.bundleDir`), which the web and the worker process must share.
+   */
+  sandboxBundles?: BundleStore;
 };
 
 export const PORT_NAMES = [
