@@ -90,6 +90,16 @@ test("the bundle ends at its end marker", async () => {
   assert.match(refusalOf(await check(huge)), /after its end/);
 });
 
+test("a gzip with zeros after its end passes, with any chunk size", async () => {
+  // As bsdtar writes to a pipe.
+  const gzip = tarGz([{ name: "a.ts", body: randomBytes(4000).toString("hex") }]);
+  const padded = Buffer.concat([gzip, Buffer.alloc(10_240 - (gzip.length % 10_240))]);
+  for (const size of [7, 512, 1000, gzip.length, gzip.length + 1, padded.length]) {
+    const result = await checkBundle(chunks(padded, size), bundleInfo(padded));
+    assert.deepEqual(result, { ok: true }, `chunks of ${size}`);
+  }
+});
+
 test("a refused bundle closes its source", async () => {
   const bad = tarGz([{ name: "../evil.sh", body: randomBytes(400_000).toString("hex") }]);
   const body = Readable.from(chunks(bad, 4096));

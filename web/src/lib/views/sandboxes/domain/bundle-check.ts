@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 import type { BundleInfo } from "@/lib/contracts/bundle-store";
 
@@ -42,18 +42,26 @@ export async function checkBundle(
     }
   }
   const entries = new TarEntries();
-  const read = async (unpacked: AsyncIterable<Buffer>) => {
-    for await (const chunk of unpacked) entries.push(chunk);
-    entries.end();
-  };
+  const gunzip = createGunzip();
+  const source = Readable.from(counted());
+  source.on("error", (error) => gunzip.destroy(error));
   try {
-    // The pipeline closes the source on each exit, so a refused bundle keeps no connection.
-    await pipeline(counted, createGunzip(), read);
+    source.pipe(gunzip);
+    for await (const chunk of gunzip) entries.push(chunk as Buffer);
+    entries.end();
+    // The gzip can end before the source: a writer can fill up its last record.
+    for await (const _ of source) {
+      // `counted` takes the bytes into the hash
+    }
   } catch (error) {
     const failure = broken as { error: unknown } | null;
     if (failure) throw failure.error;
     if (error instanceof UnsafeBundle) return { ok: false, message: error.message };
     return { ok: false, message: "The bundle is not a gzip tar." };
+  } finally {
+    // A refused bundle keeps no connection.
+    source.destroy();
+    gunzip.destroy();
   }
   if (bytes !== bundle.bytes || hash.digest("hex") !== bundle.sha256) {
     return { ok: false, message: "The uploaded bundle does not match its SHA-256 and size." };
