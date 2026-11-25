@@ -267,6 +267,12 @@ const OTEL_SPAN_REWRITE_SET = Object.fromEntries(
     ]),
 );
 
+export interface InsertOtelSpansOptions {
+  onConflict?: OtelSpanConflict;
+  /** With `ignore`: also return how many new rows each trace got. */
+  countByTrace?: boolean;
+}
+
 /**
  * Persist a bounded batch of mapped OTLP spans.
  *
@@ -279,8 +285,8 @@ export async function insertOtelSpans(
   projectId: string,
   rows: NewOtelSpan[],
   db: OtelSpansDb = getDb(),
-  { onConflict = "ignore" }: { onConflict?: OtelSpanConflict } = {},
-): Promise<{ accepted: number; updated?: number }> {
+  { onConflict = "ignore", countByTrace = false }: InsertOtelSpansOptions = {},
+): Promise<{ accepted: number; updated?: number; acceptedByTrace?: Map<string, number> }> {
   if (rows.length === 0)
     return onConflict === "update" ? { accepted: 0, updated: 0 } : { accepted: 0 };
 
@@ -293,12 +299,19 @@ export async function insertOtelSpans(
   return db.transaction(async (tx) => {
     let accepted = 0;
     let updated = 0;
+    const acceptedByTrace = new Map<string, number>();
     for (let offset = 0; offset < uniqueRows.length; offset += OTEL_SPAN_INSERT_CHUNK_SIZE) {
       const insert = tx
         .insert(otelSpans)
         .values(uniqueRows.slice(offset, offset + OTEL_SPAN_INSERT_CHUNK_SIZE));
       if (onConflict === "ignore") {
-        accepted += (await insert.onConflictDoNothing().returning({ id: otelSpans.id })).length;
+        const inserted = await insert
+          .onConflictDoNothing()
+          .returning({ id: otelSpans.id, traceId: otelSpans.traceId });
+        accepted += inserted.length;
+        for (const { traceId } of inserted) {
+          acceptedByTrace.set(traceId, (acceptedByTrace.get(traceId) ?? 0) + 1);
+        }
         continue;
       }
       const written = await insert
@@ -315,8 +328,31 @@ export async function insertOtelSpans(
         else updated += 1;
       }
     }
-    return onConflict === "update" ? { accepted, updated } : { accepted };
+    if (onConflict === "update") return { accepted, updated };
+    return countByTrace ? { accepted, acceptedByTrace } : { accepted };
   });
+}
+
+/** Which of these span rows are stored. Read on the refusal path only. */
+export async function findStoredOtelSpans(
+  projectId: string,
+  spans: readonly { id: string }[],
+  db: Pick<ReturnType<typeof getDb>, "select"> = getDb(),
+): Promise<Set<string>> {
+  if (spans.length === 0) return new Set();
+  const rows = await db
+    .select({ id: otelSpans.id })
+    .from(otelSpans)
+    .where(
+      and(
+        eq(otelSpans.projectId, projectId),
+        inArray(
+          otelSpans.id,
+          spans.map(({ id }) => id),
+        ),
+      ),
+    );
+  return new Set(rows.map(({ id }) => id));
 }
 
 export type OtelLogsDb = Pick<ReturnType<typeof getDb>, "insert" | "transaction">;

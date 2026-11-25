@@ -1,7 +1,7 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { PEEK_PARAM } from "@ratel/design-system/peek";
 import { Callout } from "@ratel/design-system/states";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { asksMissing, setupCardModel } from "@/components/console/health/setup-card-model";
@@ -44,6 +44,7 @@ import type {
   HealthShareProps,
 } from "@/lib/contracts/composition";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
+import type { HealthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { PartialReading as PartialReadingModel } from "@/lib/readings/trace-signals/partial-reading";
 import {
   type HealthPageModel,
@@ -54,8 +55,9 @@ import type { FixesModel } from "@/lib/views/fixes/types";
 import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
 import type { HallucinationRateCard } from "@/lib/views/health/hallucinations/rate-card";
 import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
+import { lowConfidenceCopy } from "@/lib/views/health/low-confidence-copy";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
-import { earlyReadingCopy, lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
+import { earlyReadingCopy } from "@/lib/views/health/page-state-copy";
 import type { TaskCompletionCard } from "@/lib/views/health/root-causes/completion-card";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
@@ -112,7 +114,8 @@ export interface SummaryViewProps {
   tasks: TaskListModel | null;
   /** Null when Fixes could not be read: no issue then claims a fix. */
   fixes: Pick<FixesModel, "open" | "applied"> | null;
-  corrections: SelfCorrectionsCardModel;
+  /** Null when the page does not show them (`FocusedHealthView`). */
+  corrections: SelfCorrectionsCardModel | null;
   /** The printable report for this window; null hides it. */
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
@@ -138,7 +141,13 @@ export interface SummaryViewProps {
   now?: Date;
 }
 
-export function SummaryView(props: SummaryViewProps) {
+export function SummaryView({
+  content,
+  ...props
+}: SummaryViewProps & {
+  /** Drawn in place of the Summary once there is a reading; the page around it stays the same. */
+  content?: ReactNode;
+}) {
   const { projectId, projectName, model, imports } = props;
   const share = props.share ?? null;
   const state = summaryState(props.state, model);
@@ -203,9 +212,14 @@ export function SummaryView(props: SummaryViewProps) {
           data-health-readiness={stateReadiness(state)}
         >
           {ready ? (
-            <Ready {...props} />
+            (content ?? <Ready {...props} />)
           ) : (
-            <NotReady {...props} state={state} canImport={canImport} />
+            <NotReady
+              {...props}
+              state={state}
+              canImport={canImport}
+              readings={content === undefined}
+            />
           )}
         </div>
         {ready ? importer("dialog") : importer("history")}
@@ -242,7 +256,13 @@ function NotReady({
   canImport,
   imports,
   partial = null,
-}: SummaryViewProps & { state: HealthPageState; canImport: boolean }) {
+  readings,
+}: SummaryViewProps & {
+  state: HealthPageState;
+  canImport: boolean;
+  /** The readings as dashes, where the page will show them. */
+  readings: boolean;
+}) {
   const collecting = stateReadiness(state) === "collecting";
   return (
     <>
@@ -260,7 +280,9 @@ function NotReady({
           sourceLabel={imports?.sourceLabel}
         />
       )}
-      {collecting ? <Readings readings={readingViews(model.tiles)} interactive={false} /> : null}
+      {collecting && readings ? (
+        <Readings readings={readingViews(model.tiles)} interactive={false} />
+      ) : null}
     </>
   );
 }
@@ -279,25 +301,11 @@ function Ready({
   taskCompletion = null,
   hallucinationRate = null,
 }: SummaryViewProps) {
-  const gap = pageGap(model);
-  const lane = model.sourceMode === "otel" ? "otel" : "sdk";
-  const runLabel = runWindowLabel(model);
-  const card = setupCardModel(model.setup);
-  const nudge: CaptureNudgeInput | null = model.setup
-    ? null
-    : { unlocks: model.captureUnlocks, captureLevel: model.captureLevel, mode: model.sourceMode };
-  const signals = signalsForGap(model.signals, gap);
-  const taskSteps = taskLookups(tasks, model.workflows);
-  // A gap in the data hides the run-based issues, so a score over them would claim too much.
-  const score = gap ? null : (model.score ?? null);
-  const rows = issueRows({
+  const { gap, lane, runLabel, rows, taskSteps, score, line } = readyReading({
     projectId,
-    signals,
-    tooEarly: model.tooEarly,
-    folding: chainFolding(model.workflows),
-    tasks: taskSteps,
-    fixes: fixLookups(fixes),
-    score,
+    model,
+    tasks,
+    fixes,
   });
   const issues = (
     <>
@@ -309,7 +317,7 @@ function Ready({
       <IssuesSection
         projectId={projectId}
         rows={rows}
-        line={issuesLine(rows, signals)}
+        line={line}
         windowLabel={runLabel}
         examplesAllowed={model.evidenceTurnsPerSignal > 0}
         lockedCount={model.lockedCount}
@@ -328,20 +336,12 @@ function Ready({
   const asksSetupKey = asksShowSetup ? asksLaneKey : null;
   return (
     <>
-      {state?.kind === "ready" && state.updating ? <RefreshWhileBuilding /> : null}
-      {inferredTools ? <InferredToolsCallout /> : null}
-      {model.lowConfidence ? (
-        <div data-health-low-confidence={model.lowConfidence.turns}>
-          <Callout
-            tone="warning"
-            title={lowConfidenceCopy(model.lowConfidence)}
-            action={imports ? <OpenImportButtonV2 /> : null}
-          >
-            Flows, tasks, the score and the numbers below are a first look. Import past runs to read
-            more now.
-          </Callout>
-        </div>
-      ) : null}
+      <LeadingCallouts
+        state={state}
+        model={model}
+        imports={imports}
+        inferredTools={inferredTools}
+      />
       {score ? (
         <HealthScore
           score={score}
@@ -351,29 +351,19 @@ function Ready({
           inferredTools={inferredTools}
         />
       ) : null}
-      {/* With the score leading, its ring and the issues say "still calculating" without a paragraph. */}
-      {model.earlyReading && !score ? (
-        <EarlyReadingNotice
-          signalWindowDays={model.signalWindowDays}
-          importing={(imports?.list ?? []).some((item) => item.status === "running")}
-          updating={state?.kind === "ready" && !!state.updating}
-        />
-      ) : null}
-      {card || nudgeShown(nudge) ? (
-        <SetupCallout projectId={projectId} card={card} nudge={nudge} />
-      ) : null}
-      <SetupGuidePanel
+      <TrailingCallouts
         projectId={projectId}
-        card={card}
-        nudge={nudge}
-        captureLevel={model.captureLevel}
+        state={state}
+        model={model}
+        imports={imports}
+        score={score}
       />
       {/* With the score leading, what moves it comes right under it. */}
       {score ? issues : null}
       <Readings readings={readingViews(tilesForGap(model.tiles, gap))} />
       {gap ? null : <ShapesSection shapes={model.shapes} turns={model.turns} vocabulary={lane} />}
       {score ? null : issues}
-      <SelfCorrectionsRow model={corrections} />
+      {corrections ? <SelfCorrectionsRow model={corrections} /> : null}
       {gap ? (
         <GapBlock gap={gap} lane={lane} />
       ) : (
@@ -400,6 +390,102 @@ function Ready({
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+/** What a ready reading's issues and score are drawn from. */
+export function readyReading({
+  projectId,
+  model,
+  tasks,
+  fixes,
+}: Pick<SummaryViewProps, "projectId" | "model" | "tasks" | "fixes">) {
+  const gap = pageGap(model);
+  const signals = signalsForGap(model.signals, gap);
+  const taskSteps = taskLookups(tasks, model.workflows);
+  // A gap in the data hides the run-based issues, so a score over them would claim too much.
+  const score = gap ? null : (model.score ?? null);
+  const rows = issueRows({
+    projectId,
+    signals,
+    tooEarly: model.tooEarly,
+    folding: chainFolding(model.workflows),
+    tasks: taskSteps,
+    fixes: fixLookups(fixes),
+    score,
+  });
+  return {
+    gap,
+    lane: model.sourceMode === "otel" ? ("otel" as const) : ("sdk" as const),
+    runLabel: runWindowLabel(model),
+    taskSteps,
+    score,
+    rows,
+    line: issuesLine(rows, signals),
+  };
+}
+
+/** What a reader must know before the score: inferred tool calls, a first look. */
+export function LeadingCallouts({
+  state,
+  model,
+  imports,
+  inferredTools = false,
+}: Pick<SummaryViewProps, "state" | "model" | "imports" | "inferredTools">) {
+  return (
+    <>
+      {state?.kind === "ready" && state.updating ? <RefreshWhileBuilding /> : null}
+      {inferredTools ? <InferredToolsCallout /> : null}
+      {model.lowConfidence ? (
+        <div data-health-low-confidence={model.lowConfidence.turns}>
+          <Callout
+            tone="warning"
+            title={lowConfidenceCopy(model.lowConfidence)}
+            action={imports ? <OpenImportButtonV2 /> : null}
+          >
+            Flows, tasks, the score and the numbers below are a first look. Import past runs to read
+            more now.
+          </Callout>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** Under the score: an early reading's note when no score says it, and what to set up to read more. */
+export function TrailingCallouts({
+  projectId,
+  state,
+  model,
+  imports,
+  score,
+}: Pick<SummaryViewProps, "projectId" | "state" | "model" | "imports"> & {
+  score: HealthScoreView | null;
+}) {
+  const card = setupCardModel(model.setup);
+  const nudge: CaptureNudgeInput | null = model.setup
+    ? null
+    : { unlocks: model.captureUnlocks, captureLevel: model.captureLevel, mode: model.sourceMode };
+  return (
+    <>
+      {/* With the score leading, its ring and the issues say "still calculating" without a paragraph. */}
+      {model.earlyReading && !score ? (
+        <EarlyReadingNotice
+          signalWindowDays={model.signalWindowDays}
+          importing={(imports?.list ?? []).some((item) => item.status === "running")}
+          updating={state?.kind === "ready" && !!state.updating}
+        />
+      ) : null}
+      {card || nudgeShown(nudge) ? (
+        <SetupCallout projectId={projectId} card={card} nudge={nudge} />
+      ) : null}
+      <SetupGuidePanel
+        projectId={projectId}
+        card={card}
+        nudge={nudge}
+        captureLevel={model.captureLevel}
+      />
     </>
   );
 }

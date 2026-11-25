@@ -30,8 +30,10 @@ export type ShellData = {
   entityPagesOrganizations?: readonly string[];
   /** `sentimentAnalysis` (RC-357): the organizations whose projects show Sentiment analysis under Traces. */
   sentimentOrganizations?: readonly string[];
-  /** `cloud-hallucination-detection`: the organizations whose projects show Hallucinations under Agent health. */
+  /** `hallucinationDetection`: the organizations whose projects show Hallucinations under Agent health. */
   hallucinationOrganizations?: readonly string[];
+  /** The organizations with `focusedConsole` on (`lib/console/focused-console`). */
+  focusedConsoleOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */

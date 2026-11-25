@@ -10,13 +10,10 @@
     "ee:unlink": "node scripts/link-ee.mjs --unlink",
     "test": "pnpm -r test",
     "check:boundary": "node scripts/check-ee-boundary.mjs",
-    "check:layers": "node scripts/check-layers.mjs",
-    "check:private": "node scripts/platform-sync/private-strings.mjs",
-    "platform:sync": "node scripts/platform-sync/sync.mjs",
-    "platform:undecided": "node scripts/platform-sync/undecided.mjs"
+    "check:layers": "node scripts/check-layers.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13"
   },
-  "version": "0.3.1"
+  "version": "0.4.0"
 }

@@ -24,7 +24,7 @@ rules over counts, and a run completes with no model key and no network.
 | `suggestion-model.ts`, `view.ts`, `export.ts` | the card model (`suggestionView`, `EffectChip`), the evidence facts (`EvidenceFact`) and the export a client applies |
 | `types.ts`, `craft-key.ts` | `CRAFT_KINDS`, the proposal body and evidence shapes; the key that makes one change of a kind and its tools |
 
-**Owned files** (`owned` in `scripts/platform-sync/map.json`): `schema.ts`, the tool-crafter
+**Owned files** (they differ from their `ratel-cloud` origin, "upstream"): `schema.ts`, the tool-crafter
 partition of the upstream schema hub; `job.ts`, with no flag gate (the crafter drafts for every
 project here, as the explorer runs for every project, so upstream's `flag.ts` and `flags-ingest`
 are gone); `job.integration.test.ts`, without the flag cases; and `register.ts`, this

@@ -1,5 +1,7 @@
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import type {
   EventWithMetric,
+  findStoredOtelSpans as findStoredOtelSpansFn,
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
   OtelSpanConflict,
@@ -34,7 +36,7 @@ import { normalizeSemconvAliases } from "./semconv/aliases";
 import { rejoinStoredModelCalls } from "./semconv/gen-ai-log-join";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
 import { attachGenAiLogEvents, distinctSpanKeys } from "./semconv/gen-ai-logs";
-import { toOtelSpanRows } from "./span-rows";
+import { otelSpanRowId, toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
 
 /** Optional monthly-event counter; the entitlements port owns the real one. */
@@ -71,13 +73,22 @@ export interface PersistSpansContext {
    * values, so an import reprocessed after a mapper fix reaches `otel_spans`.
    */
   spanConflict?: OtelSpanConflict;
+  /**
+   * Meter the batch's traces: the port's `isMetered` for this organization, read by the caller.
+   * Omitted or false, no trace is metered (the importer leaves it off).
+   */
+  meterTraces?: boolean;
 }
 
 export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   insertEventsWithMetrics: typeof insertEventsWithMetricsFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
+  /** Which spans are stored, for an export that the meter refuses. Absent, none is looked up. */
+  findStoredOtelSpans?: typeof findStoredOtelSpansFn;
   incrementEventUsage?: IncrementEventUsage;
+  /** Decides each trace's outcome; used only when the context sets `meterTraces`. */
+  traceMetering?: Pick<TraceMeteringPort, "meterTraceBatch" | "releaseSpans">;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   /** The span dimension derivation (`lib/ingest/otlp/dimensions`). Absent, the real one; a test passes one that throws. */
   deriveSpanDimensions?: typeof deriveSpanDimensions;
@@ -109,13 +120,76 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
 
 /**
  * `rows`: the model call rows stored. `events`: the LLM-call rows failed.
- * `derived`: a batch of only ledger rows failed. Either way, retry.
+ * `derived`: a batch of only ledger rows failed. Either way, retry. `refused`: every span is over
+ * a bound of the edition. `refused` of a stored batch: the spans that were.
  */
 export type PersistSpansResult =
-  | { ok: true; accepted: number; calls: number; rows: EventWithMetric[] }
-  | { ok: false; stage: "events" | "derived" };
+  | { ok: true; accepted: number; calls: number; rows: EventWithMetric[]; refused?: number }
+  | { ok: false; stage: "events" | "derived" | "refused" };
 
+/** An OTLP trace id has 32 characters. Some exporters send their own, longer ones. */
+const MAX_METERED_TRACE_ID = 256;
+
+/** What a metered batch was admitted with, and what storage then found new. */
+interface MeteredBatch {
+  admitted: ReadonlyMap<string, number>;
+  /** New rows of each trace in `otel_spans`. Null: not known, so nothing counts as resent. */
+  newSpans: ReadonlyMap<string, number> | null;
+  /** New model calls and ledger rows: a span id that was sent before can bring new ones. */
+  newRows: number;
+}
+
+/**
+ * Store a decoded batch. Spans that a meter admitted and that storage did not write (a failure, or
+ * a resend of what is stored) are given back, so that each span counts once.
+ */
 export async function persistDecodedSpans(
+  spans: DecodedSpan[],
+  context: PersistSpansContext,
+  deps: PersistSpansDeps,
+): Promise<PersistSpansResult> {
+  const batch: MeteredBatch = { admitted: new Map(), newSpans: null, newRows: 0 };
+  const release = async (unstored: ReadonlyMap<string, number>) => {
+    const { organization, projectId } = context;
+    if (unstored.size === 0 || !organization) return;
+    await deps.traceMetering
+      ?.releaseSpans?.({ organization, projectId }, unstored)
+      .catch((err: unknown) => {
+        deps.logError("trace meter release failed", err, { project_id: projectId });
+        deps.captureFailure(err);
+      });
+  };
+  try {
+    const result = await storeDecodedSpans(spans, context, deps, batch);
+    await release(result.ok ? resentSpans(batch) : batch.admitted);
+    return result;
+  } catch (err) {
+    await release(batch.admitted);
+    throw err;
+  }
+}
+
+/** The admitted spans of each trace that storage already held. */
+function resentSpans({ admitted, newSpans, newRows }: MeteredBatch): Map<string, number> {
+  const resent = new Map<string, number>();
+  if (!newSpans) return resent;
+  let left = total(admitted) - total(newSpans) - newRows;
+  for (const [traceId, spans] of admitted) {
+    const n = Math.min(left, spans - (newSpans.get(traceId) ?? 0));
+    if (n <= 0) continue;
+    resent.set(traceId, n);
+    left -= n;
+  }
+  return resent;
+}
+
+function total(spans: ReadonlyMap<string, number>): number {
+  let sum = 0;
+  for (const n of spans.values()) sum += n;
+  return sum;
+}
+
+async function storeDecodedSpans(
   spans: DecodedSpan[],
   {
     projectId,
@@ -124,8 +198,10 @@ export async function persistDecodedSpans(
     endpoint,
     foldIntentGraph = false,
     spanConflict = "ignore",
+    meterTraces = false,
   }: PersistSpansContext,
   deps: PersistSpansDeps,
+  batch: MeteredBatch,
 ): Promise<PersistSpansResult> {
   const { logError } = deps;
   // Speak one vocabulary downstream: additively re-key Vercel AI SDK `ai.*`
@@ -142,6 +218,47 @@ export async function persistDecodedSpans(
     });
     deps.captureFailure(err);
   }
+
+  // Trace meters before anything is stored: a trace's first batch decides it for every later one.
+  // A dropped trace stores nothing; an ingested-only one stores its spans and calls but writes no
+  // analysis ledger rows, so no analysis job reads it. Best-effort: when the meter fails, the
+  // batch is analyzed. A span without a trace id is in no trace, so it is never counted, and an
+  // oversized id breaks the count of its whole batch. OTLP calls both invalid: they are not stored.
+  const skipAnalysis = new Set<string>();
+  let refused = 0;
+  if (meterTraces && organization && deps.traceMetering) {
+    spans = spans.filter(
+      (span) => span.traceId.length > 0 && span.traceId.length <= MAX_METERED_TRACE_ID,
+    );
+    if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
+    try {
+      const outcomes = await deps.traceMetering.meterTraceBatch(
+        { organization, projectId },
+        spansByTrace(spans),
+      );
+      for (const [traceId, outcome] of outcomes)
+        if (outcome !== "analyzed") skipAnalysis.add(traceId);
+      const over = spans.filter((span) => outcomes.get(span.traceId) === "refused");
+      // A resend of the export that filled the bound: what is stored is not refused, it is done.
+      refused = over.length - (await countStored(over, projectId, deps));
+      spans = spans.filter(
+        (span) => !["dropped", "refused"].includes(outcomes.get(span.traceId) ?? ""),
+      );
+      batch.admitted = spansByTrace(spans);
+      if (spans.length === 0) {
+        if (refused > 0) return { ok: false, stage: "refused" };
+        return { ok: true, accepted: 0, calls: 0, rows: [] };
+      }
+    } catch (err) {
+      logError("trace meter write failed", err, {
+        organization_id: organization.id,
+        project_id: projectId,
+      });
+      deps.captureFailure(err);
+    }
+  }
+  const analyzedSpans =
+    skipAnalysis.size === 0 ? spans : spans.filter((span) => !skipAnalysis.has(span.traceId));
 
   // Logs before spans: content sent as `gen_ai` log records that are already
   // stored joins its span as span events. Fail open: the call stays without them.
@@ -196,6 +313,7 @@ export async function persistDecodedSpans(
   if (rows.length > 0) {
     try {
       accepted = await deps.insertEventsWithMetrics(projectId, rows);
+      batch.newRows += accepted;
     } catch (err) {
       logError("span insert failed", err, { project_id: projectId });
       deps.captureFailure(err);
@@ -208,7 +326,7 @@ export async function persistDecodedSpans(
   // SDK funnel's anchor-less `ratel.search` spans into native search events (those
   // batches carry no LLM calls at all, so this must not hide behind rows.length).
   // Idempotent: every derived row's id is deterministic.
-  const ratelDerived = deriveRatelSearches(spans);
+  const ratelDerived = deriveRatelSearches(analyzedSpans);
   // When the SDK's spans ride the same trace as the host's LLM call (capture on
   // for both), the same search appears twice in one batch: as a captured
   // search_capabilities tool_call AND as a ratel.search span. Keep the span row
@@ -217,7 +335,7 @@ export async function persistDecodedSpans(
   const derived = [
     ...rows
       .flatMap((r, index) =>
-        r.event.payload && r.event.dedupeHash
+        r.event.payload && r.event.dedupeHash && !skipAnalysis.has(r.event.traceId ?? "")
           ? deriveGatewaySearches(r.event.payload, {
               dedupeHash: r.event.dedupeHash,
               occurredAt: r.event.occurredAt ?? r.metric.eventTime,
@@ -231,7 +349,7 @@ export async function persistDecodedSpans(
     ...ratelDerived,
     // Agent health: the host's own tool-call spans as ledger invocations.
     ...(await agentHealthToolRows(
-      spans,
+      analyzedSpans,
       projectId,
       {
         traceTurns: deps.traceTurns,
@@ -245,6 +363,7 @@ export async function persistDecodedSpans(
   if (derived.length > 0) {
     try {
       const stored = await deps.insertTraceEvents(projectId, derived);
+      batch.newRows += stored?.accepted ?? derived.length;
       // What the Cloud-built intent graph learns from: a plain agent trace's
       // ask or tool call, or a runtime's own search span exported this way.
       if (
@@ -296,7 +415,10 @@ export async function persistDecodedSpans(
       if (spanConflict === "update") {
         await deps.insertOtelSpans(projectId, spanRows, undefined, { onConflict: "update" });
       } else {
-        await deps.insertOtelSpans(projectId, spanRows);
+        const stored = await deps.insertOtelSpans(projectId, spanRows, undefined, {
+          countByTrace: batch.admitted.size > 0,
+        });
+        batch.newSpans = stored?.acceptedByTrace ?? null;
       }
     }
   } catch (err) {
@@ -308,7 +430,35 @@ export async function persistDecodedSpans(
 
   await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
 
-  return { ok: true, accepted, calls: calls.length, rows };
+  return { ok: true, accepted, calls: calls.length, rows, ...(refused > 0 ? { refused } : {}) };
+}
+
+/** How many of these spans are stored already. Zero when they cannot be looked up. */
+async function countStored(
+  spans: readonly DecodedSpan[],
+  projectId: string,
+  deps: PersistSpansDeps,
+): Promise<number> {
+  if (spans.length === 0 || !deps.findStoredOtelSpans) return 0;
+  try {
+    const ids = spans.map((span) => otelSpanRowId(projectId, span));
+    const stored = await deps.findStoredOtelSpans(
+      projectId,
+      [...new Set(ids)].map((id) => ({ id })),
+    );
+    return ids.filter((id) => stored.has(id)).length;
+  } catch (err) {
+    deps.logError("stored span lookup failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+    return 0;
+  }
+}
+
+/** How many spans the batch brings for each trace, in first-seen order. */
+function spansByTrace(spans: readonly DecodedSpan[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { traceId } of spans) counts.set(traceId, (counts.get(traceId) ?? 0) + 1);
+  return counts;
 }
 
 /**

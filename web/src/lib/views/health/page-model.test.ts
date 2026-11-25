@@ -14,8 +14,8 @@ import {
   runWindowLabel,
   windowPhrase,
 } from "@/lib/readings/trace-signals/view";
+import { lowConfidenceCopy } from "@/lib/views/health/low-confidence-copy";
 import { pendingHealthModel, shouldUseHealthFixture } from "@/lib/views/health/page-model";
-import { lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
 import type { SignalRecord } from "@/lib/views/health/signals/claims-model";
 import { buildHealthPageModel, type PageInputs } from "@/lib/views/health/signals/page-view";
 

@@ -12,7 +12,7 @@ sentence); without it the copy keeps its neutral words.
 
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `sentimentAnalysis`,
-`hallucinationDetection`) and the optional
+`hallucinationDetection`, `focusedConsole`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
 force each one on or off; only that file knows the environment variable of each. Without the port
 each switch is its configured value for the deployment, off when unset (in the open-source
@@ -99,10 +99,19 @@ sides of the boundary), the request sizing (`estimate*`, `packBatches`) and the 
 (`readings/trace-signals/outcomes`) asks it; the edition's client records each call through the
 model-call seam. The open-source edition has none: nothing is asked and the reading is rule-only.
 
+`trace-metering.ts` and `analysis-filter.ts` are optional ports with an open-source default, so
+`composition.traceMetering` and `composition.analysisFilter` are always there. The first decides
+each trace live ingest receives (`analyzed`, `ingested_only` or `dropped`); a metered organization
+is not rejected by the monthly event cap. The second is the SQL condition that keeps the analysis
+queries (the turn build, partial readings, the inferred tool share, match quality's searches) off
+a trace that was not analyzed; they apply it through `platform/analysis-filter.ts`. The defaults
+meter nothing and filter nothing.
+
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
 edition organization-nav paths to hide for that organization. Both are absent in the open-source
-edition, which is unchanged.
+edition, which is unchanged. `ProjectGeneralSettings` adds sections at the end of a project's
+General settings.
 
 `HealthImports` puts an importer on the Agent health page: `load` reads a project's recent imports
 (the page state reads them), `sourceLabel` names each source in the page's copy, and `Importer`

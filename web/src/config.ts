@@ -79,6 +79,7 @@ const FLAG_ENV = {
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   sentimentAnalysis: "FF_SENTIMENT_ANALYSIS",
   hallucinationDetection: "FF_HALLUCINATION_DETECTION",
+  focusedConsole: "FF_FOCUSED_CONSOLE",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
