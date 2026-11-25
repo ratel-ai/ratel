@@ -27,8 +27,9 @@ Every UI change in the platform, in both editions, follows this document and is 
 
 ## Information architecture
 
-At most 9 project items; nothing "Soon"; one home per concept and per editable field; items the
-edition lacks are not rendered; moved pages redirect.
+At most 10 project items, and 14 with `customMonitoring` (the edition's own come on top), under stage
+headings; the rail scrolls when they do not fit. Nothing "Soon"; one home per concept and per
+editable field; items the edition lacks are not rendered; moved pages redirect.
 
 | Item | Answers | Contains |
 |---|---|---|
@@ -39,6 +40,16 @@ edition lacks are not rendered; moved pages redirect.
 | Intents | What do people want, and what next? | All intents, Flows, Map |
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
+
+With `customMonitoring` on, Monitor has four more items, in this order: Overview, Dashboards, Explore, Agent health,
+Traces, Scorers, Alerts. `/dashboards` is then its own item, not Overview's.
+
+| Item | Answers | Contains |
+|---|---|---|
+| Dashboards | What do I check every day? | The project's dashboards |
+| Explore | What does this number say? | One query and its chart |
+| Scorers | Is the output good? | Automatic checks on traces |
+| Alerts | Tell me when it is not | Rules, their state and history |
 
 With `focusedConsole` on, Overview is a recap of widgets that each person arranges, Agent health is
 one page (the Health score, then the issues under the four categories it counts by) and Self-corrections is an item of its own in Insights:
