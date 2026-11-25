@@ -125,6 +125,10 @@ In Ratel Cloud a hold refuses every write (503, `Retry-After`), also relayed tel
 maintenance page in place of the console. Setting it also needs the `cloud-org-migration` flag;
 reading and clearing do not.
 
+Ratel Cloud also takes `"action": "move"`: the state becomes `moved`. Jobs and writes stay closed,
+the workspace's people are sent to the same path in App, and Ratel's own people may look. `clear`
+restores it, for the way back.
+
 In this core a hold is the time between the import and the opening. Telemetry is accepted and
 stored, its jobs are queued, and no job runs. The scheduled sweeps skip the projects. The console
 sends their readers to `/maintenance`; an operator in a support session may look. An API key keeps
