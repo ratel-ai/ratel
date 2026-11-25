@@ -181,3 +181,32 @@ test("imports go to the worker only when IMPORTS_RUN_IN_WORKER=1", async () => {
   assert.equal(importsRunInWorker(config({ IMPORTS_RUN_IN_WORKER: "true" })), false);
   assert.equal(importsRunInWorker(config({ IMPORTS_RUN_IN_WORKER: "1" })), true);
 });
+
+test("a long build in its own lane does not hold up an import", async () => {
+  let releaseBuild: () => void = () => {};
+  const buildRunning = new Promise<void>((resolve) => (releaseBuild = resolve));
+  let imports = 0;
+  let builds = 0;
+  const handle = startWorker({
+    now: () => 0,
+    sleep: () => new Promise((resolve) => setTimeout(resolve, 1)),
+    sweep: async () => {},
+    drain: async () => ({ done: 0, failed: 0 }),
+    drainImports: async () => {
+      imports += 1;
+      return { done: 1, failed: 0 };
+    },
+    drainBuilds: async () => {
+      builds += 1;
+      if (builds === 1) await buildRunning;
+      return { done: 1, failed: 0 };
+    },
+  });
+  for (let i = 0; i < 1000 && imports <= 5; i++)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  const during = imports;
+  releaseBuild();
+  await handle.stop();
+  assert.ok(builds >= 1, "the build started");
+  assert.ok(during > 5, `imports kept going while it ran (${during} steps)`);
+});
