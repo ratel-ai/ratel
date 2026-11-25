@@ -91,7 +91,7 @@ export function compare(
       );
     const others = scorers.length - words.length;
     if (others > 0) words.push(`and ${others} more`);
-    const message = `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it.`;
+    const message = `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it. If the judge model changed during this run, run it again too.`;
     return { ...refused("scorers_differ", message), scorers };
   }
   const cases = comparedCases(baseline, candidate);
