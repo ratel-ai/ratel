@@ -51,7 +51,6 @@ test("the real fixtures: a queued deployment stores the same rows as a direct on
     const expected = await dumpTables(direct);
     assert.ok(expected.otel_spans.length > 0, name);
     assert.deepEqual(await dumpTables(other), expected, name);
-    assert.deepEqual(other.usage, direct.usage, name);
     await Promise.all([direct.client.close(), other.client.close()]);
   }
 });
@@ -120,8 +119,8 @@ test("a storage failure is retried by the queue, and the client never sees it", 
   );
   const direct = await setupDeployment();
   await ingestTraces(direct, [body]);
+  // The dump holds the usage counter: the first delivery's events count once.
   assert.deepEqual(await dumpTables(deployment), await dumpTables(direct));
-  assert.deepEqual(deployment.usage, direct.usage, "the first delivery's events count once");
   await Promise.all([deployment.client.close(), direct.client.close()]);
 });
 

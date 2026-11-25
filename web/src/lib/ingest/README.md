@@ -13,6 +13,15 @@ request ── admit ── accept ── publish ──> queue ──> consumer
                 └── direct: decode, store, answer
 ```
 
+Events without metrics can exist only from before the two inserts were one transaction. To count
+them (sending the export again repairs them):
+
+```sql
+select e.project_id, count(*) from events e
+left join event_metrics m on m.event_id = e.id
+where m.id is null group by 1;
+```
+
 A process function answers `ack`, `retry`, `outage` or `dead-letter`. Every write gives the same
 rows the second time, and the consumer passes `redelivers`, so a write that direct mode only logs
 fails the delivery and is tried again.

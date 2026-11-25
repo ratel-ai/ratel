@@ -397,12 +397,15 @@ async function storeDecodedSpans(
   if (derived.length > 0) {
     try {
       const stored = await deps.insertTraceEvents(projectId, derived);
-      batch.newRows += stored?.accepted ?? derived.length;
+      const added = stored?.accepted ?? derived.length;
+      batch.newRows += added;
+      // A delivery that stored these rows can have ended before their jobs were queued.
+      const starting = redelivers ? derived.length : added;
       // What the Cloud-built intent graph learns from: a plain agent trace's
       // ask or tool call, or a runtime's own search span exported this way.
       if (
         foldIntentGraph &&
-        (stored?.accepted ?? derived.length) > 0 &&
+        starting > 0 &&
         derived.some((event) => FOLD_TRIGGER_TYPES.has(event.type) || isOtlpFoldTrigger(event))
       ) {
         await scheduleIntentGraphFold(deps, projectId, endpoint);
@@ -411,7 +414,7 @@ async function storeDecodedSpans(
         projectId: projectId,
         organization,
         eventTypes: derived.map((event) => event.type),
-        accepted: stored?.accepted ?? derived.length,
+        accepted: starting,
         endpoint,
         logError,
       });
