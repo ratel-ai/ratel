@@ -595,3 +595,25 @@ test("active runs of other projects do not hide an ended run from the sweep", as
   await sweepRuns({ ...t.deps, provider: busy, organizationIdOf: async () => ORGANIZATION_ID });
   assert.equal(t.provider.running.size, 0);
 });
+
+test("a result that is too deep is refused, not a server error", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const run = await t.started();
+  const token = t.envOf().RATEL_RUN_TOKEN ?? "";
+  const request = JSON.stringify(resultBody(run.id)).replace(
+    '"done \\u0000"',
+    `${"[".repeat(20_000)}${"]".repeat(20_000)}`,
+  );
+  const response = await handleRunResult(
+    new Request("http://x", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: request,
+    }),
+    run.id,
+    { ...t.deps, offForAll: () => false, enabled: async () => true, afterResponse: () => {} },
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await t.read(run.id)).status, "running");
+});

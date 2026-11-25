@@ -724,3 +724,12 @@ test("a start that became running is not ended as interrupted", async () => {
   assert.equal(ended, 0);
   assert.equal((await experiments.trials(experiment.id))[0]?.state, "running");
 });
+
+test("params that are too deep are refused, not a server error", async () => {
+  const t = await setup();
+  await t.approvedCase("a");
+  const deps = keyDeps(t);
+  const body = `{"sandboxVersion":"latest","params":{"a":${"[".repeat(20_000)}${"]".repeat(20_000)}}}`;
+  const response = await handleStartByKey(new Request("http://x", { method: "POST", body }), deps);
+  assert.equal(response.status, 400);
+});
