@@ -142,3 +142,16 @@ export const evalTrials = pgTable(
     index("eval_trials_open_idx").on(t.experimentId).where(sql`${t.state} <> 'done'`),
   ],
 );
+
+/** The pinned baseline of a project. Only a person pins or unpins it: no job writes here. */
+export const evalBaselines = pgTable("eval_baselines", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  experimentId: uuid("experiment_id")
+    .notNull()
+    .references(() => evalExperiments.id, { onDelete: "cascade" }),
+  // A person's identity provider id, or `key:<id>`.
+  pinnedBy: text("pinned_by").notNull(),
+  pinnedAt: timestamp("pinned_at", { withTimezone: true }).notNull(),
+});
