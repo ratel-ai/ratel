@@ -72,35 +72,45 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
       return rows.map((row) => toCase(row, byCase.get(row.id) ?? []));
     },
 
-    saveDraft(projectId, caseId, { name, labels, content }, now) {
+    saveDraft(projectId, caseId, { name, labels, content }, base, now) {
       return db.transaction(async (tx) => {
         // The row lock: two edits at the same time make one draft.
-        const [row] = await tx
-          .update(evalCases)
-          .set(storable({ name, labels }))
+        const [found] = await tx
+          .select({ id: evalCases.id })
+          .from(evalCases)
           .where(and(eq(evalCases.projectId, projectId), eq(evalCases.id, caseId)))
-          .returning();
-        if (!row) return null;
+          .for("update");
+        if (!found) return "not_found";
         const [newest] = await tx
           .select()
           .from(evalCaseVersions)
           .where(eq(evalCaseVersions.caseId, caseId))
           .orderBy(desc(evalCaseVersions.number))
           .limit(1);
-        if (newest?.state === "draft") {
+        if (!newest) throw new Error("the case has no version");
+        if (newest.id !== base.versionId || +newest.updatedAt !== +base.updatedAt) return "changed";
+        const [row] = await tx
+          .update(evalCases)
+          .set(storable({ name, labels }))
+          .where(eq(evalCases.id, caseId))
+          .returning();
+        if (!row) throw new Error("the case row is missing");
+        // Each write has its own time, so the time names one state of the draft.
+        const updatedAt = new Date(Math.max(now.getTime(), newest.updatedAt.getTime() + 1));
+        if (newest.state === "draft") {
           await tx
             .update(evalCaseVersions)
-            .set({ ...columns(content), updatedAt: now })
+            .set({ ...columns(content), updatedAt })
             .where(isDraft(newest.id));
-        } else if (!newest || !isDeepStrictEqual(columns(content), columns(toVersion(newest)))) {
+        } else if (!isDeepStrictEqual(columns(content), columns(toVersion(newest)))) {
           await tx.insert(evalCaseVersions).values({
             ...columns(content),
             caseId,
-            number: (newest?.number ?? 0) + 1,
-            sourceTurnId: newest?.sourceTurnId ?? null,
-            sourceOutput: newest?.sourceOutput ?? null,
+            number: newest.number + 1,
+            sourceTurnId: newest.sourceTurnId,
+            sourceOutput: newest.sourceOutput,
             createdAt: now,
-            updatedAt: now,
+            updatedAt,
           });
         }
         const versions = await tx
@@ -144,7 +154,13 @@ function isDraft(versionId: string) {
 }
 
 function columns({ input, earlierTurns, toolFixtures, expectedOutput, scorers }: CaseContent) {
-  return storable({ input: input ?? null, earlierTurns, toolFixtures, expectedOutput, scorers });
+  return storable({
+    input: { value: input ?? null },
+    earlierTurns,
+    toolFixtures,
+    expectedOutput,
+    scorers,
+  });
 }
 
 function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
@@ -154,5 +170,5 @@ function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
 
 export function toVersion(row: VersionRow): CaseVersion {
   const { createdAt: _, state, input, ...rest } = row;
-  return { ...rest, state: state as VersionState, input: input ?? null };
+  return { ...rest, state: state as VersionState, input: input.value ?? null };
 }

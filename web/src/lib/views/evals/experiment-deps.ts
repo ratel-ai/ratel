@@ -37,9 +37,13 @@ export function experimentDeps(): ExperimentDeps {
 }
 
 /** One step, with the project in the log context, so each model call names it. */
-export async function advance(experiment: Experiment, deps = experimentDeps()) {
+export async function advance(
+  experiment: Experiment,
+  deps = experimentDeps(),
+  deadline: Date | null = null,
+) {
   const step = await withProjectLogContext(experiment.projectId, () =>
-    advanceExperiment(experiment, deps),
+    advanceExperiment(experiment, deps, deadline),
   );
   if (step.closed) {
     await trackServerEvent(

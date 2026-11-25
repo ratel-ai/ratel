@@ -70,7 +70,7 @@ async function ask(
   // A failed call may be charged, so the hold stays until a call says what it used.
   const { answer, inputTokens } = await askEvalJudge(judge, evidence);
   if (limit !== null) {
-    const spent = Math.min(maxUsd, inputTokens * judge.usdPerInputToken);
+    const spent = inputTokens * judge.usdPerInputToken;
     await deps.budget.settle(organizationId, day, maxUsd, spent);
   }
   if (!answer) return none("no_answer", "The judge gave no answer.");

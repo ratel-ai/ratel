@@ -1,0 +1,1 @@
+ALTER TABLE "eval_case_versions" ALTER COLUMN "input" SET NOT NULL;

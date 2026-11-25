@@ -5,6 +5,8 @@ import { evalsEnabledForProject } from "./gate";
 
 /** The experiments that one tick moves. */
 const LIMIT = 50;
+/** A tick takes no more trials after this: the jobs of every project wait for it. */
+const STEP_MS = 20_000;
 
 const logger = getLogger("evals/register");
 
@@ -20,10 +22,12 @@ export const evalsRegistration: Registration = {
       run: async () => {
         const totals = { startedTrials: 0, finishedTrials: 0, closedExperiments: 0, evalErrors: 0 };
         const deps = experimentDeps();
+        const deadline = new Date(Date.now() + STEP_MS);
         for (const experiment of await deps.experiments.listRunning(LIMIT)) {
+          if (new Date() > deadline) break;
           try {
             if (!(await evalsEnabledForProject(experiment.projectId))) continue;
-            const { started, finished, closed } = await advance(experiment, deps);
+            const { started, finished, closed } = await advance(experiment, deps, deadline);
             totals.startedTrials += started;
             totals.finishedTrials += finished;
             if (closed) totals.closedExperiments += 1;

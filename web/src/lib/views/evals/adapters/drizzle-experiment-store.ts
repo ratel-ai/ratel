@@ -1,7 +1,26 @@
-import { and, asc, count, desc, eq, inArray, lt, ne, notExists, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  lt,
+  ne,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
-import type { Experiment, ExperimentState, Trial, TrialState } from "../domain/experiment";
+import {
+  type Experiment,
+  type ExperimentState,
+  emptyCounts,
+  type Trial,
+  type TrialOutcome,
+  type TrialState,
+} from "../domain/experiment";
 import type { TrialResult } from "../domain/score";
 import type { ExperimentStore } from "../ports/experiment-store";
 import { evalCaseVersions, evalExperiments, evalTrials } from "../schema";
@@ -11,11 +30,31 @@ type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "transaction">;
 
 /** Rows of one insert: Postgres has a limit of 65,535 values. */
 const CHUNK = 1_000;
+const {
+  output: _output,
+  toolCalls: _toolCalls,
+  claimedAt: _claimedAt,
+  ...TRIAL
+} = getTableColumns(evalTrials);
 
 export function createDrizzleExperimentStore(db: Db): ExperimentStore {
   return {
-    create(input) {
+    create(input, maxRunning) {
       return db.transaction(async (tx) => {
+        // One start of a project at a time, so the count below is right.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`eval_experiments:${input.projectId}`}, 0))`,
+        );
+        const [running] = await tx
+          .select({ count: count() })
+          .from(evalExperiments)
+          .where(
+            and(
+              eq(evalExperiments.projectId, input.projectId),
+              eq(evalExperiments.state, "running"),
+            ),
+          );
+        if ((running?.count ?? 0) >= maxRunning) return null;
         const [row] = await tx
           .insert(evalExperiments)
           .values({ ...input, params: storable(input.params) })
@@ -51,32 +90,44 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
         .where(eq(evalExperiments.projectId, projectId))
         .orderBy(desc(evalExperiments.createdAt), desc(evalExperiments.id))
         .limit(limit);
-      if (rows.length === 0) return [];
-      const trials = await db
-        .select({ experimentId: evalTrials.experimentId, result: evalTrials.result })
+      return rows.map(toExperiment);
+    },
+
+    async counts(experimentIds) {
+      const counts = new Map(experimentIds.map((id) => [id, emptyCounts()]));
+      if (experimentIds.length === 0) return counts;
+      const rows = await db
+        .select({
+          experimentId: evalTrials.experimentId,
+          result: evalTrials.result,
+          count: count(),
+        })
         .from(evalTrials)
-        .where(
-          inArray(
-            evalTrials.experimentId,
-            rows.map(({ id }) => id),
-          ),
-        );
-      const byExperiment = Map.groupBy(trials, ({ experimentId }) => experimentId);
-      return rows.map((row) => ({
-        experiment: toExperiment(row),
-        trials: (byExperiment.get(row.id) ?? []).map(({ result }) => ({
-          result: result as TrialResult | null,
-        })),
-      }));
+        .where(inArray(evalTrials.experimentId, [...experimentIds]))
+        .groupBy(evalTrials.experimentId, evalTrials.result);
+      for (const row of rows) {
+        const of = counts.get(row.experimentId);
+        if (of) of[(row.result as TrialResult | null) ?? "open"] = row.count;
+      }
+      return counts;
     },
 
     async trials(experimentId) {
       const rows = await db
-        .select()
+        .select(TRIAL)
         .from(evalTrials)
         .where(eq(evalTrials.experimentId, experimentId))
         .orderBy(asc(evalTrials.position));
       return rows.map(toTrial);
+    },
+
+    async trialEvidence(projectId, trialId) {
+      const [row] = await db
+        .select({ output: evalTrials.output, toolCalls: evalTrials.toolCalls })
+        .from(evalTrials)
+        .innerJoin(evalExperiments, eq(evalExperiments.id, evalTrials.experimentId))
+        .where(and(eq(evalExperiments.projectId, projectId), eq(evalTrials.id, trialId)));
+      return row ? { output: row.output?.value ?? null, toolCalls: row.toolCalls } : null;
     },
 
     async listRunning(limit) {
@@ -84,7 +135,7 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
         .select()
         .from(evalExperiments)
         .where(eq(evalExperiments.state, "running"))
-        .orderBy(asc(evalExperiments.createdAt))
+        .orderBy(sql`random()`)
         .limit(limit);
       return rows.map(toExperiment);
     },
@@ -97,18 +148,20 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
       return row ? toVersion(row) : null;
     },
 
-    claimStarts(experimentId, open, now) {
+    claimStarts({ id: experimentId, projectId }, open, now) {
       return db.transaction(async (tx) => {
-        // One claim of an experiment at a time, so the count below is right.
+        // One claim of a project at a time, so the count below is right.
         await tx.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`eval_starts:${experimentId}`}, 0))`,
+          sql`select pg_advisory_xact_lock(hashtextextended(${`eval_starts:${projectId}`}, 0))`,
         );
         const [row] = await tx
           .select({ open: count() })
           .from(evalTrials)
+          .innerJoin(evalExperiments, eq(evalExperiments.id, evalTrials.experimentId))
           .where(
             and(
-              eq(evalTrials.experimentId, experimentId),
+              eq(evalExperiments.projectId, projectId),
+              eq(evalExperiments.state, "running"),
               inArray(evalTrials.state, ["starting", "running"]),
             ),
           );
@@ -133,7 +186,7 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
               eq(evalTrials.state, "pending"),
             ),
           )
-          .returning();
+          .returning(TRIAL);
         return claimed.sort((left, right) => left.position - right.position).map(toTrial);
       });
     },
@@ -147,7 +200,7 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
 
     async listRunningTrials(experimentId, limit) {
       const rows = await db
-        .select()
+        .select(TRIAL)
         .from(evalTrials)
         .where(and(eq(evalTrials.experimentId, experimentId), eq(evalTrials.state, "running")))
         .orderBy(asc(evalTrials.position))
@@ -165,32 +218,26 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
     },
 
     async finish(trialId, outcome) {
-      const { output, toolCalls, scorers, reason, ...rest } = outcome;
       await db
         .update(evalTrials)
-        .set({
-          ...rest,
-          ...storable({ output: output ?? null, toolCalls, scorers, reason }),
-          state: "done",
-          claimedAt: null,
-        })
+        .set(done(outcome))
         .where(and(eq(evalTrials.id, trialId), ne(evalTrials.state, "done")));
     },
 
-    async releaseStopped(experimentId, before) {
-      const stopped = and(
-        eq(evalTrials.experimentId, experimentId),
-        lt(evalTrials.claimedAt, before),
-      );
+    async releaseStoppedScorings(experimentId, before) {
       await db
         .update(evalTrials)
         .set({ state: "running", claimedAt: null })
-        .where(and(stopped, eq(evalTrials.state, "scoring")));
-      const left = await db
-        .select()
-        .from(evalTrials)
-        .where(and(stopped, eq(evalTrials.state, "starting")));
-      return left.map(toTrial);
+        .where(stopped(experimentId, "scoring", before));
+    },
+
+    async endStoppedStarts(experimentId, before, outcome) {
+      const ended = await db
+        .update(evalTrials)
+        .set(done(outcome))
+        .where(stopped(experimentId, "starting", before))
+        .returning({ id: evalTrials.id });
+      return ended.length;
     },
 
     async close(experimentId, now) {
@@ -214,16 +261,35 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
   };
 }
 
+function done({ output, toolCalls, scorers, reason, ...rest }: TrialOutcome) {
+  return {
+    ...rest,
+    ...storable({ output: { value: output ?? null }, toolCalls, scorers, reason }),
+    state: "done",
+    claimedAt: null,
+  };
+}
+
+/** The claims of a process that ended. */
+function stopped(experimentId: string, state: TrialState, before: Date) {
+  return and(
+    eq(evalTrials.experimentId, experimentId),
+    eq(evalTrials.state, state),
+    lt(evalTrials.claimedAt, before),
+  );
+}
+
 function toExperiment(row: typeof evalExperiments.$inferSelect): Experiment {
   return { ...row, state: row.state as ExperimentState };
 }
 
-function toTrial(row: typeof evalTrials.$inferSelect): Trial {
-  const { position: _, claimedAt: __, ...rest } = row;
+function toTrial({
+  position: _,
+  ...row
+}: Pick<typeof evalTrials.$inferSelect, keyof typeof TRIAL>): Trial {
   return {
-    ...rest,
+    ...row,
     state: row.state as TrialState,
     result: row.result as TrialResult | null,
-    output: row.output ?? null,
   };
 }

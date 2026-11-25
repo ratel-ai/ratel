@@ -50,8 +50,6 @@ export type Trial = {
   result: TrialResult | null;
   /** Why it is invalid, or the error of the agent. */
   reason: string | null;
-  output: unknown;
-  toolCalls: TrialToolCall[];
   scorers: ScorerResult[];
   costUsd: number | null;
   durationMs: number | null;
@@ -59,12 +57,18 @@ export type Trial = {
   sandboxRunId: string | null;
 };
 
-export type TrialOutcome = Pick<Trial, "reason" | "output" | "toolCalls" | "scorers"> & {
-  result: TrialResult;
-  costUsd: number | null;
-  durationMs: number | null;
-  traceId: string | null;
-};
+/** What the agent did in a trial. It can be large, so it is read for one trial at a time. */
+export type TrialEvidence = { output: unknown; toolCalls: TrialToolCall[] };
+
+export type TrialOutcome = TrialEvidence &
+  Pick<Trial, "reason" | "scorers"> & {
+    result: TrialResult;
+    costUsd: number | null;
+    durationMs: number | null;
+    traceId: string | null;
+    /** Set when the run started and the trial did not become running. */
+    sandboxRunId?: string;
+  };
 
 export type Counts = { pass: number; fail: number; invalid: number; open: number };
 
@@ -92,8 +96,12 @@ export function freezeCases(cases: readonly EvalCase[]): {
   };
 }
 
+export function emptyCounts(): Counts {
+  return { pass: 0, fail: 0, invalid: 0, open: 0 };
+}
+
 export function countTrials(trials: ReadonlyArray<Pick<Trial, "result">>): Counts {
-  const counts: Counts = { pass: 0, fail: 0, invalid: 0, open: 0 };
+  const counts = emptyCounts();
   for (const { result } of trials) counts[result ?? "open"] += 1;
   return counts;
 }

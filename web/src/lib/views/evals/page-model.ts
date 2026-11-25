@@ -8,7 +8,7 @@ import {
   type ExperimentState,
   type Trial,
 } from "./domain/experiment";
-import { type CaseCounts, caseCounts } from "./experiment-view";
+import { type CaseCounts, caseCounts, trialsByCase } from "./experiment-view";
 
 /** What the pages of evals show. Plain data. */
 export type CaseRow = {
@@ -104,20 +104,14 @@ export type ExperimentPageModel = {
   cases: Array<CaseCounts & { trials: TrialView[] }>;
 };
 
-export function experimentRow({
-  experiment,
-  trials,
-}: {
-  experiment: Experiment;
-  trials: ReadonlyArray<Pick<Trial, "result">>;
-}): ExperimentRow {
+export function experimentRow(experiment: Experiment, counts: Counts): ExperimentRow {
   return {
     id: experiment.id,
     sandboxName: experiment.sandboxName,
     commit: experiment.gitCommit,
     state: experiment.state,
     cases: experiment.caseVersions.length,
-    counts: countTrials(trials),
+    counts,
     createdAt: experiment.createdAt.toISOString(),
   };
 }
@@ -126,6 +120,7 @@ export function experimentPageModel(
   experiment: Experiment,
   trials: readonly Trial[],
 ): ExperimentPageModel {
+  const byCase = trialsByCase(trials);
   return {
     projectId: experiment.projectId,
     id: experiment.id,
@@ -140,9 +135,7 @@ export function experimentPageModel(
     counts: countTrials(trials),
     cases: caseCounts(experiment, trials).map((row) => ({
       ...row,
-      trials: trials
-        .filter(({ caseVersionId }) => caseVersionId === row.versionId)
-        .map(({ experimentId: _, ...trial }) => trial),
+      trials: (byCase.get(row.versionId) ?? []).map(({ experimentId: _, ...trial }) => trial),
     })),
   };
 }

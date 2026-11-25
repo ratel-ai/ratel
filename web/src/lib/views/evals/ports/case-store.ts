@@ -7,6 +7,8 @@ export type NewCase = CaseDetails & {
   source?: { turnId: string; output: string | null };
 };
 
+export type VersionToken = { versionId: string; updatedAt: Date };
+
 export type ApproveResult = "approved" | "not_found" | "changed";
 
 /** The cases of a project. No method changes an approved version. */
@@ -21,13 +23,15 @@ export interface CaseStore {
     projectId: string,
     caseId: string,
     edit: CaseDetails & { content: CaseContent },
+    /** The newest version as the person read it. */
+    base: VersionToken,
     now: Date,
-  ): Promise<EvalCase | null>;
+  ): Promise<EvalCase | "not_found" | "changed">;
   /** Approves the draft as the person saw it (`updatedAt`). */
   approve(
     projectId: string,
     caseId: string,
-    draft: { versionId: string; updatedAt: Date },
+    draft: VersionToken,
     by: { userId: string; now: Date },
   ): Promise<ApproveResult>;
 }

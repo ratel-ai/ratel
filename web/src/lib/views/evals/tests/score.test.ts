@@ -205,3 +205,30 @@ test("the same definition has the same hash, and a changed one has another", () 
   assert.match(hash, /^[0-9a-f]{64}$/);
   assert.deepEqual(snapshotOf(NO_REFUND), { ...NO_REFUND, hash });
 });
+
+test("an order on a tool argument holds for each call", () => {
+  const record = trial({
+    toolCalls: [
+      { name: "refund", arguments: { amount: 40 } },
+      { name: "refund", arguments: { amount: 60 } },
+    ],
+  });
+  const check = (op: "lt" | "gt", value: number) =>
+    checkTrial({ path: "tool_arguments.refund.amount", op, value }, record).status;
+  assert.equal(check("lt", 100), "pass");
+  assert.equal(check("lt", 50), "fail");
+  assert.equal(check("gt", 10), "pass");
+});
+
+test("an argument path reads the tool that has the argument", () => {
+  const record = trial({
+    toolCalls: [
+      { name: "a", arguments: { b: { c: 1 } } },
+      { name: "a.b", arguments: { other: 2 } },
+    ],
+  });
+  assert.equal(
+    checkTrial({ path: "tool_arguments.a.b.c", op: "eq", value: 1 }, record).status,
+    "pass",
+  );
+});

@@ -9,6 +9,7 @@ import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
+import { emptyCounts } from "@/lib/views/evals/domain/experiment";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { caseRow, experimentRow, readyVersions } from "@/lib/views/evals/page-model";
 import { listSandboxVersions, sandboxesEnabledForProject } from "@/lib/views/sandboxes";
@@ -38,9 +39,15 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
     "load_page",
     async () => {
       const db = getDb();
+      const store = createDrizzleExperimentStore(db);
+      const experimentRows = async () => {
+        const rows = await store.list(project.id, EXPERIMENTS);
+        const counts = await store.counts(rows.map(({ id }) => id));
+        return rows.map((row) => experimentRow(row, counts.get(row.id) ?? emptyCounts()));
+      };
       return Promise.all([
         createDrizzleCaseStore(db).list(project.id),
-        createDrizzleExperimentStore(db).list(project.id, EXPERIMENTS),
+        experimentRows(),
         (await sandboxesEnabledForProject(project.id))
           ? listSandboxVersions(project.id, VERSIONS)
           : [],
@@ -54,7 +61,7 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
       projectId={project.id}
       canEdit={!(await isRestrictedBySupportSession())}
       cases={cases.map(caseRow)}
-      experiments={experiments.map(experimentRow)}
+      experiments={experiments}
       versions={readyVersions(versions)}
       now={new Date().toISOString()}
     >

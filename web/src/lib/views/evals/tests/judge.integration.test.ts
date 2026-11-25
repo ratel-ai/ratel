@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { EvalJudge, EvalJudgeEvidence } from "@/lib/contracts/eval-judge";
+import {
+  askEvalJudge,
+  type EvalJudge,
+  type EvalJudgeEvidence,
+  maxEvalJudgeTokens,
+} from "@/lib/contracts/eval-judge";
 import type { ModelCallRecord } from "@/lib/contracts/telemetry";
 import { createDecisionJudge } from "../adapters/decision-judge";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
@@ -130,4 +135,29 @@ test("with no judge engine configured, no outbound call is made", async () => {
   assert.ok(outcome.status === "not_scored" && outcome.code === "not_configured");
   assert.equal(calls, 0);
   assert.deepEqual(await t.spent(), []);
+});
+
+test("the real usage settles, also above the hold", async () => {
+  const t = await setup({
+    ask: async ({ options }) => ({
+      answer: { choice: options[0]?.id ?? "", confidence: 1 },
+      inputTokens: 4_000,
+    }),
+  });
+  await judgeTrial(SUBJECT, EVIDENCE, t.deps);
+  assert.equal((await t.spent())[0]?.usd, 80);
+});
+
+test("the hold counts bytes, and cut evidence says so", async () => {
+  const long = { ...EVIDENCE, output: "\u{1F99C}".repeat(3_000) };
+  assert.ok(maxEvalJudgeTokens(long) >= 2 * 12_000);
+  const inputs: string[] = [];
+  const judge = {
+    ask: async ({ input }: { input: string }) => {
+      inputs.push(input);
+      return { answer: null, inputTokens: 1 };
+    },
+  };
+  await askEvalJudge(judge, { ...EVIDENCE, output: "x".repeat(20_000) });
+  assert.match(inputs[0] ?? "", /x\n\(cut\)/);
 });

@@ -6,6 +6,7 @@ import {
   refuse,
   reply,
 } from "@/lib/console/scope/member-access";
+import { storable } from "@/lib/platform/storable";
 import {
   approvalProblem,
   type CaseContent,
@@ -41,7 +42,8 @@ export type CaseEvent =
 const MAX_BODY_CHARS = MAX_CONTENT_CHARS * 2;
 const fromTurnSchema = z.object({ turnId: z.uuid() });
 const editSchema = caseDetailsSchema.extend({ content: caseContentSchema });
-const approveSchema = z.object({ versionId: z.uuid(), updatedAt: z.iso.datetime() });
+const tokenSchema = z.object({ versionId: z.uuid(), updatedAt: z.iso.datetime() });
+const changeSchema = editSchema.extend({ base: tokenSchema });
 
 export function handleCreateCase(
   request: Request,
@@ -65,11 +67,15 @@ export function handleEditCase(
   deps: CasesApiDeps,
 ): Promise<Response> {
   return write(projectId, "edit_case", deps, async (member) => {
-    const edit = editSchema.safeParse(await readJson(request));
+    const edit = changeSchema.safeParse(await readJson(request));
     if (!edit.success) return invalid(edit.error);
     if (!isId(caseId)) return notFound();
-    const saved = await deps.cases().saveDraft(member.projectId, caseId, edit.data, deps.now());
-    return saved ? reply(200, { caseId, draft: draftView(saved) }) : notFound();
+    const { base, ...change } = edit.data;
+    const token = { versionId: base.versionId, updatedAt: new Date(base.updatedAt) };
+    const saved = await deps.cases().saveDraft(member.projectId, caseId, change, token, deps.now());
+    if (saved === "not_found") return notFound();
+    if (saved === "changed") return changed();
+    return reply(200, { caseId, draft: draftView(saved) });
   });
 }
 
@@ -80,7 +86,7 @@ export function handleApproveCase(
   deps: CasesApiDeps,
 ): Promise<Response> {
   return write(projectId, "approve_case", deps, async (member) => {
-    const body = approveSchema.safeParse(await readJson(request));
+    const body = tokenSchema.safeParse(await readJson(request));
     if (!body.success) return invalid(body.error);
     const evalCase = isId(caseId) ? await deps.cases().get(member.projectId, caseId) : null;
     if (!evalCase) return notFound();
@@ -167,7 +173,9 @@ async function readJson(request: Request): Promise<unknown> {
   const text = await request.text().catch(() => "");
   if (text.length > MAX_BODY_CHARS) return null;
   try {
-    return JSON.parse(text);
+    const value: unknown = JSON.parse(text);
+    // Before the checks: a name of NUL only is empty. It also throws when the JSON is too deep.
+    return value === null ? null : storable(value);
   } catch {
     return null;
   }
@@ -188,5 +196,5 @@ function notFound(): Response {
 }
 
 function changed(): Response {
-  return refuse(409, "changed", "The draft changed. Read it again before you approve it.");
+  return refuse(409, "changed", "Another person changed this case. Read it again.");
 }

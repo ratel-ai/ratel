@@ -58,12 +58,15 @@ export type StartRefusal =
   | "not_found"
   | "not_ready"
   | "no_cases"
+  | "too_many_running"
   | "too_many_trials";
 
-/** The open trials of one experiment at a time. The others wait, and do not reach the limit. */
+/** The open trials of one project at a time. The others wait, and do not reach the limit. */
 export const OPEN_TRIALS = 20;
 /** A claim that is older than this was left by a process that ended. */
 export const CLAIM_STOPPED_MS = 10 * 60_000;
+/** The running experiments of one project. */
+export const MAX_RUNNING_EXPERIMENTS = 10;
 const PARALLEL = 5;
 const LATEST_OF = 100;
 
@@ -94,7 +97,7 @@ export async function startExperiment(
   if (cases * trialsPerCase > MAX_EXPERIMENT_TRIALS) {
     return refused("too_many_trials", `An experiment has at most ${MAX_EXPERIMENT_TRIALS} trials.`);
   }
-  const experiment = await deps.experiments.create({
+  const input = {
     ...frozen,
     projectId,
     organizationId,
@@ -105,7 +108,12 @@ export async function startExperiment(
     params,
     trialsPerCase,
     startedBy,
-  });
+  };
+  const experiment = await deps.experiments.create(input, MAX_RUNNING_EXPERIMENTS);
+  if (!experiment) {
+    const message = `The project has ${MAX_RUNNING_EXPERIMENTS} running experiments. Wait for one to end.`;
+    return refused("too_many_running", message);
+  }
   logger.info(
     { project_id: projectId, experiment_id: experiment.id, cases, trials: cases * trialsPerCase },
     "eval experiment started",
@@ -115,11 +123,13 @@ export async function startExperiment(
 
 /**
  * One step of an experiment: scores the trials whose run ended, starts the next ones, and closes
- * the experiment when no trial is open. Two processes may do it at the same time.
+ * the experiment when no trial is open. Two processes may do it at the same time. After the
+ * deadline it takes no more trials, and the next step goes on.
  */
 export function advanceExperiment(
   experiment: Experiment,
   deps: ExperimentDeps,
+  deadline: Date | null = null,
 ): Promise<{ started: number; finished: number; closed: boolean }> {
   const attributes = {
     "project.id": experiment.projectId,
@@ -131,13 +141,16 @@ export function advanceExperiment(
     async () => {
       const { experiments } = deps;
       const stopped = new Date(deps.now().getTime() - CLAIM_STOPPED_MS);
-      const left = await experiments.releaseStopped(experiment.id, stopped);
-      for (const trial of left) {
-        await experiments.finish(trial.id, unscored("invalid", "The start was interrupted."));
-      }
-      let finished = left.length;
+      await experiments.releaseStoppedScorings(experiment.id, stopped);
+      let finished = await experiments.endStoppedStarts(
+        experiment.id,
+        stopped,
+        unscored("invalid", "The start was interrupted."),
+      );
+      const late = () => deadline !== null && deps.now() > deadline;
       const running = await experiments.listRunningTrials(experiment.id, OPEN_TRIALS);
       await inParallel(running, async (trial) => {
+        if (late()) return;
         try {
           if (await finishTrial(experiment, trial, deps)) finished += 1;
         } catch (error) {
@@ -148,7 +161,10 @@ export function advanceExperiment(
           );
         }
       });
-      const starts = await experiments.claimStarts(experiment.id, OPEN_TRIALS, deps.now());
+      const mayStart = !late() && (await deps.sandboxes.enabled(experiment.projectId));
+      const starts = mayStart
+        ? await experiments.claimStarts(experiment, OPEN_TRIALS, deps.now())
+        : [];
       await inParallel(starts, (trial) => startTrial(experiment, trial, deps));
       const closed = await experiments.close(experiment.id, deps.now());
       return { started: starts.length, finished, closed };
@@ -201,8 +217,9 @@ export async function scoreRun(
   }
   const scorers = experiment.scorerSnapshots[trial.caseVersionId] ?? [];
   const judged = new Map<string, JudgeOutcome>();
-  for (const { id, definition } of scorers) {
-    if (definition.kind !== "judge") continue;
+  // At the same time: a trial has a few judges, and each one can wait for its model.
+  const judges = scorers.map(async ({ id, definition }) => {
+    if (definition.kind !== "judge") return;
     const outcome = await judgeTrial(
       experiment,
       {
@@ -216,7 +233,8 @@ export async function scoreRun(
       deps.judge,
     );
     judged.set(id, outcome);
-  }
+  });
+  await Promise.all(judges);
   const score = scoreTrial(record, scorers, judged);
   return { ...base, result: score.result, reason: score.invalidReason, scorers: score.scorers };
 }
@@ -227,6 +245,7 @@ async function startTrial(
   deps: ExperimentDeps,
 ): Promise<void> {
   const { projectId, organizationId } = experiment;
+  let sandboxRunId: string | undefined;
   try {
     const version = await deps.experiments.caseVersion(trial.caseVersionId);
     if (!version) throw new Error("the case version is missing");
@@ -238,7 +257,10 @@ async function startTrial(
       params: earlierTurns.length > 0 ? { ...experiment.params, earlierTurns } : experiment.params,
       fixtures: toolFixtures,
     });
-    if (started.ok) return await deps.experiments.markRunning(trial.id, started.run.id);
+    if (started.ok) {
+      sandboxRunId = started.run.id;
+      return await deps.experiments.markRunning(trial.id, sandboxRunId);
+    }
     const why =
       started.reason === "limit_reached" ? `${started.limit}: ${started.message}` : started.message;
     await deps.experiments.finish(trial.id, unscored("invalid", `The run was refused. ${why}`));
@@ -247,7 +269,13 @@ async function startTrial(
       { project_id: projectId, experiment_id: experiment.id, trial_id: trial.id, err: error },
       "eval trial not started",
     );
-    await deps.experiments.finish(trial.id, unscored("invalid", "The run did not start."));
+    const reason = sandboxRunId
+      ? "The run started, and its trial was not saved."
+      : "The run did not start.";
+    await deps.experiments.finish(
+      trial.id,
+      unscored("invalid", reason, sandboxRunId ? { sandboxRunId } : {}),
+    );
   }
 }
 

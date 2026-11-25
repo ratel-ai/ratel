@@ -12,11 +12,12 @@ import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
 import type { CaseContent, CaseScorer } from "../domain/case";
-import { countTrials } from "../domain/experiment";
+import { countTrials, unscored } from "../domain/experiment";
 import {
   advanceExperiment,
   CLAIM_STOPPED_MS,
   type ExperimentDeps,
+  MAX_RUNNING_EXPERIMENTS,
   OPEN_TRIALS,
   startExperiment,
 } from "../experiments";
@@ -271,9 +272,11 @@ test("the results: pass with an advisory judge, fail of a check, fail of the age
   );
   assert.match(done[0]?.scorers[1]?.reason ?? "", /^Yes, with a confidence of 90%/);
   assert.deepEqual(
-    [done[0]?.output, done[0]?.costUsd, done[0]?.durationMs, done[0]?.traceId],
-    ["No.", 0.01, 900, "c".repeat(32)],
+    [done[0]?.costUsd, done[0]?.durationMs, done[0]?.traceId],
+    [0.01, 900, "c".repeat(32)],
   );
+  const evidence = await t.deps.experiments.trialEvidence(PROJECT_ID, done[0]?.id ?? "");
+  assert.equal(evidence?.output, "No.");
   assert.equal(done[2]?.reason, "Error: boom");
   assert.match(done[3]?.reason ?? "", /^infra_error: /);
   assert.match(done[4]?.reason ?? "", /^timed_out: /);
@@ -290,6 +293,10 @@ test("the row and its frozen lists do not change after the start", async () => {
     PROJECT_ID,
     made.id,
     { name: "renamed", labels: ["x"], content: content({ scorers: [JUDGE] }) },
+    {
+      versionId: made.versions[0]?.id ?? "",
+      updatedAt: made.versions[0]?.updatedAt ?? new Date(),
+    },
     new Date(),
   );
   await t.step(experiment);
@@ -338,6 +345,7 @@ test("no route changes an experiment", () => {
         }),
   );
   assert.deepEqual(methods.sort(), [
+    "GET projects/[projectId]/evals/experiments/trials/[trialId]/route.ts",
     "GET v1/evals/experiments/[experimentId]/route.ts",
     "GET v1/evals/experiments/route.ts",
     "POST projects/[projectId]/evals/experiments/route.ts",
@@ -372,7 +380,7 @@ test("a start that throws, a run that is gone and a claim of an ended process ar
   const t = await setup();
   await t.approvedCase("one");
   const experiment = await t.start();
-  const [claimed] = await t.deps.experiments.claimStarts(experiment.id, 1, t.deps.now());
+  const [claimed] = await t.deps.experiments.claimStarts(experiment, 1, t.deps.now());
   t.pass(CLAIM_STOPPED_MS + 1000);
   t.setRefuse(() => {
     throw new Error("down");
@@ -588,4 +596,129 @@ test("a member starts an experiment, and a support session cannot", async () => 
   assert.equal((await post(deps({ isRestricted: async () => true }))).status, 403);
   assert.equal((await post(deps({ enabled: async () => false }))).status, 404);
   assert.equal((await t.table("eval_experiments")).length, 1);
+});
+
+test("the drain gives each project a turn, and a project has a limit of running experiments", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  for (let n = 0; n < MAX_RUNNING_EXPERIMENTS; n += 1) await t.start({ trialsPerCase: 1 });
+  const more = await startExperiment(
+    SUBJECT,
+    { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "u" },
+    t.deps,
+  );
+  assert.ok(!more.ok && more.reason === "too_many_running");
+  const seen = new Set<string>();
+  for (let n = 0; n < 60; n += 1) {
+    const page = await t.deps.experiments.listRunning(2);
+    for (const { id } of page) seen.add(id);
+  }
+  assert.equal(seen.size, MAX_RUNNING_EXPERIMENTS, "no experiment waits for an older one");
+});
+
+test("with the sandboxes flag off no trial starts", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  const experiment = await t.start();
+  t.deps.sandboxes.enabled = async () => false;
+  assert.equal((await t.step(experiment)).started, 0);
+  assert.equal(t.started.length, 0);
+  t.deps.sandboxes.enabled = async () => true;
+  assert.equal((await t.step(experiment)).started, 3);
+});
+
+test("a step ends at its deadline, and the next one goes on", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  const experiment = await t.start({ trialsPerCase: 10 });
+  await t.step(experiment);
+  for (const run of t.runs.values()) t.end(run);
+  const past = new Date(t.deps.now().getTime() - 1);
+  const late = await advanceExperiment(experiment, t.deps, past);
+  assert.deepEqual([late.finished, late.closed], [0, false]);
+  assert.deepEqual([(await t.step(experiment)).finished], [10]);
+});
+
+test("the judges of a trial run at the same time", async () => {
+  const t = await setup();
+  const judges = [1, 2, 3].map((n) => ({ ...JUDGE, id: `j${n}` }));
+  await t.approvedCase("one", { scorers: [...content().scorers, ...judges] });
+  const experiment = await t.start({ trialsPerCase: 1 });
+  await t.step(experiment);
+  for (const run of t.runs.values()) t.end(run);
+  let open = 0;
+  let most = 0;
+  const judge = await t.deps.judge.judge.judgeFor(SUBJECT);
+  assert.ok(judge);
+  t.deps.judge.judge = {
+    judgeFor: async () => ({
+      ...judge,
+      ask: async (request) => {
+        open += 1;
+        most = Math.max(most, open);
+        await new Promise((done) => setTimeout(done, 20));
+        open -= 1;
+        return judge.ask(request);
+      },
+    }),
+  };
+  await t.step(experiment);
+  assert.equal(most, 3);
+});
+
+test("the experiments of a project share the open trials", async () => {
+  const t = await setup();
+  for (let n = 0; n < 5; n += 1) await t.approvedCase(`case ${n}`);
+  const first = await t.start();
+  const second = await t.start();
+  assert.equal((await t.step(first)).started, 15);
+  assert.equal((await t.step(second)).started, OPEN_TRIALS - 15);
+});
+
+test("the read of a key does not load the outputs", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  const experiment = await t.start();
+  await t.step(experiment);
+  for (const run of t.runs.values()) t.end(run);
+  await t.step(experiment);
+  const trials = await t.deps.experiments.trials(experiment.id);
+  assert.ok(trials.every((trial) => !("output" in trial) && !("toolCalls" in trial)));
+  const [first] = trials;
+  assert.ok(first);
+  const evidence = await t.deps.experiments.trialEvidence(PROJECT_ID, first.id);
+  assert.deepEqual(evidence, { output: "No.", toolCalls: [] });
+  assert.equal(await t.deps.experiments.trialEvidence(OTHER_PROJECT_ID, first.id), null);
+});
+
+test("a run that started stays linked when the trial did not become running", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  const experiment = await t.start({ trialsPerCase: 1 });
+  t.deps.experiments = {
+    ...t.deps.experiments,
+    markRunning: async () => {
+      throw new Error("down");
+    },
+  };
+  await t.step(experiment);
+  const [trial] = await t.deps.experiments.trials(experiment.id);
+  assert.equal(trial?.result, "invalid");
+  assert.equal(trial?.sandboxRunId, [...t.runs.keys()][0]);
+});
+
+test("a start that became running is not ended as interrupted", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  const experiment = await t.start({ trialsPerCase: 1 });
+  const { experiments } = t.deps;
+  const [claimed] = await experiments.claimStarts(experiment, 1, t.deps.now());
+  assert.ok(claimed);
+  await experiments.markRunning(claimed.id, VERSION.id);
+  const late = new Date(t.deps.now().getTime() + 1e9);
+  const ended = await experiments.endStoppedStarts(experiment.id, late, {
+    ...unscored("invalid", "The start was interrupted."),
+  });
+  assert.equal(ended, 0);
+  assert.equal((await experiments.trials(experiment.id))[0]?.state, "running");
 });

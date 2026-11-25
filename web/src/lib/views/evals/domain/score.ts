@@ -85,7 +85,7 @@ export function checkTrial(
   trial: TrialRecord,
 ): { status: ScorerResult["status"]; reason: string } {
   const actual = valueAt(config.path, trial);
-  const outcome = runCheck({ ...config, path: `${ATTRIBUTE_PREFIX}value` }, traceOf(actual));
+  const outcome = runOn(config, actual);
   const words = `${config.path} ${config.op}${config.value === undefined ? "" : ` ${config.value}`}`;
   if (outcome.status === "scored") {
     const status = outcome.score.passed ? "pass" : "fail";
@@ -104,6 +104,7 @@ const USAGE: ReadonlySet<string> = new Set([
   "output_tokens",
   "total_tokens",
 ]);
+const ORDER: ReadonlySet<string> = new Set(["gt", "gte", "lt", "lte"]);
 const SHOWN_CHARS = 300;
 
 function scoreOne(
@@ -119,6 +120,18 @@ function scoreOne(
   }
   const { passed, reason, confidence, model } = judged;
   return { ...base, status: passed ? "pass" : "fail", reason, confidence, model };
+}
+
+/** An order on the values of some calls holds for each one. The other operators read the list. */
+function runOn(config: CheckConfig, actual: unknown) {
+  const run = (value: unknown) =>
+    runCheck({ ...config, path: `${ATTRIBUTE_PREFIX}value` }, traceOf(value));
+  if (!ORDER.has(config.op) || !Array.isArray(actual) || actual.length === 0) return run(actual);
+  const outcomes = actual.map(run);
+  return (
+    outcomes.find((outcome) => outcome.status !== "scored" || !outcome.score.passed) ??
+    run(actual[0])
+  );
 }
 
 function valueAt(path: string, trial: TrialRecord): unknown {
@@ -143,17 +156,18 @@ function valueAt(path: string, trial: TrialRecord): unknown {
   if (path.startsWith(OUTPUT_PREFIX)) return at(trial.output, path.slice(OUTPUT_PREFIX.length));
   if (path.startsWith(TOOL_ARGUMENTS_PREFIX)) {
     const rest = path.slice(TOOL_ARGUMENTS_PREFIX.length);
-    // A tool name can have dots: the longest name that the path starts with is the tool.
-    const tool = trial.toolCalls
-      .map(({ name }) => name)
+    // A tool name can have dots: the longest name with the argument is the tool.
+    const tools = [...new Set(trial.toolCalls.map(({ name }) => name))]
       .filter((name) => rest.startsWith(`${name}.`))
-      .sort((left, right) => right.length - left.length)[0];
-    if (tool === undefined) return undefined;
-    const values = trial.toolCalls
-      .filter(({ name }) => name === tool)
-      .map((call) => at(call.arguments, rest.slice(tool.length + 1)))
-      .filter((value) => value !== undefined);
-    return values.length === 0 ? undefined : values;
+      .sort((left, right) => right.length - left.length);
+    for (const tool of tools) {
+      const values = trial.toolCalls
+        .filter(({ name }) => name === tool)
+        .map((call) => at(call.arguments, rest.slice(tool.length + 1)))
+        .filter((value) => value !== undefined);
+      if (values.length > 0) return values;
+    }
+    return undefined;
   }
   return undefined;
 }

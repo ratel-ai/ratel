@@ -47,6 +47,7 @@ const STATUS: Record<StartRefusal, number> = {
   not_found: 404,
   not_ready: 409,
   no_cases: 409,
+  too_many_running: 429,
   too_many_trials: 413,
 };
 
@@ -65,7 +66,7 @@ export function handleListByKey(deps: KeyDeps): Promise<Response> {
     const { experiments } = deps.experiments();
     const rows = await experiments.list(projectId, LIST_LIMIT);
     return reply(200, {
-      experiments: rows.map(({ experiment }) => ({
+      experiments: rows.map((experiment) => ({
         experimentId: experiment.id,
         state: experiment.state,
         sandboxVersionId: experiment.sandboxVersionId,
@@ -94,6 +95,21 @@ export function handleStartByMember(
       ),
     { write: true },
   );
+}
+
+/** The output and the tool calls of one trial, for a member. */
+export function handleTrialEvidence(
+  projectId: string,
+  trialId: string,
+  deps: ConsoleDeps,
+): Promise<Response> {
+  const span = { feature: "evals", operation: "get_trial" } as const;
+  return forMember(projectId, span, deps, async (member) => {
+    const { experiments } = deps.experiments();
+    const known = z.uuid().safeParse(trialId).success;
+    const evidence = known ? await experiments.trialEvidence(member.projectId, trialId) : null;
+    return evidence ? reply(200, evidence) : notFound();
+  });
 }
 
 async function start(

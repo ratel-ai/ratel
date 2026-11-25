@@ -1,13 +1,14 @@
 "use client";
 
 import { Badge, type Tone } from "@ratel/design-system/badge";
-import { Disclosure } from "@ratel/design-system/disclosure";
+import { Button } from "@ratel/design-system/button";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { formatRelativeTime } from "@/lib/synthesis/traces/v2/format";
+import type { TrialEvidence } from "@/lib/views/evals/domain/experiment";
 import type { ScorerResult, TrialResult } from "@/lib/views/evals/domain/score";
 import type { ExperimentPageModel, TrialView } from "@/lib/views/evals/page-model";
 import { caseHref, evalsHref } from "@/lib/views/evals/paths";
@@ -124,23 +125,49 @@ function TrialPanel({ projectId, trial }: { projectId: string; trial: TrialView 
         </ul>
       ) : null}
       {trial.result && trial.result !== "invalid" ? (
-        <Disclosure title="Output and tool calls">
-          <div className="flex flex-col gap-2">
-            <pre className="max-h-80 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg">
-              {show(trial.output)}
-            </pre>
-            <ol className="flex flex-col gap-1">
-              {trial.toolCalls.map((call, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: the calls of a trial never change their order
-                <li key={index} className="font-mono text-xs break-all text-fg-muted">
-                  {call.name}({show(call.arguments)}) → {call.error ?? show(call.result)} [
-                  {call.source}]
-                </li>
-              ))}
-            </ol>
-          </div>
-        </Disclosure>
+        <Evidence projectId={projectId} trialId={trial.id} />
       ) : null}
+    </div>
+  );
+}
+
+/** The output and the tool calls, read when the reader asks: they can be large. */
+function Evidence({ projectId, trialId }: { projectId: string; trialId: string }) {
+  const [evidence, setEvidence] = useState<TrialEvidence | "loading" | "failed" | null>(null);
+
+  async function load() {
+    setEvidence("loading");
+    const response = await fetch(
+      `/api/projects/${projectId}/evals/experiments/trials/${trialId}`,
+    ).catch(() => null);
+    setEvidence(response?.ok ? ((await response.json()) as TrialEvidence) : "failed");
+  }
+
+  if (evidence === null || evidence === "loading" || evidence === "failed") {
+    return (
+      <div className="flex items-center gap-3">
+        <Button size="sm" variant="ghost" onClick={load} disabled={evidence === "loading"}>
+          {evidence === "loading" ? "Loading…" : "Show output and tool calls"}
+        </Button>
+        {evidence === "failed" ? (
+          <span className="text-ui text-fg-muted">They did not load. Try again.</span>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <pre className="max-h-80 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg">
+        {show(evidence.output)}
+      </pre>
+      <ol className="flex flex-col gap-1">
+        {evidence.toolCalls.map((call, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the calls of a trial never change their order
+          <li key={index} className="font-mono text-xs break-all text-fg-muted">
+            {call.name}({show(call.arguments)}) → {call.error ?? show(call.result)} [{call.source}]
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

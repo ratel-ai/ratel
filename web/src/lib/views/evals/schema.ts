@@ -49,7 +49,8 @@ export const evalCaseVersions = pgTable(
     number: integer("number").notNull(),
     // "draft" | "approved"
     state: text("state").notNull().default("draft"),
-    input: jsonb("input").$type<unknown>(),
+    // In an object: a driver parses the text of a jsonb string one more time.
+    input: jsonb("input").$type<{ value: unknown }>().notNull(),
     earlierTurns: jsonb("earlier_turns").$type<EarlierTurn[]>().notNull(),
     toolFixtures: jsonb("tool_fixtures").$type<CaseContent["toolFixtures"]>().notNull(),
     expectedOutput: text("expected_output"),
@@ -128,7 +129,7 @@ export const evalTrials = pgTable(
     // "pass" | "fail" | "invalid"
     result: text("result"),
     reason: text("reason"),
-    output: jsonb("output").$type<unknown>(),
+    output: jsonb("output").$type<{ value: unknown }>(),
     toolCalls: jsonb("tool_calls").$type<TrialToolCall[]>().notNull().default([]),
     scorers: jsonb("scorers").$type<ScorerResult[]>().notNull().default([]),
     costUsd: doublePrecision("cost_usd"),

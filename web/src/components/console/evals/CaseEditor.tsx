@@ -27,6 +27,7 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
   const { projectId, canEdit, approved, draft } = model;
   const router = useRouter();
   const start = draft ?? approved;
+  const [base, setBase] = useState(start && { versionId: start.id, updatedAt: start.updatedAt });
   const [name, setName] = useState(model.name);
   const [labels, setLabels] = useState(model.labels.join(", "));
   const [json, setJson] = useState<Record<JsonField, string>>({
@@ -56,11 +57,16 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
     return send(
       model.id ? "PUT" : "POST",
       `/api/projects/${projectId}/evals/cases${model.id ? `/${model.id}` : ""}`,
-      { name, labels: labelsOf(labels), content },
+      { name, labels: labelsOf(labels), content, ...(base ? { base } : {}) },
     );
   }
 
-  async function send<T>(method: string, url: string, body: unknown): Promise<T | null> {
+  async function send<T>(
+    method: string,
+    url: string,
+    body: unknown,
+    fail: (message: string) => void = setProblem,
+  ): Promise<T | null> {
     setProblem(null);
     try {
       const response = await fetch(url, {
@@ -70,38 +76,34 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
       });
       const answer = (await response.json()) as T & { message?: string };
       if (response.ok) return answer;
-      setProblem(answer.message ?? "The change was not saved. Try again.");
+      fail(answer.message ?? "The change was not saved. Try again.");
     } catch {
-      setProblem("The change was not saved. Try again.");
+      fail("The change was not saved. Try again.");
     }
     return null;
   }
 
   async function run(approve: boolean) {
     setPending(true);
-    try {
-      const saved = await save();
-      if (!saved) return;
-      const open = () =>
-        model.id ? router.refresh() : router.replace(caseHref(projectId, saved.caseId));
-      if (approve && saved.draft) {
-        const done = await send(
-          "POST",
-          `/api/projects/${projectId}/evals/cases/${saved.caseId}/approve`,
-          { versionId: saved.draft.versionId, updatedAt: saved.draft.updatedAt },
-        );
-        if (!done) return open();
-        toast({ title: `Version ${saved.draft.number} is approved`, tone: "success" });
-      } else {
-        toast({
-          title: saved.draft ? "Draft saved" : "Saved. No change to approve.",
-          tone: "success",
-        });
-      }
-      open();
-    } finally {
-      setPending(false);
+    const saved = await save();
+    if (!saved) return setPending(false);
+    if (saved.draft) setBase(saved.draft);
+    if (approve && saved.draft) {
+      const { versionId, updatedAt, number } = saved.draft;
+      const url = `/api/projects/${projectId}/evals/cases/${saved.caseId}/approve`;
+      const done = await send("POST", url, { versionId, updatedAt }, (message) =>
+        // The form can be a new one after the save, so the reason is not in it.
+        toast({ title: "Not approved", description: message, tone: "danger" }),
+      );
+      if (done) toast({ title: `Version ${number} is approved`, tone: "success" });
+    } else {
+      const title = saved.draft ? "Draft saved" : "Saved. No change to approve.";
+      toast({ title, tone: "success" });
     }
+    // A new case stays pending until its page opens: a second click would make a second case.
+    if (!model.id) return router.replace(caseHref(projectId, saved.caseId));
+    router.refresh();
+    setPending(false);
   }
 
   return (

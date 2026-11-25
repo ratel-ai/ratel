@@ -70,8 +70,21 @@ async function setup() {
   };
   const post = (body: unknown, d = deps(), projectId = PROJECT_ID) =>
     answer(handleCreateCase(request(body), projectId, d));
-  const put = (caseId: string, body: unknown, d = deps(), projectId = PROJECT_ID) =>
-    answer(handleEditCase(request(body), projectId, caseId, d));
+  /** With no base, the newest version as it is now. */
+  const put = async (
+    caseId: string,
+    body: object,
+    base?: object | null,
+    d = deps(),
+    projectId = PROJECT_ID,
+  ) => {
+    const newest = base ? null : (await store.get(PROJECT_ID, caseId))?.versions[0];
+    const sent = base ?? {
+      versionId: newest?.id ?? PROJECT_ID,
+      updatedAt: (newest?.updatedAt ?? new Date()).toISOString(),
+    };
+    return answer(handleEditCase(request({ ...body, base: sent }), projectId, caseId, d));
+  };
   const approve = (caseId: string, draft: object, d = deps(), projectId = PROJECT_ID) =>
     answer(handleApproveCase(request(draft), projectId, caseId, d));
   const get = async (caseId: string) => {
@@ -159,7 +172,10 @@ test("approve freezes the version, and an edit makes a new draft", async () => {
   assert.equal((await t.approve(made.caseId, made.draft)).status, 409, "it is approved already");
   const [first, second, ...more] = await t.rows();
   assert.deepEqual(first, frozen, "the approved version did not change");
-  assert.deepEqual([second?.state, second?.input, more.length], ["draft", { message: "third" }, 0]);
+  assert.deepEqual(
+    [second?.state, second?.input, more.length],
+    ["draft", { value: { message: "third" } }, 0],
+  );
   assert.equal(approvedVersion(await t.get(made.caseId))?.number, 1, "the approved one counts");
 
   const { draft } = (await t.put(made.caseId, edit({ input: { message: "third" } }))).body;
@@ -199,7 +215,7 @@ test("another project, a stranger, the flag off and a support session change not
   const before = await t.rows();
   const all = async (d: CasesApiDeps, projectId = PROJECT_ID) => [
     (await t.post(edit(), d, projectId)).status,
-    (await t.put(made.caseId, edit({ input: 1 }), d, projectId)).status,
+    (await t.put(made.caseId, edit({ input: 1 }), null, d, projectId)).status,
     (await t.approve(made.caseId, made.draft, d, projectId)).status,
   ];
   assert.deepEqual(await all(t.deps(), OTHER_PROJECT_ID), [404, 404, 404]);
@@ -215,17 +231,18 @@ test("another project, a stranger, the flag off and a support session change not
       role: "member",
     }),
   });
-  assert.equal((await t.put(made.caseId, edit(), other, OTHER_PROJECT_ID)).status, 404);
+  assert.equal((await t.put(made.caseId, edit(), null, other, OTHER_PROJECT_ID)).status, 404);
   assert.equal((await t.approve(made.caseId, made.draft, other, OTHER_PROJECT_ID)).status, 404);
   assert.deepEqual(await t.rows(), before);
 });
 
 test("a wrong body and a wrong id are refused", async () => {
   const t = await setup();
+  const made = { versionId: TURN_ID, updatedAt: new Date().toISOString() };
   assert.equal((await t.post({ ...edit(), name: " " })).status, 400);
   assert.equal((await t.post(null)).status, 400);
   assert.equal((await t.post(edit({ expectedOutput: "x".repeat(600_000) }))).status, 400);
-  assert.equal((await t.put("nope", edit())).status, 404);
+  assert.equal((await t.put("nope", edit(), made)).status, 404);
 });
 
 test("a label refers to no row: the tables of evals reference projects and cases only", async () => {
@@ -243,4 +260,44 @@ test("the routes of cases are create, edit and approve", () => {
     .filter((file) => file.endsWith("route.ts"))
     .sort();
   assert.deepEqual(files, ["[caseId]/approve/route.ts", "[caseId]/route.ts", "route.ts"]);
+});
+
+test("text that looks like JSON stays text", async () => {
+  const t = await setup();
+  for (const input of ["123", "null", '{"a":1}']) {
+    const { body } = await t.post(edit({ input }));
+    assert.equal((await t.get(body.caseId)).versions[0]?.input, input);
+  }
+});
+
+test("an edit of a form that another person changed is refused", async () => {
+  const t = await setup();
+  const { body: made } = await t.post(edit());
+  assert.equal((await t.put(made.caseId, edit({ input: "A" }), made.draft)).status, 200);
+  const stale = await t.put(made.caseId, edit({ input: "B" }), made.draft);
+  assert.deepEqual([stale.status, stale.body.error], [409, "changed"]);
+  assert.equal((await t.get(made.caseId)).versions[0]?.input, "A");
+});
+
+test("two edits in the same millisecond have two tokens", async () => {
+  const t = await setup();
+  const now = () => new Date("2026-11-25T10:00:00Z");
+  const { body: made } = await t.post(edit());
+  const a = await t.put(made.caseId, edit({ input: "A" }), made.draft, t.deps({ now }));
+  const b = await t.put(made.caseId, edit({ input: "B" }), a.body.draft, t.deps({ now }));
+  assert.notEqual(a.body.draft.updatedAt, b.body.draft.updatedAt);
+  assert.equal((await t.approve(made.caseId, a.body.draft)).status, 409);
+});
+
+test("NUL is removed before the check, and JSON that is too deep is refused", async () => {
+  const t = await setup();
+  assert.equal((await t.post({ ...edit(), name: "\0" })).status, 400);
+  const deep = `${"[".repeat(20_000)}${"]".repeat(20_000)}`;
+  const body = JSON.stringify(edit()).replace('{"message":"refund A200"}', deep);
+  const response = await handleCreateCase(
+    new Request("http://x", { method: "POST", body }),
+    PROJECT_ID,
+    t.deps(),
+  );
+  assert.equal(response.status, 400);
 });

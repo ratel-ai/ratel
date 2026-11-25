@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { approvalProblem, caseContentSchema, caseDetailsSchema } from "../domain/case";
-import { caseFromTurn, type TurnContent } from "../domain/from-turn";
+import { caseFromTurn, recordedConversation, type TurnContent } from "../domain/from-turn";
 import { content, NO_REFUND } from "./support";
 
 const call = (name: string, args: unknown, result: unknown, earlier = false) => ({
@@ -34,7 +34,7 @@ const turn = (over: Partial<TurnContent> = {}): TurnContent => ({
 
 test("a turn gives the input, the earlier turns, the recorded answer and the side-effect fixtures", () => {
   assert.deepEqual(caseFromTurn(turn(), new Set(["lookup_order"])), {
-    name: "refund A200",
+    name: "Case from a turn",
     content: {
       input: { message: "refund A200" },
       earlierTurns: [
@@ -79,9 +79,83 @@ test("a turn with no message uses its ask, and a turn with no captured input giv
   assert.equal(caseFromTurn(turn({ messages: [] }), new Set()), null);
 });
 
-test("a long message gives a short name", () => {
-  const messages = [{ id: "1", role: "user" as const, text: "word ".repeat(100) }];
-  assert.ok((caseFromTurn(turn({ messages }), new Set())?.name.length ?? 999) <= 80);
+test("the name of a case from a turn has no captured text", () => {
+  const messages = [{ id: "1", role: "user" as const, text: "My SSN is 123-45-6789" }];
+  assert.equal(caseFromTurn(turn({ messages }), new Set())?.name, "Case from a turn");
+});
+
+test("a tool that no sandbox can declare gives no fixture, and the lists have a limit", () => {
+  const many = Array.from({ length: 300 }, (_, n) => call("refund_order", { n }, { ok: true }));
+  const made = caseFromTurn(
+    turn({
+      messages: [
+        ...Array.from({ length: 300 }, (_, n) => ({
+          id: `e${n}`,
+          role: "user" as const,
+          text: `earlier ${n}`,
+          earlier: true,
+        })),
+        { id: "x", role: "user", text: "now" },
+      ],
+      toolCalls: [call("Bash:git", {}, "ok"), call("x".repeat(65), {}, "ok"), ...many],
+    }),
+    new Set(),
+  );
+  assert.ok(made);
+  assert.equal(caseContentSchema.safeParse(made.content).success, true);
+  assert.equal(made.content.toolFixtures.length, 200);
+  assert.ok(made.content.toolFixtures.every(({ tool }) => tool === "refund_order"));
+  assert.equal(made.content.earlierTurns.length, 200);
+  assert.equal(made.content.earlierTurns.at(-1)?.text, "earlier 299");
+});
+
+test("a repeated message stays in the earlier turns, and the answer is the recorded one", () => {
+  const said = (role: "user" | "assistant", text: string) => ({ role, text });
+  const made = caseFromTurn(
+    turn({
+      conversation: {
+        earlier: [
+          said("user", "delete order 1"),
+          said("assistant", "Are you sure?"),
+          said("user", "yes"),
+          said("assistant", "Done."),
+          said("user", "delete order 2"),
+          said("assistant", "Are you sure?"),
+        ],
+        ask: "yes",
+        answer: "Done.",
+      },
+    }),
+    new Set(),
+  );
+  assert.equal(made?.content.earlierTurns.length, 6);
+  assert.deepEqual(made?.content.input, { message: "yes" });
+  assert.equal(made?.sourceOutput, "Done.");
+});
+
+test("the recorded conversation is the messages of the calls, with no message removed", () => {
+  const payload = (messages: unknown[], output: unknown[] = []) => ({
+    messages: [...messages, ...output],
+  });
+  const m = (role: string, content: string) => ({ role, content });
+  const history = [
+    m("user", "delete order 1"),
+    m("assistant", "Are you sure?"),
+    m("user", "yes"),
+    m("assistant", "Done."),
+    m("user", "delete order 2"),
+    m("assistant", "Are you sure?"),
+    m("user", "yes"),
+  ];
+  assert.deepEqual(
+    recordedConversation([payload([...history, m("assistant", "Done.")])] as never),
+    {
+      earlier: history.slice(0, -1).map(({ role, content }) => ({ role, text: content })),
+      ask: "yes",
+      answer: "Done.",
+    },
+  );
+  assert.equal(recordedConversation([]), null);
 });
 
 test("the content accepts the shared scorer definitions with the paths of a trial only", () => {
@@ -133,4 +207,15 @@ test("a label is text", () => {
     caseDetailsSchema.parse({ name: " x ", labels: ["task:refunds", "task:refunds"] }),
     { name: "x", labels: ["task:refunds"] },
   );
+});
+
+test("a case has at most 5 judges", () => {
+  const judges = Array.from({ length: 6 }, (_, n) => ({
+    id: `j${n}`,
+    name: "Judge",
+    gating: false,
+    definition: { kind: "judge" as const, config: { prompt: "ok?", output: "boolean" as const } },
+  }));
+  assert.equal(caseContentSchema.safeParse(content({ scorers: judges })).success, false);
+  assert.equal(caseContentSchema.safeParse(content({ scorers: judges.slice(1) })).success, true);
 });

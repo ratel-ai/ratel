@@ -114,10 +114,10 @@ export async function askEvalJudge(
   };
 }
 
-/** The most input tokens that the two questions can use. Low characters per token on purpose. */
+/** The most input tokens that the two questions use: a token has at least one byte of text. */
 export function maxEvalJudgeTokens(evidence: EvalJudgeEvidence): number {
-  const chars = evidenceText(evidence).length + evidence.question.length + 2_000;
-  return 2 * Math.ceil(chars / 2);
+  const bytes = new TextEncoder().encode(evidenceText(evidence) + evidence.question).length;
+  return 2 * (bytes + 2_000);
 }
 
 function evidenceText({
@@ -149,7 +149,9 @@ function evidenceText({
 }
 
 function part(label: string, value: unknown): string {
-  return `${label}:\n${textOf(value).slice(0, EVAL_JUDGE_PART_CHARS)}`;
+  const text = textOf(value);
+  const cut = text.length > EVAL_JUDGE_PART_CHARS;
+  return `${label}:\n${cut ? `${text.slice(0, EVAL_JUDGE_PART_CHARS)}\n(cut)` : text}`;
 }
 
 function textOf(value: unknown): string {

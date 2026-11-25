@@ -108,7 +108,10 @@ test("the turn page shows the action behind the flag, and the pages are under th
       "utf8",
     );
   const page = source("project/[projectId]/traces/turns/[turnId]/page.tsx");
-  assert.match(page, /evalsEnabledForProject\(project\.id\)\) \? \(\s*<SaveAsEvalCase/);
+  assert.match(
+    page,
+    /evalsEnabledForProject\(project\.id\)\) &&\s*!\(await isRestrictedBySupportSession\(\)\) &&\s*\(await contentOptIn\(project\.id\)\);\s*const saveAction = canSave \? \(?\s*<SaveAsEvalCase/,
+  );
   assert.match(source("../(evals)/project/[projectId]/layout.tsx"), /notFound\(\)/);
 });
 
@@ -121,8 +124,6 @@ test("the experiment page shows the raw counts of each case, and links each tria
     state: "done",
     result: "pass",
     reason: null,
-    output: "No.",
-    toolCalls: [{ name: "lookup_order", arguments: {}, result: {}, source: "real" }],
     scorers: [],
     costUsd: 0.01,
     durationMs: 900,
@@ -181,7 +182,10 @@ test("the experiment page shows the raw counts of each case, and links each tria
   }
   assert.match(text, /No refund\s*gating\s*tools ne refund_order/);
   // A judge that could not run shows its reason next to the fail of the trial.
-  assert.match(text, /Trial 2\s*Fail[\s\S]*Not scored\s*Polite\s*gating\s*The judge budget [\s\S]*100 USD/);
+  assert.match(
+    text,
+    /Trial 2\s*Fail[\s\S]*Not scored\s*Polite\s*gating\s*The judge budget [\s\S]*100 USD/,
+  );
   assert.match(html, new RegExp(`traces/${"c".repeat(32)}`));
 });
 

@@ -24,7 +24,8 @@ export function createDecisionJudge(
         baseUrl: resolved.baseUrl,
         feature: EVAL_JUDGE_FEATURE,
         timeoutMs: 10_000,
-        attempts: 2,
+        // The usage of a failed attempt is unknown, so it is not tried again.
+        attempts: 1,
         ...(fetchImpl ? { fetchImpl } : {}),
       });
       return {

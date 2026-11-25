@@ -7,8 +7,10 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { traceTurns } from "@/lib/ledger/schema";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { runIsInEvalSet } from "@/lib/views/task-evals/run-to-test";
 import { loadTurnDetail } from "@/lib/views/traces/turn-detail";
@@ -72,9 +74,11 @@ export default async function TurnTracePage({
         { operation: "trace_turn_test" },
       )
     : null;
-  const saveAction = (await evalsEnabledForProject(project.id)) ? (
-    <SaveAsEvalCase projectId={project.id} turnId={turnId} />
-  ) : null;
+  const canSave =
+    (await evalsEnabledForProject(project.id)) &&
+    !(await isRestrictedBySupportSession()) &&
+    (await contentOptIn(project.id));
+  const saveAction = canSave ? <SaveAsEvalCase projectId={project.id} turnId={turnId} /> : null;
   const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
   const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (

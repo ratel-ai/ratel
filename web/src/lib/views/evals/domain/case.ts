@@ -14,6 +14,11 @@ const MAX_NAME_CHARS = 200;
 const MAX_LABELS = 20;
 const MAX_QUESTION_CHARS = 5_000;
 const MAX_SCORERS = 50;
+/** The judges of a trial run at the same time, and each one costs a call. */
+const MAX_JUDGES = 5;
+export const MAX_LIST = 200;
+/** The tool names that a sandbox can declare. */
+export const TOOL_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
 export const MAX_CONTENT_CHARS = 256 * 1024;
 
 const checkSchema = z
@@ -50,7 +55,7 @@ const caseScorerSchema = z.object({
 export type CaseScorer = z.infer<typeof caseScorerSchema>;
 
 const toolFixtureSchema = z.object({
-  tool: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/),
+  tool: z.string().regex(TOOL_NAME),
   // JSON has no undefined: a fixture that the runner can match needs both.
   arguments: z.unknown().transform((value) => value ?? null),
   result: z.unknown().transform((value) => value ?? null),
@@ -63,8 +68,8 @@ export type EarlierTurn = z.infer<typeof earlierTurnSchema>;
 export const caseContentSchema = z
   .object({
     input: z.unknown().transform((value) => value ?? null),
-    earlierTurns: z.array(earlierTurnSchema).max(200).default([]),
-    toolFixtures: z.array(toolFixtureSchema).max(200).default([]),
+    earlierTurns: z.array(earlierTurnSchema).max(MAX_LIST).default([]),
+    toolFixtures: z.array(toolFixtureSchema).max(MAX_LIST).default([]),
     expectedOutput: z.string().nullable().default(null),
     scorers: z
       .array(caseScorerSchema)
@@ -72,6 +77,11 @@ export const caseContentSchema = z
       .refine(
         (scorers) => new Set(scorers.map(({ id }) => id)).size === scorers.length,
         "two scorers have the same id",
+      )
+      .refine(
+        (scorers) =>
+          scorers.filter(({ definition }) => definition.kind === "judge").length <= MAX_JUDGES,
+        `a case has at most ${MAX_JUDGES} judges`,
       )
       .default([]),
   })
