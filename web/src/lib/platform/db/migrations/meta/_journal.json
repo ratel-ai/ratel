@@ -365,6 +365,13 @@
       "when": 1795605245027,
       "tag": "0051_eval_baselines",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1795613545500,
+      "tag": "0052_sandbox_instances",
+      "breakpoints": true
     }
   ]
 }

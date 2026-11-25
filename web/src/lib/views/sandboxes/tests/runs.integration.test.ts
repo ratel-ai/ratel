@@ -533,3 +533,46 @@ test("a run token reads as a key that was used", async () => {
   const key = await find(hashApiKey(t.envOf().RATEL_RUN_TOKEN ?? ""));
   assert.ok(key?.lastUsedAt, "each run would count as the first trace of a key");
 });
+
+test("the instances of a deleted project are stopped by the sweep", async () => {
+  const t = await setup();
+  await t.makeReady();
+  await t.started();
+  await t.started();
+  assert.equal(t.provider.running.size, 2);
+  await t.client.exec(`delete from projects where id = '${PROJECT_ID}'`);
+
+  const broken: SandboxProvider = {
+    ...t.provider,
+    stopInstance: async () => {
+      throw new Error("no answer");
+    },
+  };
+  await sweepRuns({ ...t.deps, provider: broken, organizationIdOf: async () => null });
+  assert.equal(t.provider.running.size, 2);
+  assert.equal((await t.sweep()).stoppedInstances, 2);
+  assert.equal(t.provider.running.size, 0);
+  assert.equal((await t.sweep()).stoppedInstances, 0);
+});
+
+test("an instance that starts after the delete of its project is stopped", async () => {
+  const t = await setup();
+  await t.makeReady();
+  let deleted = false;
+  const provider: SandboxProvider = {
+    ...t.provider,
+    startInstance: async (request) => {
+      const made = await t.provider.startInstance(request);
+      await t.client.exec(`delete from projects where id = '${PROJECT_ID}'`);
+      deleted = true;
+      return made;
+    },
+    stopInstance: async () => {
+      throw new Error("no answer");
+    },
+  };
+  await t.start({ provider });
+  assert.ok(deleted);
+  await t.sweep();
+  assert.equal(t.provider.running.size, 0);
+});
