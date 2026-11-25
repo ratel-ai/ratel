@@ -22,7 +22,7 @@ import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-e
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { getDb } from "@/lib/platform/db/client";
 import { incrementEventUsage } from "@/lib/platform/entitlements";
-import { getOrganizationById } from "@/lib/platform/organizations";
+import { getOrganizationById, type Organization } from "@/lib/platform/organizations";
 import { getProjectById, touchApiKeyAt } from "@/lib/platform/projects/queries";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { enqueueClusterIntentsJob } from "@/lib/readings/intent-engine/jobs";
@@ -83,7 +83,12 @@ export function configuredHandler(replay?: ReplayDeps): EnvelopeHandler {
   return createEnvelopeHandler({
     findProject: async (projectId) => {
       const project = await getProjectById(projectId);
-      return project && { organization: await getOrganizationById(project.organizationId) };
+      if (!project) return null;
+      // A replay runs outside the edition, which owns organizations: the meter asks for the id only.
+      const organization = replay
+        ? ({ id: project.organizationId } as Organization)
+        : await getOrganizationById(project.organizationId);
+      return { organization };
     },
     traces: (envelope, context) =>
       processTraces(envelope, context, {
