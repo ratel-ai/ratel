@@ -176,9 +176,9 @@ test("the Summary row: rate, change and trend, recovered, the tool the agent cor
     name: "update_task",
     events: 14,
     mainKind: "Retried after an error",
-    href: "/project/11111111-1111-4111-8111-111111111111/health/self-corrections?tool=update_task",
+    href: "/project/11111111-1111-4111-8111-111111111111/self-corrections?tool=update_task",
   });
-  assert.equal(card.href, "/project/11111111-1111-4111-8111-111111111111/health/self-corrections");
+  assert.equal(card.href, "/project/11111111-1111-4111-8111-111111111111/self-corrections");
   assert.equal(card.trend?.values.length, 7, "a day per bucket");
   assert.equal(
     card.trend?.values.filter((value) => value !== null).length && true,

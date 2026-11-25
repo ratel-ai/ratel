@@ -1,31 +1,15 @@
-"use client";
-
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Skeleton } from "@ratel/design-system/states";
-import { useParams } from "next/navigation";
 import { SELF_CORRECTIONS_DESCRIPTION } from "@/components/console/self-corrections/copy";
-import { useFocusedConsole } from "@/components/console/shell/focused-console-context";
-import { agentHealthHref } from "@/lib/readings/trace-signals/view";
 
 /**
- * The page's layout while it loads: the same header (crumb included, so the
- * title does not move when the data lands), the hero, the three short lists
+ * The page's layout while it loads: the same header, the hero, the three short lists
  * of where it happens, and the phrases beside their examples.
  */
 export function SelfCorrectionsSkeleton() {
-  const params = useParams<{ projectId?: string }>();
-  // A page of its own with `focusedConsole`: no crumb.
-  const topLevel = useFocusedConsole();
-  const projectId = !topLevel && typeof params?.projectId === "string" ? params.projectId : null;
   return (
     <Page>
-      <PageHeader
-        title="Self-corrections"
-        crumbs={
-          projectId ? [{ label: "Agent health", href: agentHealthHref(projectId) }] : undefined
-        }
-        description={SELF_CORRECTIONS_DESCRIPTION}
-      />
+      <PageHeader title="Self-corrections" description={SELF_CORRECTIONS_DESCRIPTION} />
       <PageBody>
         <div
           aria-hidden

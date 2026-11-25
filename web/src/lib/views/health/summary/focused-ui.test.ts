@@ -18,7 +18,7 @@ import { pendingHealthModel } from "@/lib/views/health/page-model";
 import { render, visibleText } from "@/lib/views/tasks/test-support";
 import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
 
-/** Agent health with `focusedConsole`: the score and its four categories, in every state. */
+/** Agent health: the score and its four categories, in every state. */
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";
 const PILLARS: PillarReading[] = [
@@ -62,10 +62,8 @@ const REMOVED = [
   "Open issues",
 ];
 
-type Props = Omit<SummaryViewProps, "corrections">;
-
-function page(over: Partial<Props> = {}, search = ""): string {
-  const props: Props = {
+function page(over: Partial<SummaryViewProps> = {}, search = ""): string {
+  const props: SummaryViewProps = {
     projectId: PROJECT,
     projectName: "Site Copilot",
     model: MODEL,

@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PathParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
@@ -10,9 +9,7 @@ import { HistoryBody } from "@/components/console/home/focused/HistoryDialog";
 import type { LayoutActions } from "@/components/console/home/focused/OverviewLayout";
 import { offeredTo } from "@/components/console/home/focused/widgets";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
-import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
-import { FocusedConsoleProvider } from "@/components/console/shell/focused-console-context";
-import { TOUR_STEPS, tourSteps } from "@/lib/console/onboarding/tour-steps";
+import { TOUR_STEPS } from "@/lib/console/onboarding/tour-steps";
 import {
   HEALTH_SCORE_VERSION,
   healthScoreView,
@@ -39,7 +36,7 @@ import { topologyModel } from "@/lib/views/project-entities/topology";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import { findDsViolations } from "../../../../eslint-rules/ds-tokens.mjs";
 
-/** The recap Overview (`focusedConsole`): what it reads, and every state it draws. */
+/** The recap Overview: what it reads, and every state it draws. */
 
 const NOW = new Date("2026-11-24T12:00:00.000Z");
 const AT = new Date("2026-11-24T11:00:00.000Z");
@@ -499,32 +496,7 @@ test("each failed read costs its own part only", async () => {
   }
 });
 
-test("the Self-corrections skeleton has the crumb only where the page has one", () => {
-  const skeleton = (on: boolean) =>
-    visibleText(
-      render(
-        createElement(
-          PathParamsContext.Provider,
-          { value: { projectId: PROJECT_ID } },
-          createElement(
-            FocusedConsoleProvider,
-            { value: on },
-            createElement(SelfCorrectionsSkeleton),
-          ),
-        ),
-      ),
-    );
-  assert.doesNotMatch(skeleton(true), /Agent health/);
-  assert.match(skeleton(false), /Agent health/);
-});
-
-test("the skeleton and the tour say the recap with the flag, today's Overview without", () => {
-  const skeleton = (on: boolean) =>
-    render(createElement(FocusedConsoleProvider, { value: on }, createElement(OverviewSkeleton)));
-  assert.match(skeleton(true), /data-skeleton="focused"/);
-  assert.doesNotMatch(skeleton(false), /data-skeleton="focused"/);
-  assert.equal(render(createElement(OverviewSkeleton)), skeleton(false));
-  assert.equal(tourSteps(false), TOUR_STEPS);
-  assert.match(tourSteps(true)[0].body, /Edit to add, remove, move and resize the widgets/);
-  assert.deepEqual(tourSteps(true).slice(1), TOUR_STEPS.slice(1));
+test("the skeleton and the tour say the recap", () => {
+  assert.match(render(createElement(OverviewSkeleton)), /data-skeleton="recap"/);
+  assert.match(TOUR_STEPS[0].body, /Edit to add, remove, move and resize the widgets/);
 });

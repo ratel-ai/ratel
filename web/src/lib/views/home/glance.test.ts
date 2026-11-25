@@ -2,17 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Fix } from "@/lib/views/fixes/types";
 import {
-  type SelfCorrectionsCardModel,
-  unavailableSelfCorrectionsCard,
-} from "@/lib/views/health/self-corrections/card";
-import {
+  applicableDescriptions,
   descriptionsHref,
-  type FixesSlice,
-  fixesGlance,
   type IntentsRead,
   intentsGlance,
   READ_FAILED,
-  selfCorrectionsGlance,
   tasksGlance,
 } from "@/lib/views/home/glance";
 import type { TaskListModel, TaskRow } from "@/lib/views/tasks/model";
@@ -163,75 +157,15 @@ test("tasks that all finish have no weakest; the states before a reading say why
   assert.deepEqual([blocked.state, blocked.blocked], ["blocked", "mixed_runs"]);
 });
 
-test("self-corrections read Agent health's card: the rate, its change and the tool after which most happen", () => {
-  const card: SelfCorrectionsCardModel = {
-    state: "ready",
-    windowDays: 7,
-    rate: {
-      label: "Per 100 turns",
-      value: "18.4",
-      hint: "",
-      delta: { value: "+1.2", direction: "up", good: false, label: "vs the 7 days before" },
-    },
-    events: 46,
-    turns: 250,
-    topTool: {
-      node: "tool:search_docs",
-      entryId: "search_docs",
-      entryKind: "tool",
-      name: "search_docs",
-      events: 20,
-      mainKind: "Retried",
-      href: "/project/p1/health/self-corrections?tool=search_docs",
-    },
-    href: "/project/p1/health/self-corrections",
-    trend: null,
-    recovered: null,
-    recoveredShare: null,
-    topPhrase: null,
-    phrasesCaptured: false,
-  };
-  assert.deepEqual(selfCorrectionsGlance(card), {
-    state: "ready",
-    href: "/project/p1/health/self-corrections",
-    windowDays: 7,
-    value: "18.4",
-    delta: { value: "+1.2", direction: "up", good: false, label: "vs the 7 days before" },
-    events: 46,
-    topTool: "search_docs",
-  });
-  const failed = selfCorrectionsGlance(unavailableSelfCorrectionsCard(P, 7));
-  assert.equal(failed.state, "unavailable");
-  assert.equal(failed.topTool, null);
-  assert.equal(failed.delta, undefined);
-});
-
-test("fixes: how many are ready, and how many description updates Ratel can apply, the count Needs attention shows", () => {
-  const fix = (id: string, kind: Fix["kind"], apply = false) =>
-    ({ id, kind, actions: { apply } }) as Fix;
-  const slice: FixesSlice = {
-    open: [
-      fix("rewrite:1", "rewrite", true),
-      fix("rewrite:2", "rewrite", true),
-      fix("craft:2", "rewrite"),
-      fix("craft:3", "combine"),
-    ],
+test("fixes: the description updates Ratel can apply, plan included", () => {
+  const fix = (id: string, apply: boolean) => ({ id, actions: { apply } }) as Fix;
+  const fixes = {
+    open: [fix("a", true), fix("b", false), fix("c", true)],
     applied: [],
     rewritesOn: true,
   };
-  assert.deepEqual(fixesGlance(P, slice), {
-    state: "ready",
-    href: "/project/p1/improvement/fixes",
-    open: 4,
-    descriptions: 2,
-    descriptionsPageHref: "/project/p1/quality/descriptions",
-  });
-  assert.equal(
-    fixesGlance(P, { ...slice, rewritesOn: false }).descriptions,
-    0,
-    "none to apply when the plan has no rewrites",
-  );
-  assert.equal(fixesGlance(P, null).state, "failed");
+  assert.equal(applicableDescriptions(fixes), 2);
+  assert.equal(applicableDescriptions({ ...fixes, rewritesOn: false }), 0);
 });
 
 test("Quality › Descriptions takes a tool or an open rewrite", () => {

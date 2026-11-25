@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
-import { agentToolCount, assembleOperations } from "@/lib/mcp/operations";
 import {
   defaultOverviewDeps,
-  focusedConsoleForCaller,
   mcpLayoutReader,
   type OverviewOperationDeps,
   overviewOperations,
@@ -37,7 +34,7 @@ import {
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
 import { webLayoutReader } from "@/lib/views/overview-layout/readers";
-import { overviewLayoutChanges, overviewLayouts } from "@/lib/views/overview-layout/schema";
+import { overviewLayouts } from "@/lib/views/overview-layout/schema";
 
 /** The Overview over MCP, against a database: one person's layout and one set of numbers with the web. */
 
@@ -79,7 +76,6 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
         ? { ...PROJECT, organizationId: ORGANIZATION_ID }
         : null) as unknown as OverviewOperationDeps["getProject"],
     getOrganization: async () => ORGANIZATION,
-    focusedConsole: async () => true,
     entitiesLinked: async () => true,
     loadOverview: (input) => loadFocusedOverview({ ...input, db }),
     layoutStore: store,
@@ -577,50 +573,4 @@ test("a drawing that fails does not make a saved change look refused", async () 
       (w: { id: string; removed: boolean }) => w.id === "topology" && w.removed,
     ),
   );
-});
-
-test("the flag off is off with the experimental features on", async () => {
-  const focused = (organization: { id: string }) =>
-    focusedConsoleEnabled(organization, {
-      flags: { focusedConsole: false },
-      experimentalFeatures: true,
-    } as never);
-  assert.equal(await focusedConsoleForCaller(ANA, focused), false);
-  const { call } = await setup({ focusedConsole: focused });
-  for (const widget of [undefined, ...OVERVIEW_WIDGETS])
-    assert.deepEqual(refusal(await call("get_overview", widget ? { widget } : {})), [
-      "forbidden",
-      "focused_console_off",
-    ]);
-});
-
-test("the flag off: neither operation is listed, and a project whose organization has it off refuses", async () => {
-  const ids = (focusedConsole: boolean) =>
-    assembleOperations({ focusedConsole }).map(({ id }) => id);
-  const calls = [
-    ["get_overview", {}],
-    ["change_overview_layout", { change: "reset" }],
-    ["list_overview_changes", {}],
-    ["undo_overview_change", { revision: "0.0" }],
-    ["restore_overview_layout", { changeId: 1, revision: "0.0" }],
-  ] as const;
-  for (const [id] of calls) {
-    assert.ok(!ids(false).includes(id));
-    assert.ok(ids(true).includes(id));
-  }
-  assert.ok(ids(false).includes("get_project_overview"), "it stays");
-  assert.equal(agentToolCount({ focusedConsole: true }), agentToolCount() + calls.length);
-
-  const { call, db } = await setup({ focusedConsole: async () => false });
-  for (const [id, params] of calls)
-    assert.deepEqual(refusal(await call(id, params)), ["forbidden", "focused_console_off"], id);
-  assert.deepEqual(await db.select().from(overviewLayoutChanges), [], "no row");
-});
-
-test("a connection lists the tools when one of its organizations has the flag", async () => {
-  const on = async ({ id }: { id: string }) => id === ORGANIZATION_ID;
-  assert.equal(await focusedConsoleForCaller(KEY, on), true);
-  assert.equal(await focusedConsoleForCaller(ANA, on), true);
-  assert.equal(await focusedConsoleForCaller({ ...KEY, organization: null }, on), false);
-  assert.equal(await focusedConsoleForCaller(ANA, async () => false), false);
 });

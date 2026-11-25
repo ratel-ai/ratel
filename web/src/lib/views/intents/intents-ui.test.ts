@@ -515,7 +515,7 @@ test("an intent's panel: numbers as marks, examples read on open, tasks and tool
     /6 in 5 asks Retried 4 Asked again 2/,
     "self-corrections, each kind as a badge",
   );
-  assert.match(html, /href="\/project\/p1\/health\/self-corrections\?topic=t_order"/);
+  assert.match(html, /href="\/project\/p1\/self-corrections\?topic=t_order"/);
   assert.match(html, /href="\/project\/p1\/improvement\/fixes\?topic=t_order"/);
   assert.match(html, /href="\/project\/p1\/intents\/flows\?start=t_order"/);
   assertNoNameInAttributes(html);

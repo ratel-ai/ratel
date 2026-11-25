@@ -1,5 +1,4 @@
-import { and, eq, gt, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
-import { traceTurns } from "@/lib/ledger/schema";
+import { and, eq, gt, sql } from "drizzle-orm";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import { traceTopicInsights, traceTopics } from "@/lib/readings/topics/schema";
 import { TOPIC_INSIGHTS_VERSION } from "@/lib/readings/topics/types";
@@ -128,48 +127,4 @@ export async function readTasks(db: BoundReadDb, projectId: string): Promise<Tas
       : [],
   );
   return { list, steps };
-}
-
-/** Clock slack around a run when looking up its turn: a turn ends with its last step, inside its trace. */
-const RUN_SLACK_MS = 60_000;
-/** A turn built from one OpenTelemetry trace is keyed by it (`turns/segment.ts`). */
-const OTLP_TURN_PREFIX = "otlp:";
-
-/**
- * The task each run was placed in, by trace id, for runs sent as
- * OpenTelemetry (each trace is one turn, keyed `otlp:<trace id>`). Runs from
- * the SDK, and runs no task holds, are left out. One range scan on closed
- * turns between the runs' first start and last end.
- */
-export async function readRunTasks(
-  db: BoundReadDb,
-  projectId: string,
-  runs: readonly { traceId: string; startedAt: Date; endedAt: Date }[],
-): Promise<Map<string, string>> {
-  if (runs.length === 0) return new Map();
-  const from = Math.min(...runs.map((run) => run.startedAt.getTime())) - RUN_SLACK_MS;
-  const to =
-    Math.max(...runs.map((run) => Math.max(run.endedAt.getTime(), run.startedAt.getTime()))) +
-    RUN_SLACK_MS;
-  const rows = await db
-    .select({ key: traceTurns.turnKey, task: traceTurns.workflowId })
-    .from(traceTurns)
-    .where(
-      and(
-        eq(traceTurns.projectId, projectId),
-        eq(traceTurns.status, "closed"),
-        gte(traceTurns.endedAt, new Date(from)),
-        lte(traceTurns.endedAt, new Date(to)),
-        inArray(
-          traceTurns.turnKey,
-          runs.map((run) => `${OTLP_TURN_PREFIX}${run.traceId}`),
-        ),
-        isNotNull(traceTurns.workflowId),
-      ),
-    );
-  return new Map(
-    rows.flatMap((row) =>
-      row.task ? [[row.key.slice(OTLP_TURN_PREFIX.length), row.task] as const] : [],
-    ),
-  );
 }

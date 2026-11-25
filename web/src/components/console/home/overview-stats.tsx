@@ -4,10 +4,8 @@ import type { ReactNode } from "react";
 import { fmtCost } from "@/lib/platform/format";
 import { formatSharePercent } from "@/lib/readings/trace-signals/claims";
 import { formatDuration } from "@/lib/synthesis/traces/format";
-import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
 import { CONTEXT_PEEK } from "@/lib/views/home/context-peek";
 import type { MetricsData } from "@/lib/views/home/focused-load";
-import type { OverviewData } from "@/lib/views/home/load";
 import {
   type Change,
   compactCount,
@@ -29,8 +27,8 @@ import {
  * window: its numbers come from those events, and the trace-only ones (runs,
  * duration, spend) would only read as zero.
  */
-export function isSdkOnly(data: Pick<OverviewData, "traces" | "sdk">): boolean {
-  if (!data.sdk || (data.traces?.count ?? 0) > 0) return false;
+function isSdkOnly(data: Pick<MetricsData, "traces" | "sdk">): boolean {
+  if (!data.sdk || data.traces.count > 0) return false;
   const { searches, toolCalls, skillRuns } = data.sdk.current;
   return searches + toolCalls + skillRuns > 0;
 }
@@ -55,7 +53,7 @@ function spark(values: readonly (number | null)[], label: string): ReactNode {
 }
 
 /** The right tool in the top 5 (first try on older readings), from Agent health, once it has a reading; null before. */
-function firstTryStat(data: Pick<OverviewData, "health" | "window">): StatProps | null {
+function firstTryStat(data: Pick<MetricsData, "health" | "window">): StatProps | null {
   const health = data.health;
   const tile = health?.firstTry;
   if (!health || !tile || tile.value === null) return null;
@@ -77,29 +75,10 @@ function firstTryStat(data: Pick<OverviewData, "health" | "window">): StatProps 
   };
 }
 
-/** Runs, first try (or failures), median duration and spend, each with its change and its days. */
-export function overviewStats(data: OverviewData, traces: TraceAggregateSummary): StatProps[] {
-  return stats(data, traces, firstTryStat(data));
-}
-
-/** The recap Overview's: runs, failed runs, median duration and spend. The Health score has its own widget. */
+/** Runs, failed runs, median duration and spend, each with its change and its days. The Health score has its own widget. */
 export function focusedStats(data: MetricsData): StatProps[] {
-  return stats(data, data.traces, null);
-}
-
-type StatsData = Pick<
-  OverviewData,
-  "root" | "rangeParam" | "window" | "previous" | "series" | "daily" | "sdk" | "health" | "traces"
->;
-
-/** `quality` in place of the failed runs. */
-function stats(
-  data: StatsData,
-  traces: TraceAggregateSummary,
-  quality: StatProps | null,
-): StatProps[] {
   if (isSdkOnly(data) && data.sdk) return sdkStats(data, data.sdk);
-  const { previous, root, rangeParam, window, daily } = data;
+  const { traces, previous, root, rangeParam, window, daily } = data;
   const versus = `vs the same time ${window} days earlier`;
   const tracesHref = `${root}/traces?range=${rangeParam}`;
   const hasRuns = traces.count > 0;
@@ -150,7 +129,7 @@ function stats(
     peek: CONTEXT_PEEK,
   };
 
-  return [runs, quality ?? failed, duration, spend];
+  return [runs, failed, duration, spend];
 }
 
 /**
@@ -158,7 +137,7 @@ function stats(
  * first try when Agent health has a reading, tool calls (or skill runs).
  * Duration and spend need traces, so they are left out rather than shown as 0.
  */
-function sdkStats(data: StatsData, sdk: NonNullable<OverviewData["sdk"]>): StatProps[] {
+function sdkStats(data: MetricsData, sdk: NonNullable<MetricsData["sdk"]>): StatProps[] {
   const { root, rangeParam, window } = data;
   const versus = `vs the same time ${window} days earlier`;
   const eventsHref = `${root}/traces/logs?range=${rangeParam}`;

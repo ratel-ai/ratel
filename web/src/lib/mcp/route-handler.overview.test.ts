@@ -5,7 +5,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { createMcpRouteHandler } from "@/lib/mcp/route-handler";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 
-/** What a client is told exists, with `focusedConsole` on and off for it. */
+/** What a client is told of the Overview. */
 
 const auth: McpAuthContext = {
   kind: "api-key",
@@ -34,7 +34,7 @@ const catalog = buildMcpAppCatalog(
   new Set([...TOOLS, "get_agent_health"]),
 );
 
-async function call(on: boolean, method: string, params: unknown = {}) {
+async function call(method: string) {
   const limiter = () => createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 });
   const handler = createMcpRouteHandler({
     authenticate: async () => ({ ok: true, auth }),
@@ -44,14 +44,13 @@ async function call(on: boolean, method: string, params: unknown = {}) {
     trackServerEvent: (async () => undefined) as never,
     launchAccess: async () => true,
     mcpApps: async () => true,
-    focusedConsole: async () => on,
     appCatalog: () => catalog,
   });
   const response = await handler(
     new Request("https://cloud.ratel.sh/api/mcp", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: "Bearer rtl_test" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: {} }),
     }),
   );
   return (await response.json()) as {
@@ -69,8 +68,8 @@ async function call(on: boolean, method: string, params: unknown = {}) {
   };
 }
 
-test("on, the tools are listed, with the widgets, and each has the view", async () => {
-  const { tools } = (await call(true, "tools/list")).result;
+test("the tools are listed, with the widgets, and each has the view", async () => {
+  const { tools } = (await call("tools/list")).result;
   const named = (name: string) => tools.find((tool) => tool.name === name);
   for (const tool of TOOLS)
     assert.deepEqual(named(tool)?._meta?.ui, { resourceUri: "ui://ratel/overview" }, tool);
@@ -85,20 +84,6 @@ test("on, the tools are listed, with the widgets, and each has the view", async 
     "health",
     "attention",
   ]);
-  const { resources } = (await call(true, "resources/list")).result;
+  const { resources } = (await call("resources/list")).result;
   assert.ok(resources.some(({ uri }) => uri === "ui://ratel/overview"));
-});
-
-test("off, no tool and no view of it exists", async () => {
-  const { tools } = (await call(false, "tools/list")).result;
-  assert.ok(!tools.some(({ name }) => TOOLS.includes(name)));
-  const { resources } = (await call(false, "resources/list")).result;
-  assert.deepEqual(
-    resources.map(({ uri }) => uri),
-    ["ui://ratel/health"],
-  );
-  for (const name of TOOLS) {
-    const reply = await call(false, "tools/call", { name, arguments: { change: "reset" } });
-    assert.ok(reply.error || reply.result.isError, name);
-  }
 });

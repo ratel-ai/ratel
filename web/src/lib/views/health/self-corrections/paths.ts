@@ -33,12 +33,27 @@ export function selfCorrectionsHref(
   options: { days?: WindowDays; filters?: Partial<SelfCorrectionFilters> } = {},
 ): string {
   const filters = { ...NO_FILTERS, ...options.filters };
-  return withQuery(`${root(projectId)}/health/self-corrections`, {
+  return withQuery(`${root(projectId)}/self-corrections`, {
     days: options.days && options.days !== DEFAULT_WINDOW_DAYS ? String(options.days) : null,
     tool: filters.tool,
     task: filters.task,
     topic: filters.topic,
   });
+}
+
+/** This page for a visit to its old address under Agent health: the whole query moves along. */
+export function movedSelfCorrectionsHref(
+  projectId: string,
+  query: Readonly<Record<string, string | readonly string[] | undefined>>,
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item !== undefined) search.append(key, item);
+    }
+  }
+  const path = selfCorrectionsHref(projectId);
+  return search.size > 0 ? `${path}?${search}` : path;
 }
 
 /** A task's page (Agent health, Tasks). */

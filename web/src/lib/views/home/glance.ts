@@ -1,18 +1,13 @@
 import type { TaskColorSlot } from "@ratel/design-system/task-colors";
 import { projectRoot } from "@/lib/console/navigation";
-import { fixHref } from "@/lib/views/fixes/href";
 import type { FixesModel } from "@/lib/views/fixes/types";
-import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { mostlyUnanswered } from "@/lib/views/intents/topics-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
 import { taskHref, tasksHref, topicHref } from "@/lib/views/tasks/paths";
 
 /**
- * The one product at a glance (DESIGN.md, The product's nouns): what people
- * want (Intents), what the agent does for it (Tasks), where it goes back on
- * itself (Self-corrections) and what to change (Fixes). One tile each: one
- * number, one line, a pin. Each tile reads its numbers the way its own page
- * does, so the Overview and the page never disagree. Pure.
+ * Intents, tasks and fixes as "Needs attention" reads them, the way each one's own page does, so
+ * the Overview and the page never disagree. Pure.
  *
  * PRIVACY: intent and task names are written from people's asks. They are
  * text only; links and keys carry ids.
@@ -171,33 +166,6 @@ export function tasksGlance(projectId: string, read: GlanceRead<TasksRead>): Tas
   };
 }
 
-/* - Self-corrections ------------------------------------------------------------ */
-
-export interface SelfCorrectionsGlance {
-  state: SelfCorrectionsCardModel["state"];
-  href: string;
-  windowDays: number;
-  /** Per 100 turns, formatted ("18.4"). */
-  value: string;
-  delta: SelfCorrectionsCardModel["rate"]["delta"];
-  events: number;
-  /** The tool the agent corrects itself after most. */
-  topTool: string | null;
-}
-
-/** Agent health's Self-corrections card, read as a tile. */
-export function selfCorrectionsGlance(card: SelfCorrectionsCardModel): SelfCorrectionsGlance {
-  return {
-    state: card.state,
-    href: card.href,
-    windowDays: card.windowDays,
-    value: card.rate.value,
-    delta: card.state === "ready" ? card.rate.delta : undefined,
-    events: card.events,
-    topTool: card.state === "ready" && card.events > 0 ? (card.topTool?.name ?? null) : null,
-  };
-}
-
 /* - Fixes --------------------------------------------------------------------- */
 
 /**
@@ -218,40 +186,7 @@ export function descriptionsHref(
 /** What the Overview reads of Fixes. */
 export type FixesSlice = Pick<FixesModel, "open" | "applied" | "rewritesOn">;
 
-export interface FixesGlance {
-  state: "ready" | "failed";
-  href: string;
-  /** Open fixes: changes ready to make. */
-  open: number;
-  /** Of those, description updates Cloud can apply now: the count Needs attention shows (`applicableDescriptions`). */
-  descriptions: number;
-  /** Where description updates are made: Quality › Descriptions (every other fix is on Fixes). */
-  descriptionsPageHref: string;
-}
-
-/** Description updates Cloud can apply now, plan included; the Fixes tile and Needs attention both show this. */
+/** Description updates Cloud can apply now, plan included: the count Needs attention shows. */
 export function applicableDescriptions(fixes: FixesSlice): number {
   return fixes.rewritesOn ? fixes.open.filter((fix) => fix.actions.apply).length : 0;
-}
-
-export function fixesGlance(projectId: string, fixes: FixesSlice | null): FixesGlance {
-  const href = fixHref(projectId);
-  const descriptionsPageHref = descriptionsHref(projectId);
-  if (!fixes) return { state: "failed", href, open: 0, descriptions: 0, descriptionsPageHref };
-  return {
-    state: "ready",
-    href,
-    open: fixes.open.length,
-    descriptions: applicableDescriptions(fixes),
-    descriptionsPageHref,
-  };
-}
-
-/* - All four ------------------------------------------------------------------ */
-
-export interface Glance {
-  intents: IntentsGlance;
-  tasks: TasksGlance;
-  selfCorrections: SelfCorrectionsGlance;
-  fixes: FixesGlance;
 }

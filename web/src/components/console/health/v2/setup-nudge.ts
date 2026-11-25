@@ -25,3 +25,8 @@ export function nudgeShown(nudge: CaptureNudgeInput | null): nudge is CaptureNud
   if (!nudge || nudge.unlocks.length === 0) return false;
   return nudge.mode === "otel" || nudge.captureLevel !== "content";
 }
+
+/** What capture adds to this page: not the order tools are called in, which only a share link shows. */
+export function pageUnlocks(unlocks: readonly CaptureUnlock[]): readonly CaptureUnlock[] {
+  return unlocks.filter(({ key }) => key !== "otel_conversation_id");
+}

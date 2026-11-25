@@ -18,7 +18,7 @@ import { analysisPending, type SectionProgress } from "@/lib/views/freshness/mod
 import type { SelfCorrectionsPageModel } from "@/lib/views/health/self-corrections/page-model";
 
 /**
- * Self-corrections (Agent health): how often the agent goes back on itself,
+ * Self-corrections (Insights): how often the agent goes back on itself,
  * where, what it said, and what to change, for a calm read top to bottom:
  * the hero (per 100 turns with its trend and three small figures), where it
  * happens (tools, tasks and intents as pins), what the agent said (top
@@ -36,7 +36,6 @@ export function SelfCorrectionsView({
   now,
   actions = {},
   progress = null,
-  topLevel = false,
 }: {
   model: SelfCorrectionsPageModel;
   /** The time windows the plan allows, as links. */
@@ -49,16 +48,11 @@ export function SelfCorrectionsView({
   actions?: Readonly<Record<string, FixAction>>;
   /** Where the readings behind this page stand (RC-210); null reads as idle. */
   progress?: SectionProgress | null;
-  /** The page stands in Insights (`focusedConsole`), not under Agent health. */
-  topLevel?: boolean;
 }) {
   return (
     <Page>
       <PageHeader
         title="Self-corrections"
-        crumbs={
-          topLevel ? undefined : [{ label: "Agent health", href: agentHealthHref(model.projectId) }]
-        }
         description={SELF_CORRECTIONS_DESCRIPTION}
         actions={
           <>
@@ -104,7 +98,7 @@ function Body({
     case "unavailable":
       return (
         <Callout tone="danger" title="Couldn't load self-corrections">
-          Try again in a moment. The rest of Agent health still works.
+          Try again in a moment. The other pages still work.
         </Callout>
       );
     case "not_read":

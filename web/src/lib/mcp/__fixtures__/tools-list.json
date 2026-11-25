@@ -73,6 +73,76 @@
     }
   },
   {
+    "name": "get_overview",
+    "title": "Get the Overview",
+    "description": "Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. Give widget to read only that widget, also if it is removed from the Overview. Without widget, a removed widget has no data. With an API key, the layout is the default. Example: {\"widget\": \"health\", \"range\": \"30d\"}.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "widget": {
+          "enum": [
+            "metrics",
+            "topology",
+            "health",
+            "attention"
+          ],
+          "description": "The widget to read. Without it, the result is the whole Overview.",
+          "type": "string"
+        },
+        "range": {
+          "default": "7d",
+          "description": "The window of the data: 7 days or 30 days.",
+          "type": "string",
+          "enum": [
+            "7d",
+            "30d"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get the Overview",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_overview_changes",
+    "title": "List the changes of the Overview layout",
+    "description": "Lists the last 25 changes of the signed-in person's Overview layout in one project, newest first. Each change has an ID, its time, where the person made it (web or an MCP client), what changed and the layout after it. The result has the revision that undo_overview_change and restore_overview_layout need. A person reads only their own changes. An API key has no changes.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "List the changes of the Overview layout",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
     "name": "list_skills",
     "title": "List skills",
     "description": "Ratel skills in the project catalog with their status, tags, and a preview of the body. Filter by status or end user, search by name or description, sort by name, runs or last update. Use get_skill for a full body.",
@@ -1781,7 +1851,7 @@
   {
     "name": "get_agent_health",
     "title": "Get agent health",
-    "description": "The Agent health page for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
+    "description": "Agent health for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4480,6 +4550,157 @@
     },
     "_meta": {
       "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "change_overview_layout",
+    "title": "Change the Overview layout",
+    "description": "Changes the Overview layout of the signed-in person in one project. Other people keep their layouts. The grid has 12 columns. Call get_overview first to read the layout. An API key cannot change a layout. Example: {\"change\": \"move\", \"widget\": \"attention\", \"x\": 0, \"y\": 0}.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "change": {
+          "type": "string",
+          "enum": [
+            "move",
+            "resize",
+            "add",
+            "remove",
+            "reset"
+          ],
+          "description": "move needs widget, x and y. resize needs widget, w and h. add and remove need widget. reset restores the default layout and needs no other parameter."
+        },
+        "widget": {
+          "description": "The widget to change.",
+          "type": "string",
+          "enum": [
+            "metrics",
+            "topology",
+            "health",
+            "attention"
+          ]
+        },
+        "x": {
+          "description": "The first column of the widget. Column 0 is the left column.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "y": {
+          "description": "The first row of the widget. Row 0 is the top row. The other widgets make room.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "w": {
+          "description": "The width in columns. Each widget has a minimum width.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "h": {
+          "description": "The height in rows. Each widget has a minimum height.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "revision": {
+          "description": "The revision of the layout that you read. If the layout changed after that, the call changes nothing. Without it, the change applies to the latest layout.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "change"
+      ]
+    },
+    "annotations": {
+      "title": "Change the Overview layout",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "undo_overview_change",
+    "title": "Undo the latest change of the Overview layout",
+    "description": "Takes back the latest change of the signed-in person's Overview layout in one project that is not taken back yet. Call it again to go further back. The undo is a new change in the history, so nothing is lost. Call list_overview_changes or get_overview first to read the revision. An API key cannot undo.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "revision": {
+          "type": "string",
+          "description": "The revision of the layout that you read. If the layout changed after that, the call changes nothing."
+        }
+      },
+      "required": [
+        "revision"
+      ]
+    },
+    "annotations": {
+      "title": "Undo the latest change of the Overview layout",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "restore_overview_layout",
+    "title": "Restore an earlier Overview layout",
+    "description": "Restores the signed-in person's Overview layout in one project to the layout after one change in the history. The restore is a new change in the history, so nothing is lost. Call list_overview_changes first to read the change ID and the revision. An API key cannot restore.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "changeId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The ID of the change, from list_overview_changes."
+        },
+        "revision": {
+          "type": "string",
+          "description": "The revision of the layout that you read. If the layout changed after that, the call changes nothing."
+        }
+      },
+      "required": [
+        "changeId",
+        "revision"
+      ]
+    },
+    "annotations": {
+      "title": "Restore an earlier Overview layout",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
     }
   },
   {

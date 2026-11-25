@@ -67,7 +67,6 @@ function deps(overrides: Partial<AccountOperationDeps> = {}): AccountOperationDe
     now: () => NOW,
     editionToolListed: () => false,
     featureEnabled: async () => false,
-    focusedConsoleEnabled: async () => false,
     ...overrides,
   };
 }
@@ -276,19 +275,13 @@ test("get_job_status refuses a job id that is not a UUID as the other id params 
 
 test("get_flag_status reports each switch as the flags port decides it for this project and caller", async () => {
   const asked: unknown[] = [];
-  const askedFocused: unknown[] = [];
   const result = await run("get_flag_status", {
     featureEnabled: async (flag, subject) => {
       asked.push([flag, subject]);
       return flag === "evalGate";
     },
-    focusedConsoleEnabled: async (organization) => {
-      askedFocused.push(organization);
-      return true;
-    },
   });
-  const flags = result.data.flags as { key: string; enabled: boolean; note: string }[];
-  assert.match(flags.find(({ key }) => key === "focusedConsole")?.note ?? "", /Overview/);
+  const flags = result.data.flags as { key: string; enabled: boolean }[];
   assert.deepEqual(
     flags.map(({ key, enabled }) => [key, enabled]),
     [
@@ -297,7 +290,6 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["mcpApps", false],
       ["agentsPages", false],
       ["toolRunInsights", false],
-      ["focusedConsole", true],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -308,7 +300,6 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["agentsPages", subject],
     ["toolRunInsights", subject],
   ]);
-  assert.deepEqual(askedFocused, [{ id: "org-1" }], "as the rail and the pages ask it");
 });
 
 // RP-63, decision mcp-apps-scope: under an OAuth connection the MCP Apps flag is connection-wide,
@@ -374,23 +365,4 @@ test("get_flag_status reports MCP Apps for a project key with that project, as t
   const reported = flags.find(({ key }) => key === "mcpApps")?.enabled;
   assert.equal(reported, await mcpAppsEnabled(keyAuth, resolveConfig()));
   assert.equal(reported, true);
-});
-
-test("get_flag_status reports an explicit focusedConsole off, as the rail and the pages decide it", async () => {
-  const { focusedConsoleEnabled } = await import("@/lib/console/focused-console");
-  const { featureEnabled } = await import("@/lib/platform/experimental-features");
-  const reported = async (env: Record<string, string>) => {
-    const config = resolveConfig({ env });
-    const result = await run("get_flag_status", {
-      featureEnabled: (flag, subject) => featureEnabled(flag, subject, { config }),
-      focusedConsoleEnabled: (organization) => focusedConsoleEnabled(organization, config),
-    });
-    const flags = result.data.flags as { key: string; enabled: boolean }[];
-    return flags.find(({ key }) => key === "focusedConsole")?.enabled;
-  };
-  assert.equal(
-    await reported({ RATEL_EXPERIMENTAL_FEATURES: "1", FF_FOCUSED_CONSOLE: "0" }),
-    false,
-  );
-  assert.equal(await reported({ RATEL_EXPERIMENTAL_FEATURES: "1" }), true);
 });

@@ -214,7 +214,7 @@ export function topicLinks(
   const root = projectRoot(projectId);
   const id = encodeURIComponent(topicId);
   return {
-    selfCorrections: `${root}/health/self-corrections?topic=${id}`,
+    selfCorrections: `${root}/self-corrections?topic=${id}`,
     fixes: `${root}/improvement/fixes?topic=${id}`,
     flows: flowStart
       ? `${intentsRoot(projectId)}/flows?start=${id}`

@@ -4,69 +4,29 @@ import type { HealthPageModel, HealthTile } from "@/lib/readings/trace-signals/v
 import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
 import type { Fix } from "@/lib/views/fixes/types";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
-import { unavailableSelfCorrectionsCard } from "@/lib/views/health/self-corrections/card";
 import { signal } from "@/lib/views/health/workflows-view-fixtures";
-import { READ_FAILED } from "@/lib/views/home/glance";
+import type { FixesSlice } from "@/lib/views/home/glance";
 import {
-  assembleOverview,
-  type FixesSlice,
+  firstTryTile,
   fixTarget,
   issuePanelHref,
-  type OverviewReads,
+  overviewAttention,
+  overviewDaily,
+  overviewSdk,
 } from "@/lib/views/home/load";
-import type { TaskListModel } from "@/lib/views/tasks/model";
 
-const PROJECT = { id: "p1", name: "Support bot", slug: "support-bot", isDemo: false };
 const DAYS = ["2026-10-13", "2026-10-14", "2026-10-15"];
-const LIMITS = {
-  agentHealthSignalsShown: 1,
-  agentHealthEvidenceTurns: 3,
-  agentHealthWindowDays: 30,
+const TRACES: TraceAggregateSummary = {
+  count: 40,
+  errorCount: 8,
+  errorRate: 0.2,
+  p50DurationMs: 900,
+  p95DurationMs: 4_000,
+  p99DurationMs: 6_000,
+  costUsd: 1.5,
+  totalTokens: 90_000,
+  volume: [{ day: "2026-10-14", count: 40, errorCount: 8 }],
 };
-
-function aggregate(overrides: Partial<TraceAggregateSummary> = {}): TraceAggregateSummary {
-  return {
-    count: 40,
-    errorCount: 8,
-    errorRate: 0.2,
-    p50DurationMs: 900,
-    p95DurationMs: 4_000,
-    p99DurationMs: 6_000,
-    costUsd: 1.5,
-    totalTokens: 90_000,
-    volume: [{ day: "2026-10-14", count: 40, errorCount: 8 }],
-    ...overrides,
-  };
-}
-
-function reads(overrides: Partial<OverviewReads> = {}): OverviewReads {
-  return {
-    traces: aggregate(),
-    previous: aggregate({ count: 30 }),
-    dailyTraces: [],
-    recentRuns: [],
-    runTasks: new Map(),
-    telemetry: {
-      hasEvents: true,
-      hasSpans: true,
-      latestEventAt: null,
-      latestSpanAt: new Date("2026-10-15T10:00:00.000Z"),
-    },
-    dailyAggregates: [],
-    health: null,
-    healthLimits: LIMITS,
-    healthWindow: 7,
-    pendingRewrites: null,
-    fixes: null,
-    sdkDays: null,
-    sdkPrevious: null,
-    sdkLatestAt: null,
-    intents: null,
-    tasks: null,
-    corrections: unavailableSelfCorrectionsCard("p1", 7),
-    ...overrides,
-  };
-}
 
 function readyHealth(): HealthPageModel {
   const firstTry = {
@@ -96,85 +56,81 @@ function readyHealth(): HealthPageModel {
   };
 }
 
-function assemble(overrides: Partial<OverviewReads> = {}) {
-  return assembleOverview({ project: PROJECT, window: 7, days: DAYS, reads: reads(overrides) });
+function attention(overrides: Partial<Parameters<typeof overviewAttention>[0]> = {}) {
+  return overviewAttention({
+    projectId: "p1",
+    window: 7,
+    traces: TRACES,
+    health: null,
+    healthWindow: 7,
+    fixes: null,
+    pendingRewrites: null,
+    tasks: { byId: {}, steps: [] },
+    unanswered: [],
+    contextSuggestions: [],
+    contextSplit: null,
+    ...overrides,
+  });
 }
 
-test("the window's runs fill the daily series and failing runs lead the list", () => {
-  const overview = assemble({
-    dailyTraces: [
-      {
-        day: "2026-10-14",
-        traceCount: 40,
-        errorTraceCount: 8,
-        averageLatencyMs: 1_100,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        costUsd: 1.5,
-      },
-    ],
-  });
-  assert.deepEqual(overview.series, [0, 40, 0]);
-  assert.deepEqual(overview.daily, {
+test("the window's days fill the numbers' series, and a day without runs is a gap", () => {
+  const day = {
+    day: "2026-10-14",
+    traceCount: 40,
+    errorTraceCount: 8,
+    averageLatencyMs: 1_100,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costUsd: 1.5,
+  };
+  assert.deepEqual(overviewDaily({ traces: TRACES, dailyTraces: [day] }, DAYS), {
     failedShare: [null, 0.2, null],
     duration: [null, 1_100, null],
     spend: [null, 1.5, null],
   });
-  assert.equal(overview.attention.items[0]!.key, "errors");
-  assert.deepEqual(overview.attention.items[0]!.target, {
+  assert.deepEqual(overviewDaily({ traces: null, dailyTraces: null }, DAYS).duration, [
+    null,
+    null,
+    null,
+  ]);
+});
+
+test("failing runs lead the list, and an unread window has no failure share", () => {
+  const [first] = attention().items;
+  assert.equal(first!.key, "errors");
+  assert.deepEqual(first!.target, {
     kind: "link",
     href: "/project/p1/traces?range=7d&errorOnly=1",
   });
-  assert.equal(overview.lastEventAt?.toISOString(), "2026-10-15T10:00:00.000Z");
-  assert.equal(overview.hasTelemetry, true);
+  assert.equal(attention({ traces: null }).items.length, 0);
 });
 
-test("a project that never sent anything gets the setup guide", () => {
-  const overview = assemble({
-    traces: aggregate({ count: 0, errorCount: 0, errorRate: 0, volume: [] }),
-    telemetry: { hasEvents: false, hasSpans: false, latestEventAt: null, latestSpanAt: null },
-  });
-  assert.equal(overview.hasTelemetry, false);
-});
-
-test("a failed diagnostics read never passes for an empty project", () => {
-  const overview = assemble({ traces: null, telemetry: null, dailyTraces: null });
-  assert.equal(overview.hasTelemetry, true);
-  assert.equal(overview.lastEventAt, null);
-  assert.deepEqual(overview.series, [0, 0, 0]);
-  assert.deepEqual(overview.daily.duration, [null, null, null]);
-  assert.equal(overview.attention.items.length, 0, "no failure share without numbers");
-});
-
-test("Agent health adds its first try, its issues cut to the plan, each opening its panel", () => {
-  const overview = assemble({ health: readyHealth(), healthWindow: 30 });
-  assert.equal(overview.health?.href, "/project/p1/health?days=30");
-  assert.equal(overview.health?.firstTry?.value, 0.7);
-  const issues = overview.attention.items.filter((item) => item.key.startsWith("issue:"));
-  // The plan shows one issue; the other is counted, not listed.
+test("an issue opens its panel in the Agent health window, and the ones the plan hides are counted", () => {
+  const health = { signals: readyHealth().signals.slice(0, 1), lockedCount: 1 };
+  const { items, moreIssues } = attention({ health, healthWindow: 30 });
+  const issues = items.filter((item) => item.key.startsWith("issue:"));
   assert.equal(issues.length, 1);
   assert.deepEqual(issues[0]!.target, {
     kind: "link",
     href: "/project/p1/health?days=30&peek=issue%3Aa#signal-a",
   });
-  assert.equal(overview.attention.moreIssues, 1);
+  assert.equal(moreIssues, 1);
 });
 
-test("Agent health still collecting gives no first try", () => {
-  const overview = assemble({ health: { ...readyHealth(), turns: 10 } });
-  assert.equal(overview.health?.firstTry, null);
+test("the first try tile shows once Agent health has a reading", () => {
+  assert.equal(firstTryTile(readyHealth())?.value, 0.7);
+  assert.equal(firstTryTile({ ...readyHealth(), turns: 10 }), null);
 });
 
 test("description updates ready open Quality › Descriptions, and nothing shows with Quality off", () => {
-  const on = assemble({ pendingRewrites: 3 });
-  const rewrites = on.attention.items.find((item) => item.key === "rewrites");
-  assert.deepEqual(rewrites?.target, { kind: "link", href: "/project/p1/quality/descriptions" });
-  const off = assemble({ pendingRewrites: null });
-  assert.equal(
-    off.attention.items.some((item) => item.key === "rewrites"),
-    false,
-  );
+  const rewrites = (pendingRewrites: number | null) =>
+    attention({ pendingRewrites }).items.find((item) => item.key === "rewrites");
+  assert.deepEqual(rewrites(3)?.target, {
+    kind: "link",
+    href: "/project/p1/quality/descriptions",
+  });
+  assert.equal(rewrites(null), undefined);
 });
 
 function fix(id: string, issues: string[], apply: boolean, over: Partial<Fix> = {}): Fix {
@@ -196,30 +152,20 @@ test("with the fixes read, an issue opens its fix and the updates count what Fix
     applied: [],
     rewritesOn: true,
   };
-  const overview = assemble({
-    health: {
-      ...readyHealth(),
-      signals: [signal("a", "error_loop", "tool", "upload", ["upload"])],
-    },
+  const { items } = attention({
+    health: { signals: readyHealth().signals.slice(0, 1), lockedCount: 0 },
     pendingRewrites: 9,
     fixes,
   });
-  const issue = overview.attention.items.find((item) => item.key === "issue:a");
-  assert.deepEqual(issue?.target, {
+  assert.deepEqual(items.find((item) => item.key === "issue:a")?.target, {
     kind: "link",
     href: "/project/p1/improvement/fixes?peek=craft%3Ac1",
   });
-  const rewrites = overview.attention.items.find((item) => item.key === "rewrites");
-  assert.equal(rewrites?.figure.value, "2");
-  assert.equal(overview.glance.fixes.open, 3);
-  assert.equal(overview.glance.fixes.descriptions, 2);
+  assert.equal(items.find((item) => item.key === "rewrites")?.figure.value, "2");
   // Rewrites off the plan are not ready to apply, whatever Quality has pending.
-  const offPlan = assemble({
-    pendingRewrites: 9,
-    fixes: { ...fixes, open: [fixes.open[0]!], rewritesOn: false },
-  });
+  const offPlan = attention({ pendingRewrites: 9, fixes: { ...fixes, rewritesOn: false } });
   assert.equal(
-    offPlan.attention.items.some((item) => item.key === "rewrites"),
+    offPlan.items.some((item) => item.key === "rewrites"),
     false,
   );
 });
@@ -255,125 +201,20 @@ test("an issue's panel keeps the window and lands on its row", () => {
   );
 });
 
-test("a project that sends only SDK events is live, with each day's events", () => {
-  const overview = assemble({
-    traces: aggregate({ count: 0, errorCount: 0, errorRate: 0, volume: [] }),
-    telemetry: { hasEvents: false, hasSpans: false, latestEventAt: null, latestSpanAt: null },
-    sdkDays: [
-      { day: "2026-10-13", searches: 100, toolCalls: 90, skillRuns: 0 },
-      { day: "2026-10-15", searches: 200, toolCalls: 200, skillRuns: 20 },
-    ],
-    sdkPrevious: { searches: 250, toolCalls: 240, skillRuns: 10 },
-    sdkLatestAt: new Date("2026-10-15T11:30:00.000Z"),
-  });
-  assert.equal(overview.hasTelemetry, true);
-  assert.equal(overview.lastEventAt?.toISOString(), "2026-10-15T11:30:00.000Z");
-  assert.deepEqual(overview.sdk, {
+test("SDK activity adds the days up, and a day without events is zero", () => {
+  const previous = { searches: 250, toolCalls: 240, skillRuns: 10 };
+  const sdkDays = [
+    { day: "2026-10-13", searches: 100, toolCalls: 90, skillRuns: 0 },
+    { day: "2026-10-15", searches: 200, toolCalls: 200, skillRuns: 20 },
+  ];
+  assert.deepEqual(overviewSdk({ sdkDays, sdkPrevious: previous }, DAYS), {
     current: { searches: 300, toolCalls: 290, skillRuns: 20 },
-    previous: { searches: 250, toolCalls: 240, skillRuns: 10 },
+    previous,
     days: [
       { searches: 100, toolCalls: 90, skillRuns: 0 },
       { searches: 0, toolCalls: 0, skillRuns: 0 },
       { searches: 200, toolCalls: 200, skillRuns: 20 },
     ],
   });
-});
-
-test("the newest of spans, events and SDK events is the last event", () => {
-  const overview = assemble({ sdkLatestAt: new Date("2026-10-01T00:00:00.000Z") });
-  assert.equal(overview.lastEventAt?.toISOString(), "2026-10-15T10:00:00.000Z");
-});
-
-test("the tiles read intents, tasks, self-corrections and fixes, each failing on its own", () => {
-  const tasks: TaskListModel = {
-    state: "ready",
-    blocked: null,
-    windowDays: 30,
-    readAt: null,
-    stats: {
-      tasks: 1,
-      runsInTasks: 10,
-      allRuns: 10,
-      finishRate: 0.8,
-      correctionsPer100: null,
-      correctionsRecorded: false,
-    },
-    rows: [
-      {
-        id: "wf1",
-        name: "Track a delivery",
-        color: "chart-1",
-        runs: 10,
-        finishRate: 0.8,
-      } as TaskListModel["rows"][number],
-    ],
-    unserved: { measured: false, asks: [], runs: 0 },
-    readingSince: null,
-    excludedRuns: 0,
-  };
-  const overview = assemble({
-    intents: {
-      topics: [{ id: "t1", turns: 60, answered: 10 }],
-      names: new Map([["t1", "Equipment rental"]]),
-    },
-    tasks: { list: tasks, steps: [["a", "b"]] },
-    fixes: null,
-    // A run in a task the latest reading no longer has wears no pin.
-    runTasks: new Map([
-      ["trace-1", "wf1"],
-      ["trace-2", "wf-gone"],
-    ]),
-  });
-  assert.deepEqual(overview.runTasks, {
-    "trace-1": {
-      id: "wf1",
-      name: "Track a delivery",
-      slot: "chart-1",
-      href: "/project/p1/health/tasks/wf1",
-    },
-  });
-  assert.equal(overview.glance.intents.count, 1);
-  assert.equal(overview.glance.tasks.weakest?.name, "Track a delivery");
-  assert.equal(overview.glance.selfCorrections.state, "unavailable");
-  assert.equal(overview.glance.fixes.state, "failed");
-  // An intent mostly unanswered needs attention, and opens in its panel.
-  const intent = overview.attention.items.find((item) => item.key === "intent:t1");
-  assert.deepEqual(intent?.target, { kind: "link", href: "/project/p1/intents?peek=t1" });
-  const failed = assemble({ intents: READ_FAILED, tasks: READ_FAILED });
-  assert.equal(failed.glance.intents.state, "failed");
-  assert.equal(failed.glance.tasks.state, "failed");
-});
-
-/* - Prompt cache hit rate (RC-382) ------------------------------------------- */
-
-test("without the prompt cache read (flag off) the page has no hit rate", () => {
-  assert.equal(
-    assembleOverview({ project: PROJECT, window: 7, days: DAYS, reads: reads() })
-      .promptCacheHitRate,
-    null,
-  );
-});
-
-test("a project that caches only its system prompt shows a hit rate while history-cached stays 0", () => {
-  const day = {
-    day: "2026-10-14",
-    spend: { skills: 0, tools: 0, history: 400, memory: 0, user_input: 100 },
-    splits: { history_cached: 0, history_uncached: 400, tools_used: 0, tools_unused: 0 },
-    outputTokens: 50,
-    latencyMs: 900,
-    costUsd: 0.1,
-    runs: 2,
-  };
-  const data = assembleOverview({
-    project: PROJECT,
-    window: 7,
-    days: DAYS,
-    reads: reads({
-      dailyAggregates: [day],
-      promptCache: { cachedTokens: 3_000, inputTokens: 4_000 },
-    }),
-  });
-  assert.equal(data.promptCacheHitRate, 0.75);
-  const history = data.context?.rows.find((row) => row.source === "history");
-  assert.deepEqual(history?.waste, { label: "re-read uncached", share: 1 });
+  assert.equal(overviewSdk({ sdkDays: null, sdkPrevious: previous }, DAYS), null);
 });

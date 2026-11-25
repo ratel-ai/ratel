@@ -15,7 +15,6 @@ export const CORE_FLAGS = [
   "mcpApps",
   "agentsPages",
   "toolRunInsights",
-  "focusedConsole",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];
