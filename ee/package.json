@@ -6,6 +6,8 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.137.0",
+    "@aws-sdk/client-s3": "^3.1177.0",
+    "@aws-sdk/s3-request-presigner": "^3.1177.0",
     "@base-ui/react": "^1.6.0",
     "@clerk/backend": "^3.26.5",
     "@clerk/mcp-tools": "^0.6.0",
