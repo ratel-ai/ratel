@@ -199,8 +199,38 @@ test("parallel calls of one tool with no parent link pair one to one", async () 
   assert.deepEqual(await serverEdges("solo", parallel), { "agent:claude > mcp:solo": [2, 0] });
   assert.deepEqual(await serverEdges("solo", [...parallel, span(24, 112, 1, provided("solo"))]), {
     "agent:claude > mcp:solo": [2, 0],
-    "project > mcp:solo": [1, 0],
+    // No client call failed, so the failed span is the one that is left.
+    "project > mcp:solo": [1, 1],
   });
+});
+
+test("a caller's server calls never spend another caller's client calls", async () => {
+  const from = (agentKey: string) => ({ ...provided("solo"), agentKey, agentSource: "sdk" });
+  const counted = await serverEdges("solo", [
+    span(20, 100, 8, call("solo", "a")),
+    span(21, 101, 8, call("solo", "b")),
+    span(22, 102, 8, from("a")),
+    span(23, 103, 8, from("a")),
+  ]);
+  assert.deepEqual(counted, { "agent:a > mcp:solo": [2, 0], "agent:b > mcp:solo": [1, 0] });
+});
+
+test("two server calls under one client call are two calls", async () => {
+  const under = { ...provided("solo"), parentSpanId: spanId(20) };
+  const counted = await serverEdges("solo", [
+    span(20, 100, 8, call("solo", "a")),
+    span(21, 101, 8, under),
+    span(22, 102, 8, under),
+  ]);
+  assert.deepEqual(counted, { "agent:a > mcp:solo": [2, 0] });
+});
+
+test("when only one side knows the caller, the call is that caller's", async () => {
+  const known = { ...provided("solo"), agentKey: "a", agentSource: "sdk" };
+  assert.deepEqual(
+    await serverEdges("solo", [span(20, 100, 8, call("solo")), span(21, 101, 8, known)]),
+    { "agent:a > mcp:solo": [1, 0] },
+  );
 });
 
 const boardEdges = (spans: NewOtelSpan[]) => serverEdges("board", spans);

@@ -91,8 +91,6 @@ const ERROR_TEXT = sql`nullif(s.attributes ->> 'error.type', '')`;
 const MCP_ENVIRONMENT = sql`coalesce(s.attributes ->> 'deployment.environment.name', s.attributes ->> 'deployment.environment')`;
 const AGENT_TOOL_NAME = sql`coalesce(nullif(s.attributes ->> 'gen_ai.tool.name', ''), regexp_replace(s.name, '^execute_tool ?', ''))`;
 const MCP_TOOL_NAME = sql`coalesce(s.attributes ->> 'gen_ai.tool.name', regexp_replace(s.name, '^(MCP send )?tools/call ?', ''))`;
-/** The tool of a call from either side, so that both sides give one name. */
-const CALL_TOOL_NAME = sql`coalesce(nullif(s.attributes ->> 'gen_ai.tool.name', ''), regexp_replace(s.name, '^(execute_tool|(MCP send )?tools/call) ?', ''))`;
 /** The calling agent: the span's own, else its parent's (a provided call is the server's span). */
 const CALLING_AGENT = sql`coalesce(s.agent_key, s.caller_agent_key, p.agent_key, p.caller_agent_key)`;
 const PARENT_JOIN = sql`left join lateral (
@@ -284,19 +282,23 @@ export function agentMcpServerCountsQuery(
 }
 
 /**
- * Calls and errors per (calling agent, MCP server): every call a client recorded, and every call
- * that only the server recorded, with an unknown caller when neither its span nor its parent
- * names one. Only spans of the project and the window are compared.
+ * Calls and errors per (calling agent, MCP server): a call that both sides recorded counts once,
+ * and a call that one side recorded counts too. Only spans of the project and the window are read.
  *
- * The server's span is a client's call again, and is left out, when:
- * - the client's span is its parent; or
- * - both are in one trace, with the same server and tool, and their times overlap.
+ * Each server span pairs with at most one client span, and the reverse. Two known callers that
+ * differ never pair. In this order:
+ * 1. A client span and the earliest server span under it.
+ * 2. In a cluster, the server spans and the client spans of one known caller.
+ * 3. The server spans of a known caller that are left, and the client spans of no known caller.
+ * 4. The server spans of no known caller, and any client span that is left.
+ * What is left is a call of its own. A pair is its known caller's, when one side knows it. A
+ * cluster is the spans of one trace, server and tool whose times overlap, also through a third.
+ * Steps 2 to 4 need numbers only: a known caller has `greatest(clients, servers)` calls.
  *
- * The second is a guess, so it takes each client call one time, never a client call that a parent
- * link took, and never across two known callers that differ. Where more server spans than client
- * calls overlap, which of them is the client's cannot be known: the ones of the same caller are
- * taken first, then those with none. With no parent link, two records in two traces, or with
- * clocks too far apart to overlap, cannot be matched, and count as two calls.
+ * A pair has the client's status, but the server's in step 3. Failed spans pair with failed ones
+ * first. The limits: two records with no parent link, in two traces or with clocks too far apart
+ * to overlap, cannot be matched and count as two calls. Two calls in one cluster, each recorded by
+ * the other side only, cannot be told from one call and count as one.
  */
 export function agentMcpCallsQuery(
   projectId: string,
@@ -308,66 +310,129 @@ export function agentMcpCallsQuery(
     with spans as (
       select ${CALLING_AGENT} as agent, s.mcp_server as server, s.mcp_role as role,
         s.trace_id, s.span_id, s.parent_span_id, s.started_at, s.ended_at,
-        ${withoutServerPrefix(CALL_TOOL_NAME, sql`s.mcp_server`)} as tool, ${IS_ERROR} as failed
+        s.name, s.attributes ->> 'gen_ai.tool.name' as tool_name, ${IS_ERROR} as failed
       from otel_spans s
-      ${PARENT_JOIN}
+      left join lateral (
+        select parent.agent_key, parent.caller_agent_key
+        from otel_spans parent
+        where s.agent_key is null and s.caller_agent_key is null
+          and parent.project_id = s.project_id and parent.trace_id = s.trace_id
+          and parent.span_id = s.parent_span_id
+        limit 1
+      ) p on true
       where ${serverSpans(projectId, window)}
-    ), calls as (
-      select ${merge.key} as agent, c.server, c.role, c.trace_id, c.span_id, c.parent_span_id,
-        c.started_at, c.ended_at, c.tool, c.failed
-      from spans c${merge.join}
+    ), calls as materialized (
+      select c.*, min(c.role) over trace_server <> max(c.role) over trace_server as both_sides
+      from (
+        select ${merge.key} as agent, c.server collate "C" as server, c.role,
+          c.trace_id collate "C" as trace_id, c.span_id, c.parent_span_id,
+          c.started_at, c.ended_at, c.name, c.tool_name, c.failed
+        from spans c${merge.join}
+      ) c
+      window trace_server as (partition by c.trace_id, c.server)
     ), linked as (
-      select p.trace_id, p.span_id, p.parent_span_id
+      select distinct on (c.trace_id, c.span_id) c.trace_id, c.span_id as client_id,
+        p.span_id as server_id, coalesce(c.agent, p.agent) as agent, c.server, c.failed
       from calls p
       join calls c on c.trace_id = p.trace_id and c.span_id = p.parent_span_id
       where p.role = 'provided' and c.role = 'consumed' and c.server = p.server
-    ), unlinked as (
-      select calls.*
+        and (c.agent is null or c.agent = p.agent)
+      order by c.trace_id, c.span_id, p.started_at, p.span_id
+    ), unlinked as materialized (
+      select calls.*, coalesce(
+          nullif(tool_name, ''), regexp_replace(name, '^(execute_tool|(MCP send )?tools/call) ?', '')
+        ) collate "C" as raw_tool
       from calls
-      left join linked as server_side
-        on server_side.trace_id = calls.trace_id and server_side.span_id = calls.span_id
-      left join (select distinct trace_id, parent_span_id from linked) as client_side
-        on client_side.trace_id = calls.trace_id and client_side.parent_span_id = calls.span_id
-      where server_side.span_id is null and client_side.parent_span_id is null
+      left join (
+        select trace_id, client_id as span_id from linked
+        union all
+        select trace_id, server_id from linked
+      ) pairs using (trace_id, span_id)
+      where both_sides and pairs.span_id is null
+    ), named as materialized (
+      select unlinked.*, ${withoutServerPrefix(sql`raw_tool`, sql`server`)} as tool
+      from unlinked
     ), clustered as (
       select starts.*,
-        count(*) filter (where starts_group) over (
+        count(*) filter (where starts_cluster) over (
           partition by trace_id, server, tool order by started_at, span_id
         ) as cluster
       from (
-        select unlinked.*,
+        select named.*,
           started_at > max(ended_at) over (
             partition by trace_id, server, tool order by started_at, span_id
             rows between unbounded preceding and 1 preceding
-          ) as starts_group
-        from unlinked
+          ) as starts_cluster
+        from named
       ) starts
-    ), compared as (
-      select clustered.*,
-        count(*) filter (where role = 'consumed')
-          over (partition by trace_id, server, tool, cluster) as clients,
-        bool_or(role = 'consumed' and agent is null)
-          over (partition by trace_id, server, tool, cluster) as unknown_client,
-        bool_or(role = 'consumed')
-          over (partition by trace_id, server, tool, cluster, agent) as same_caller
-      from clustered
-    ), ranked as (
-      select compared.*, same_caller or agent is null or unknown_client as may_match,
-        row_number() over (
-          partition by trace_id, server, tool, cluster, role,
-            (same_caller or agent is null or unknown_client)
-          order by same_caller desc, started_at, span_id
-        ) as place
-      from compared
-    ), once as (
-      select agent, server, failed from calls where role = 'consumed'
+    ), callers as (
+      select trace_id, server, tool, cluster, agent, clients, servers,
+        client_errors, server_errors,
+        greatest(servers - clients, 0) as servers_left,
+        greatest(clients - servers, 0) as clients_left,
+        least(greatest(servers - clients, 0), greatest(server_errors - client_errors, 0))
+          as servers_left_errors,
+        least(greatest(clients - servers, 0), greatest(client_errors - server_errors, 0))
+          as clients_left_errors
+      from (
+        select trace_id, server, tool, cluster, agent,
+          count(*) filter (where role = 'consumed') as clients,
+          count(*) filter (where role = 'provided') as servers,
+          count(*) filter (where role = 'consumed' and failed) as client_errors,
+          count(*) filter (where role = 'provided' and failed) as server_errors
+        from clustered
+        group by 1, 2, 3, 4, 5
+      ) sides
+    ), unknown as (
+      select u.server, u.servers, u.server_errors, u.client_errors,
+        coalesce(k.clients_left, 0) as known_clients,
+        coalesce(k.clients_left_errors, 0) as known_client_errors,
+        coalesce(k.servers_left_errors, 0) as known_server_errors,
+        least(u.clients, coalesce(k.servers_left, 0)) as given,
+        u.clients - least(u.clients, coalesce(k.servers_left, 0)) as clients
+      from callers u
+      left join (
+        select trace_id, server, tool, cluster, sum(clients_left) as clients_left,
+          sum(servers_left) as servers_left, sum(clients_left_errors) as clients_left_errors,
+          sum(servers_left_errors) as servers_left_errors
+        from callers
+        where agent is not null
+        group by 1, 2, 3, 4
+      ) k using (trace_id, server, tool, cluster)
+      where u.agent is null
+    ), unknown_kept as (
+      select unknown.*, greatest(servers - known_clients - clients, 0) as servers_left,
+        client_errors - greatest(
+          least(given, client_errors, known_server_errors), client_errors - clients
+        ) as kept_errors
+      from unknown
+    ), counted as (
+      select agent, server, count(*) as calls, count(*) filter (where failed) as errors
+      from calls
+      where not both_sides
+      group by 1, 2
       union all
-      select agent, server, failed from ranked
-      where role = 'provided' and not (may_match and place <= clients)
+      select agent, server, count(*), count(*) filter (where failed)
+      from linked
+      group by 1, 2
+      union all
+      select agent, server, sum(greatest(clients, servers)),
+        sum(client_errors + servers_left_errors)
+      from callers
+      where agent is not null
+      group by 1, 2
+      union all
+      select null, server, sum(clients + servers_left),
+        sum(kept_errors + least(
+          servers_left, greatest(server_errors - known_client_errors - kept_errors, 0)
+        ))
+      from unknown_kept
+      group by 2
     )
-    select agent, server, count(*)::int as calls, count(*) filter (where failed)::int as errors
-    from once
+    select agent, server, sum(calls)::int as calls, sum(errors)::int as errors
+    from counted
     group by 1, 2
+    having sum(calls) > 0
     order by calls desc, 1, 2
     limit ${MAX_ROWS}
   `;
