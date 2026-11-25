@@ -176,6 +176,35 @@ test("ci-gate needs every other job", () => {
   assert.deepEqual([...listed].sort(), [...jobs].sort());
 });
 
+// A required check that does not run can count as a pass: only a superseded push may drop the gate.
+test("ci-gate runs except on a cancelled push and a draft pull request", () => {
+  const condition = jobBody(ciWorkflow, "ci-gate").match(/\n {4}if: >-\n((?: {6}.*\n)+)/);
+  assert.ok(condition, "ci-gate must have a condition");
+  // Without a status function, GitHub adds success() and a failed need skips the gate.
+  assert.match(condition[1], /^\s*always\(\) &&/);
+  const runs = new Function("github", "always", "cancelled", `return Boolean(${condition[1]});`);
+  for (const [event, draft, cancelled, expected] of [
+    ["push", false, false, true],
+    ["push", false, true, false],
+    ["pull_request", false, false, true],
+    ["pull_request", false, true, true],
+    ["pull_request", true, false, false],
+    ["pull_request", true, true, false],
+    ["workflow_dispatch", false, false, true],
+    ["workflow_dispatch", false, true, true],
+  ]) {
+    const github = {
+      event_name: event,
+      event: event === "pull_request" ? { pull_request: { draft } } : {},
+    };
+    assert.equal(
+      runs(github, () => true, () => cancelled),
+      expected,
+      `${event} draft=${draft} cancelled=${cancelled}`,
+    );
+  }
+});
+
 // The SDKs and their release workflows moved to ratel-ai/ratel-sdk.
 test("ci.yml builds no SDK artifact", () => {
   assert.doesNotMatch(ciWorkflow, /dtolnay\/rust-toolchain|cargo |maturin|src\/sdk|e2e\//);
