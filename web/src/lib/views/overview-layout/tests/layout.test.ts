@@ -8,6 +8,7 @@ import {
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewWidgetId,
+  onlyWidget,
   sameLayout,
   stepChange,
   visibleWidgets,
@@ -146,6 +147,13 @@ test("a keyboard step is an arrange, null with no room, and reset is the default
   assert.deepEqual(order(layout), ["topology", "metrics", "health", "attention"]);
   assert.equal(stepChange(DEFAULT_LAYOUT, "metrics", "up"), null);
   assert.deepEqual(changeLayout(layout, { kind: "reset" }), DEFAULT_LAYOUT);
+});
+
+test("one widget alone is as wide as the grid, whatever a layout holds", () => {
+  for (const widget of WIDGET_CATALOG)
+    assert.deepEqual(onlyWidget(widget), [
+      { id: widget.id, x: 0, y: 0, w: 12, h: widget.place.h, removed: false },
+    ]);
 });
 
 test("a change from outside is checked", () => {

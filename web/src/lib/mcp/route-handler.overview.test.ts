@@ -17,10 +17,14 @@ const auth: McpAuthContext = {
 const HTML = "<!doctype html><html><head></head><body></body></html>";
 const catalog = buildMcpAppCatalog(
   [
-    { view: "overview", html: HTML, bindings: [{ tool: "get_overview" }] },
+    {
+      view: "overview",
+      html: HTML,
+      bindings: [{ tool: "get_overview" }, { tool: "change_overview_layout" }],
+    },
     { view: "health", html: HTML, bindings: [{ tool: "get_agent_health" }] },
   ],
-  new Set(["get_overview", "get_agent_health"]),
+  new Set(["get_overview", "change_overview_layout", "get_agent_health"]),
 );
 
 async function call(on: boolean, method: string, params: unknown = {}) {
@@ -47,18 +51,32 @@ async function call(on: boolean, method: string, params: unknown = {}) {
     error?: unknown;
     result: {
       isError?: boolean;
-      tools: { name: string; annotations: { readOnlyHint?: boolean }; _meta?: { ui?: unknown } }[];
+      tools: {
+        name: string;
+        inputSchema: { properties: { widget: { enum?: string[] } } };
+        annotations: { readOnlyHint?: boolean };
+        _meta?: { ui?: unknown };
+      }[];
       resources: { uri: string }[];
     };
   };
 }
 
-test("on, the two tools are listed and get_overview has its view", async () => {
+test("on, the two tools are listed, with the widgets, and both have the view", async () => {
   const { tools } = (await call(true, "tools/list")).result;
   const named = (name: string) => tools.find((tool) => tool.name === name);
   assert.deepEqual(named("get_overview")?._meta?.ui, { resourceUri: "ui://ratel/overview" });
   assert.equal(named("get_overview")?.annotations.readOnlyHint, true);
   assert.equal(named("change_overview_layout")?.annotations.readOnlyHint, false);
+  assert.deepEqual(named("change_overview_layout")?._meta?.ui, {
+    resourceUri: "ui://ratel/overview",
+  });
+  assert.deepEqual(named("get_overview")?.inputSchema.properties.widget.enum, [
+    "metrics",
+    "topology",
+    "health",
+    "attention",
+  ]);
   const { resources } = (await call(true, "resources/list")).result;
   assert.ok(resources.some(({ uri }) => uri === "ui://ratel/overview"));
 });

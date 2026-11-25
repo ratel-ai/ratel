@@ -8,12 +8,14 @@ export interface OverviewView {
   overview: OverviewViewData;
   /** The Agents and MCP servers pages exist. */
   linked: boolean;
+  /** Only this widget was asked for. Null: the whole Overview. */
+  widget: string | null;
 }
 
-/** get_overview's view data (web/src/lib/mcp/operations/overview.ts), or null when the result has none. */
+/** The operations' view data (web/src/lib/mcp/operations/overview.ts), or null when the result has none. */
 export function readOverviewView(result: Pick<ToolSuccess, "view">): OverviewView | null {
   const view = result.view as
-    | { kind?: unknown; overview?: Partial<OverviewViewData>; linked?: unknown }
+    | { kind?: unknown; overview?: Partial<OverviewViewData>; linked?: unknown; widget?: unknown }
     | undefined;
   const overview = view?.kind === "overview" ? view.overview : undefined;
   if (
@@ -23,5 +25,9 @@ export function readOverviewView(result: Pick<ToolSuccess, "view">): OverviewVie
     !Array.isArray(overview.layout)
   )
     return null;
-  return { overview: overview as OverviewViewData, linked: view?.linked === true };
+  return {
+    overview: overview as OverviewViewData,
+    linked: view?.linked === true,
+    widget: typeof view?.widget === "string" ? view.widget : null,
+  };
 }

@@ -4,10 +4,13 @@ import {
   changeLayout,
   DEFAULT_LAYOUT,
   type OverviewLayout,
+  type OverviewWidgetId,
+  onlyWidget,
+  WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
 import { errorResult, okResult, type ViewFixture, type ViewFixtures } from "../../shell/types";
 
-/** get_overview's scenarios, with the view model that the server sends. */
+/** The scenarios of get_overview and change_overview_layout, with the view model that the server sends. */
 
 const PROJECT = "3f1c9a52-7d4e-4b8a-9c11-5e2d6f0a8b73";
 const ROOT = `/project/${PROJECT}`;
@@ -153,6 +156,34 @@ function fixture(
   };
 }
 
+/** One widget, as the server sends it: the others are not read. */
+function single(
+  widget: OverviewWidgetId,
+  over: Partial<Omit<FocusedOverviewData, "lastEventAt">> = {},
+): ViewFixture {
+  const entry = WIDGET_CATALOG.find(({ id }) => id === widget);
+  if (!entry) throw new Error(`no widget ${widget}`);
+  const overview = {
+    ...DATA,
+    metrics: null,
+    topology: null,
+    health: null,
+    attention: null,
+    [widget]: DATA[widget],
+    ...over,
+    layout: onlyWidget(entry),
+    lastEventAt: "2026-11-24T10:00:00.000Z",
+  };
+  return {
+    tool: "get_overview",
+    input: { widget },
+    result: okResult(
+      { project: { id: PROJECT, name: DATA.project.name }, range: "7d", widget },
+      { view: { kind: "overview", overview, linked: true, widget } },
+    ),
+  };
+}
+
 const ARRANGED = changeLayout(
   changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "topology" }),
   {
@@ -179,6 +210,27 @@ const fixtures: ViewFixtures = {
   }),
   "get_overview · no data": fixture({ hasTelemetry: false, metrics: null }),
   "get_overview · failed reads": fixture({ metrics: "failed", topology: "failed" }),
+  "get_overview · metrics": single("metrics"),
+  "get_overview · topology": single("topology"),
+  "get_overview · health": single("health"),
+  "get_overview · attention": single("attention"),
+  "get_overview · attention, nothing": single("attention", {
+    attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false },
+  }),
+  "get_overview · topology, failed read": single("topology", { topology: "failed" }),
+  "get_overview · metrics, no data": single("metrics", { hasTelemetry: false, metrics: null }),
+  "get_overview · unknown widget": {
+    tool: "get_overview",
+    input: { widget: "spend" },
+    result: errorResult(
+      "invalid_params",
+      'The Overview has no widget with the name "spend". The widgets are: metrics, topology, health, attention.',
+    ),
+  },
+  change_overview_layout: {
+    ...fixture({ topology: null }, ARRANGED),
+    tool: "change_overview_layout",
+  },
   "get_overview · text only": {
     tool: "get_overview",
     result: okResult({ project: { id: PROJECT, name: DATA.project.name }, range: "7d" }),

@@ -1,6 +1,7 @@
 import {
   compacted,
   fitted,
+  GRID_COLUMNS,
   type GridItem,
   type GridMinimum,
   type GridPlace,
@@ -119,6 +120,11 @@ export function defaultLayout(offered: OfferedWidgets): OverviewLayout {
     offered.map(({ id, place }) => ({ id, ...place, removed: false })),
     offered,
   );
+}
+
+/** One widget on its own, as wide as the grid: its place in a person's layout, and its removal, do not count. */
+export function onlyWidget({ id, place }: OverviewWidget): OverviewLayout {
+  return [{ id, x: 0, y: 0, w: GRID_COLUMNS, h: place.h, removed: false }];
 }
 
 /** In reading order. */

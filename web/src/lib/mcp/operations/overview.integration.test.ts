@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { z } from "zod";
+import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { agentToolCount, assembleOperations } from "@/lib/mcp/operations";
@@ -10,6 +12,7 @@ import {
   type OverviewOperationDeps,
   overviewOperations,
   overviewWriteOperations,
+  WIDGET_DATA,
 } from "@/lib/mcp/operations/overview";
 import { buildRegistry } from "@/lib/mcp/registry";
 import {
@@ -23,7 +26,12 @@ import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import { changeOverviewLayout, readOverviewLayout } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
-import { DEFAULT_LAYOUT, WIDGET_CATALOG } from "@/lib/views/overview-layout/domain/layout";
+import {
+  DEFAULT_LAYOUT,
+  OVERVIEW_WIDGETS,
+  type OverviewWidgetId,
+  WIDGET_CATALOG,
+} from "@/lib/views/overview-layout/domain/layout";
 import { webLayoutReader } from "@/lib/views/overview-layout/readers";
 import { overviewLayouts } from "@/lib/views/overview-layout/schema";
 
@@ -95,6 +103,23 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
     );
   return { db, call, web: webDeps(db, "user_ana"), store };
 }
+
+/** A loaded Overview with no widget's data, without a database. */
+const empty = ({ layout = DEFAULT_LAYOUT }: Parameters<typeof loadFocusedOverview>[0]) => ({
+  project: PROJECT,
+  root: "/",
+  window: 7 as const,
+  rangeParam: "7d" as const,
+  lastEventAt: NOW,
+  telemetryRead: true,
+  hasTelemetry: true,
+  layout,
+  metrics: null,
+  topology: null,
+  health: null,
+  attention: null,
+  context: null,
+});
 
 /** The web's own side: the session user of the console scope. */
 function webDeps(db: Db, externalId: string) {
@@ -295,6 +320,153 @@ test("the view gets the page's own data, and only a view does", async () => {
   assert.ok(viewed.ok);
   assert.equal(viewed.view?.kind, "overview");
   assert.equal((viewed.view?.overview as { project: { id: string } }).project.id, PROJECT_ID);
+});
+
+test("one widget: only its data, with the page's numbers, for both ranges", async () => {
+  const { call } = await setup();
+  for (const range of ["7d", "30d"]) {
+    const page = dataOf(await call("get_overview", { range }));
+    for (const widget of OVERVIEW_WIDGETS) {
+      const one = dataOf(await call("get_overview", { widget, range }));
+      assert.deepEqual(one[widget], page[widget], `${widget} ${range}`);
+      assert.ok(one[widget], widget);
+      assert.equal(one.widget, widget);
+      assert.equal(one.range, range);
+      for (const other of OVERVIEW_WIDGETS)
+        if (other !== widget) assert.ok(!(other in one), `${other} in ${widget}`);
+      assert.ok(!("layout" in one));
+    }
+  }
+});
+
+test("one widget: the loader is asked for it alone, and its view draws it alone", async () => {
+  const asked: string[][] = [];
+  const { call } = await setup({
+    loadOverview: async (input) => {
+      asked.push((input.layout ?? []).map(({ id }) => id));
+      return empty(input);
+    },
+  });
+  for (const widget of OVERVIEW_WIDGETS) {
+    const viewed = await call("get_overview", { widget }, ANA, true);
+    assert.ok(viewed.ok);
+    assert.equal(viewed.view?.widget, widget);
+  }
+  assert.deepEqual(
+    asked,
+    OVERVIEW_WIDGETS.map((id) => [id]),
+  );
+  const page = await call("get_overview", {}, ANA, true);
+  assert.ok(page.ok && page.view && !("widget" in page.view));
+});
+
+test("one widget: a removed one can be asked for alone, also with an API key", async () => {
+  const { call } = await setup();
+  await call("change_overview_layout", { change: "remove", widget: "topology" });
+  const whole = await call("get_overview");
+  assert.equal(dataOf(whole).topology, null);
+  assert.ok(whole.ok);
+  assert.match(whole.hint ?? "", /Call get_overview with widget/);
+  for (const auth of [ANA, KEY])
+    assert.ok(dataOf(await call("get_overview", { widget: "topology" }, auth)).topology.nodes);
+});
+
+test("an unknown widget is refused with the names of the widgets", async () => {
+  const { call } = await setup();
+  const result = await call("get_overview", { widget: "spend" });
+  assert.equal(refusal(result)?.[0], "invalid_params");
+  assert.match(
+    result.ok ? "" : result.message,
+    /"spend"\. The widgets are: metrics, topology, health, attention\./,
+  );
+});
+
+test("a fifth widget has its single-widget read and its place, and no new operation", async () => {
+  const alerts = "alerts" as OverviewWidgetId;
+  const five = [
+    ...WIDGET_CATALOG,
+    { id: alerts, min: { w: 3, h: 3 }, place: { x: 0, y: 16, w: 6, h: 4 } },
+  ];
+  const over: Partial<OverviewOperationDeps> = {
+    widgets: five,
+    widgetData: { ...WIDGET_DATA, [alerts]: (data: object) => (data as Alerts).alerts },
+    loadOverview: async (input) =>
+      ({
+        ...empty(input),
+        alerts: { firing: 2 },
+      }) as never,
+  };
+  type Alerts = { alerts?: { firing: number } };
+  const { call } = await setup({ ...over, offeredWidgets: async () => five });
+  const one = await call("get_overview", { widget: "alerts" }, ANA, true);
+  assert.deepEqual(dataOf(one).alerts, { firing: 2 });
+  assert.equal(one.ok && one.view?.widget, "alerts");
+  assert.deepEqual(dataOf(await call("get_overview")).alerts, { firing: 2 });
+  const listed = overviewOperations({ ...defaultOverviewDeps, ...over });
+  assert.deepEqual(
+    listed.map(({ id }) => id),
+    overviewOperations().map(({ id }) => id),
+  );
+  assert.match(JSON.stringify(z.toJSONSchema(listed[0].params)), /"attention","alerts"\]/);
+
+  // Behind a flag that is off for this project, it is no widget.
+  const off = await setup({ ...over, offeredWidgets: async () => WIDGET_CATALOG });
+  assert.equal(
+    refusal(await off.call("get_overview", { widget: "alerts" }))?.[0],
+    "invalid_params",
+  );
+});
+
+test("a change of the layout draws the Overview that it made, and only for a view", async () => {
+  const { call } = await setup();
+  const change = { change: "remove", widget: "topology" };
+  const plain = await call("change_overview_layout", change);
+  assert.ok(plain.ok && plain.view === undefined);
+  const viewed = await call(
+    "change_overview_layout",
+    { change: "add", widget: "topology" },
+    ANA,
+    true,
+  );
+  const page = await call("get_overview", {}, ANA, true);
+  assert.ok(viewed.ok && page.ok);
+  assert.equal(viewed.view?.kind, "overview");
+  assert.deepEqual(viewed.view, page.view);
+});
+
+test("a drawing that fails does not make a saved change look refused", async () => {
+  const { call } = await setup({
+    loadOverview: async () => {
+      throw new Error("statement timeout");
+    },
+  });
+  const result = await call(
+    "change_overview_layout",
+    { change: "remove", widget: "topology" },
+    ANA,
+    true,
+  );
+  assert.ok(result.ok && result.view === undefined);
+  assert.ok(
+    dataOf(result).layout.widgets.some(
+      (w: { id: string; removed: boolean }) => w.id === "topology" && w.removed,
+    ),
+  );
+});
+
+test("the flag off is off with the experimental features on", async () => {
+  const focused = (organization: { id: string }) =>
+    focusedConsoleEnabled(organization, {
+      flags: { focusedConsole: false },
+      experimentalFeatures: true,
+    } as never);
+  assert.equal(await focusedConsoleForCaller(ANA, focused), false);
+  const { call } = await setup({ focusedConsole: focused });
+  for (const widget of [undefined, ...OVERVIEW_WIDGETS])
+    assert.deepEqual(refusal(await call("get_overview", widget ? { widget } : {})), [
+      "forbidden",
+      "focused_console_off",
+    ]);
 });
 
 test("the flag off: neither operation is listed, and a project whose organization has it off refuses", async () => {
