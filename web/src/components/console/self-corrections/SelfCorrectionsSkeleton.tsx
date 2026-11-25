@@ -4,6 +4,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Skeleton } from "@ratel/design-system/states";
 import { useParams } from "next/navigation";
 import { SELF_CORRECTIONS_DESCRIPTION } from "@/components/console/self-corrections/copy";
+import { useFocusedConsole } from "@/components/console/shell/focused-console-context";
 import { agentHealthHref } from "@/lib/readings/trace-signals/view";
 
 /**
@@ -13,7 +14,9 @@ import { agentHealthHref } from "@/lib/readings/trace-signals/view";
  */
 export function SelfCorrectionsSkeleton() {
   const params = useParams<{ projectId?: string }>();
-  const projectId = typeof params?.projectId === "string" ? params.projectId : null;
+  // A page of its own with `focusedConsole`: no crumb.
+  const topLevel = useFocusedConsole();
+  const projectId = !topLevel && typeof params?.projectId === "string" ? params.projectId : null;
   return (
     <Page>
       <PageHeader
