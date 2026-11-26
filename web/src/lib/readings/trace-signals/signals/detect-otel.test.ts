@@ -178,6 +178,24 @@ test("unknown_tool fires on a called name missing from the captured menu", () =>
   assert.equal(signal?.metrics.byError, 0);
 });
 
+test("unknown_tool takes a per-command name like Bash:grep as the menu's Bash", () => {
+  // Shell calls are counted per command (Bash:grep, Bash:gh); the model was handed Bash.
+  const world = otelWorld(
+    times(8, () =>
+      trace([call("Bash:grep"), call("Bash:gh")], { modelCalls: 2, menu: ["Bash", "Read"] }),
+    ),
+  );
+  assert.equal(only(analyze(world).signals, "unknown_tool").length, 0);
+  const missing = otelWorld(
+    times(8, () => trace([call("Bash:grep")], { modelCalls: 1, menu: ["Read"] })),
+  );
+  assert.equal(
+    only(analyze(missing).signals, "unknown_tool").length,
+    1,
+    "no Bash on the menu: still missing",
+  );
+});
+
 test("unknown_tool still fires on menu misses of a tool that also succeeds on turns whose menu has it", () => {
   const world = otelWorld([
     ...times(10, () => trace([call("lookup_order")], { modelCalls: 1, menu: ["lookup_order"] })),
