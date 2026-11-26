@@ -12,6 +12,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { MiniVolume } from "@/components/console/traces-sessions/MiniVolume";
 import { SummaryFigure, SummaryNumbers } from "@/components/console/traces-sessions/TabSummary";
+import type { ApiKeyCta } from "@/lib/console/api-key-cta";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { TraceFacets } from "@/lib/synthesis/traces/queries";
 import {
@@ -79,6 +80,8 @@ export interface RunsViewProps {
   paged: boolean;
   /** Why the list is empty, or null when it has runs. */
   empty: TracesEmptyKind | null;
+  /** The API-key CTA the "no-telemetry" state shows (`loadApiKeyCta`); null otherwise. */
+  apiKey?: ApiKeyCta | null;
   latestRunAt: string | null;
   /** A wider preset to offer when nothing is in the window. */
   widerPreset: { id: RangePreset; label: string } | null;
@@ -184,7 +187,7 @@ export function RunsView(props: RunsViewProps) {
             <TracesEmpty
               kind={empty}
               unit="runs"
-              projectId={projectId}
+              apiKey={props.apiKey}
               latestAt={props.latestRunAt}
               onClearFilters={() =>
                 go((current) => {

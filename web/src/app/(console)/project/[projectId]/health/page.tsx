@@ -7,6 +7,7 @@ import {
   type SummaryViewProps,
 } from "@/components/console/health/v2/SummaryView";
 import { composition } from "@/lib/composition";
+import { loadApiKeyCta } from "@/lib/console/api-key-cta-load";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
@@ -146,6 +147,12 @@ export default async function AgentHealthPage({
     readOnly: inSupportSession,
   });
 
+  // Before a reading, the state block offers the key the project has, or asks for one.
+  const apiKey =
+    state && state.kind !== "ready" && state.kind !== "tool_spans"
+      ? await loadApiKeyCta(project.id)
+      : null;
+
   // Imported runs with no tool calls: read what their spans still say.
   const partial =
     state?.kind === "imported_no_tools"
@@ -208,6 +215,7 @@ export default async function AgentHealthPage({
     share,
     partial,
     inferredTools,
+    apiKey,
   };
   return focused ? (
     <FocusedHealthView {...view} />

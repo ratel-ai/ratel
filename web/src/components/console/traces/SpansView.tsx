@@ -10,6 +10,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { Layers } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { TabSummary } from "@/components/console/traces-sessions/TabSummary";
+import type { ApiKeyCta } from "@/lib/console/api-key-cta";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import {
   AGENT_DIMENSION_LABEL,
@@ -69,6 +70,8 @@ export interface SpansViewProps {
   nextCursor: string | null;
   paged: boolean;
   empty: TracesEmptyKind | null;
+  /** The API-key CTA the "no-telemetry" state shows (`loadApiKeyCta`); null otherwise. */
+  apiKey?: ApiKeyCta | null;
   latestAt: string | null;
   widerPreset: { id: RangePreset; label: string } | null;
 }
@@ -166,7 +169,7 @@ export function SpansView(props: SpansViewProps) {
             <TracesEmpty
               kind={empty}
               unit="spans"
-              projectId={projectId}
+              apiKey={props.apiKey}
               latestAt={props.latestAt}
               onClearFilters={() => go((current) => withoutFilters("spans", current))}
               onWiden={

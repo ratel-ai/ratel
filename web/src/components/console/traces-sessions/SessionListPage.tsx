@@ -1,5 +1,6 @@
 import { ExploreLink } from "@/components/console/explore/ExploreLink";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
+import { loadApiKeyCta } from "@/lib/console/api-key-cta-load";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import {
@@ -99,6 +100,8 @@ export async function SessionListPage({
       hasSpans: diagnostics.hasSpans,
     });
   }
+  // Nothing sent yet: the empty state points at the key the project has, or asks for one.
+  const apiKey = empty === "no-telemetry" ? await loadApiKeyCta(project.id, now) : null;
   return (
     <SessionListView
       projectId={project.id}
@@ -108,6 +111,7 @@ export async function SessionListPage({
       nextCursor={page.nextCursor}
       now={now.toISOString()}
       empty={empty}
+      apiKey={apiKey}
       filterFacets={filterFacets}
       entities={filterOptions.entities}
     />

@@ -1,6 +1,7 @@
 import { SpansView } from "@/components/console/traces/SpansView";
 import type { TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
+import { loadApiKeyCta } from "@/lib/console/api-key-cta-load";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import {
   supplementaryReadTimeoutMs,
@@ -139,6 +140,9 @@ export async function SpansPageV2({
     (preset) => resolveTraceRange({ range: preset }, now).from,
   );
 
+  // Nothing sent yet: the empty state points at the key the project has, or asks for one.
+  const apiKey = empty === "no-telemetry" ? await loadApiKeyCta(project.id, now) : null;
+
   return (
     <SpansView
       projectId={project.id}
@@ -164,6 +168,7 @@ export async function SpansPageV2({
       }
       paged={Boolean(view.queryOptions.cursor)}
       empty={empty}
+      apiKey={apiKey}
       latestAt={latestAt}
       widerPreset={
         wider

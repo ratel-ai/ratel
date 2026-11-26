@@ -20,6 +20,7 @@ import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import { TracesEmpty } from "@/components/console/traces/TracesEmpty";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
 import { TracesListTable } from "@/components/console/traces/TracesListTable";
+import type { ApiKeyCta } from "@/lib/console/api-key-cta";
 import type { TraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
 import { rollupFilterQuery, withoutFilters } from "@/lib/synthesis/traces/v2/filters";
 import { formatDuration, formatInteger, formatMoney } from "@/lib/synthesis/traces/v2/format";
@@ -75,6 +76,8 @@ export interface SessionListViewProps {
   /** The request's time, for relative times. */
   now: string;
   empty: SessionsEmptyKind | null;
+  /** The API-key CTA the "no-telemetry" state shows (`loadApiKeyCta`); null otherwise. */
+  apiKey?: ApiKeyCta | null;
   /** The property bar's values (RC-506); null hides the bar. */
   filterFacets?: TraceFilterFacets | null;
   /** `cloud-project-entities`: the bar has the Agent and MCP server filters (RC-790). */
@@ -165,7 +168,7 @@ export function SessionListView(props: SessionListViewProps) {
           </div>
         ) : empty ? (
           <div className="rounded-lg border border-line" data-sessions-empty={empty}>
-            <TracesEmpty kind={empty} unit="runs" projectId={projectId} />
+            <TracesEmpty kind={empty} unit="runs" apiKey={props.apiKey} />
           </div>
         ) : (
           <SessionList

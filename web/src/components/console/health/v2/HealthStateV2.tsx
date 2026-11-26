@@ -1,11 +1,13 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { DotEmblem, DotLoader, DotMeter } from "@ratel/design-system/dot-matrix";
 import { Callout, EmptyState } from "@ratel/design-system/states";
-import { CalendarRange, KeyRound, Wrench } from "lucide-react";
+import { CalendarRange, Wrench } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
+import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
+import { type ApiKeyCta as ApiKeyCtaModel, noApiKeyCta } from "@/lib/console/api-key-cta";
 import { agentHealthHref, type WindowDays } from "@/lib/readings/trace-signals/view";
 import type {
   BuildingPhase,
@@ -34,6 +36,8 @@ export interface HealthStateV2Props {
   billingHref: string | null;
   /** The edition's names for import sources, by id. */
   sourceLabel?: Readonly<Record<string, string>>;
+  /** The project's API-key CTA (`loadApiKeyCta`); absent, "Create an API key". */
+  apiKey?: ApiKeyCtaModel | null;
   now?: Date;
 }
 
@@ -43,7 +47,9 @@ export interface HealthStateV2Props {
  * the one thing to do about it (DESIGN.md, Empty states). The words come from `healthStateCopy`.
  *
  * Owned (ADR-0004): the importer is the edition's, and without it the one action besides a
- * wider window is the API key; the edition's source names reach the copy.
+ * wider window is the API key; the edition's source names reach the copy. A project that
+ * already has a key is not asked for one: the action is sending the first trace, and the
+ * key is "View API keys" beside it (`ApiKeyCta`).
  */
 export function HealthStateV2({
   projectId,
@@ -52,6 +58,7 @@ export function HealthStateV2({
   canImport,
   billingHref,
   sourceLabel,
+  apiKey = null,
   now = new Date(),
 }: HealthStateV2Props) {
   // With billing off no plan can be picked, so none is named.
@@ -77,6 +84,7 @@ export function HealthStateV2({
         copy={copy}
         canImport={canImport}
         billingHref={billingHref}
+        apiKey={apiKey ?? noApiKeyCta(projectId)}
       />
     </section>
   );
@@ -88,15 +96,25 @@ function StateBody({
   copy,
   canImport,
   billingHref,
+  apiKey,
 }: {
   projectId: string;
   state: HealthStateV2State;
   copy: StateCopy;
   canImport: boolean;
   billingHref: string | null;
+  apiKey: ApiKeyCtaModel;
 }) {
-  const getKey = <ApiKeyLink projectId={projectId} primary={!canImport} />;
   const importRuns = canImport ? <OpenImportButtonV2 variant="primary" /> : null;
+  // Without the importer, the next step leads: create the key, or send the first trace with it.
+  const getKey = importRuns ?? (
+    <ApiKeyCta cta={apiKey} step="next" icon className={buttonVariants({ variant: "primary" })} />
+  );
+  // Beside it, the key link: always beside the importer, and "View API keys" once there is one.
+  const keyLink =
+    importRuns || apiKey.kind === "view" ? (
+      <ApiKeyCta cta={apiKey} icon className={buttonVariants({ variant: "secondary" })} />
+    ) : undefined;
   switch (state.kind) {
     case "nothing_yet":
       return (
@@ -104,8 +122,8 @@ function StateBody({
           emblem
           title={copy.title}
           description={copy.body}
-          action={importRuns ?? getKey}
-          secondary={importRuns ? getKey : undefined}
+          action={getKey}
+          secondary={keyLink}
         />
       );
     case "building":
@@ -116,8 +134,8 @@ function StateBody({
           icon={Wrench}
           title={copy.title}
           description={copy.body}
-          action={importRuns ?? getKey}
-          secondary={importRuns ? getKey : undefined}
+          action={getKey}
+          secondary={keyLink}
         />
       );
     case "unavailable":
@@ -168,10 +186,10 @@ function StateBody({
                 billingHref={billingHref}
               />
             ) : (
-              (importRuns ?? getKey)
+              getKey
             )
           }
-          secondary={state.suggestion ? undefined : importRuns ? getKey : undefined}
+          secondary={state.suggestion ? undefined : keyLink}
         />
       );
   }
@@ -235,18 +253,6 @@ function WindowAction({
       className={buttonVariants({ variant: "secondary" })}
     >
       See plans
-    </Link>
-  );
-}
-
-function ApiKeyLink({ projectId, primary }: { projectId: string; primary: boolean }) {
-  return (
-    <Link
-      href={`/project/${encodeURIComponent(projectId)}/settings/api-keys`}
-      className={buttonVariants({ variant: primary ? "primary" : "secondary" })}
-    >
-      <KeyRound strokeWidth={1.5} aria-hidden />
-      Get an API key
     </Link>
   );
 }

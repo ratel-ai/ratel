@@ -3,6 +3,7 @@ import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { OverviewView } from "@/components/console/home/OverviewView";
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
+import { loadApiKeyCta } from "@/lib/console/api-key-cta-load";
 import { BASE_URL } from "@/lib/platform/app-config";
 import { loadOverview, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
@@ -28,7 +29,11 @@ export async function OverviewPage({
 }) {
   const window = parseOverviewWindow(range);
   const now = new Date();
-  const data = await loadOverview({ project, organization, window, now });
+  // The key is read beside the data: the setup guide shows it until the first event.
+  const [data, apiKey] = await Promise.all([
+    loadOverview({ project, organization, window, now }),
+    loadApiKeyCta(project.id, now),
+  ]);
   return (
     <OverviewView
       data={data}
@@ -45,11 +50,7 @@ export async function OverviewPage({
         </span>
       }
       setup={
-        <SetupGuide
-          root={data.root}
-          endpoint={`${BASE_URL}/v1/traces`}
-          serviceName={project.slug}
-        />
+        <SetupGuide apiKey={apiKey} endpoint={`${BASE_URL}/v1/traces`} serviceName={project.slug} />
       }
       contextPanel={
         <ContextPanel subtitle={`Tokens sent to the model, last ${window} days`}>

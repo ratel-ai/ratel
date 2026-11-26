@@ -14,6 +14,7 @@ import {
 import { fixLookups } from "@/components/console/health/v2/summary-model";
 import { AskExample } from "@/components/console/health/v2/UnservedSection";
 import { composition } from "@/lib/composition/ports";
+import { apiKeyCta } from "@/lib/console/api-key-cta";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
   HEALTH_SCORE_VERSION,
@@ -49,6 +50,22 @@ import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
  */
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";
+
+/** The project's onboarding key, as `loadApiKeyCta` reads it. */
+const WITH_KEY = apiKeyCta(
+  PROJECT,
+  [
+    {
+      name: "Onboarding",
+      keyPrefix: "rtl_a1b2c3d4",
+      createdAt: new Date("2026-11-20T09:30:00Z"),
+      revokedAt: null,
+      expiresAt: null,
+      scopes: ["*"],
+    },
+  ],
+  new Date("2026-11-26T12:00:00Z"),
+);
 const ROOT = `/project/${PROJECT}`;
 const NOW = new Date("2026-10-21T12:00:00Z");
 const ASK = "export the whole board as a PDF for the client";
@@ -1116,7 +1133,7 @@ test("reads that failed cost their part, not the page", () => {
 });
 
 const STATES: readonly [string, HealthPageState, RegExp][] = [
-  ["nothing yet", { kind: "nothing_yet" }, /No runs yet[^]*Get an API key/],
+  ["nothing yet", { kind: "nothing_yet" }, /No runs yet[^]*Create an API key/],
   [
     "collecting",
     { kind: "too_few", turns: 14, floor: 50, imported: false, wider: { days: 30, plan: null } },
@@ -1174,6 +1191,17 @@ for (const [name, state, expected] of STATES) {
   });
 }
 
+test("before a reading, a project with a key sends the first trace instead of making a key", () => {
+  const html = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, apiKey: WITH_KEY });
+  assertHouseStyle(html, "nothing yet, with a key");
+  assert.match(
+    html,
+    /No runs yet[^]*data-api-key-step="next"[^>]*>(?:<svg[^]*?<\/svg>)?Send your first trace<[^]*View API keys</,
+  );
+  assert.match(html, new RegExp(`href="/project/${PROJECT}/settings/api-keys"`));
+  assert.doesNotMatch(html, /Create an API key|Get an API key/);
+});
+
 const StubImporter = ({ variant }: { variant: string }) =>
   createElement("div", { "data-stub-importer": variant });
 
@@ -1185,7 +1213,15 @@ test("an edition's importer: offered by the state and the menu, mounted once, it
     Importer: StubImporter,
   };
   const empty = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, imports });
-  assert.match(empty, /No runs yet[^]*Import past runs[^]*Get an API key/);
+  assert.match(empty, /No runs yet[^]*Import past runs[^]*Create an API key/);
+  const keyed = page({
+    model: MOCK_NO_TELEMETRY,
+    state: { kind: "nothing_yet" },
+    imports,
+    apiKey: WITH_KEY,
+  });
+  assert.match(keyed, /Import past runs[^]*View API keys/, "the importer leads, the key beside it");
+  assert.doesNotMatch(keyed, /Create an API key|Send your first trace/);
   assert.match(empty, /data-stub-importer="history"/);
   const named = page({
     model: pendingHealthModel(7),
