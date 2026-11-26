@@ -24,7 +24,11 @@ export type OperationDomain =
   | "improvement"
   | "account"
   | "joins"
-  | "writes";
+  | "writes"
+  /** Ratel sandbox: versions and runs of a pushed agent (`sandbox_*`). */
+  | "sandboxes"
+  /** Eval cases, eval runs and comparisons on Ratel sandbox (`evals_*`). */
+  | "evals";
 
 export const OPERATION_DOMAINS: readonly OperationDomain[] = [
   "scope",
@@ -34,6 +38,8 @@ export const OPERATION_DOMAINS: readonly OperationDomain[] = [
   "account",
   "joins",
   "writes",
+  "sandboxes",
+  "evals",
 ];
 
 /** What the operation needs resolved and authorized before it runs. */

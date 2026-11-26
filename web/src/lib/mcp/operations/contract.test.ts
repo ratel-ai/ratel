@@ -62,8 +62,13 @@ test("every params schema converts to JSON Schema for discovery", () => {
   }
 });
 
+/** A feature domain keeps its reads and writes together; each write still declares `mutates`. */
+const FEATURE_DOMAINS = new Set(["sandboxes", "evals"]);
+
 test("write operations are exactly those declaring mutates", () => {
-  const mutating = operations.filter((operation) => operation.mutates).map((o) => o.id);
+  const mutating = operations
+    .filter((operation) => operation.mutates && !FEATURE_DOMAINS.has(operation.domain))
+    .map((o) => o.id);
   const inWritesDomain = operations
     .filter((operation) => operation.domain === "writes")
     .map((o) => o.id);
@@ -71,7 +76,7 @@ test("write operations are exactly those declaring mutates", () => {
   assert.deepEqual(
     mutating.sort(),
     inWritesDomain.sort(),
-    "an operation that mutates must live in the writes domain, and vice versa",
+    "an operation that mutates must live in the writes domain or a feature domain, and every writes-domain operation mutates",
   );
 });
 
@@ -199,6 +204,22 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
+  // Ratel sandbox (decision `mcp-surface`). sandbox_run starts a VM run.
+  ["sandbox_list", false],
+  ["sandbox_get_version", false],
+  ["sandbox_run", true],
+  ["sandbox_get_run", false],
+  // Evals on Ratel sandbox (decision `mcp-surface`).
+  ["evals_list_cases", false],
+  ["evals_get_case", false],
+  ["evals_create_case", true],
+  ["evals_approve_case", true],
+  ["evals_start_run", true],
+  ["evals_list_runs", false],
+  ["evals_get_run", false],
+  ["evals_get_trial", false],
+  ["evals_compare", false],
+  ["evals_pin_baseline", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

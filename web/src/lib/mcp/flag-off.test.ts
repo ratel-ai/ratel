@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import type { McpAuthContext } from "./auth";
 import { agentToolCount, assembleOperations } from "./operations";
 import { buildRegistry, type McpOperation, type OperationContext } from "./registry";
@@ -127,10 +128,14 @@ test("flag off: every registered tool runs without forView and answers exactly a
       `${operation.id}: no view data, no _meta, the text main wrote`,
     );
   }
-  assert.ok(
-    seen.size > callable.length / 2,
-    `most tools ran with just a project (${seen.size} of ${callable.length})`,
-  );
+  // Each tool that needs no more than a project ran: a refusal above is only for a missing param.
+  const projectOnly = callable.filter(({ params }) => {
+    const required = (z.toJSONSchema(params, { io: "input" }) as { required?: string[] }).required;
+    return (required ?? []).every((name) => name === "projectId");
+  });
+  assert.ok(projectOnly.length > 0);
+  for (const operation of projectOnly)
+    assert.ok(seen.has(operation.id), `${operation.id} ran with just a project`);
 });
 
 test("the Integrations page's tool count is the flag-off tools/list, as main's", async () => {

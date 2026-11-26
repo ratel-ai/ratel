@@ -3652,6 +3652,644 @@
     }
   },
   {
+    "name": "sandbox_list",
+    "title": "List Ratel sandboxes",
+    "description": "Use this tool to find the agents that are pushed to Ratel sandbox. It returns each sandbox name with its newest versions, their status and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "List Ratel sandboxes",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "sandbox_get_version",
+    "title": "Read a Ratel sandbox version",
+    "description": "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, the declared params with their types and options, the tools with their modes, and the smoke check result.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of a version. sandbox_list gives the version ids."
+        }
+      },
+      "required": [
+        "versionId"
+      ]
+    },
+    "annotations": {
+      "title": "Read a Ratel sandbox version",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "sandbox_run",
+    "title": "Run a Ratel sandbox version",
+    "description": "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. Then it returns the run with its input, output and tool calls, or the run id and a hint to poll sandbox_get_run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "versionId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of a version. sandbox_list gives the version ids."
+        },
+        "name": {
+          "description": "The name of a sandbox. It runs the newest ready version. Give this or versionId.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "input": {
+          "description": "The input of the agent. Use the shape of input.example of sandbox_get_version."
+        },
+        "params": {
+          "description": "Values for the params that the version declares. Other names are refused.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "input"
+      ]
+    },
+    "annotations": {
+      "title": "Run a Ratel sandbox version",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "sandbox_get_run",
+    "title": "Read a Ratel sandbox run",
+    "description": "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output, the params, the tool calls, the error of a failed run and the end of the container logs.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of a run. sandbox_run gives it."
+        }
+      },
+      "required": [
+        "runId"
+      ]
+    },
+    "annotations": {
+      "title": "Read a Ratel sandbox run",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_list_cases",
+    "title": "List eval cases",
+    "description": "Use this tool to see the eval cases of the project. It returns each case with its name, labels, approved version number and draft. Only an approved case counts in an eval run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "List eval cases",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_get_case",
+    "title": "Read an eval case",
+    "description": "Use this tool to read one eval case. It returns the input, the expected output, the scorers and the state of the newest version, and the version that counts in an eval run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "caseId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of a case. evals_list_cases gives the case ids."
+        }
+      },
+      "required": [
+        "caseId"
+      ]
+    },
+    "annotations": {
+      "title": "Read an eval case",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_create_case",
+    "title": "Create an eval case",
+    "description": "Use this tool to save an input as an eval case, for example a sandbox run with a bad answer. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and answer of that run. A case needs a gating scorer before approval.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A short name that says what the case tests."
+        },
+        "labels": {
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "sandboxRunId": {
+          "description": "A sandbox run to copy. Its input becomes the input of the case.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "input": {
+          "description": "The input of the agent. Give this or sandboxRunId."
+        },
+        "expectedOutput": {
+          "description": "The answer that is correct, as text. A judge reads it.",
+          "type": "string",
+          "maxLength": 20000
+        },
+        "scorers": {
+          "description": "The scorers. A trial passes when every gating scorer passes.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "check"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "gating": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "What the check reads: output, output.<field>, tools, duration_ms, cost_usd, input_tokens, output_tokens, total_tokens or tool_arguments.<tool>.<field>."
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "ne",
+                      "contains",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "exists"
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "path",
+                  "op"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "judge"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "gating": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000,
+                    "description": "A yes-or-no question about the answer. Yes is a pass."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "question"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "annotations": {
+      "title": "Create an eval case",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_approve_case",
+    "title": "Approve an eval case",
+    "description": "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It refuses a draft with no input or no gating scorer.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "caseId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of a case. evals_list_cases gives the case ids."
+        }
+      },
+      "required": [
+        "caseId"
+      ]
+    },
+    "annotations": {
+      "title": "Approve an eval case",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_start_run",
+    "title": "Start an eval run",
+    "description": "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Poll evals_get_run until the state is completed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "sandboxVersion": {
+          "default": "latest",
+          "description": "A sandbox version id, or latest for the newest ready version.",
+          "anyOf": [
+            {
+              "type": "string",
+              "const": "latest"
+            },
+            {
+              "type": "string",
+              "minLength": 36,
+              "maxLength": 36
+            }
+          ]
+        },
+        "trials": {
+          "default": 3,
+          "description": "The runs of each case.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "params": {
+          "default": {},
+          "description": "Values for the params that the sandbox version declares.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "annotations": {
+      "title": "Start an eval run",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_list_runs",
+    "title": "List eval runs",
+    "description": "Use this tool to find eval runs of the project, newest first. It returns each run with its state, sandbox version, raw pass, fail and invalid counts, and which run is the pinned baseline.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "List eval runs",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_get_run",
+    "title": "Read an eval run",
+    "description": "Use this tool to read an eval run. A running run is awaited up to 20 seconds. It returns the state and the raw counts, and for each case its input, the output of each trial, the trial results and the scorer results.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of an eval run. evals_start_run gives it."
+        }
+      },
+      "required": [
+        "runId"
+      ]
+    },
+    "annotations": {
+      "title": "Read an eval run",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_get_trial",
+    "title": "Read an eval trial",
+    "description": "Use this tool to read one trial of an eval run in full. It returns the output, the tool calls, each scorer result with its reason, and the sandbox run id.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of an eval run. evals_start_run gives it."
+        },
+        "trialId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of a trial. evals_get_run gives the trial ids."
+        }
+      },
+      "required": [
+        "runId",
+        "trialId"
+      ]
+    },
+    "annotations": {
+      "title": "Read an eval trial",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_compare",
+    "title": "Compare two eval runs",
+    "description": "Use this tool to compare an eval run with the pinned baseline, or with baselineRunId. It returns the verdict, the rule that decided it, and the changed cases with the outputs of both runs. It refuses runs whose scorers differ and says why.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of an eval run. evals_start_run gives it."
+        },
+        "baselineRunId": {
+          "description": "The eval run to compare with. Omit it to use the pinned baseline.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "runId"
+      ]
+    },
+    "annotations": {
+      "title": "Compare two eval runs",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "evals_pin_baseline",
+    "title": "Pin the eval baseline",
+    "description": "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. evals_compare uses the baseline when no baselineRunId is given.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The id of an eval run. evals_start_run gives it."
+        }
+      },
+      "required": [
+        "runId"
+      ]
+    },
+    "annotations": {
+      "title": "Pin the eval baseline",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
     "name": "list_tasks",
     "title": "List tasks",
     "description": "List the project's tasks with their runs, status, finish rate and fix counts, plus the reading's totals, its state and the asks no task serves. Call get_task with a taskId for its steps, issues, scorers and eval set.",
