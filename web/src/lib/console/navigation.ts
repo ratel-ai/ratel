@@ -105,7 +105,7 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
-  /** `customMonitoring` on for the shown organization: Scorers, Dashboards, Explore and Alerts under Overview. */
+  /** `customMonitoring` on for the shown organization: Dashboards, Explore, Scorers and Alerts in Monitor. */
   customMonitoring?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
@@ -402,7 +402,7 @@ export function consoleNav({
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
+ * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore, Scorers and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
  * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
  */
 function stageRailNav(
@@ -492,12 +492,15 @@ function stageRailNav(
         ],
       }
     : classicTraces;
+  const overview = pick("overview");
   return [
-    ...stage("monitor", "Monitor", [
-      customMonitoring ? withMonitoringPages(root, pick("overview")) : pick("overview"),
-      health,
-      traces,
-    ]),
+    ...stage(
+      "monitor",
+      "Monitor",
+      customMonitoring
+        ? withMonitoringPages(root, { overview, health, traces })
+        : [overview, health, traces],
+    ),
     ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
@@ -509,51 +512,47 @@ function stageRailNav(
 }
 
 /**
- * Overview with the `customMonitoring` pages. They fold under it because the rail is already at the
- * 9 items DESIGN.md allows.
+ * Monitor with the `customMonitoring` pages, each an item of its own: they are destinations as much as
+ * the pages beside them. Overview gives up `/dashboards`, which is then a page and not an old address.
  */
-function withMonitoringPages(root: string, overview: NavItem): NavItem {
-  return {
-    ...overview,
-    children: [
-      {
-        id: "overview-summary",
-        label: "Summary",
-        href: overview.href,
-        icon: "overview",
-        exact: true,
-        activeId: overview.id,
-      },
-      {
-        id: "scorers",
-        label: "Scorers",
-        href: `${root}/scorers`,
-        icon: "overview",
-        keywords: ["scores", "judge", "checks", "evaluation"],
-      },
-      {
-        id: "dashboards",
-        label: "Dashboards",
-        href: `${root}/dashboards`,
-        icon: "overview",
-        keywords: ["dashboards", "widgets", "charts", "metrics"],
-      },
-      {
-        id: "explore",
-        label: "Explore",
-        href: `${root}/explore`,
-        icon: "overview",
-        keywords: ["query", "analyze", "playground", "charts", "funnel", "flow"],
-      },
-      {
-        id: "alerts",
-        label: "Alerts",
-        href: `${root}/alerts`,
-        icon: "overview",
-        keywords: ["threshold", "notifications", "slack", "monitors"],
-      },
-    ],
+function withMonitoringPages(
+  root: string,
+  { overview, health, traces }: { overview: NavItem; health: NavItem; traces: NavItem },
+): NavItem[] {
+  const dashboards: NavItem = {
+    id: "dashboards",
+    label: "Dashboards",
+    href: `${root}/dashboards`,
+    icon: "dashboards",
+    keywords: ["dashboards", "widgets", "charts", "metrics"],
   };
+  return [
+    { ...overview, also: overview.also?.filter((path) => path !== dashboards.href) },
+    dashboards,
+    {
+      id: "explore",
+      label: "Explore",
+      href: `${root}/explore`,
+      icon: "explore",
+      keywords: ["query", "analyze", "playground", "charts", "funnel", "flow"],
+    },
+    health,
+    traces,
+    {
+      id: "scorers",
+      label: "Scorers",
+      href: `${root}/scorers`,
+      icon: "scorers",
+      keywords: ["scores", "judge", "checks", "evaluation"],
+    },
+    {
+      id: "alerts",
+      label: "Alerts",
+      href: `${root}/alerts`,
+      icon: "alerts",
+      keywords: ["threshold", "notifications", "slack", "monitors"],
+    },
+  ];
 }
 
 export type CommandEntry = {
