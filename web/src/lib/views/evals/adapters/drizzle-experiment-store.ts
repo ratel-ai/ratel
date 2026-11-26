@@ -130,6 +130,32 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
       return row ? { output: row.output?.value ?? null, toolCalls: row.toolCalls } : null;
     },
 
+    async outputPreviews(experimentId, chars) {
+      const rows = await db
+        .select({
+          id: evalTrials.id,
+          text: sql<string>`left(${evalTrials.output}->'value' #>> '{}', ${chars})`,
+        })
+        .from(evalTrials)
+        .where(
+          and(
+            eq(evalTrials.experimentId, experimentId),
+            sql`${evalTrials.output}->'value' is not null`,
+            sql`jsonb_typeof(${evalTrials.output}->'value') <> 'null'`,
+          ),
+        );
+      return new Map(rows.map(({ id, text }) => [id, text]));
+    },
+
+    async caseVersions(versionIds) {
+      if (versionIds.length === 0) return [];
+      const rows = await db
+        .select()
+        .from(evalCaseVersions)
+        .where(inArray(evalCaseVersions.id, [...versionIds]));
+      return rows.map(toVersion);
+    },
+
     async listRunning(limit) {
       const rows = await db
         .select()

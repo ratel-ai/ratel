@@ -766,6 +766,25 @@ test("the read of a key does not load the outputs", async () => {
   assert.equal(await t.deps.experiments.trialEvidence(OTHER_PROJECT_ID, first.id), null);
 });
 
+test("the grid reads a cut output of each trial and the case versions of an experiment", async () => {
+  const t = await setup();
+  const made = await t.approvedCase("one", { expectedOutput: "Yes." });
+  const experiment = await t.start({ trialsPerCase: 2 });
+  await t.step(experiment);
+  const [first, second] = [...t.runs.values()];
+  assert.ok(first && second);
+  t.end(first, {}, "x".repeat(50));
+  t.end(second, {}, { reply: "ok" });
+  await t.step(experiment);
+  const previews = await t.deps.experiments.outputPreviews(experiment.id, 20);
+  const texts = [...previews.values()].sort();
+  assert.deepEqual(texts, ["x".repeat(20), '{"reply": "ok"}'].sort());
+  const versions = await t.deps.experiments.caseVersions([made.versions[0]?.id ?? ""]);
+  assert.equal(versions.length, 1);
+  assert.equal(versions[0]?.expectedOutput, "Yes.");
+  assert.deepEqual(await t.deps.experiments.caseVersions([]), []);
+});
+
 test("a run that started stays linked when the trial did not become running", async () => {
   const t = await setup();
   await t.approvedCase("one");

@@ -2,6 +2,7 @@
 
 import { Badge, type Tone } from "@ratel/design-system/badge";
 import { Button } from "@ratel/design-system/button";
+import { Disclosure } from "@ratel/design-system/disclosure";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { TrialEvidence } from "@/lib/views/evals/domain/experiment";
@@ -13,6 +14,11 @@ const RESULT: Record<TrialResult, { label: string; tone: Tone }> = {
   fail: { label: "Fail", tone: "danger" },
   invalid: { label: "Invalid", tone: "warning" },
 };
+const MODE = {
+  real: { label: "Live", tone: "neutral" },
+  fixture: { label: "Recorded", tone: "info" },
+  fake: { label: "Simulated", tone: "accent" },
+} as const;
 const SCORER: Record<ScorerResult["status"], { label: string; tone: Tone }> = {
   pass: { label: "Pass", tone: "success" },
   fail: { label: "Fail", tone: "danger" },
@@ -24,11 +30,14 @@ export function TrialPanel({
   projectId,
   trial,
   loadEvidence = false,
+  showLogs = false,
 }: {
   projectId: string;
   trial: TrialView;
   /** Reads the output and the tool calls with no click. */
   loadEvidence?: boolean;
+  /** Shows the logs of the sandbox run, read when the reader opens them. */
+  showLogs?: boolean;
 }) {
   const result = trial.result ? RESULT[trial.result] : null;
   return (
@@ -64,7 +73,42 @@ export function TrialPanel({
       {trial.result && (trial.result !== "invalid" || trial.scorers.length > 0) ? (
         <Evidence projectId={projectId} trialId={trial.id} load={loadEvidence} />
       ) : null}
+      {showLogs && trial.sandboxRunId && trial.result ? (
+        <RunLogs projectId={projectId} runId={trial.sandboxRunId} />
+      ) : null}
     </div>
+  );
+}
+
+/** The logs of the sandbox run of a trial: the end only, so they are read with the panel. */
+function RunLogs({ projectId, runId }: { projectId: string; runId: string }) {
+  const [logs, setLogs] = useState<string | "loading" | "failed">("loading");
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/projects/${projectId}/sandboxes/runs/${runId}`)
+      .then((response) =>
+        response.ok ? (response.json() as Promise<{ logs: string | null }>) : null,
+      )
+      .catch(() => null)
+      .then((run) => {
+        if (live) setLogs(run ? (run.logs ?? "") : "failed");
+      });
+    return () => {
+      live = false;
+    };
+  }, [projectId, runId]);
+  const text =
+    logs === "loading"
+      ? "Loading…"
+      : logs === "failed"
+        ? "The logs did not load."
+        : logs || "The run wrote no log.";
+  return (
+    <Disclosure title="Logs">
+      <pre className="max-h-60 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
+        {text}
+      </pre>
+    </Disclosure>
   );
 }
 
@@ -111,14 +155,24 @@ function Evidence({
       <pre className="max-h-80 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg">
         {show(evidence.output)}
       </pre>
-      <ol className="flex flex-col gap-1">
-        {evidence.toolCalls.map((call, index) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: the calls of a trial never change their order
-          <li key={index} className="font-mono text-xs break-all text-fg-muted">
-            {call.name}({show(call.arguments)}) → {call.error ?? show(call.result)} [{call.source}]
-          </li>
-        ))}
-      </ol>
+      {evidence.toolCalls.length === 0 ? (
+        <p className="text-xs text-fg-subtle">The agent called no tool.</p>
+      ) : (
+        <ol className="flex flex-col gap-1.5">
+          {evidence.toolCalls.map((call, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the calls of a trial never change their order
+            <li key={index} className="flex flex-col gap-0.5">
+              <span className="flex items-center gap-2">
+                <code className="font-mono text-xs text-fg">{call.name}</code>
+                <Badge tone={MODE[call.source].tone}>{MODE[call.source].label}</Badge>
+              </span>
+              <code className="font-mono text-xs break-all text-fg-muted">
+                {show(call.arguments)} → {call.error ?? show(call.result)}
+              </code>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
