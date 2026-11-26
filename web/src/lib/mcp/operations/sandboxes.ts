@@ -83,7 +83,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "List Ratel sandboxes",
       description:
-        "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name, its newest versions with their status, and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+        "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name and its newest versions with their status. It also returns the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
       keywords: ["sandbox", "pushed agents", "sandbox versions"],
       scope: "project",
       mutates: false,
@@ -108,7 +108,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "Read a Ratel sandbox version",
       description:
-        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, and the tools with their modes.",
+        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options. It also returns the tools with their modes.",
       keywords: ["sandbox", "declared params", "input example", "smoke check"],
       scope: "project",
       mutates: false,
@@ -133,7 +133,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "Run a Ratel sandbox version",
       description:
-        "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds for the result. If the run is not complete then, call sandbox_get_run with the run id.",
+        "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. It returns the run id and the status. A complete run also has the input, the output and the tool calls. For a run that is not complete, call sandbox_get_run.",
       keywords: ["sandbox", "run agent", "try an input"],
       scope: "project",
       mutates: true,
@@ -147,7 +147,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
           .max(63)
           .optional()
           .describe(
-            "The name of a sandbox. It runs the newest ready version. Give this or versionId.",
+            "The name of a sandbox. The tool runs its newest ready version. Give this or versionId.",
           ),
         input: z
           .unknown()
@@ -157,7 +157,9 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
         params: z
           .record(z.string(), scalar)
           .optional()
-          .describe("Values for the params that the version declares. Other names are refused."),
+          .describe(
+            "Values for the params that the version declares. The tool refuses other names.",
+          ),
       }),
       async execute(ctx, params) {
         const version = await findVersion(deps, ctx.projectId, params);
@@ -182,7 +184,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "Read a Ratel sandbox run",
       description:
-        "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output, the params, the tool calls, the error of a failed run and the end of the container logs.",
+        "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output and the params. It also returns the tool calls, the error of a failed run and the end of the container logs.",
       keywords: ["sandbox", "run result", "container logs"],
       scope: "project",
       mutates: false,

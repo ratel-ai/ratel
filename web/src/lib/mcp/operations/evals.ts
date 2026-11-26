@@ -179,7 +179,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "List eval cases",
       description:
-        "Use this tool to see the eval cases of the project. It returns each case with its name, labels, approved version number and draft. Only an approved case counts in an eval run.",
+        "Use this tool to see the eval cases of the project. It returns each case with its id, name, labels, approved version number and draft version number. Only an approved case counts in an eval run.",
       keywords: ["evals", "eval cases", "dataset"],
       scope: "project",
       mutates: false,
@@ -246,7 +246,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Create an eval case",
       description:
-        "Use this tool to save an input as an eval case, for example a sandbox run with a bad answer. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and answer of that run. A case needs a gating scorer before approval.",
+        "Use this tool to save an input as an eval case. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and the answer of a sandbox run. It returns the case id, the draft version number and the state. A case needs a gating scorer before approval.",
       keywords: ["evals", "save as case", "new case"],
       scope: "project",
       mutates: true,
@@ -325,7 +325,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Approve an eval case",
       description:
-        "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It refuses a draft with no input or no gating scorer.",
+        "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It returns the case id, the version number and the state. It refuses a draft with no input or no gating scorer.",
       keywords: ["evals", "approve case"],
       scope: "project",
       mutates: true,
@@ -375,7 +375,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Start an eval run",
       description:
-        "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Call evals_get_run until the state is completed.",
+        "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id, the state, and the numbers of cases and trials at once. Call evals_get_run until the state is completed.",
       keywords: ["evals", "start eval run"],
       scope: "project",
       mutates: true,
@@ -546,7 +546,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Compare two eval runs",
       description:
-        "Use this tool to compare an eval run with the pinned baseline, or with baselineRunId. It returns the verdict, the rule that decided it, and the changed cases with the outputs of both runs. It refuses runs whose scorers differ and says why.",
+        "Use this tool to compare an eval run with the pinned baseline, or with baselineRunId. It returns the verdict and the rule that decided it. It also returns the changed cases with the outputs of both runs. It refuses runs whose scorers differ and gives the reason.",
       keywords: ["evals", "regression", "verdict"],
       scope: "project",
       mutates: false,
@@ -579,7 +579,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Pin the eval baseline",
       description:
-        "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. evals_compare uses the baseline when no baselineRunId is given.",
+        "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. It returns the baseline run id and the time of the pin. evals_compare uses this baseline when you give no baselineRunId.",
       keywords: ["evals", "pin baseline"],
       scope: "project",
       mutates: true,
