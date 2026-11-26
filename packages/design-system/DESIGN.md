@@ -27,8 +27,9 @@ Every UI change in the platform, in both editions, follows this document and is 
 
 ## Information architecture
 
-At most 10 project items, and 14 with `customMonitoring` (the edition's own come on top), under stage
-headings; the rail scrolls when they do not fit. Nothing "Soon"; one home per concept and per
+At most 10 project items in the rail's list, and 14 with `customMonitoring` (the edition's own come
+on top), under stage headings; the list scrolls when they do not fit. MCP is not in the list: it sits in
+the rail's footer and does not count. Nothing "Soon"; one home per concept and per
 editable field; items the edition lacks are not rendered; moved pages redirect.
 
 | Item | Answers | Contains |
@@ -39,6 +40,7 @@ editable field; items the edition lacks are not rendered; moved pages redirect.
 | Catalog | What can my agent use? | Tools, Skills, Test |
 | Intents | What do people want, and what next? | All intents, Flows, Map |
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
+| MCP (rail footer) | How do I connect an agent to Ratel? | The organization's MCP connection guide, the key choice on this project |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
 
 With `customMonitoring` on, Monitor has four more items, in this order: Overview, Dashboards, Explore, Agent health,
@@ -63,7 +65,8 @@ one page (the Health score, then the issues under the four categories it counts 
 ## Layout
 
 - **Inverted-L frame:** sidebar (240 px, 48 collapsed, a drawer on phones) and a 52 px page
-  header; no top bar.
+  header; no top bar. The sidebar is the switcher and search, the scrolling list, then a footer
+  pinned at the bottom: MCP, the analysis line and the account.
 - **Grid:** 4 px. Page padding 24 px (32 px from `lg`); 32 px between sections, 16 px inside, 8 px
   between related controls.
 - **Width:** reading and form pages cap at 1200 px; tables, traces and maps run full width.

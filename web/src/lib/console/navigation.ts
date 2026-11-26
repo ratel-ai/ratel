@@ -31,12 +31,23 @@ export interface NavItem {
   keywords?: readonly string[];
   /** The rail item to select when this destination matches. Defaults to this item's id. */
   activeId?: string;
-  /** The rail section it sits in; the rail leaves a gap between sections. Absent means `main`. */
-  section?: "settings" | "edition" | `group:${string}`;
+  /**
+   * The rail section it sits in; the rail leaves a gap between sections. Absent means `main`.
+   * `footer` items leave the scrolling list: they are pinned at the rail's foot, above the account.
+   */
+  section?: "settings" | "footer" | "edition" | `group:${string}`;
   /** The section's heading, on its first item (an edition's project group). */
   sectionLabel?: string;
   /** Sub-pages folded under this item; its own href is the group's landing page. */
   children?: readonly NavItem[];
+}
+
+/** The rail's scrolling list and its pinned footer, each in rail order. */
+export function railParts(items: readonly NavItem[]): { list: NavItem[]; footer: NavItem[] } {
+  return {
+    list: items.filter((item) => item.section !== "footer"),
+    footer: items.filter((item) => item.section === "footer"),
+  };
 }
 
 /** Every item, children included, in rail order. */
@@ -354,6 +365,21 @@ export function consoleNav({
             ),
           ),
         {
+          id: "mcp-setup",
+          label: "MCP",
+          href: `${root}/mcp-setup`,
+          icon: "integrations",
+          keywords: [
+            "mcp",
+            "connect",
+            "claude",
+            "cursor",
+            "model context protocol",
+            "integrations",
+          ],
+          section: "footer",
+        },
+        {
           id: "settings",
           label: "Settings",
           href: `${root}/settings`,
@@ -403,7 +429,7 @@ export function consoleNav({
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
  * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore, Scorers and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
- * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
+ * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the list, unlabelled; MCP sits in the footer.
  */
 function stageRailNav(
   root: string,
@@ -507,6 +533,7 @@ function stageRailNav(
     ...classic.filter((item) => item.section?.startsWith("group:")),
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
+    pick("mcp-setup"),
     pick("settings"),
   ];
 }
