@@ -4,20 +4,16 @@ import { Field, Input } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import { SegmentedControl } from "@ratel/design-system/tabs";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
-import {
-  type Dimension,
-  MAX_DIMENSIONS,
-  type MetricQuery,
-  QUERY_KINDS,
-  type Query,
-} from "@/lib/contracts/query";
+import { type Dimension, MAX_DIMENSIONS, type MetricQuery } from "@/lib/contracts/query";
 import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import {
   MAX_WIDGET_TITLE,
   METRIC_CHARTS,
+  WIDGET_KINDS,
   type WidgetChart,
   type WidgetInput,
+  type WidgetQuery,
 } from "@/lib/views/dashboards/types";
 import {
   CHART_LABELS,
@@ -65,7 +61,7 @@ export function WidgetFields({
   const scorers = useScorers();
   const set = (change: Partial<WidgetInput>) =>
     onChange((current) => fitWidget({ ...current, ...change }));
-  const setQuery = (change: (query: Query) => Query) =>
+  const setQuery = (change: (query: WidgetQuery) => WidgetQuery) =>
     onChange((current) => fitWidget({ ...current, query: change(current.query) }));
   const metric = queryMetric(query);
 
@@ -82,7 +78,7 @@ export function WidgetFields({
         <div className="flex">
           <SegmentedControl
             label="Show"
-            options={QUERY_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
+            options={WIDGET_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
             value={query.kind}
             onValueChange={(kind) => onChange((current) => widgetOfKind(kind, current))}
           />

@@ -299,6 +299,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["toolRunInsights", false],
       ["focusedConsole", true],
       ["customMonitoring", false],
+      ["rql", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -309,6 +310,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["agentsPages", subject],
     ["toolRunInsights", subject],
     ["customMonitoring", subject],
+    ["rql", subject],
   ]);
   assert.deepEqual(askedFocused, [{ id: "org-1" }], "as the rail and the pages ask it");
 });

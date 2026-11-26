@@ -19,6 +19,7 @@ import {
   loopEvalSetWriteOperations,
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
+import { rqlForCaller } from "@/lib/mcp/operations/monitoring/rql";
 import { focusedConsoleForCaller } from "@/lib/mcp/operations/overview";
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpOrigin, mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
@@ -113,6 +114,8 @@ export interface McpRouteDeps {
   mcpApps?: (auth: McpAuthContext, options?: McpAppsFlagOptions) => Promise<boolean>;
   /** `focusedConsole`, for this caller: whether the recap Overview's tools exist. */
   focusedConsole?: (auth: McpAuthContext) => Promise<boolean>;
+  /** `rql`, for this caller: whether the RQL tools exist. */
+  rql?: (auth: McpAuthContext) => Promise<boolean>;
   /** The built views, checked against the registry (lib/mcp/apps/load.ts). */
   appCatalog?: () => McpAppCatalog;
   now?: () => number;
@@ -436,8 +439,11 @@ async function runMessages(
   /** The client shows views: the model is told the person already sees the data. */
   clientRendersViews: boolean,
 ): Promise<JSONRPCMessage[]> {
-  const focusedConsole = await (deps.focusedConsole ?? focusedConsoleForCaller)(auth);
-  const registry = buildRequestRegistry({ focusedConsole });
+  const [focusedConsole, rql] = await Promise.all([
+    (deps.focusedConsole ?? focusedConsoleForCaller)(auth),
+    (deps.rql ?? rqlForCaller)(auth),
+  ]);
+  const registry = buildRequestRegistry({ focusedConsole, rql });
   const apps = built && viewsFor(built, (tool) => tool === "whoami" || registry.has(tool));
   const server = createRatelMcpServer({
     auth,

@@ -27,7 +27,9 @@ widgets on a grid. A widget is one query object
 | `actions.ts` | `changeDashboard`: one change by a person, after membership, the flag and a support-session check (the pages' server action calls it) |
 
 Chart rules: a table needs a group-by, a number has none, a line and a bar take both. Every other
-query kind has the one chart of its name. A move of a flow opens the Traces page for the traces of
+query kind has the one chart of its name, but kind `sql`: no chart draws its rows yet, so
+`parseWidget` refuses it (`SQL_WIDGET_PROBLEM`) for a widget, an Explore panel, a dashboard document
+and `query_monitoring`; `WidgetQuery` is the query of every other kind. A move of a flow opens the Traces page for the traces of
 its source: the trace filter knows no order, and no skill. A node of a step flow opens the traces that
 had it at any step, for the same reason; a skill, an intent and a fold open none. A funnel step opens its traces only when
 the trace filter can say exactly which (one tool, no error). A clusters widget reads the stored analysis: it states its

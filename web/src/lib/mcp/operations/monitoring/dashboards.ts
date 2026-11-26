@@ -4,20 +4,23 @@ import {
   BUCKETS,
   DIMENSIONS,
   MEASURES,
-  QUERY_KINDS,
   QUERY_VERSION,
   type Query,
   querySchema,
+  type SqlQuery,
 } from "@/lib/contracts/query";
 import { invalidParams, notFound } from "@/lib/mcp/errors";
 import {
   callerAccess,
   defaultMonitoringDeps,
+  type MonitoringCaller,
   type MonitoringDeps,
   observeChange,
+  queryRefusal,
   refusal,
   required,
   requireMonitoring,
+  requireRql,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { cappedResult, countOf, headline } from "@/lib/mcp/operations/monitoring/results";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
@@ -25,6 +28,7 @@ import { defineOperation, type McpOperation, type OperationContext } from "@/lib
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { resolveWindow, windowParams } from "@/lib/mcp/windows";
 import { MAX_METRIC_WINDOW_DAYS, offeredMetrics } from "@/lib/synthesis/metrics/catalog";
+import { RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { loadWidgets } from "@/lib/views/dashboards/data";
@@ -44,8 +48,11 @@ import {
   type DashboardSummary,
   type DashboardWidget,
   METRIC_CHARTS,
+  SQL_WIDGET_PROBLEM,
   WIDGET_CHARTS,
+  WIDGET_KINDS,
   type WidgetInput,
+  type WidgetKind,
 } from "@/lib/views/dashboards/types";
 import { chartProblem, widgetName } from "@/lib/views/dashboards/widget";
 import { explorePanelsHref } from "@/lib/views/explore/links";
@@ -54,6 +61,9 @@ import { scorerNames } from "@/lib/views/scorers/picker";
 
 const FEATURES = { customMonitoring: true } as const;
 const QUERY_WINDOW = { defaultDays: 7, maxDays: MAX_METRIC_WINDOW_DAYS } as const;
+/** Kind sql reads at most the longest window of RQL. */
+const SQL_WINDOW = { defaultDays: 7, maxDays: RQL_LIMITS.maxWindowDays } as const;
+const SQL_CHART_PROBLEM = "A query of kind sql has no chart: it gives a table.";
 /** How a change made through MCP is signed: the core has no table of people. */
 const EDITOR_NAME = "An agent (MCP)";
 
@@ -104,7 +114,20 @@ export const EXAMPLES = {
     kind: "geography",
     measures: [{ measure: "trace_count", aggregation: "count" }],
   },
-} as const satisfies Record<Query["kind"], z.input<typeof querySchema>>;
+} as const satisfies Record<WidgetKind, z.input<typeof querySchema>>;
+
+/** Kind sql, in the catalog only with the `rql` flag on. */
+const SQL_KIND = {
+  kind: "sql",
+  charts: [],
+  example: {
+    version: QUERY_VERSION,
+    kind: "sql",
+    text: "select model, count(*) as calls from events where type = 'llm_call' group by model",
+    rqlVersion: RQL_VERSION,
+  },
+  note: "RQL text. query_monitoring runs it and gives a table. A widget, a panel and an alert cannot hold it yet. describe_rql_schema gives the language. run_rql runs it with a table view.",
+} as const;
 
 export function dashboardReadOperations(
   deps: MonitoringDeps = defaultMonitoringDeps,
@@ -127,11 +150,12 @@ export function dashboardReadOperations(
           .describe("catalog: without the two schemas. query or dashboard: one schema alone."),
       }),
       async execute(ctx, { part }) {
-        await requireMonitoring(deps, ctx);
+        const caller = await requireMonitoring(deps, ctx);
         const has = (wanted: string) => part === "all" || part === wanted;
+        const sql = has("catalog") && (await deps.rqlEnabled(caller));
         return {
           data: {
-            ...(has("catalog") ? { catalog: catalog() } : {}),
+            ...(has("catalog") ? { catalog: catalog(sql) } : {}),
             ...(has("query") ? { query: jsonSchema(querySchema) } : {}),
             ...(has("dashboard") ? { dashboard: jsonSchema(dashboardDocumentSchema) } : {}),
           },
@@ -152,7 +176,9 @@ export function dashboardReadOperations(
         ...projectScoped,
         query: queryParam
           .optional()
-          .describe(`A query object. ${EXAMPLE_QUERY} ${EXAMPLE_STEP_FLOW}`),
+          .describe(
+            `A query object. ${EXAMPLE_QUERY} ${EXAMPLE_STEP_FLOW} With the rql flag on, a query of kind sql (RQL text) gives a table. It cannot be a panel.`,
+          ),
         queries: z
           .array(panelParam)
           .min(2)
@@ -171,7 +197,10 @@ export function dashboardReadOperations(
         limit: limitParam,
       }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const caller = await requireMonitoring(deps, ctx);
+        const { projectId } = caller;
+        const sql = loneSql(params);
+        if (sql) return sqlAnswer(deps, ctx, caller, sql, params);
         const panels = askedPanels(params);
         const filter = parsedFilters(params.filters);
         const tooLong = filtersProblem(
@@ -182,7 +211,9 @@ export function dashboardReadOperations(
         const window = resolveWindow(params, QUERY_WINDOW, deps.now());
         const results = await Promise.all(
           panels.map(({ query }) => deps.runQuery(projectId, query, { ...window, filter })),
-        );
+        ).catch((error: unknown) => {
+          throw queryRefusal(error);
+        });
         const tracker = new TruncationTracker();
         tracker.mark(window.clamped);
         const range = rangeOf(exactly(window.since, window.until));
@@ -465,6 +496,56 @@ function panelCell(index: number, count: number) {
   return { x: (index % 2) * 6, y: Math.floor(index / 2) * 10, w: last ? 12 : 6, h: 10 };
 }
 
+interface QueryParams {
+  query?: unknown;
+  queries?: readonly unknown[];
+  since?: string;
+  until?: string;
+  filters?: unknown;
+  chart?: string;
+  limit: number;
+}
+
+/** The query of kind sql a call asks for alone, or undefined for any other call. */
+function loneSql(params: QueryParams): SqlQuery | undefined {
+  if (params.queries !== undefined) return undefined;
+  const raw = params.query as { kind?: unknown } | undefined;
+  if (raw?.kind !== "sql") return undefined;
+  return parsedQuery(raw, ["query"]) as SqlQuery;
+}
+
+/** A query of kind sql: its table, behind the `rql` flag, with the errors of RQL. */
+async function sqlAnswer(
+  deps: MonitoringDeps,
+  ctx: OperationContext,
+  { projectId }: MonitoringCaller,
+  query: SqlQuery,
+  params: QueryParams,
+) {
+  await requireRql(deps, ctx);
+  if (params.chart)
+    throw invalidParams(SQL_CHART_PROBLEM, [{ path: "chart", message: SQL_CHART_PROBLEM }]);
+  const window = resolveWindow(params, SQL_WINDOW, deps.now());
+  const filter = parsedFilters(params.filters);
+  const result = await deps
+    .runQuery(projectId, query, { since: window.since, until: window.until, filter })
+    .catch((error: unknown) => {
+      throw queryRefusal(error);
+    });
+  const tracker = new TruncationTracker();
+  tracker.mark(window.clamped);
+  return {
+    data: {
+      name: "RQL query",
+      summary: headline(query, result),
+      result: cappedResult(query, result, params.limit, tracker),
+    },
+    truncated: tracker.value,
+    window: window.toJSON(),
+    hint: "run_rql runs RQL too, and shows the table as a view. A widget cannot hold kind sql yet.",
+  };
+}
+
 /** The panels a call asks for, each with the chart it is drawn as. */
 function askedPanels(params: {
   query?: unknown;
@@ -484,6 +565,10 @@ function askedPanels(params: {
     : [{ title: "", query: params.query, chart: params.chart, path: [] }];
   return asked.map(({ title = "", query: raw, chart: given, path }) => {
     const query = parsedQuery(raw, [...path, "query"]);
+    if (query.kind === "sql")
+      throw invalidParams(SQL_WIDGET_PROBLEM, [
+        { path: [...path, "query", "kind"].join("."), message: SQL_WIDGET_PROBLEM },
+      ]);
     // The chart of a lone query is for a metric; the other kinds have one each.
     const chart =
       query.kind === "metric" ? (given ?? "line") : path.length > 0 && given ? given : query.kind;
@@ -711,13 +796,16 @@ function parsedFilters(raw: unknown): Dashboard["filters"] | undefined {
   throw invalidParams(`The filters are invalid at "${at}": ${message}`, [{ path: at, message }]);
 }
 
-function catalog() {
+function catalog(sql: boolean) {
   return {
-    kinds: QUERY_KINDS.map((kind) => ({
-      kind,
-      charts: kind === "metric" ? METRIC_CHARTS : [kind],
-      example: EXAMPLES[kind],
-    })),
+    kinds: [
+      ...WIDGET_KINDS.map((kind) => ({
+        kind,
+        charts: kind === "metric" ? METRIC_CHARTS : [kind],
+        example: EXAMPLES[kind],
+      })),
+      ...(sql ? [SQL_KIND] : []),
+    ],
     measures: offeredMetrics(FEATURES).map(
       ({ id, label, description, unit, aggregations, dimensions, buckets, filterable }) => ({
         id,

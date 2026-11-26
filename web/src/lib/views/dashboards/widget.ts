@@ -12,7 +12,6 @@ import {
   type MetricQuery,
   metricQuery,
   type Query,
-  type QueryKind,
   type StepFlowNode,
   type StepFlowQuery,
   stepFlowQuery,
@@ -25,6 +24,8 @@ import {
   type MetricWidget,
   type WidgetChart,
   type WidgetInput,
+  type WidgetKind,
+  type WidgetQuery,
 } from "@/lib/views/dashboards/types";
 import type { PickerScorer } from "@/lib/views/scorers/picker";
 
@@ -42,7 +43,7 @@ export const CHART_LABELS: Readonly<Record<WidgetChart, string>> = {
   geography: "Map",
 };
 
-export const KIND_LABELS: Readonly<Record<QueryKind, string>> = {
+export const KIND_LABELS: Readonly<Record<WidgetKind, string>> = {
   metric: "Metric",
   flow: "Flow",
   step_flow: "Step flow",
@@ -164,7 +165,7 @@ export function fitWidget(widget: WidgetInput): WidgetInput {
 }
 
 /** The widget a person starts from when they pick a kind: its filter stays where the kind has one. */
-export function widgetOfKind(kind: QueryKind, from: WidgetInput): WidgetInput {
+export function widgetOfKind(kind: WidgetKind, from: WidgetInput): WidgetInput {
   if (from.query.kind === kind) return from;
   const filters = queryFilter(from.query) ?? {};
   switch (kind) {
@@ -217,7 +218,7 @@ export function queryMetric(query: Query): MetricDefinition | null {
 }
 
 /** A query's own trace filter, without its scorer. */
-export function queryFilter(query: Query): TraceFilter {
+export function queryFilter(query: WidgetQuery): TraceFilter {
   if (query.kind === "clusters") return {};
   if (!measuresOne(query)) return query.filters;
   const { scorer: _, ...filter } = query.filters;
@@ -234,14 +235,14 @@ export function measuresOne(query: Query): query is MetricQuery | GeographyQuery
 }
 
 /** The query with another trace filter; its scorer stays. */
-export function withFilter<Q extends Query>(query: Q, filter: TraceFilter): Q {
+export function withFilter<Q extends WidgetQuery>(query: Q, filter: TraceFilter): Q {
   if (query.kind === "clusters") return query;
   const scorer = queryScorerId(query);
   return { ...query, filters: { ...filter, ...(scorer ? { scorer: { id: scorer } } : {}) } };
 }
 
 /** Whether the dashboard's filters narrow it. */
-export function isFilterable(query: Query): boolean {
+export function isFilterable(query: WidgetQuery): boolean {
   if (query.kind === "clusters") return false;
   return !measuresOne(query) || queryMetric(query)?.filterable === true;
 }
@@ -329,6 +330,8 @@ export function queryName(query: NamedQuery): string {
       return query.country
         ? `${metricName({ ...query, dimensions: [] })} by region of ${placeName(query.country)}`
         : `${metricName({ ...query, dimensions: [] })} by country`;
+    case "sql":
+      return "RQL query";
   }
 }
 
@@ -339,7 +342,8 @@ type NamedQuery =
   | Pick<StepFlowQuery, "kind" | "node" | "start" | "mode" | "target">
   | { kind: "funnel"; steps: readonly { name: string }[] }
   | Pick<ClustersQuery, "kind" | "view">
-  | Pick<GeographyQuery, "kind" | "measures" | "country">;
+  | Pick<GeographyQuery, "kind" | "measures" | "country">
+  | { kind: "sql" };
 
 function metricName({
   measures: [{ measure, aggregation }],

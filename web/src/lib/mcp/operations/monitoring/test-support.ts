@@ -1,5 +1,6 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchResult, type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation } from "@/lib/mcp/registry";
@@ -7,7 +8,11 @@ import { buildRegistry } from "@/lib/mcp/registry";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { runQuery } from "@/lib/synthesis/metrics/query";
+import { metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
+import type { RqlPool } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
 import type { SealedDestination } from "@/lib/views/alerts/destinations";
 // What these modules own is read through what they register.
 import "@/lib/views/dashboards/data";
@@ -53,6 +58,8 @@ export interface Monitoring {
   /** The state a test changes. */
   set: {
     on: boolean;
+    /** The `rql` flag. Off by default. */
+    rql: boolean;
     channels: Awaited<ReturnType<MonitoringDeps["slack"]["listChannels"]>>;
     access: Awaited<ReturnType<MonitoringDeps["slack"]["channelAccess"]>>;
     post: Awaited<ReturnType<MonitoringDeps["slack"]["post"]>>;
@@ -78,6 +85,7 @@ export async function monitoring(
   const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
   const set: Monitoring["set"] = {
     on: true,
+    rql: false,
     channels: { ok: true, channels: [], partial: false },
     access: { ok: true, teamId: "T1", name: "alerts" },
     post: { ok: true },
@@ -95,6 +103,7 @@ export async function monitoring(
   };
   const deps: MonitoringDeps = {
     enabled: async () => set.on,
+    rqlEnabled: async () => set.rql,
     db: () => db,
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),
@@ -117,6 +126,7 @@ export async function monitoring(
     },
     now: () => NOW,
   };
+  runRqlOn(client);
   const registry = buildRegistry(operationsOf(deps));
   const call: Monitoring["call"] = (id, params = {}, auth = KEY_AUTH) =>
     dispatchOperation(id, params, {
@@ -150,4 +160,30 @@ export function insertTrace(client: PGlite, traceId: string, durationMs = 100, f
      values ($1, $2, $3, $4, $5, 1, 1, 0, $3, $3)`,
     [PROJECT, traceId, at, durationMs, failed],
   );
+}
+
+/**
+ * Kind `sql` on this database: the RQL runner over the one PGlite connection, with the seam's own
+ * flag check passed. The tools check the flag of the caller (`set.rql`) before the seam.
+ */
+function runRqlOn(client: PGlite) {
+  const pool: RqlPool = {
+    async connect() {
+      return {
+        async query({ text, values, rowMode }) {
+          const result = await client.query(text, values ?? [], rowMode ? { rowMode } : {});
+          return { rows: result.rows as unknown[] };
+        },
+        release: () => {},
+      };
+    },
+  };
+  metricSeams.sql = sqlQueryRunner({
+    flags: {
+      config: resolveConfig({ override: { flags: { rql: true }, experimentalFeatures: false } }),
+      edition: "Ratel OSS",
+      port: undefined,
+    },
+    run: { executor: createPgRqlExecutor(pool), gate: createRqlGate(), observe: async () => {} },
+  });
 }

@@ -1,5 +1,5 @@
 import type { Query } from "@/lib/contracts/query";
-import { forbidden, invalidParams, McpOperationError } from "@/lib/mcp/errors";
+import { forbidden, invalidParams, type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
 import { mcpActor, mcpEventContext, mcpSessionDeps } from "@/lib/mcp/operations/loop/tasks";
 import type { OperationContext } from "@/lib/mcp/registry";
 import { getDb } from "@/lib/platform/db/client";
@@ -8,7 +8,9 @@ import { featureEnabled } from "@/lib/platform/experimental-features";
 import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { type ServerEventName, trackServerEvent } from "@/lib/platform/telemetry";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
-import { type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import { QueryError, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+// Fills `metricSeams.sql`: kind sql runs behind the `rql` flag (run_rql, query_monitoring).
+import "@/lib/synthesis/rql/query";
 import { postTo } from "@/lib/views/alerts/slack";
 import { loadWidget } from "@/lib/views/dashboards/data";
 import { countLastWeek, previewScorer } from "@/lib/views/scorers/preview";
@@ -22,6 +24,12 @@ import { slackWorkspace } from "@/lib/views/slack/workspace";
  */
 export interface MonitoringDeps {
   enabled(subject: { projectId: string; organizationId: string; actor: string }): Promise<boolean>;
+  /** The `rql` flag: RQL and the query kind `sql`. */
+  rqlEnabled(subject: {
+    projectId: string;
+    organizationId: string;
+    actor: string;
+  }): Promise<boolean>;
   db(): ReturnType<typeof getDb>;
   previewScorer(...args: Parameters<typeof previewScorer>): ReturnType<typeof previewScorer>;
   countLastWeek(...args: Parameters<typeof countLastWeek>): ReturnType<typeof countLastWeek>;
@@ -45,13 +53,17 @@ export interface MonitoringDeps {
 
 export const defaultMonitoringDeps: MonitoringDeps = {
   enabled: (subject) => featureEnabled("customMonitoring", subject),
+  rqlEnabled: (subject) => featureEnabled("rql", subject),
   db: () => getDb(),
   previewScorer: (...args) => previewScorer(...args),
   countLastWeek: (...args) => countLastWeek(...args),
+  // RQL runs on its own read-only pool with its own timeout: no transaction of the primary pool.
   runQuery: (projectId, query, scope) =>
-    withStatementTimeout((db) => runQuery(projectId, query, scope, db), {
-      operation: "mcp_query_monitoring",
-    }),
+    query.kind === "sql"
+      ? runQuery(projectId, query, scope)
+      : withStatementTimeout((db) => runQuery(projectId, query, scope, db), {
+          operation: "mcp_query_monitoring",
+        }),
   loadWidget,
   canSeal: () => secretBoxConfigured(),
   slack: {
@@ -90,6 +102,47 @@ export async function requireMonitoring(
       { reason: "custom_monitoring_off" },
     );
   return caller;
+}
+
+/** Refuses with `forbidden` while `rql` is off for the caller. */
+export async function requireRql(
+  deps: Pick<MonitoringDeps, "rqlEnabled">,
+  ctx: OperationContext,
+): Promise<MonitoringCaller> {
+  const caller = {
+    projectId: ctx.projectId,
+    organizationId: ctx.organizationId ?? "",
+    actor: mcpActor(ctx.auth, ctx.projectId),
+  };
+  if (!(await deps.rqlEnabled(caller)))
+    throw new McpOperationError(
+      "forbidden",
+      "RQL is off for this project: the rql flag is off. get_flag_status shows rql.",
+      { reason: "rql_off" },
+    );
+  return caller;
+}
+
+/** The RQL codes that are not a problem of the query text. */
+const RQL_ERROR_CODES: Readonly<Record<string, McpErrorCode>> = {
+  rql_off: "forbidden",
+  rql_busy: "rate_limited",
+  rql_timeout: "timeout",
+  rql_unavailable: "unavailable",
+};
+
+/**
+ * A refused query as the tool's error. An RQL refusal keeps its code (as `reason`), its message
+ * and its fix, as the compiler or the runner wrote them.
+ */
+export function queryRefusal(error: unknown): unknown {
+  if (!(error instanceof QueryError)) return error;
+  if (!error.detail) return invalidParams(error.message);
+  const { code, fix } = error.detail;
+  return new McpOperationError(RQL_ERROR_CODES[code] ?? "invalid_params", error.message, {
+    reason: code,
+    fix,
+  });
 }
 
 /** The access checks of the actions, answered for a caller that `requireMonitoring` let in. */

@@ -30,9 +30,19 @@ import { type TraceFilter, traceFilterCondition } from "@/lib/synthesis/traces/t
 
 export type MetricsDb = Pick<ReturnType<typeof getDb>, "execute">;
 
-/** Why a query is refused. */
+/**
+ * Why a query is refused. `detail` is there when the refusal has a stable code and a fix, as the
+ * errors of RQL (kind `sql`) have: they come back as RQL wrote them.
+ */
 export class QueryError extends Error {
   override name = "QueryError";
+
+  constructor(
+    message: string,
+    readonly detail?: { code: string; fix: string },
+  ) {
+    super(message);
+  }
 }
 
 export interface MetricGroupValue {
@@ -61,13 +71,25 @@ export interface MetricResult {
   series: MetricSeries[];
 }
 
+/** The rows of a `sql` query, as the RQL runner gives them. */
+export interface SqlResult {
+  kind: "sql";
+  /** The name and the RQL type of each column, in the order of a row. Names can repeat. */
+  columns: { name: string; type: string }[];
+  /** Arrays in the order of `columns`. A number is a JS number, a timestamp an ISO string. */
+  rows: unknown[][];
+  /** The query had more rows than its limit: `rows` holds the first ones. */
+  truncated: boolean;
+}
+
 export type QueryResult =
   | MetricResult
   | FlowResult
   | StepFlowResult
   | FunnelResult
   | ClustersResult
-  | GeographyResult;
+  | GeographyResult
+  | SqlResult;
 /** What a query of one kind answers. */
 export type ResultOf<Q extends Query> = Extract<QueryResult, { kind: Q["kind"] }>;
 
@@ -165,13 +187,15 @@ type Runner<K extends Query["kind"]> = (
 ) => Promise<Extract<QueryResult, { kind: K }>>;
 
 /**
- * What a higher layer owns. Empty until that module fills it: the scorers
- * (`views/scorers/metrics`) fill `scores` and `funnel`, `views/dashboards/clusters` fills `clusters`.
+ * What another module owns. Empty until that module fills it: the scorers
+ * (`views/scorers/metrics`) fill `scores` and `funnel`, `views/dashboards/clusters` fills `clusters`,
+ * and `synthesis/rql/query` fills `sql` (behind the `rql` flag).
  */
 export const metricSeams: {
   scores?: MetricSourceQuery;
   funnel?: Runner<"funnel">;
   clusters?: Runner<"clusters">;
+  sql?: Runner<"sql">;
 } = {};
 
 /**
@@ -206,10 +230,14 @@ function runParsed(
       return seam("clusters")(projectId, query, scope, db);
     case "geography":
       return runGeography(projectId, query, scope, db);
+    case "sql":
+      return seam("sql")(projectId, query, scope, db);
   }
 }
 
-function seam<K extends "funnel" | "clusters">(kind: K): NonNullable<(typeof metricSeams)[K]> {
+function seam<K extends "funnel" | "clusters" | "sql">(
+  kind: K,
+): NonNullable<(typeof metricSeams)[K]> {
   const run = metricSeams[kind];
   // The contract allowed the query, so a hole here is a module that was not loaded.
   if (!run) throw new Error(`no module runs a "${kind}" query`);

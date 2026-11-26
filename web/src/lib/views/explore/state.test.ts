@@ -109,7 +109,7 @@ test("a bad, an old or a forged value is refused with a reason", () => {
     ["1.gICA", /damaged/],
     [raw([]), /damaged/],
     [raw(Array(5).fill({ chart: "bar", query })), /damaged/],
-    [raw([{ chart: "bar", query: { ...query, kind: "sql" } }]), /Unknown query kind/],
+    [raw([{ chart: "bar", query: { ...query, kind: "spans" } }]), /Unknown query kind/],
     [raw([{ chart: "table", query }]), /needs a group-by/],
     [`2.${"A".repeat(MAX_STATE_CHARS)}`, /too long/],
   ] as const) {

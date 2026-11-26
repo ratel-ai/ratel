@@ -149,6 +149,7 @@ test("the server loads the built views and links the generic views' tools", () =
     "overview",
     "replay",
     "series",
+    "table",
     "trace",
   ]);
   assert.equal(catalog.boundTool("list_traces")?.uri, "ui://ratel/list");
@@ -156,6 +157,7 @@ test("the server loads the built views and links the generic views' tools", () =
   assert.equal(catalog.boundTool("get_trace")?.uri, "ui://ratel/trace");
   assert.equal(catalog.boundTool("get_cost_by_day")?.uri, "ui://ratel/series");
   assert.equal(catalog.boundTool("get_agent_health")?.uri, "ui://ratel/health");
+  assert.equal(catalog.boundTool("run_rql")?.uri, "ui://ratel/table");
   for (const tool of ["get_dashboard", "query_monitoring"])
     assert.equal(catalog.boundTool(tool)?.uri, "ui://ratel/dashboard");
   for (const tool of [
