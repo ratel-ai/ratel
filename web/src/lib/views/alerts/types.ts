@@ -46,6 +46,13 @@ export type AlertingRule = Pick<
   "id" | "name" | "operator" | "threshold" | "lastValue" | "stateChangedAt"
 > & { query: MetricQuery };
 
+/** How many rules a project has, how many are on, and how many of those have no data. */
+export interface AlertRuleCounts {
+  total: number;
+  on: number;
+  noData: number;
+}
+
 export type AlertDestinationKind = "webhook" | "slack_channel";
 
 /** Where messages go, as the pages show it: no secret is ever read back. */

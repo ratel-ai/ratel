@@ -127,6 +127,7 @@ const empty = ({ layout = DEFAULT_LAYOUT }: Parameters<typeof loadFocusedOvervie
   lastEventAt: NOW,
   telemetryRead: true,
   hasTelemetry: true,
+  tracesSeen: "in_window" as const,
   layout,
   metrics: null,
   topology: null,

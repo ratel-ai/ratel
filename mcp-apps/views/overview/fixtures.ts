@@ -44,6 +44,7 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
   rangeParam: "7d",
   telemetryRead: true,
   hasTelemetry: true,
+  tracesSeen: "in_window",
   layout: DEFAULT_LAYOUT,
   metrics: {
     root: ROOT,
@@ -143,6 +144,7 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
     moreIssues: 2,
     healthHref: HEALTH,
     partial: false,
+    state: "clear",
   },
   alerts: {
     items: [
@@ -156,6 +158,8 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
       },
     ],
     href: `${ROOT}/alerts`,
+    newHref: `${ROOT}/alerts/new`,
+    rules: null,
   },
   dashboards: null,
   context: null,
@@ -281,6 +285,62 @@ const WITH_ITEMS = [RUNS, GONE].reduce<OverviewLayout>(
   changeLayout(DEFAULT_LAYOUT, { kind: "remove", widget: "topology" }),
 );
 
+function noAlerts(rules: { total: number; on: number; noData: number }) {
+  return { items: [], href: `${ROOT}/alerts`, newHref: `${ROOT}/alerts/new`, rules };
+}
+
+/** Events without a trace: every widget is empty. */
+const NO_RUNS = {
+  count: 0,
+  errorCount: 0,
+  errorRate: 0,
+  p50DurationMs: null,
+  p95DurationMs: null,
+  p99DurationMs: null,
+  costUsd: 0,
+  totalTokens: 0,
+  volume: [],
+};
+const NO_TRACES: Partial<Omit<FocusedOverviewData, "lastEventAt">> = {
+  tracesSeen: "none",
+  metrics: {
+    root: ROOT,
+    window: 7,
+    rangeParam: "7d",
+    traces: NO_RUNS,
+    previous: NO_RUNS,
+    series: DAYS.map(() => 0),
+    daily: { failedShare: [], duration: [], spend: [] },
+    sdk: null,
+    health: null,
+  },
+  topology: { nodes: [], edges: [], omitted: { agents: 0, servers: 0, atLeast: false } },
+  health: {
+    href: HEALTH,
+    windowDays: 7,
+    card: {
+      kind: "state",
+      reason: "no_turns",
+      line: "Collecting: no turns in this window yet.",
+      progress: { turns: 0, floor: 50 },
+    },
+  },
+  attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false, state: "no_data" },
+  alerts: noAlerts({ total: 0, on: 0, noData: 0 }),
+  dashboards: {
+    [RUNS]: item(
+      "Runs by model",
+      { query: metricQuery("trace_count", "count", { dimensions: ["model"] }), chart: "table" },
+      { kind: "metric", bucket: "day", buckets: [], series: [] },
+    ),
+  },
+};
+const EMPTY_ITEM = changeLayout(DEFAULT_LAYOUT, {
+  kind: "add",
+  widget: RUNS,
+  source: { title: "Runs by model", w: 6, h: 5 },
+});
+
 const entry = (
   id: number,
   minutes: number,
@@ -326,8 +386,9 @@ const fixtures: ViewFixtures = {
       windowDays: 7,
       card: {
         kind: "state",
+        reason: "too_few",
         line: "Too few turns: 12 of the 50 a score needs.",
-        failed: false,
+        progress: { turns: 12, floor: 50 },
       },
     },
   }),
@@ -338,11 +399,34 @@ const fixtures: ViewFixtures = {
   "get_overview · health": single("health"),
   "get_overview · attention": single("attention"),
   "get_overview · attention, nothing": single("attention", {
-    attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false },
+    attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false, state: "clear" },
   }),
   "get_overview · alerts": single("alerts"),
   "get_overview · alerts, none": single("alerts", {
-    alerts: { items: [], href: `${ROOT}/alerts` },
+    alerts: noAlerts({ total: 2, on: 2, noData: 0 }),
+  }),
+  "get_overview · alerts, no rules": single("alerts", {
+    alerts: noAlerts({ total: 0, on: 0, noData: 0 }),
+  }),
+  "get_overview · no traces yet": fixture(NO_TRACES, EMPTY_ITEM),
+  "get_overview · no traces in the window": fixture(
+    { ...NO_TRACES, tracesSeen: "before" },
+    EMPTY_ITEM,
+  ),
+  "get_overview · first reading": single("health", {
+    health: {
+      href: HEALTH,
+      windowDays: 7,
+      card: {
+        kind: "state",
+        reason: "first_reading",
+        line: "Your first reading is being built.",
+        progress: null,
+      },
+    },
+  }),
+  "get_overview · attention, too early": single("attention", {
+    attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false, state: "early" },
   }),
   "get_overview · topology, failed read": single("topology", { topology: "failed" }),
   "get_overview · metrics, no data": single("metrics", { hasTelemetry: false, metrics: null }),

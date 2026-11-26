@@ -259,7 +259,8 @@ after a non-breaking space ("12 ms"). Money in whole amounts or cents, one or th
 shared time-window control.
 
 **Empty states.** In place of the data: a 20 px icon, a one-line title, one sentence, one
-primary action, an optional docs link.
+primary action, an optional docs link. An empty widget (`home/focused/WidgetEmpty`) is still and
+never a `Skeleton`: a gray picture or an icon, why it is empty, and what fills it. A failed read is red.
 
 **Loading.** `Skeleton` for sections, `Button` with `loading` for actions.
 

@@ -11,6 +11,7 @@ import {
   type AlertDraft,
   type AlertingRule,
   type AlertRule,
+  type AlertRuleCounts,
   MAX_ALERT_RULES,
 } from "@/lib/views/alerts/types";
 
@@ -100,6 +101,23 @@ export async function countAlertRules(projectId: string, db: AlertsDb = getDb())
     .from(alertRules)
     .where(eq(alertRules.projectId, projectId));
   return row.n;
+}
+
+/** What an Overview without an alerting rule says of the rules there are. */
+export async function countAlertRuleStates(
+  projectId: string,
+  db: Pick<AlertsDb, "select"> = getDb(),
+): Promise<AlertRuleCounts> {
+  const on = sql`${alertRules.enabled}`;
+  const [row] = await db
+    .select({
+      total: count(),
+      on: sql<number>`(count(*) filter (where ${on}))::int`,
+      noData: sql<number>`(count(*) filter (where ${on} and ${alertRules.state} = 'no_data'))::int`,
+    })
+    .from(alertRules)
+    .where(eq(alertRules.projectId, projectId));
+  return row;
 }
 
 export async function createAlertRule(
