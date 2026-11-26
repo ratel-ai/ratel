@@ -100,8 +100,6 @@ const nextConfig: NextConfig = {
     "@opentelemetry/sdk-trace-node",
     "@opentelemetry/semantic-conventions",
     "pino",
-    // The sandbox provider's SDK (gRPC), loaded only on a call to it.
-    "modal",
   ],
 };
 

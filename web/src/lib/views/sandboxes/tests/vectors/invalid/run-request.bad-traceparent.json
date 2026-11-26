@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "runId": "r",
+  "input": 1,
+  "params": {},
+  "tools": {},
+  "fixtures": [],
+  "traceparent": "abc"
+}

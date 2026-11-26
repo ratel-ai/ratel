@@ -1,16 +1,17 @@
+import type { z } from "zod";
 import type { BundleStore } from "@/lib/contracts/bundle-store";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageLimitsPort, UsageRefusal } from "@/lib/contracts/usage-limits";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
 import { getLogger } from "@/lib/platform/logger";
-import { checkBundle } from "./domain/bundle-check";
-import { createVersionSchema } from "./domain/manifest";
+import { createVersionSchema } from "./domain/config";
 import { bundleKey, type SandboxVersion, versionView } from "./domain/version";
 import type { VersionStore } from "./ports/version-store";
 
 /**
- * The push API (`protocol/sandbox/v1`): create a version, upload its bundle, finalize it, and read
- * versions. Each call acts on the project of its key. A stored version has no route that edits it.
+ * The push API (`protocol/sandbox/v1`): create a version from an image tarball and its parsed
+ * `ratel.yaml`, upload the tarball, finalize it, and read versions. Each call acts on the project
+ * of its key. A stored version has no route that edits it.
  */
 export type PushApiDeps = {
   authenticate: () => Promise<ResolvedApiKeyProject>;
@@ -20,9 +21,10 @@ export type PushApiDeps = {
   limits: () => UsageLimitsPort;
   /** Whether this deployment can build and run sandboxes. */
   providerConfigured: () => boolean;
-  /** Called one time for each version, when its bundle is complete. */
+  /** Called one time for each version, when its tarball is complete. */
   onUploaded: (version: SandboxVersion) => Promise<void>;
-  publicUrl: (path: string) => string;
+  /** The configured public origin of this deployment, or null when none is configured. */
+  publicOrigin: () => string | null;
 };
 
 type Project = { projectId: string; apiKeyId: string };
@@ -35,22 +37,12 @@ export const NOT_CONFIGURED_MESSAGE =
 
 const logger = getLogger("sandboxes/push-api");
 
-/** The versions whose bundle this process checks now. A check costs CPU time. */
-const checking = new Set<string>();
-
 export function handleCreateVersion(req: Request, deps: PushApiDeps): Promise<Response> {
   return forProject(deps, "create_version", async ({ projectId, apiKeyId }) => {
     if (!deps.providerConfigured())
       return json(503, refusal("not_configured", NOT_CONFIGURED_MESSAGE));
     const input = createVersionSchema.safeParse(await readJson(req));
-    if (!input.success) {
-      const issue = input.error.issues[0];
-      const where = issue?.path.join(".");
-      return json(
-        400,
-        refusal("invalid", `${where ? `${where}: ` : ""}${issue?.message ?? "Invalid."}`),
-      );
-    }
+    if (!input.success) return json(400, refusal("invalid", issueText(input.error.issues[0])));
     const organizationId = await deps.organizationIdOf(projectId);
     if (!organizationId) return notFound();
     const subject = { organizationId, projectId };
@@ -75,7 +67,7 @@ export function handleCreateVersion(req: Request, deps: PushApiDeps): Promise<Re
     );
     const target = await deps.bundles().uploadTarget(bundleKey(version), version.bundle);
     const upload = target ?? {
-      url: deps.publicUrl(`/api/v1/sandboxes/versions/${version.id}/bundle`),
+      url: `${originOf(req, deps)}/api/v1/sandboxes/versions/${version.id}/bundle`,
       headers: { "content-type": "application/gzip" },
     };
     return json(201, {
@@ -99,60 +91,47 @@ export function handleUploadBundle(req: Request, versionId: string, deps: PushAp
     if (stored.reason === "exists") return alreadyStored();
     return json(
       409,
-      refusal("bundle_mismatch", "The uploaded bundle does not match its SHA-256 and size."),
+      refusal("bundle_mismatch", "The uploaded tarball does not match its SHA-256 and size."),
     );
   });
 }
 
-export function handleFinalizeVersion(versionId: string, deps: PushApiDeps): Promise<Response> {
+export function handleFinalizeVersion(
+  req: Request,
+  versionId: string,
+  deps: PushApiDeps,
+): Promise<Response> {
   return forProject(deps, "finalize_version", async ({ projectId }) => {
     const version = await find(deps, projectId, versionId);
     if (!version) return notFound();
     if (version.status === "uploading") {
-      if (checking.has(version.id)) {
-        return json(409, refusal("checking", "The bundle of this version is in its check."));
+      // The store checks the SHA-256 and the size at the upload, and the build checks them again.
+      if (!(await isStored(deps.bundles(), bundleKey(version)))) {
+        return json(409, refusal("not_uploaded", "The image tarball is not uploaded."));
       }
-      checking.add(version.id);
-      try {
-        const answer = await checkUpload(version, deps);
-        if (answer) return answer;
-      } finally {
-        checking.delete(version.id);
-      }
+      const moved = await deps.versions().markUploaded(projectId, version.id);
+      if (moved) await deps.onUploaded({ ...version, status: "uploaded" });
     }
     const now = await deps.versions().get(projectId, version.id);
-    return now ? json(202, versionView(now)) : notFound();
+    return now ? json(202, view(req, now, deps)) : notFound();
   });
 }
 
-/** Moves a version whose bundle is right to `uploaded`. Gives the answer when it is not. */
-async function checkUpload(version: SandboxVersion, deps: PushApiDeps): Promise<Response | null> {
-  const { projectId, id: versionId } = version;
-  const body = await deps.bundles().open(bundleKey(version));
-  if (!body) return json(409, refusal("not_uploaded", "The bundle is not uploaded."));
-  const checked = await checkBundle(body, version.bundle);
-  if (!checked.ok) {
-    logger.info({ project_id: projectId, version_id: versionId }, "sandbox bundle refused");
-    // A refused version ends here, so its check cannot run again and again.
-    await deps.versions().markRefused(projectId, versionId, checked.message);
-    return json(422, refusal("bundle_refused", checked.message));
-  }
-  const moved = await deps.versions().markUploaded(projectId, versionId);
-  if (moved) await deps.onUploaded({ ...version, status: "uploaded" });
-  return null;
-}
-
-export function handleGetVersion(versionId: string, deps: PushApiDeps): Promise<Response> {
+export function handleGetVersion(
+  req: Request,
+  versionId: string,
+  deps: PushApiDeps,
+): Promise<Response> {
   return forProject(deps, "get_version", async ({ projectId }) => {
     const version = await find(deps, projectId, versionId);
-    return version ? json(200, versionView(version)) : notFound();
+    return version ? json(200, view(req, version, deps)) : notFound();
   });
 }
 
-export function handleListVersions(deps: PushApiDeps): Promise<Response> {
+export function handleListVersions(req: Request, deps: PushApiDeps): Promise<Response> {
   return forProject(deps, "list_versions", async ({ projectId }) => {
     const versions = await deps.versions().list(projectId, LIST_LIMIT);
-    return json(200, { versions: versions.map(versionView) });
+    return json(200, { versions: versions.map((version) => view(req, version, deps)) });
   });
 }
 
@@ -167,6 +146,35 @@ async function forProject(
   return withFeatureSpan("sandboxes", operation, () => work({ projectId, apiKeyId }), {
     attributes: { "project.id": projectId },
   });
+}
+
+function view(req: Request, version: SandboxVersion, deps: PushApiDeps) {
+  return versionView(version, `${originOf(req, deps)}/project/${version.projectId}/sandbox`);
+}
+
+function originOf(req: Request, deps: PushApiDeps): string {
+  return requestOrigin(req, deps.publicOrigin());
+}
+
+/**
+ * The configured public origin, else the origin that the client called. Behind a proxy that is the
+ * forwarded host. The client sends its key only to the origin of its own base URL.
+ */
+export function requestOrigin(req: Request, configured: string | null): string {
+  if (configured) return configured.replace(/\/+$/, "");
+  const url = new URL(req.url);
+  const first = (name: string) => req.headers.get(name)?.split(",")[0]?.trim() || null;
+  const host = first("x-forwarded-host") ?? first("host") ?? url.host;
+  const proto = first("x-forwarded-proto") ?? url.protocol.replace(/:$/, "");
+  return `${proto}://${host}`;
+}
+
+/** Whether the store has the tarball. The open stream is closed at once. */
+async function isStored(bundles: BundleStore, key: string): Promise<boolean> {
+  const body = await bundles.open(key);
+  if (!body) return false;
+  await body[Symbol.asyncIterator]().return?.();
+  return true;
 }
 
 async function find(deps: PushApiDeps, projectId: string, versionId: string) {
@@ -184,12 +192,21 @@ async function readJson(req: Request): Promise<unknown> {
   }
 }
 
+/** The first issue of a refused body, with its path, e.g. `config.params.model.default: ...`. */
+function issueText(issue: z.core.$ZodIssue | undefined): string {
+  if (!issue) return "Invalid.";
+  const path = issue.code === "unrecognized_keys" ? [...issue.path, issue.keys[0]] : issue.path;
+  const where = path.map(String).join(".");
+  const message = issue.code === "unrecognized_keys" ? "This field is not known." : issue.message;
+  return `${where ? `${where}: ` : ""}${message}`;
+}
+
 function limitReached({ limit, max, current, message }: UsageRefusal, status: number): Response {
   return json(status, { error: "limit_reached", message, limit, max, current });
 }
 
 function alreadyStored(): Response {
-  return json(409, refusal("already_stored", "The version has its bundle. Push a new version."));
+  return json(409, refusal("already_stored", "The version has its image. Push a new version."));
 }
 
 function notFound(): Response {

@@ -1,0 +1,14 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "params": {
+    "tone": {
+      "type": "string",
+      "options": [
+        "a"
+      ]
+    }
+  }
+}

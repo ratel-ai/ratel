@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "limit_reached",
+    "message": "The limit sandbox_vm_starts_per_day (20) is reached.",
+    "limit": "sandbox_vm_starts_per_day",
+    "max": 20,
+    "current": 20
+  }
+}

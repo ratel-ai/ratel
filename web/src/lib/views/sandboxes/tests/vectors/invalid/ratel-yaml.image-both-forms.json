@@ -1,0 +1,10 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "image": {
+    "dockerfile": "Dockerfile",
+    "ref": "x:1"
+  }
+}

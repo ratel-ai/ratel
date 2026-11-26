@@ -1,0 +1,66 @@
+{
+  "name": "support-agent",
+  "image": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "run": {
+    "mode": "http",
+    "port": 8080,
+    "timeoutSeconds": 120
+  },
+  "input": {
+    "example": {
+      "message": "Refund order 42"
+    },
+    "schema": {
+      "type": "object",
+      "required": [
+        "message"
+      ]
+    }
+  },
+  "params": {
+    "model": {
+      "type": "enum",
+      "options": [
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5"
+      ],
+      "default": "claude-sonnet-5-5",
+      "description": "The model."
+    },
+    "tone": {
+      "type": "string",
+      "default": "friendly"
+    },
+    "maxTurns": {
+      "type": "number",
+      "default": 4
+    },
+    "verbose": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "secrets": [
+    "ANTHROPIC_API_KEY"
+  ],
+  "tools": {
+    "lookup_order": {
+      "mode": "live"
+    },
+    "refund_order": {
+      "mode": "simulated"
+    },
+    "get_weather": {
+      "mode": "recorded"
+    }
+  },
+  "network": {
+    "allow": [
+      "api.anthropic.com",
+      "*.example.com"
+    ]
+  }
+}

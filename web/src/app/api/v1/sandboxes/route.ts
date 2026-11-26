@@ -10,5 +10,5 @@ export const GET = withRequestLog(handle);
 
 async function handle(req: Request) {
   const deps = pushApiDeps(req, BEARER_ROUTE_SCOPES["GET /api/v1/sandboxes"]);
-  return handleListVersions(deps);
+  return handleListVersions(req, deps);
 }

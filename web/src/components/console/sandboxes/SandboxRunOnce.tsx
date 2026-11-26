@@ -98,7 +98,7 @@ export function SandboxRunOnce({
             onValueChange={setVersionId}
             options={ready.map((version) => ({
               value: version.id,
-              label: `${version.name} · ${version.commit.slice(0, 12)} · ${version.id.slice(0, 8)}`,
+              label: `${version.name} · ${version.commit?.slice(0, 12) ?? "no commit"} · ${version.id.slice(0, 8)}`,
             }))}
             className="w-full max-w-md"
           />

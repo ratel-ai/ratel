@@ -1,10 +1,13 @@
+import { getConfig } from "@/config";
 import type { Registration } from "@/lib/contracts/registry";
 import { SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { getDb } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
+import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleBuildStore } from "./adapters/drizzle-build-store";
+import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
 import { sandboxProvider } from "./adapters/provider-from-env";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
 import { runDeps } from "./run-deps";
@@ -14,9 +17,10 @@ import { sweepRuns } from "./run-sweep";
 const UNQUEUED_MS = 2 * 60_000;
 
 /**
- * What Ratel sandboxes contribute to the background machinery: the image build, which the reaper
+ * What Ratel sandboxes contribute to the background machinery: the image preparation, which the reaper
  * spares while it sends heartbeats (it can outlast the stale-job window), and the sweeps that end
- * an interrupted build, queue a build that was never queued, and end runs and their instances.
+ * an interrupted build, queue a build that was never queued, end the runs that their process left,
+ * and delete the run VMs that are idle or unknown.
  */
 export const sandboxesRegistration: Registration = {
   jobs: {
@@ -25,6 +29,8 @@ export const sandboxesRegistration: Registration = {
         builds: createDrizzleBuildStore(getDb()),
         bundles: bundleStore(),
         provider: sandboxProvider(),
+        secrets: createDrizzleSecretStore(getDb()),
+        sealingKey: () => sealedSecretsKey(),
         now: () => new Date(),
         every: (ms, beat) => {
           const timer = setInterval(beat, ms);
@@ -57,6 +63,7 @@ export const sandboxesRegistration: Registration = {
       run: () =>
         sweepRuns({
           ...runDeps(),
+          idleMs: getConfig().sandboxes.vmIdleSeconds * 1000,
           organizationIdOf: async (projectId) =>
             (await getOrganizationByProjectId(projectId))?.id ?? null,
         }),

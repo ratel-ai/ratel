@@ -33,6 +33,7 @@ export const API_KEY_SCOPES = [
   "content:read",
   "sandboxes:read",
   "sandboxes:write",
+  "sandboxes:run",
   "evals:read",
   "evals:write",
 ] as const;
@@ -120,12 +121,17 @@ export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
   "sandboxes:read": {
     group: "Sandboxes",
     label: "Read sandboxes",
-    description: "GET /api/v1/sandboxes",
+    description: "GET /api/v1/sandboxes and /api/v1/sandbox-runs/:id",
   },
   "sandboxes:write": {
     group: "Sandboxes",
     label: "Push sandboxes",
     description: "POST /api/v1/sandboxes/versions (ratel sandbox push)",
+  },
+  "sandboxes:run": {
+    group: "Sandboxes",
+    label: "Run sandboxes",
+    description: "POST /api/v1/sandbox-runs (ratel run), spends sandbox time",
   },
   "evals:read": {
     group: "Evals",

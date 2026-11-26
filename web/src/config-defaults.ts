@@ -192,7 +192,12 @@ export const CONFIG_DEFAULTS = {
     maxSessions: 100_000,
     maxCallsPerSession: 500,
   },
-  sandboxes: { modalApp: "ratel-sandboxes", region: "eu", limits: SANDBOX_HARD_LIMITS },
+  sandboxes: {
+    boatApiUrl: "https://boat.dev/api/v1",
+    boatVmType: "small",
+    vmIdleSeconds: 300,
+    limits: SANDBOX_HARD_LIMITS,
+  },
   topics: {
     maxTurns: 20_000,
     newMinTurns: 5,

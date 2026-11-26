@@ -445,7 +445,7 @@ test("refusals of a start", async () => {
   assert.equal(await start(), "no_cases");
   await t.approvedCase("one");
   assert.equal(await start(OTHER_PROJECT_ID), "not_found");
-  t.setVersions([{ ...VERSION, status: "building" }]);
+  t.setVersions([{ ...VERSION, status: "preparing" }]);
   assert.equal(await start(), "not_ready");
   assert.equal(await start(VERSION.id), "not_ready");
   t.setVersions([{ ...VERSION, id: OTHER_PROJECT_ID, status: "failed" }, VERSION]);

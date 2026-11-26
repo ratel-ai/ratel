@@ -1,5 +1,5 @@
 import type { UsageCheck, UsageRefusal } from "@/lib/contracts/usage-limits";
-import type { CreateVersionInput } from "../domain/manifest";
+import type { CreateVersionInput } from "../domain/config";
 import type { SandboxVersion } from "../domain/version";
 
 export type NewVersion = CreateVersionInput & { projectId: string; apiKeyId: string | null };
@@ -17,8 +17,8 @@ export interface VersionStore {
   get(projectId: string, versionId: string): Promise<SandboxVersion | null>;
   /** The newest first. */
   list(projectId: string, limit: number): Promise<SandboxVersion[]>;
+  /** The newest `ready` version of the sandbox with this name. */
+  newestReady(projectId: string, name: string): Promise<SandboxVersion | null>;
   /** `uploading` to `uploaded`. False when the version has another status. */
   markUploaded(projectId: string, versionId: string): Promise<boolean>;
-  /** `uploading` to `failed`. */
-  markRefused(projectId: string, versionId: string, reason: string): Promise<void>;
 }

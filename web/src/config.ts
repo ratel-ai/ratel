@@ -441,13 +441,16 @@ const CONFIG_SCHEMA = schema({
   sandboxes: {
     /** Seals sandbox secrets: 32 random bytes in base64 (`lib/platform/sealed-secrets.ts`). */
     secretsKey: optional("SANDBOX_SECRETS_KEY", configured, { sensitive: true }),
-    /** The provider's account. With none, Ratel sandbox shows "not configured". */
-    modalTokenId: optional("MODAL_TOKEN_ID", configured, { sensitive: true }),
-    modalTokenSecret: optional("MODAL_TOKEN_SECRET", configured, { sensitive: true }),
-    /** The provider's app that holds the builds and the instances. */
-    modalApp: setting("MODAL_APP", trimmed, D.sandboxes.modalApp),
-    /** Where builds and instances run. */
-    region: setting("SANDBOX_REGION", trimmed, D.sandboxes.region),
+    /** The API key of the VM service. With none, Ratel sandbox shows "not configured". */
+    boatApiKey: optional("BOAT_API_KEY", configured, { sensitive: true }),
+    /** The base URL of the API of the VM service. */
+    boatApiUrl: setting("BOAT_API_URL", trimmed, D.sandboxes.boatApiUrl),
+    /** The machine size of each VM. */
+    boatVmType: setting(
+      "BOAT_VM_TYPE",
+      z.enum(["small", "default", "large", "xlarge"]),
+      D.sandboxes.boatVmType,
+    ),
     /** The address at which an instance reaches this deployment; the public URL when unset. */
     callbackUrl: optional("SANDBOX_CALLBACK_URL", trimmed),
     /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */
@@ -479,7 +482,14 @@ const CONFIG_SCHEMA = schema({
         atMost(HARD.sandbox_bundle_bytes),
         D.sandboxes.limits.sandbox_bundle_bytes,
       ),
+      sandbox_vm_starts_per_day: setting(
+        "SANDBOX_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_vm_starts_per_day,
+      ),
     },
+    /** A run VM with no run for this time is deleted. */
+    vmIdleSeconds: setting("SANDBOX_VM_IDLE_SECONDS", positiveCount, D.sandboxes.vmIdleSeconds),
   },
   topics: {
     maxTurns: setting("TOPICS_MAX_TURNS", positiveCount, D.topics.maxTurns),

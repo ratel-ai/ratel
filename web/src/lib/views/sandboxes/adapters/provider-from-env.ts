@@ -1,7 +1,6 @@
-import type { ModalClient } from "modal";
 import { type Config, getConfig } from "@/config";
 import type { SandboxProvider } from "../ports/sandbox-provider";
-import { createModalProvider } from "./modal-provider";
+import { createBoatProvider } from "./boat-provider";
 
 type SandboxConfig = Pick<Config, "sandboxes">;
 
@@ -9,33 +8,17 @@ const providers = new Map<string, SandboxProvider>();
 
 /** Whether the provider is set up in the configuration. It makes no call. */
 export function sandboxProviderConfigured(config: SandboxConfig = getConfig()): boolean {
-  const { modalTokenId, modalTokenSecret } = config.sandboxes;
-  return Boolean(modalTokenId && modalTokenSecret);
+  return Boolean(config.sandboxes.boatApiKey);
 }
 
-/** The provider, or null when it is not set up. The SDK loads on the first call to the provider. */
+/** The provider, or null when it is not set up. It makes no call. */
 export function sandboxProvider(config: SandboxConfig = getConfig()): SandboxProvider | null {
-  const {
-    modalTokenId: tokenId,
-    modalTokenSecret: tokenSecret,
-    region,
-    modalApp,
-  } = config.sandboxes;
-  if (!tokenId || !tokenSecret) return null;
-  const key = JSON.stringify([tokenId, tokenSecret, region, modalApp]);
+  const { boatApiKey: apiKey, boatApiUrl: baseUrl, boatVmType: vmType } = config.sandboxes;
+  if (!apiKey) return null;
+  const key = JSON.stringify([apiKey, baseUrl, vmType]);
   const known = providers.get(key);
   if (known) return known;
-  let client: Promise<ModalClient> | undefined;
-  const provider = createModalProvider({
-    client: () => {
-      client ??= import("modal").then(
-        ({ ModalClient }) => new ModalClient({ tokenId, tokenSecret, logLevel: "error" }),
-      );
-      return client;
-    },
-    appName: modalApp,
-    region,
-  });
+  const provider = createBoatProvider({ apiKey, baseUrl, vmType });
   providers.set(key, provider);
   return provider;
 }

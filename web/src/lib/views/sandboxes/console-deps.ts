@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { getDb } from "@/lib/platform/db/client";
 import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
@@ -25,7 +26,8 @@ export const secretsApiDeps: SecretsApiDeps = {
 
 export const runsApiDeps: RunsApiDeps = {
   ...consoleAccess,
-  runDeps,
+  // The run goes on after the response.
+  runDeps: () => runDeps((work) => after(work)),
   track: ({ externalId, projectId, organizationId, outcome }) =>
     trackServerEvent(
       "sandbox_run_started",

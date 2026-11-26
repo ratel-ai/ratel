@@ -154,7 +154,7 @@ export function experimentPageModel(
 export function readyVersions(versions: readonly SandboxVersionSummary[]): ReadyVersion[] {
   return versions
     .filter(({ status }) => status === "ready")
-    .map(({ id, name, git }) => ({ id, name, commit: git.commit }));
+    .map(({ id, name, git }) => ({ id, name, commit: git?.commit ?? "" }));
 }
 
 /** One of the two experiments of a comparison. */
