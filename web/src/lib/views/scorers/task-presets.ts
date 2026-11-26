@@ -11,16 +11,18 @@ import {
   upsertScorer,
 } from "@/lib/views/task-scorers/store";
 import type { ScorerKind as TaskKind, Scorer as TaskScorer } from "@/lib/views/task-scorers/types";
-import { MAX_NAME_CHARS, MAX_SCORERS, TASK_SCORERS_ACTOR } from "./config";
+import { MAX_NAME_CHARS, MAX_SCORERS, TASK_JUDGE_SAMPLE_RATE, TASK_SCORERS_ACTOR } from "./config";
 import { limitText } from "./format";
-import { definitionOf } from "./preset";
+import { definitionOf, taskScorerOf } from "./preset";
 import { taskPresetSeeds } from "./schema";
 import {
   countScorers,
   createScorer,
   detachScorer,
+  getScorer,
   listTaskScorers,
   type ScorerDb,
+  systemScorerIds,
   updateScorer,
 } from "./store";
 import type { Scorer, ScorerDraft } from "./types";
@@ -88,21 +90,30 @@ export async function seedTaskPresets(
       (scorer) =>
         !given.has(scorer.kind) && !attached.some((current) => standsFor(current, scorer)),
     );
-    await db.transaction(async (tx) => {
-      for (const scorer of missing)
-        await createScorer(projectId, draftOf(scorer, taskId), TASK_SCORERS_ACTOR, tx);
-      await tx
+    created += await db.transaction(async (tx) => {
+      // The task's record first: a second trigger that seeds at the same time waits on it, then
+      // finds it and creates nothing, so no scorer is made twice.
+      const [claimed] = await tx
         .insert(taskPresetSeeds)
-        .values(
-          [SEEDED, ...effective.map((scorer) => scorer.kind)].map((kind) => ({
-            projectId,
-            taskId,
-            kind,
-          })),
-        )
-        .onConflictDoNothing();
+        .values({ projectId, taskId, kind: SEEDED })
+        .onConflictDoNothing()
+        .returning({ taskId: taskPresetSeeds.taskId });
+      if (!claimed) return 0;
+      // A judge calls a model: the seed gives it off, and a person turns it on.
+      for (const scorer of missing)
+        await createScorer(
+          projectId,
+          draftOf(scorer, taskId, { judgeOn: false }),
+          TASK_SCORERS_ACTOR,
+          tx,
+        );
+      if (effective.length > 0)
+        await tx
+          .insert(taskPresetSeeds)
+          .values(effective.map((scorer) => ({ projectId, taskId, kind: scorer.kind })))
+          .onConflictDoNothing();
+      return missing.length;
     });
-    created += missing.length;
   }
   return created;
 }
@@ -151,11 +162,17 @@ export async function resetTaskScorer(
 }
 
 /**
- * Make the task's scorer of the one model follow a change of its task scorer: `before` and `after` are the task's effective scorer of that kind
- * (`scorersFor`) around the change. The attached scorer that stood for `before` takes the new
- * setting and switch, keeping its name, filter, sample and tasks; without one, a scorer is created,
- * under the limit. Without `after` (a reset to no default), it is detached from the task. False when
- * the limit stops a create.
+ * Make the task's scorer of the one model follow a change of its task scorer: `before` and `after`
+ * are the task's effective scorer of that kind (`scorersFor`) around the change. Only a scorer the
+ * system made for this one task follows (`ownScorer`): a scorer a person made, or one attached to
+ * other tasks too, is theirs, and a save of this task never changes it. The own scorer takes the new
+ * setting and switch, keeping its name, filter, sample and tasks; without one, the system creates
+ * one for the task, under the limit. Without `after` (a reset to no default), the own scorer is
+ * detached from the task. False when the limit stops a create.
+ *
+ * A judge calls a model, so a save never turns one on: its switch can only go off here, and its
+ * sample is at most `TASK_JUDGE_SAMPLE_RATE`. With `live` off (`customMonitoring`), a new judge is
+ * created off. A person turns a judge on with its own switch, and it starts at that time.
  */
 export async function syncTaskPreset(
   projectId: string,
@@ -164,29 +181,72 @@ export async function syncTaskPreset(
   after: (TaskScorer & { enabled: boolean }) | undefined,
   actor: string,
   db: ScorerDb & EvalDb = getDb(),
+  live = true,
 ): Promise<boolean> {
   const wanted = before ?? after;
   if (!wanted) return true;
-  const current = (await listTaskScorers(projectId, taskId, db)).find((scorer) =>
-    standsFor(scorer, wanted),
-  );
+  const current = await ownScorer(projectId, taskId, wanted, db);
   if (!after) {
     if (current) await detachScorer(projectId, current.id, taskId, actor, db);
     return true;
   }
   if (current) {
     const { name, filter, tasks, sampleRate } = current;
+    const judge = current.kind === "judge";
     await updateScorer(
       projectId,
       current.id,
-      { ...definitionOf(after), name, filter, tasks, sampleRate, enabled: after.enabled },
+      {
+        ...definitionOf(after),
+        name,
+        filter,
+        tasks,
+        sampleRate: judge ? Math.min(sampleRate, TASK_JUDGE_SAMPLE_RATE) : sampleRate,
+        enabled: judge ? current.enabled && after.enabled : after.enabled,
+      },
       actor,
       db,
     );
     return true;
   }
   if ((await countScorers(projectId, db)) >= MAX_SCORERS) return false;
-  await createScorer(projectId, draftOf(after, taskId), actor, db);
+  await createScorer(projectId, draftOf(after, taskId, { judgeOn: live }), TASK_SCORERS_ACTOR, db);
+  return true;
+}
+
+/**
+ * Save a change made to a scorer of the one model (the Panel, MCP `update_scorer`), and, when the
+ * system made it for one task, write its setting back to that task's scorer (`task_scorers`), which
+ * the eval gate grades with. A preset writes back its switch too; a judge does not (its switch is
+ * about live model calls, not about the gate). False when there is no scorer.
+ */
+export async function updateScorerWithTask(
+  projectId: string,
+  scorerId: string,
+  draft: ScorerDraft,
+  actor: string,
+  db: ScorerDb & EvalDb = getDb(),
+): Promise<boolean> {
+  if (!(await updateScorer(projectId, scorerId, draft, actor, db))) return false;
+  const saved = await getScorer(projectId, scorerId, db);
+  const [taskId] = saved?.tasks ?? [];
+  if (!saved || saved.tasks?.length !== 1 || taskId === undefined) return true;
+  if (!(await systemScorerIds(projectId, [scorerId], db)).has(scorerId)) return true;
+  const scorer: TaskScorer | null =
+    saved.kind === "preset"
+      ? taskScorerOf(saved.config)
+      : saved.kind === "judge" && saved.config.output === "boolean"
+        ? { kind: "judge_criteria", criteria: saved.config.prompt }
+        : null;
+  if (!scorer) return true;
+  // A judge's switch says "call the model on live traces"; the task scorer's says "the eval gate
+  // grades with this criteria". A judge writes back its criteria only, and keeps the gate's switch.
+  const enabled =
+    scorer.kind === "judge_criteria"
+      ? ((await scorersFor(projectId, taskId, db)).find((s) => s.kind === "judge_criteria")
+          ?.enabled ?? true)
+      : saved.enabled;
+  await upsertScorer({ projectId, taskId, scorer, enabled, source: "user", updatedBy: actor }, db);
   return true;
 }
 
@@ -221,7 +281,7 @@ async function withSync(
     if (count >= MAX_SCORERS) throw new ScorerLimitError(count);
   }
   await write();
-  if (!(await syncTaskPreset(projectId, taskId, before, await effective(), actor, db)))
+  if (!(await syncTaskPreset(projectId, taskId, before, await effective(), actor, db, live)))
     logger.warn(
       { project_id: projectId, task_id: taskId, kind },
       "task scorer saved; its scorer waits for room under the scorer limit",
@@ -241,16 +301,46 @@ async function givenKinds(
   return new Set(rows.map((row) => row.kind));
 }
 
-/** A new scorer of one task for a task scorer. */
-function draftOf(scorer: TaskScorer & { enabled: boolean }, taskId: string): ScorerDraft {
+/**
+ * A new scorer of one task for a task scorer. A judge reads `TASK_JUDGE_SAMPLE_RATE` percent of the
+ * traces, and is on only when `judgeOn` says it may be.
+ */
+function draftOf(
+  scorer: TaskScorer & { enabled: boolean },
+  taskId: string,
+  { judgeOn }: { judgeOn: boolean },
+): ScorerDraft {
+  const judge = scorer.kind === "judge_criteria";
   return {
     ...definitionOf(scorer),
     name: `${SCORER_LABELS[scorer.kind]} · ${taskId}`.slice(0, MAX_NAME_CHARS),
     filter: {},
     tasks: [taskId],
-    sampleRate: 100,
-    enabled: scorer.enabled,
+    sampleRate: judge ? TASK_JUDGE_SAMPLE_RATE : 100,
+    enabled: scorer.enabled && (!judge || judgeOn),
   };
+}
+
+/**
+ * The scorer the system made for this one task that does what this task scorer does: made by
+ * `TASK_SCORERS_ACTOR` and attached to this task only.
+ */
+async function ownScorer(
+  projectId: string,
+  taskId: string,
+  wanted: TaskScorer,
+  db: ScorerDb,
+): Promise<Scorer | undefined> {
+  const candidates = (await listTaskScorers(projectId, taskId, db)).filter(
+    (scorer) =>
+      standsFor(scorer, wanted) && scorer.tasks?.length === 1 && scorer.tasks[0] === taskId,
+  );
+  const system = await systemScorerIds(
+    projectId,
+    candidates.map(({ id }) => id),
+    db,
+  );
+  return candidates.find(({ id }) => system.has(id));
 }
 
 /** Whether an attached scorer already does what this task scorer does. */

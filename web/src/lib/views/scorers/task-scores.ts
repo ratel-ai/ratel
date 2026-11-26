@@ -6,6 +6,7 @@ import {
   type ScorerSummary,
   scorerSummaries,
   scorerTrend,
+  systemScorerIds,
 } from "./store";
 import type { ScorerKind } from "./types";
 
@@ -22,6 +23,11 @@ export interface TaskScorerScores {
   /** Every task it is attached to, this one included. */
   tasks: readonly string[];
   enabled: boolean;
+  /**
+   * A judge the system made for a task (migration 0055 or a task scorer save) that is off: it makes
+   * no model call until a person turns it on.
+   */
+  offAfterConversion: boolean;
   /** The last 7 days; null without a result. */
   week: ScorerSummary | null;
   /** Fourteen UTC days, oldest first. */
@@ -43,12 +49,17 @@ export async function loadTaskScorers(
   const days = Array.from({ length: TREND_DAYS }, (_, index) =>
     new Date(now.getTime() - (TREND_DAYS - 1 - index) * DAY_MS).toISOString().slice(0, 10),
   );
-  const [summaries, trends] = await Promise.all([
+  const [summaries, trends, system] = await Promise.all([
     scorerSummaries(projectId, new Date(now.getTime() - 7 * DAY_MS), db, taskId),
     Promise.all(
       scorers.map(({ id }) =>
         scorerTrend(projectId, id, new Date(`${days[0]}T00:00:00Z`), db, taskId),
       ),
+    ),
+    systemScorerIds(
+      projectId,
+      scorers.filter((scorer) => scorer.kind === "judge" && !scorer.enabled).map(({ id }) => id),
+      db,
     ),
   ]);
   return scorers.map((scorer, index) => {
@@ -63,6 +74,7 @@ export async function loadTaskScorers(
       sampleRate: scorer.sampleRate,
       tasks: scorer.tasks ?? [],
       enabled: scorer.enabled,
+      offAfterConversion: system.has(scorer.id),
       week: summaries.get(scorer.id) ?? null,
       trend: days.map((day) => {
         const row = byDay.get(day);

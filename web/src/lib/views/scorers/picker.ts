@@ -5,7 +5,7 @@ import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import { organizationModelSpendSince } from "@/lib/views/eval-gate/store";
 import { MAX_SCORERS } from "./config";
 import { definitionSummary, hasVerdict } from "./format";
-import { listScorers, type ScorerDb } from "./store";
+import { countScorers, listScorers, type ScorerDb } from "./store";
 import { rowsOf } from "./traces";
 import type { ScorerKind } from "./types";
 // The one daily budget counts every reader of it, the judge scorers' too.
@@ -63,8 +63,10 @@ export async function loadScorerPicker(
   db: ScorerDb & EvalDb = getDb(),
   dailyUsd: number = DAILY_ORG_BUDGET_USD,
 ): Promise<ScorerPickerData> {
-  const [scorers, usage, spentUsd] = await Promise.all([
+  const [scorers, count, usage, spentUsd] = await Promise.all([
     listScorers(projectId, db),
+    // The count the server's limit reads: the scorers the system made for tasks do not count.
+    countScorers(projectId, db),
     scorerUsage(projectId, db),
     organizationModelSpendSince(projectId, new Date(now.getTime() - DAY_MS), db),
   ]);
@@ -82,7 +84,7 @@ export async function loadScorerPicker(
         usage: { ...used, total: used.widgets + used.alerts + used.tasks },
       };
     }),
-    count: scorers.length,
+    count,
     limit: MAX_SCORERS,
     budget: { dailyUsd, spentUsd, leftUsd: Math.max(0, dailyUsd - spentUsd) },
     unread: false,

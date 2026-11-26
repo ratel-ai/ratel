@@ -112,6 +112,15 @@ test("a member can save each scorer and reset its override with audit events", a
   assert.equal(events.length, 18);
 });
 
+test("a support session cannot change a task scorer", async () => {
+  const { deps, saved, events } = setup();
+  deps.isRestricted = async () => true;
+  const result = await changeTaskScorer(valid, deps);
+  assert.deepEqual(result, { ok: false, error: "A support session cannot change scorers." });
+  assert.deepEqual(saved, []);
+  assert.equal(events.length, 0);
+});
+
 test("a failed write emits no success event", async () => {
   const { deps, events } = setup();
   deps.save = async () => {
@@ -128,6 +137,7 @@ function setup() {
     getSession: async () => ({ user: { id: "db_user", externalId: "user_test" } }),
     findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: "org_test" } }),
     enabled: async () => true,
+    isRestricted: async () => false,
     save: async (input) => {
       saved.push(input);
     },

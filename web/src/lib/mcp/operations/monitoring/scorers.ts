@@ -39,8 +39,8 @@ import {
   scorerSummaries,
   scorerTrend,
   setScorerEnabled,
-  updateScorer,
 } from "@/lib/views/scorers/store";
+import { updateScorerWithTask } from "@/lib/views/scorers/task-presets";
 import {
   CHECK_OPERATORS,
   JUDGE_OUTPUTS,
@@ -312,7 +312,8 @@ export function scorerWriteOperations(
             get: (project, id) => getScorer(project, id, db),
             count: (project) => countScorers(project, db),
             create: (project, draft, actor) => createScorer(project, draft, actor, db),
-            update: (project, id, draft, actor) => updateScorer(project, id, draft, actor, db),
+            update: (project, id, draft, actor) =>
+              updateScorerWithTask(project, id, draft, actor, db),
             setEnabled: (project, id, enabled, actor) =>
               setScorerEnabled(project, id, enabled, actor, db),
             attach: (project, id, task, actor) => attachScorer(project, id, task, actor, db),

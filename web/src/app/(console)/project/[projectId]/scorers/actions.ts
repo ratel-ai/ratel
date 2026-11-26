@@ -27,8 +27,8 @@ import {
   detachScorer,
   getScorer,
   setScorerEnabled,
-  updateScorer,
 } from "@/lib/views/scorers/store";
+import { updateScorerWithTask } from "@/lib/views/scorers/task-presets";
 import type { ScorerDraft } from "@/lib/views/scorers/types";
 import { loadTaskOptions, type TaskOption } from "./tasks";
 
@@ -50,8 +50,9 @@ export async function changeScorerAction(input: unknown): Promise<ScorerActionRe
       get: (projectId, scorerId) => getScorer(projectId, scorerId),
       count: (projectId) => countScorers(projectId),
       create: (projectId, draft, actor) => createScorer(projectId, draft, actor),
+      // A scorer the system made for one task writes back to that task's scorer (the eval gate).
       update: (projectId, scorerId, draft, actor) =>
-        updateScorer(projectId, scorerId, draft, actor),
+        updateScorerWithTask(projectId, scorerId, draft, actor),
       setEnabled: (projectId, scorerId, enabled, actor) =>
         setScorerEnabled(projectId, scorerId, enabled, actor),
       attach: (projectId, scorerId, taskId, actor) =>

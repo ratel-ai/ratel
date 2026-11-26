@@ -13,7 +13,7 @@ import { formatInteger } from "@/lib/synthesis/traces/v2/format";
 import { scorerHref } from "@/lib/views/scorers/paths";
 import type { PickerScorer } from "@/lib/views/scorers/picker";
 import type { TaskScorerScores } from "@/lib/views/scorers/task-scores";
-import { KindBadge, summaryValue } from "./parts";
+import { EnabledSwitch, KindBadge, summaryValue } from "./parts";
 import { EditScorerButton } from "./ScorerPanel";
 import { ScorerPicker } from "./ScorerPicker";
 import { ScoreTrend } from "./ScoreTrend";
@@ -137,6 +137,14 @@ export function TaskLiveScores({
                   Detach
                 </Button>
               </div>
+              {scorer.offAfterConversion ? (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-border bg-bg-subtle px-3 py-2">
+                  <p className="min-w-0 flex-1 text-xs text-fg-subtle">
+                    {`Off after the move to scorers: this judge makes no model call. Turn it on to judge new traces. It reads ${scorer.sampleRate}% of them, from the time you turn it on, within the organization's daily model budget.`}
+                  </p>
+                  <EnabledSwitch projectId={projectId} scorer={scorer} label="Turn on" />
+                </div>
+              ) : null}
               {scorer.trend.every(({ scored }) => scored === 0) ? (
                 <StillCalculating padded={false} />
               ) : (
