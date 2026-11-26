@@ -458,4 +458,20 @@ describe("errors", () => {
       });
     }
   });
+
+  // Live on a trial account (RP-417): a snapshot save answered 403 trial_saved_snapshots_not_allowed.
+  test("a refusal of the plan names the plan, not a permission of the API key", async () => {
+    for (const code of ["trial_saved_snapshots_not_allowed", "trial_machine_class_not_allowed"]) {
+      failWith(error(403, code));
+      await assert.rejects(provider().startVm(RUN), (thrown: unknown) => {
+        assert.ok(thrown instanceof ProviderRefused, code);
+        assert.equal(thrown.status, 403);
+        assert.match(thrown.message, /plan of the sandbox service account does not allow/);
+        assert.doesNotMatch(thrown.message, /API key/);
+        assert.ok(thrown.message.includes(code));
+        clean(thrown);
+        return true;
+      });
+    }
+  });
 });

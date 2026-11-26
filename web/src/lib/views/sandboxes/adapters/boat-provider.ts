@@ -51,6 +51,8 @@ const READY = new Set(["ready", "idle", "running"]);
 const STARTING = new Set(["init", "provisioning", "provisioned", "cloning"]);
 const STOPPED = new Set(["archiving", "archived", "error"]);
 const AT_CAPACITY = new Set(["limit_reached", "member_limit_reached"]);
+/** A 403 of the plan, not of the key: e.g. `trial_saved_snapshots_not_allowed`, `machine_class_plan_required`. */
+const PLAN_REFUSAL = /^trial_|_plan_required$/;
 /** A command sent while the VM still starts. Sending it again is safe. */
 const NOT_READY_YET = new Set(["boat_starting", "sandbox_starting"]);
 const DEPLOYMENT_LABEL = "ratel-deployment";
@@ -487,6 +489,12 @@ function errorOf(response: Response, body: unknown): Error {
     return new ProviderRefused(`The sandbox service refused the API key (${detail}).`, status);
   if (status === 402) {
     return new ProviderRefused(`The sandbox service account needs billing (${detail}).`, status);
+  }
+  if (status === 403 && PLAN_REFUSAL.test(code)) {
+    return new ProviderRefused(
+      `The plan of the sandbox service account does not allow this call (${detail}).`,
+      status,
+    );
   }
   if (status === 403) {
     return new ProviderRefused(
