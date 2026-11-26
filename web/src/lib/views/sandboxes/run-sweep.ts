@@ -1,5 +1,6 @@
 import { getLogger } from "@/lib/platform/logger";
 import type { OpenRun } from "./ports/run-store";
+import { VM_START_TIMEOUT_MS } from "./ports/sandbox-provider";
 import { deleteVm, type RunDeps, recordUsage } from "./runs";
 
 /**
@@ -13,8 +14,11 @@ export type SweepDeps = Pick<RunDeps, "runs" | "vms" | "provider" | "limits" | "
   idleMs: number;
 };
 
-/** A run that waits longer than this for its VM was left by a process that ended. */
-export const START_STOPPED_MS = 5 * 60_000;
+/**
+ * A run that waits longer than this for its VM was left by a process that ended: a VM start ends
+ * in {@link VM_START_TIMEOUT_MS}, and the rest is for the calls around it.
+ */
+export const START_STOPPED_MS = VM_START_TIMEOUT_MS + 3 * 60_000;
 /** The time that a run needs beyond its own timeout: the health wait and the Docker steps. */
 const RUN_GRACE_MS = 3 * 60_000;
 const LIMIT = 500;
@@ -41,13 +45,19 @@ export async function sweepRuns(
       logger.error({ project_id: run.projectId, run_id: run.id, err: error }, "run sweep failed");
     }
   });
-  const now = deps.now().getTime();
-  const idle = await deps.vms.listIdle(
-    new Date(now - deps.idleMs),
-    new Date(now - START_STOPPED_MS),
-    LIMIT,
-  );
+  const now = deps.now();
+  const idleSince = new Date(now.getTime() - deps.idleMs);
+  const startingSince = new Date(now.getTime() - START_STOPPED_MS);
+  const idle = await deps.vms.listIdle(idleSince, startingSince, LIMIT);
   await inParallel(idle, async (vm) => {
+    try {
+      // A run can claim the VM after the list: the VM goes only when it is still idle.
+      if (!(await deps.vms.retireIdle(vm, idleSince, startingSince, now))) return;
+    } catch (error) {
+      logger.error({ project_id: vm.projectId, vm_id: vm.id, err: error }, "idle vm not retired");
+      return;
+    }
+    // A failed delete leaves the VM to the sweep of unknown VMs: its row is deleted.
     if (await deleteVm(vm, vm.vmRef, deps)) totals.deletedVms += 1;
   });
   totals.deletedVms += await deleteUnknownVms(deps);

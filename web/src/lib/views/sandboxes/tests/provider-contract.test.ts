@@ -29,7 +29,14 @@ after(async () => {
 });
 contract(
   "adapter on a fake server",
-  () => createBoatProvider({ apiKey: "k", baseUrl: server?.url, pollMs: 1, inlineMaxBytes: 64 }),
+  () =>
+    createBoatProvider({
+      apiKey: "k",
+      baseUrl: server?.url,
+      deploymentId: "contract",
+      pollMs: 1,
+      inlineMaxBytes: 64,
+    }),
   {},
 );
 

@@ -10,9 +10,7 @@ export function createDrizzleVmStore(db: Db): VmStore {
     claim(claim, check) {
       return db.transaction(async (tx) => {
         // One claim of a project at a time, so the counts below are right.
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${`sandbox_vms:${claim.projectId}`}, 0))`,
-        );
+        await lockProject(tx, claim.projectId);
         const active = sql<number>`(select count(*) from ${sandboxRuns} where ${sandboxRuns.vmId} = ${sandboxVms.id} and ${sandboxRuns.status} in ('queued', 'running'))`;
         const [warm] = await tx
           .select()
@@ -85,19 +83,26 @@ export function createDrizzleVmStore(db: Db): VmStore {
     },
 
     async listIdle(idleSince, startingSince, limit) {
-      const noActiveRun = sql`not exists (select 1 from ${sandboxRuns} where ${sandboxRuns.vmId} = ${sandboxVms.id} and ${sandboxRuns.status} in ('queued', 'running'))`;
       const rows = await db
         .select()
         .from(sandboxVms)
-        .where(
-          or(
-            and(eq(sandboxVms.state, "ready"), lt(sandboxVms.lastUsedAt, idleSince), noActiveRun),
-            and(eq(sandboxVms.state, "starting"), lt(sandboxVms.startedAt, startingSince)),
-          ),
-        )
+        .where(idle(idleSince, startingSince))
         .orderBy(asc(sandboxVms.lastUsedAt))
         .limit(limit);
       return rows.map(toVm);
+    },
+
+    retireIdle(vm, idleSince, startingSince, now) {
+      return db.transaction(async (tx) => {
+        // A claim that came first has its run on the VM now, so the VM is not idle.
+        await lockProject(tx, vm.projectId);
+        const marked = await tx
+          .update(sandboxVms)
+          .set({ state: "deleted", deletedAt: now })
+          .where(and(eq(sandboxVms.id, vm.id), idle(idleSince, startingSince)))
+          .returning({ id: sandboxVms.id });
+        return marked.length > 0;
+      });
     },
 
     async live(vmIds) {
@@ -112,6 +117,25 @@ export function createDrizzleVmStore(db: Db): VmStore {
 }
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** The lock of the VMs of one project, to the end of the transaction. */
+async function lockProject(tx: Tx, projectId: string) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`sandbox_vms:${projectId}`}, 0))`,
+  );
+}
+
+/**
+ * `ready` with no active run and not used since `idleSince`, or `starting` since before
+ * `startingSince`.
+ */
+function idle(idleSince: Date, startingSince: Date) {
+  const noActiveRun = sql`not exists (select 1 from ${sandboxRuns} where ${sandboxRuns.vmId} = ${sandboxVms.id} and ${sandboxRuns.status} in ('queued', 'running'))`;
+  return or(
+    and(eq(sandboxVms.state, "ready"), lt(sandboxVms.lastUsedAt, idleSince), noActiveRun),
+    and(eq(sandboxVms.state, "starting"), lt(sandboxVms.startedAt, startingSince)),
+  );
+}
 
 async function assign(tx: Tx, runId: string, vmId: string) {
   await tx.update(sandboxRuns).set({ vmId }).where(eq(sandboxRuns.id, runId));

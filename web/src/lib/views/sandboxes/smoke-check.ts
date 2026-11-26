@@ -7,7 +7,7 @@ import type { SandboxProvider } from "./ports/sandbox-provider";
 /**
  * The smoke check of a version in its prepare VM: one run of `input.example` with every tool
  * simulated, in a container of the loaded image (`container-run.ts`). The check removes its
- * container and its files at the end, so no snapshot holds a secret value.
+ * container, its volumes and its files at the end, so no snapshot holds a secret value.
  */
 export type SmokeCheckInput = {
   versionId: string;
@@ -47,10 +47,10 @@ export async function runSmokeCheck(
   return result;
 }
 
-/** Whether the VM holds no container and no file of a smoke check. */
+/** What the VM still holds of a smoke check: a container, a volume or a file. Empty when nothing. */
 export async function smokeLeftovers(provider: SandboxProvider, vmRef: string): Promise<string> {
   const found = await provider.exec(vmRef, {
-    command: `docker ps -aq; ls -1d ${FILE_PREFIX}* 2>/dev/null; true`,
+    command: `docker ps -aq; docker volume ls -q; ls -1d ${FILE_PREFIX}* 2>/dev/null; true`,
     timeoutS: DOCKER_STEP_S,
   });
   return found.exitCode === 0 ? found.stdout.trim() : "the check of the VM did not run";

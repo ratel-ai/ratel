@@ -42,8 +42,11 @@ export type FakeProvider = SandboxProvider & {
   fileOf(vmRef: string, path: string): string | undefined;
 };
 
-/** An in-memory provider. It keeps the rules of the port that the contract test checks. */
-export function createFakeProvider(): FakeProvider {
+/**
+ * An in-memory provider. It keeps the rules of the port that the contract test checks: each VM
+ * carries the deployment label, and `listVms` lists only the VMs of the deployment.
+ */
+export function createFakeProvider({ deploymentId = "test-deployment" } = {}): FakeProvider {
   const live = (vmRef: string): FakeVm => {
     const vm = fake.vms.get(vmRef);
     if (!vm || vm.state !== "running") throw new ProviderRefused("The VM is not running.", 409);
@@ -84,6 +87,7 @@ export function createFakeProvider(): FakeProvider {
           ...request.labels,
           "ratel-project": request.projectId,
           "ratel-purpose": request.purpose,
+          "ratel-deployment": deploymentId,
         },
         state: "running",
         files: new Map(from ?? []),
@@ -127,8 +131,9 @@ export function createFakeProvider(): FakeProvider {
       return { state: fake.vms.get(vmRef)?.state ?? "gone" };
     },
     async listVms(labels) {
+      const own = { ...labels, "ratel-deployment": deploymentId };
       return [...fake.vms.values()]
-        .filter((vm) => Object.entries(labels).every(([key, value]) => vm.labels[key] === value))
+        .filter((vm) => Object.entries(own).every(([key, value]) => vm.labels[key] === value))
         .map((vm) => ({ vmRef: vm.vmRef, labels: { ...vm.labels }, createdAt: vm.createdAt }));
     },
   };

@@ -45,6 +45,16 @@ export interface VmStore {
    * since before `startingSince` (their process ended).
    */
   listIdle(idleSince: Date, startingSince: Date, limit: number): Promise<RunVm[]>;
+  /**
+   * Marks a VM of `listIdle` deleted when it is still idle by the same terms. It takes the lock of
+   * `claim`, so no claim gets the VM after it. True when this call marked the VM.
+   */
+  retireIdle(
+    vm: Pick<RunVm, "id" | "projectId">,
+    idleSince: Date,
+    startingSince: Date,
+    now: Date,
+  ): Promise<boolean>;
   /** Which of these VM ids are not deleted. */
   live(vmIds: readonly string[]): Promise<Set<string>>;
 }

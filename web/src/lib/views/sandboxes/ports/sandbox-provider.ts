@@ -1,10 +1,14 @@
 /**
  * The service that runs virtual machines with Docker. A "prepare" VM loads an image and is saved
  * as a snapshot; a "run" VM starts from that snapshot and runs one agent. The developer never sees
- * which service it is, so no message of an error of this port names it.
+ * which service it is, so no message of an error of this port names it. One provider serves one
+ * deployment: it marks each VM that it starts as a VM of the deployment.
  */
 export interface SandboxProvider {
-  /** Starts one VM and waits until it is ready (Docker answers). */
+  /**
+   * Starts one VM and waits until it is ready (Docker answers). It ends in
+   * {@link VM_START_TIMEOUT_MS} at most, plus the time of one call.
+   */
   startVm(request: StartVmRequest): Promise<{ vmRef: string }>;
   /** Runs one shell command in the VM and waits for its end. */
   exec(vmRef: string, request: ExecRequest): Promise<ExecResult>;
@@ -17,9 +21,12 @@ export interface SandboxProvider {
   /** Deletes a snapshot. A snapshot that is not there is deleted. */
   deleteSnapshot(snapshotRef: string): Promise<void>;
   vmStatus(vmRef: string): Promise<{ state: VmState }>;
-  /** The VMs that have all these labels. */
+  /** The VMs of this deployment that have all these labels. No VM of another deployment. */
   listVms(labels: Readonly<Record<string, string>>): Promise<VmInfo[]>;
 }
+
+/** The longest time of a VM start, the create, the ready wait and the Docker wait included. */
+export const VM_START_TIMEOUT_MS = 12 * 60_000;
 
 export type StartVmRequest = {
   projectId: string;
@@ -40,6 +47,7 @@ export type StartVmRequest = {
 export type ExecRequest = {
   /** A shell command. It must not hold a secret value: the service keeps command lines. */
   command: string;
+  /** The command ends at this time. A time longer than the service allows still holds. */
   timeoutS: number;
   stdin?: string;
 };

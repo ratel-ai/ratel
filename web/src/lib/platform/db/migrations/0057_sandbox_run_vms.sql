@@ -18,22 +18,24 @@ CREATE INDEX "sandbox_vms_project_started_idx" ON "sandbox_vms" USING btree ("pr
 CREATE INDEX "sandbox_vms_live_idx" ON "sandbox_vms" USING btree ("version_id","last_used_at") WHERE "sandbox_vms"."state" <> 'deleted';--> statement-breakpoint
 CREATE INDEX "sandbox_runs_vm_active_idx" ON "sandbox_runs" USING btree ("vm_id") WHERE "sandbox_runs"."status" in ('queued', 'running');--> statement-breakpoint
 UPDATE "sandbox_runs" SET
-	"response" = jsonb_strip_nulls(jsonb_build_object(
-		'output', CASE WHEN "result" ? 'output' THEN "result"->'output' END,
+	-- Only the usage loses its nulls: a null in the output, the args or a result is data.
+	"response" = jsonb_build_object(
+		'output', coalesce("result"->'output', 'null'::jsonb),
 		'toolCalls', (
 			SELECT coalesce(jsonb_agg(
 				jsonb_build_object(
 					'name', c->'name',
 					'args', CASE WHEN jsonb_typeof(c->'arguments') = 'object' THEN c->'arguments' ELSE '{}'::jsonb END,
 					'mode', CASE c->>'source' WHEN 'real' THEN 'live' WHEN 'fixture' THEN 'recorded' ELSE 'simulated' END
-				) || CASE WHEN c ? 'error'
+				) || CASE WHEN c->>'error' IS NOT NULL
 					THEN jsonb_build_object('error', jsonb_build_object('code', 'tool_failed', 'message', c->>'error'))
 					ELSE jsonb_build_object('result', c->'result') END
 			), '[]'::jsonb)
 			FROM jsonb_array_elements(coalesce("result"->'toolCalls', '[]'::jsonb)) c
-		),
-		'usage', ("result"->'usage') - 'durationMs'
-	)),
+		)
+	) || CASE WHEN jsonb_typeof("result"->'usage') = 'object'
+		THEN jsonb_build_object('usage', jsonb_strip_nulls(("result"->'usage') - 'durationMs'))
+		ELSE '{}'::jsonb END,
 	"duration_ms" = ("result"->'usage'->>'durationMs')::numeric::integer,
 	"error_code" = CASE WHEN "status" = 'failed' THEN 'run_failed' END,
 	"reason" = coalesce("reason", "result"->'error'->>'message')
