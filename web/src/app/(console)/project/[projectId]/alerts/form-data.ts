@@ -8,15 +8,14 @@ import {
   getTraceFilterFacets,
 } from "@/lib/synthesis/traces/trace-filters";
 import { listDestinations } from "@/lib/views/alerts/destinations";
-import { hasVerdict } from "@/lib/views/scorers/format";
-import { listScorers } from "@/lib/views/scorers/store";
+import { loadScorerPicker } from "@/lib/views/scorers/picker";
 import { getSlackConnection } from "@/lib/views/slack/store";
 import { metricFeatures } from "../dashboards/context";
 import type { FeaturePage } from "../feature-page";
 
 const WEEK_MS = 7 * 86_400_000;
 
-/** What the alert form offers: filter values, scorers (null while they are off), destinations and whether Slack is lost. */
+/** What the alert form offers: filter values, the scorer picker (null while scorers are off), destinations and whether Slack is lost. */
 export async function loadAlertForm(page: FeaturePage) {
   const { projectId } = page;
   const features = await metricFeatures(page);
@@ -38,23 +37,18 @@ export async function loadAlertForm(page: FeaturePage) {
           { operation: "alert_facets", timeoutMs: supplementaryReadTimeoutMs() },
         ),
     }),
-    features.customMonitoring ? listScorers(projectId) : null,
+    features.customMonitoring ? loadScorerPicker(projectId) : null,
     listDestinations(projectId),
     getSlackConnection(page.organizationId),
   ]);
   return {
     features,
+    scorers,
     form: {
       facets,
       destinations,
       slackLost:
         (slack === null || slack.lost) && destinations.some(({ kind }) => kind === "slack_channel"),
-      scorers:
-        scorers?.map((scorer) => ({
-          id: scorer.id,
-          name: scorer.name,
-          verdict: hasVerdict(scorer),
-        })) ?? null,
     },
   };
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
-import { definitionSummary, scoreLabel, searchOfFilter } from "./format";
+import { definitionSummary, limitText, scoreLabel, searchOfFilter } from "./format";
 import { checkDraft } from "./test-support";
 
 test("a stored filter survives the filter bar's query string", () => {
@@ -33,4 +33,16 @@ test("a scorer and its result in words", () => {
   assert.equal(scoreLabel({ passed: true, value: 1 }), "Pass");
   assert.equal(scoreLabel({ passed: false, value: 0 }), "Fail");
   assert.equal(scoreLabel({ passed: null, value: 4 }), "4 of 5");
+});
+
+test("the limit text says the real count, also over the limit, and never a negative number", () => {
+  assert.deepEqual(limitText(12, 100), { full: false, text: "12 of 100 scorers." });
+  assert.deepEqual(limitText(100, 100), {
+    full: true,
+    text: "This project has 100 scorers, and the limit is 100. Delete 1 to create another.",
+  });
+  assert.deepEqual(limitText(130, 100), {
+    full: true,
+    text: "This project has 130 scorers, and the limit is 100. Delete 31 to create another.",
+  });
 });

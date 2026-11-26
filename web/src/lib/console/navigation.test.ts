@@ -474,19 +474,22 @@ test("Dashboards, Explore, Scorers and Alerts are Monitor items only with custom
         ["Explore", `/project/${P1}/explore`, undefined],
         ["Agent health", `/project/${P1}/health`, undefined],
         ["Traces", `/project/${P1}/traces`, undefined],
-        ["Scorers", `/project/${P1}/scorers`, undefined],
         ["Alerts", `/project/${P1}/alerts`, undefined],
       ],
     );
     assert.equal(on.find(({ id }) => id === "overview")?.children, undefined);
-    // DESIGN.md's budget: at most 10 items in the list, and 14 with customMonitoring. The
-    // footer's MCP does not count.
+    // DESIGN.md's budget: at most 10 items in the list, and 13 with customMonitoring. The
+    // footer's MCP does not count. No item lists scorers.
     const list = (items: typeof on) => items.filter(({ section }) => section !== "footer");
     assert.ok(list(off).length <= 10);
-    assert.ok(list(on).length <= 14);
-    assert.equal(on.length, off.length + 4);
+    assert.ok(list(on).length <= 13);
+    assert.equal(on.length, off.length + 3);
+    assert.equal(
+      on.some(({ id }) => id === "scorers"),
+      false,
+    );
     // Everything else on the rail is as it was.
-    const pages = ["dashboards", "explore", "scorers", "alerts"];
+    const pages = ["dashboards", "explore", "alerts"];
     const rest = (items: typeof on) =>
       items.filter(({ id }) => !pages.includes(id)).map((item) => ({ ...item, also: undefined }));
     assert.deepEqual(rest(on), rest(off));
@@ -510,7 +513,8 @@ test("with customMonitoring on, each monitoring page lights its own item, not Ov
   const on = consoleNav({ projectId: P1, additions: [], customMonitoring: true });
   assert.equal(activeNavItemId(`/project/${P1}`, on), "overview");
   assert.equal(activeNavItemId(`/project/${P1}/insights`, on), "overview");
-  assert.equal(activeNavItemId(`/project/${P1}/scorers/s1`, on), "scorers");
+  // A scorer is picked on Dashboards, so one scorer's page lights Dashboards.
+  assert.equal(activeNavItemId(`/project/${P1}/scorers/s1`, on), "dashboards");
   assert.equal(activeNavItemId(`/project/${P1}/dashboards`, on), "dashboards");
   assert.equal(activeNavItemId(`/project/${P1}/dashboards/d1`, on), "dashboards");
   assert.equal(activeNavItemId(`/project/${P1}/explore`, on), "explore");

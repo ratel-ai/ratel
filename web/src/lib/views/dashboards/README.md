@@ -16,7 +16,6 @@ widgets on a grid. A widget is one query object
 | `layout.ts` | a widget as a card of the shared grid (`lib/console/grid`, which has the arithmetic), its sizes, and the first free place |
 | `stored-widget.ts` | `readWidgets`, `writeWidgets`: each stored item passes the widget schema again; one that fails is a broken entry with its title and the reason, and goes back as it was |
 | `starter.ts` | the four widgets of "Start from the traces overview" |
-| `scorer-options.ts` | the project's scorers as a widget names them |
 | `store.ts` | the reads and writes; a widget change locks its row |
 | `data.ts` | `loadWidget`, `loadWidgets`: the numbers, a few reads at a time, each bounded; a failed one, or one whose switch is off, is null |
 | `chart-model.ts` | what a chart draws: six color slots by group name, "Other", the scale, the axis labels and the number formats |

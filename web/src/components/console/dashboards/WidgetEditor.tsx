@@ -9,7 +9,7 @@ import { metricQuery } from "@/lib/contracts/query";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import { filtersProblem } from "@/lib/views/dashboards/filters";
 import type { DashboardRange } from "@/lib/views/dashboards/links";
-import type { DashboardFilters, ScorerOption, WidgetInput } from "@/lib/views/dashboards/types";
+import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
 import { widgetName } from "@/lib/views/dashboards/widget";
 import { useWidgetPreview } from "./use-widget-preview";
 import { WidgetBody } from "./WidgetBody";
@@ -28,7 +28,6 @@ export function WidgetEditor({
   projectId,
   initial,
   start,
-  scorers,
   facets,
   range,
   filters,
@@ -42,8 +41,6 @@ export function WidgetEditor({
   initial: WidgetInput | null;
   /** What a new one starts from, instead of the default. */
   start: WidgetInput | null;
-  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
-  scorers: readonly ScorerOption[] | null;
   facets: TraceFilterBarFacets;
   range: DashboardRange;
   /** The dashboard's: the preview shows what the widget will. */
@@ -60,7 +57,6 @@ export function WidgetEditor({
         <EditorForm
           projectId={projectId}
           initial={initial ?? start ?? NEW_WIDGET}
-          scorers={scorers}
           submitLabel={initial ? "Save widget" : "Add widget"}
           facets={facets}
           range={range}
@@ -77,7 +73,6 @@ export function WidgetEditor({
 function EditorForm({
   projectId,
   initial,
-  scorers,
   submitLabel,
   facets,
   range,
@@ -87,7 +82,6 @@ function EditorForm({
 }: {
   projectId: string;
   initial: WidgetInput;
-  scorers: readonly ScorerOption[] | null;
   submitLabel: string;
   facets: TraceFilterBarFacets;
   range: DashboardRange;
@@ -117,7 +111,6 @@ function EditorForm({
           if (!problem) setWidget(changed);
         }}
         refused={refused ? { field: "filter", message: refused } : null}
-        scorers={scorers}
         facets={facets}
         result={preview?.ok ? preview.result : null}
       />

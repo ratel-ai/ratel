@@ -43,14 +43,14 @@ editable field; items the edition lacks are not rendered; moved pages redirect.
 | MCP (rail footer) | How do I connect an agent to Ratel? | The organization's MCP connection guide, the key choice on this project |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
 
-With `customMonitoring` on, Monitor has four more items, in this order: Overview, Dashboards, Explore, Agent health,
-Traces, Scorers, Alerts. `/dashboards` is then its own item, not Overview's.
+With `customMonitoring` on, Monitor has three more items, in this order: Overview, Dashboards, Explore, Agent health,
+Traces, Alerts. `/dashboards` is then its own item, not Overview's. Scorers has no item and no list
+page: a scorer is picked, created and edited in place, with the scorer picker and its Panel, where it is used.
 
 | Item | Answers | Contains |
 |---|---|---|
 | Dashboards | What do I check every day? | The project's dashboards |
 | Explore | What does this number say? | One query and its chart |
-| Scorers | Is the output good? | Automatic checks on traces |
 | Alerts | Tell me when it is not | Rules, their state and history |
 
 With `focusedConsole` on, Overview is a recap of widgets that each person arranges, Agent health is
@@ -147,7 +147,8 @@ Declared exception: screens in the Micro style (see Declared exceptions) are out
 
 Shadows only on floating surfaces, never colored.
 z-index scale: `z-sticky` 10, `z-rail` 20, `z-panel` 50, `z-dialog` 60, `z-popover` 65,
-`z-toast` 70, `z-tour` 80 (anchored overlays sit above the panels and dialogs they open from).
+`z-toast` 70, `z-tour` 80 (anchored overlays sit above the panels and dialogs they open from). A
+Panel that opens from inside a Dialog takes `layer="dialog"`, so it shows above the Dialog.
 
 ### Icons
 
@@ -301,7 +302,7 @@ Intents, then Tasks, then Issues and Self-corrections, then Fixes: one word per 
 | **Self-correction** | The agent retried, switched tools, gave up or apologized | `RotateCcw` | Agent health › Self-corrections |
 | **Fix** | A concrete change that resolves an issue | `Hammer` | Improvements › Fixes |
 | **Alert** | A metric with a threshold that sends a message when it fires and when it recovers | `Bell` | Alerts |
-| **Scorer** | A check, or a question a model answers, that gives each matching trace one score | | Scorers |
+| **Scorer** | A check, or a question a model answers, that gives each matching trace one score | | Picked where it is used (dashboards, alerts, a task's scoring) |
 
 An intent opens onto **What they ask for**, then **Ways people ask it**. Nouns appear as pins
 with their icon, and every page links to its neighbours.

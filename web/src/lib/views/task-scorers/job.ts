@@ -41,14 +41,21 @@ export interface ScoreTasksJobDeps extends TaskJudgeDeps, ReportDeps {
   db?: ReturnType<typeof getDb>;
   flagDeps?: OrganizationFlagDeps;
   now?: () => Date;
+  /** Whether the top-level scorers (`views/scorers`) do a project's live scoring instead. */
+  scorersOn?: (projectId: string) => Promise<boolean>;
 }
 
+/** The database of the queue: it may also create scorers (`seedPresets`), in a transaction. */
+type QueueDb = EvalDb & Pick<ReturnType<typeof getDb>, "transaction">;
+
 export interface EnqueueScoreTasksDeps extends ReportDeps {
-  db?: EvalDb;
+  db?: QueueDb;
   flagDeps?: OrganizationFlagDeps;
   now?: () => Date;
   /** Whether the top-level scorers (`views/scorers`) do a project's live scoring instead. */
   scorersOn?: (projectId: string) => Promise<boolean>;
+  /** With the top-level scorers on: give the project's new tasks their default presets. */
+  seedPresets?: (projectId: string, now: Date, db: QueueDb) => Promise<unknown>;
 }
 
 /** Score closed task runs by UTC day. Repeated jobs replace the current day's counts. */
@@ -57,6 +64,11 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
   if (!(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))) {
     await reportSkip(projectId, "gate_off", "job", deps);
     return { scored: false, reason: "gate_off" };
+  }
+  // A job queued before the flag turned on writes nothing: the scorers' sweep scores the project.
+  if (await deps.scorersOn?.(projectId)) {
+    await reportSkip(projectId, "trace_scorers", "job", deps);
+    return { scored: false, reason: "trace_scorers" };
   }
   const startedAt = Date.now();
   const now = deps.now?.() ?? new Date();
@@ -210,8 +222,10 @@ export async function enqueueScoreTasksJob(
       finishedAt: now,
     });
     await reportSkip(projectId, skipped, trigger, deps);
-    if (skipped === "trace_scorers")
+    if (skipped === "trace_scorers") {
+      await deps.seedPresets?.(projectId, now, db);
       await enqueueDueTaskEvalSets(projectId, { db, flagDeps: deps.flagDeps, now: () => now });
+    }
     return null;
   }
   const [job] = await db

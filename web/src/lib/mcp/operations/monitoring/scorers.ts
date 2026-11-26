@@ -14,8 +14,9 @@ import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import { formatPercent } from "@/lib/synthesis/traces/v2/format";
+import { dashboardsHref } from "@/lib/views/dashboards/links";
 import { changeScorer } from "@/lib/views/scorers/actions";
-import { parseScorerDraft } from "@/lib/views/scorers/config";
+import { CRITERIA_PRESET, parseScorerDraft } from "@/lib/views/scorers/config";
 import {
   definitionSummary,
   formatAverage,
@@ -23,7 +24,8 @@ import {
   SKIP_LABELS,
   scoreLabel,
 } from "@/lib/views/scorers/format";
-import { scorersHref, traceHref } from "@/lib/views/scorers/paths";
+import { scorerHref, traceHref } from "@/lib/views/scorers/paths";
+import { type ScorerUsage, scorerUsage } from "@/lib/views/scorers/picker";
 import {
   attachScorer,
   countScorers,
@@ -42,6 +44,7 @@ import {
 import {
   CHECK_OPERATORS,
   JUDGE_OUTPUTS,
+  PRESET_KINDS,
   SCORER_KINDS,
   type Scorer,
 } from "@/lib/views/scorers/types";
@@ -78,8 +81,25 @@ const draftShape = {
           .describe("A closed question on the trace's input and output."),
         output: z.enum(JUDGE_OUTPUTS).describe("boolean: pass or fail. numeric: 1 to 5."),
       }),
+      z.strictObject({
+        preset: z
+          .enum([...PRESET_KINDS, CRITERIA_PRESET])
+          .describe(
+            "A task kind, graded on the task run of each trace. judge_criteria is saved as a pass-or-fail judge.",
+          ),
+        max: z
+          .number()
+          .optional()
+          .describe(
+            "For max_*: the limit (ms, USD, or a whole number of tool calls or self-corrections).",
+          ),
+        tool: z.string().max(500).optional().describe("For expected_tool: the tool id."),
+        criteria: z.string().max(5_000).optional().describe("For judge_criteria: what to check."),
+      }),
     ])
-    .describe("A check's path, op and value, or a judge's prompt and output."),
+    .describe(
+      "A check's path, op and value; a judge's prompt and output; or a preset with its setting (kind preset, with tasks).",
+    ),
   filter: z
     .record(z.string(), z.unknown())
     .optional()
@@ -103,7 +123,7 @@ const draftShape = {
 };
 const scorerDraft = z.strictObject(draftShape);
 const EXAMPLE =
-  'Example: {"name":"Fast","kind":"check","config":{"path":"duration_ms","op":"lte","value":2000}}.';
+  'Example: {"name":"Fast","kind":"check","config":{"path":"duration_ms","op":"lte","value":2000}}, or {"name":"Run time","kind":"preset","config":{"preset":"max_latency_ms","max":2000},"tasks":["<task id>"]}.';
 
 export function scorerReadOperations(deps: MonitoringDeps = defaultMonitoringDeps): McpOperation[] {
   return [
@@ -112,16 +132,17 @@ export function scorerReadOperations(deps: MonitoringDeps = defaultMonitoringDep
       domain: "improvement",
       title: "List scorers",
       description:
-        "The project's own scorers: each gives every matching trace one stored result. Per scorer: what it checks, which traces it takes, whether it is on, and its pass rate or average of the last 7 days. A task's fix scorers are in get_task. Change one with change_scorer.",
+        "The project's own scorers: each gives every matching trace one stored result. Per scorer: what it checks, which traces it takes, whether it is on, its pass rate or average of the last 7 days, and where it is used (dashboard widgets, alert rules, tasks). A task's fix scorers are in get_task. Change one with change_scorer.",
       keywords: ["scorers", "trace scores", "online evaluation", "llm judge"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
         const { projectId } = await requireMonitoring(deps, ctx);
-        const [scorers, week] = await Promise.all([
+        const [scorers, week, usage] = await Promise.all([
           listScorers(projectId, deps.db()),
           scorerSummaries(projectId, daysAgo(deps, WEEK_DAYS), deps.db()),
+          scorerUsage(projectId, deps.db()),
         ]);
         const tracker = new TruncationTracker();
         return {
@@ -134,8 +155,8 @@ export function scorerReadOperations(deps: MonitoringDeps = defaultMonitoringDep
             count: scorers.length,
             scorers: tracker
               .take(capRows(scorers, params.limit))
-              .map((scorer) => listed(scorer, week.get(scorer.id), tracker)),
-            href: scorersHref(projectId),
+              .map((scorer) => listed(scorer, week.get(scorer.id), usage.get(scorer.id), tracker)),
+            href: dashboardsHref(projectId),
           },
           truncated: tracker.value,
           hint:
@@ -160,17 +181,18 @@ export function scorerReadOperations(deps: MonitoringDeps = defaultMonitoringDep
         const db = deps.db();
         const scorer = await getScorer(projectId, params.scorerId, db);
         if (!scorer) throw notFound("scorer");
-        const [trend, week, latest] = await Promise.all([
+        const [trend, week, latest, usage] = await Promise.all([
           scorerTrend(projectId, scorer.id, trendStart(deps), db),
           scorerSummaries(projectId, daysAgo(deps, WEEK_DAYS), db),
           latestScores(projectId, scorer.id, params.limit + 1, db),
+          scorerUsage(projectId, db),
         ]);
         const tracker = new TruncationTracker();
         return {
           data: {
             summary: `${said(scorer, week.get(scorer.id))}.`,
             scorer: {
-              ...listed(scorer, week.get(scorer.id), tracker),
+              ...listed(scorer, week.get(scorer.id), usage.get(scorer.id), tracker),
               config: scorer.config,
               filter: scorer.filter,
               createdAt: scorer.createdAt.toISOString(),
@@ -259,7 +281,7 @@ export function scorerWriteOperations(
       domain: "writes",
       title: "Change a scorer",
       description:
-        "Create, update, enable, disable or delete a scorer, or attach it to a task or detach it. An update changes only the fields it gives. Delete removes every stored result. Try a draft with test_scorer first; read scorers with list_scorers.",
+        "Create, update, enable, disable or delete a scorer, or attach it to a task or detach it. A task preset (kind preset) grades the task run of each trace of its tasks. An update changes only the fields it gives. Delete removes every stored result. Try a draft with test_scorer first; read scorers with list_scorers.",
       keywords: ["create scorer", "edit scorer", "attach scorer to task"],
       scope: "project",
       mutates: true,
@@ -312,7 +334,7 @@ export function scorerWriteOperations(
             action: params.action,
             scorerId: result.scorerId,
             ...(saved ? { scorer: { ...draftOf(saved), id: saved.id } } : {}),
-            href: scorersHref(projectId),
+            href: saved ? scorerHref(projectId, saved.id) : dashboardsHref(projectId),
           },
           hint: saved
             ? "It scores traces about a minute after they end. get_scorer shows the results."
@@ -369,7 +391,14 @@ function draftOf({ id: _, projectId: __, createdAt, updatedAt, ...draft }: Score
   return draft;
 }
 
-function listed(scorer: Scorer, week: ScorerSummary | undefined, tracker: TruncationTracker) {
+function listed(
+  scorer: Scorer,
+  week: ScorerSummary | undefined,
+  used: Omit<ScorerUsage, "total"> | undefined,
+  tracker: TruncationTracker,
+) {
+  const { widgets = 0, alerts = 0, tasks = 0 } = used ?? {};
+  const total = widgets + alerts + tasks;
   return {
     id: scorer.id,
     name: scorer.name,
@@ -386,7 +415,14 @@ function listed(scorer: Scorer, week: ScorerSummary | undefined, tracker: Trunca
     status: scorer.enabled ? "on" : "off",
     last7Days: week ? rates(week) : null,
     result: resultText(scorer, week),
-    href: `${scorersHref(scorer.projectId)}/${scorer.id}`,
+    usage: {
+      widgets,
+      alerts,
+      tasks,
+      total,
+      said: `used in ${total} ${total === 1 ? "place" : "places"}`,
+    },
+    href: scorerHref(scorer.projectId, scorer.id),
   };
 }
 

@@ -1,7 +1,6 @@
 import { getDb } from "@/lib/platform/db/client";
 import { definitionSummary, hasVerdict } from "./format";
 import {
-  listScorers,
   listTaskScorers,
   type ScorerDb,
   type ScorerSummary,
@@ -27,14 +26,6 @@ export interface TaskScorerScores {
   week: ScorerSummary | null;
   /** Fourteen UTC days, oldest first. */
   trend: { day: string; scored: number; value: number | null }[];
-}
-
-/** A scorer a task may get: not attached to it yet. */
-export interface AttachableScorer {
-  id: string;
-  name: string;
-  /** It scores every trace now, so attaching it narrows it. */
-  everyTrace: boolean;
 }
 
 const DAY_MS = 86_400_000;
@@ -83,15 +74,4 @@ export async function loadTaskScorers(
       }),
     };
   });
-}
-
-/** The project's scorers that are not attached to a task, oldest first. */
-export async function loadAttachableScorers(
-  projectId: string,
-  taskId: string,
-  db: ScorerDb = getDb(),
-): Promise<AttachableScorer[]> {
-  return (await listScorers(projectId, db)).flatMap(({ id, name, tasks }) =>
-    tasks?.includes(taskId) ? [] : [{ id, name, everyTrace: tasks === null }],
-  );
 }

@@ -3,6 +3,8 @@
 import { Field } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import type { ReactNode } from "react";
+import { ScorerPicker } from "@/components/console/scorers/ScorerPicker";
+import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import type { Aggregation, MeasureId, MetricQuery } from "@/lib/contracts/query";
 import { getMetric, offeredMetrics } from "@/lib/synthesis/metrics/catalog";
@@ -12,30 +14,29 @@ import {
   traceFilterFromSearch,
 } from "@/lib/synthesis/traces/v2/filters";
 import { searchFromTraceFilter } from "@/lib/views/dashboards/links";
-import type { ScorerOption } from "@/lib/views/dashboards/types";
 import { aggregationLabel, type QueryChange, scorersOfMetric } from "@/lib/views/dashboards/widget";
 
-const ALL_SCORERS = "all";
-
-/** What is measured: the metric, its aggregation and its scorer. `children` follow the aggregation. */
+/**
+ * What is measured: the metric, its aggregation and its scorer. `children` follow the aggregation.
+ * The metrics of scorers show only while scorers are on (a `ScorerPickerProvider` with data).
+ */
 export function MetricFields({
   query,
-  scorers,
   filterableOnly = false,
   onChange,
   children,
 }: {
   query: Pick<MetricQuery, "measures" | "filters">;
-  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
-  scorers: readonly ScorerOption[] | null;
   /** Only the metrics of traces that a trace filter applies to. */
   filterableOnly?: boolean;
   onChange: (change: QueryChange) => void;
   children?: ReactNode;
 }) {
+  const scorers = useScorers();
   const [{ measure, aggregation }] = query.measures;
   const metric = getMetric(measure);
   if (!metric) return null;
+  const readable = new Set(scorersOfMetric(measure, scorers ?? []).map(({ id }) => id));
   return (
     <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
       <Field label="Metric" className="min-w-40 flex-1">
@@ -69,21 +70,14 @@ export function MetricFields({
       {children}
       {metric.source === "scores" ? (
         <Field label="Scorer" className="min-w-40 flex-1">
-          {(control) => (
-            <Select
-              {...control}
+          {({ id }) => (
+            <ScorerPicker
+              id={id}
               className="w-full"
-              options={[
-                { value: ALL_SCORERS, label: "All scorers" },
-                ...scorersOfMetric(measure, scorers ?? []).map(({ id, name }) => ({
-                  value: id,
-                  label: name,
-                })),
-              ]}
-              value={query.filters.scorer?.id ?? ALL_SCORERS}
-              onValueChange={(value) =>
-                onChange({ scorerId: value === ALL_SCORERS ? null : String(value) })
-              }
+              allLabel="All scorers"
+              filter={(scorer) => readable.has(scorer.id)}
+              value={query.filters.scorer?.id ?? null}
+              onChange={(scorerId) => onChange({ scorerId })}
             />
           )}
         </Field>

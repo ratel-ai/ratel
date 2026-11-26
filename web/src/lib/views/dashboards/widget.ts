@@ -23,10 +23,10 @@ import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   METRIC_CHARTS,
   type MetricWidget,
-  type ScorerOption,
   type WidgetChart,
   type WidgetInput,
 } from "@/lib/views/dashboards/types";
+import type { PickerScorer } from "@/lib/views/scorers/picker";
 
 /** What fits a widget, and how it is named. Safe for the browser. */
 
@@ -102,7 +102,7 @@ export interface QueryChange {
 export function changeQuery(
   query: MetricQuery,
   change: QueryChange,
-  scorers: readonly ScorerOption[],
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
 ): MetricQuery {
   const [current] = query.measures;
   const metric = getMetric(change.measure ?? current.measure);
@@ -136,7 +136,7 @@ export function changeQuery(
 export function changeGeography(
   query: GeographyQuery,
   change: QueryChange,
-  scorers: readonly ScorerOption[],
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
 ): GeographyQuery {
   const { measures, filters } = changeQuery(
     metricQuery(query.measures[0].measure, query.measures[0].aggregation, {
@@ -269,16 +269,16 @@ export function dimensionLabel(dimension: Dimension): string {
 }
 
 /** The scorers a metric can read: pass or fail for the pass rate, 1 to 5 for the average. */
-export function scorersOfMetric(
+export function scorersOfMetric<T extends Pick<PickerScorer, "verdict">>(
   metric: MeasureId,
-  scorers: readonly ScorerOption[],
-): readonly ScorerOption[] {
+  scorers: readonly T[],
+): readonly T[] {
   if (metric === "scorer_count") return scorers;
   return scorers.filter(({ verdict }) => verdict === (metric === "scorer_pass_rate"));
 }
 
 /** The widget "Add to dashboard" starts from on a scorer's page. */
-export function scorerWidget({ id, verdict }: Pick<ScorerOption, "id" | "verdict">): MetricWidget {
+export function scorerWidget({ id, verdict }: Pick<PickerScorer, "id" | "verdict">): MetricWidget {
   return {
     title: "",
     query: metricQuery(verdict ? "scorer_pass_rate" : "scorer_average", verdict ? "rate" : "avg", {

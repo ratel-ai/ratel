@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
@@ -8,6 +9,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
+import { getTraceFilterFacets, type TraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
 import {
   authorizeScorers,
   changeScorer,
@@ -27,8 +29,11 @@ import {
   setScorerEnabled,
   updateScorer,
 } from "@/lib/views/scorers/store";
+import type { ScorerDraft } from "@/lib/views/scorers/types";
+import { loadTaskOptions, type TaskOption } from "./tasks";
 
 const logger = getLogger("scorers/actions");
+const WEEK_MS = 7 * 86_400_000;
 
 const access: ScorerAccessDeps = {
   getSession: getSessionContext,
@@ -93,6 +98,35 @@ export async function countScorerTracesAction(
     const allowed = await authorizeScorers(projectId, access);
     if (!allowed.ok) return allowed;
     return { ok: true, count: await countLastWeek(allowed.projectId, { filter, tasks }) };
+  });
+}
+
+/** What the scorer form in a Panel reads: the filter values, the tasks and the scorer to edit (null: a new one). */
+export async function scorerFormAction(
+  projectId: string,
+  scorerId: string | null,
+): Promise<
+  | {
+      ok: true;
+      facets: TraceFilterFacets;
+      tasks: TaskOption[];
+      scorer: (ScorerDraft & { id: string }) | null;
+    }
+  | { ok: false; error: string }
+> {
+  return guarded("scorer_form", "Could not open the scorer. Try again.", async () => {
+    const allowed = await authorizeScorers(projectId, access);
+    if (!allowed.ok) return allowed;
+    const id = scorerId === null ? null : parseProjectUuid(scorerId);
+    const stored = id ? await getScorer(allowed.projectId, id) : null;
+    if (scorerId !== null && !stored) return { ok: false, error: "The scorer does not exist." };
+    const [facets, tasks] = await Promise.all([
+      getTraceFilterFacets(allowed.projectId, { since: new Date(Date.now() - WEEK_MS) }),
+      loadTaskOptions(allowed.projectId, stored?.tasks ?? []),
+    ]);
+    if (!stored) return { ok: true, facets, tasks, scorer: null };
+    const { createdAt: _created, updatedAt: _updated, projectId: _project, ...scorer } = stored;
+    return { ok: true, facets, tasks, scorer };
   });
 }
 

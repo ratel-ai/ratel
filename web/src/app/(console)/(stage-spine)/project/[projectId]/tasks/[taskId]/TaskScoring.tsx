@@ -1,9 +1,11 @@
 import { Section } from "@ratel/design-system/section";
 import { Callout, Skeleton } from "@ratel/design-system/states";
 import { Suspense } from "react";
+import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { TaskLiveScores } from "@/components/console/scorers/TaskLiveScores";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import { loadAttachableScorers, loadTaskScorers } from "@/lib/views/scorers/task-scores";
+import { loadScorerPicker } from "@/lib/views/scorers/picker";
+import { loadTaskScorers } from "@/lib/views/scorers/task-scores";
 import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
 import { ScoreChart } from "./ScoreChart";
@@ -112,11 +114,11 @@ async function LiveContent({
     distinctId: `project:${projectId}`,
     fallback: null,
     load: async () => {
-      const [scorers, attachable] = await Promise.all([
+      const [scorers, picker] = await Promise.all([
         loadTaskScorers(projectId, taskId, now),
-        loadAttachableScorers(projectId, taskId),
+        loadScorerPicker(projectId, now),
       ]);
-      return { scorers, attachable };
+      return { scorers, picker };
     },
   });
   if (!data)
@@ -127,5 +129,9 @@ async function LiveContent({
         </Callout>
       </Section>
     );
-  return <TaskLiveScores projectId={projectId} taskId={taskId} {...data} />;
+  return (
+    <ScorerPickerProvider projectId={projectId} data={data.picker}>
+      <TaskLiveScores projectId={projectId} taskId={taskId} scorers={data.scorers} />
+    </ScorerPickerProvider>
+  );
 }

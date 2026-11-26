@@ -16,6 +16,7 @@ test("a test gives one result per newest matching trace, whatever the sample rat
       return traces;
     },
     count: async () => 0,
+    preset: async () => [],
     judge: async () => [
       { status: "scored" as const, score: { value: 1, passed: true, confidence: 0.9 } },
       { status: "skipped" as const, reason: "no_content" as const },

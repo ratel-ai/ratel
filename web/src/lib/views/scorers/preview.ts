@@ -1,5 +1,6 @@
 import { runCheck } from "./check";
 import { type JudgeDeps, judgeTraces } from "./judge";
+import { scorePresetTraces } from "./preset";
 import { countMatchingTraces, latestMatchingTraces } from "./traces";
 import type { ScoreOutcome, ScorerDraft, ScorerTarget } from "./types";
 
@@ -17,6 +18,7 @@ export interface PreviewDeps {
   latest: typeof latestMatchingTraces;
   count: typeof countMatchingTraces;
   judge: typeof judgeTraces;
+  preset: typeof scorePresetTraces;
   judgeDeps?: JudgeDeps;
 }
 
@@ -24,6 +26,7 @@ const defaults: PreviewDeps = {
   latest: latestMatchingTraces,
   count: countMatchingTraces,
   judge: judgeTraces,
+  preset: scorePresetTraces,
 };
 
 /**
@@ -40,6 +43,8 @@ export async function previewScorer(
   if (draft.kind === "check") {
     const { config } = draft;
     outcomes = traces.map((trace) => runCheck(config, trace));
+  } else if (draft.kind === "preset") {
+    outcomes = await deps.preset(projectId, draft.config, traces, draft.tasks ?? []);
   } else {
     outcomes = await deps.judge(projectId, draft.config, traces, deps.judgeDeps);
   }

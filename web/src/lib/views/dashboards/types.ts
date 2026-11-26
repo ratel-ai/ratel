@@ -33,14 +33,6 @@ export interface WidgetInput {
 
 export type MetricWidget = WidgetInput & { query: MetricQuery };
 
-/** A scorer as the widget form offers it. */
-export interface ScorerOption {
-  id: string;
-  name: string;
-  /** Pass or fail; false: 1 to 5. */
-  verdict: boolean;
-}
-
 export type Widget = WidgetInput & {
   id: string;
   layout: GridPosition;
