@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { SkillsV2Page } from "@/components/console/catalog/CatalogPages";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 
@@ -12,7 +12,7 @@ export default async function ScopedSkillsCatalogPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Skills">
         Skills become available once setup finishes.

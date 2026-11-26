@@ -1,6 +1,6 @@
 import { LogsView } from "@/components/console/traces/LogsView";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { listProjectEvents } from "@/lib/synthesis/traces/events-queries";
 import {
@@ -23,7 +23,7 @@ export async function LogsPageV2({
   projectId: string;
   searchParams: EventListSearchParams;
 }) {
-  if (!isDbConfigured()) return <TracesUnavailable />;
+  if (!(await dbConfigured())) return <TracesUnavailable />;
   // The project layout already guarded the id against the session.
   const project = { id: projectId };
 

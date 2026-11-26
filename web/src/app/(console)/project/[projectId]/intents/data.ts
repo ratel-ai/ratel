@@ -1,5 +1,5 @@
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { topicReadingInFlight } from "@/lib/readings/topics/queries";
@@ -30,7 +30,7 @@ export function firstParam(value: string | string[] | undefined): string | undef
 }
 
 export async function loadIntentsPage(projectIdParam: string): Promise<IntentsPageData> {
-  if (!isDbConfigured()) return { kind: "no-db" };
+  if (!(await dbConfigured())) return { kind: "no-db" };
   const { project } = await requireProjectScope(projectIdParam);
   const projectId = project.id;
   const operation = "topics_reading";

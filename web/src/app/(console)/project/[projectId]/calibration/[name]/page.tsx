@@ -2,7 +2,7 @@ import ExperimentDetailContent from "@/app/(console)/project/[projectId]/calibra
 import { RankingCalibrationContent } from "@/app/(console)/project/[projectId]/calibration/[name]/ranking-content";
 import { ExperimentSource } from "@/components/console/lineage/ExperimentSource";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { createCalibrationQueries } from "@/lib/synthesis/experiments/calibration-queries";
@@ -38,7 +38,7 @@ export default async function ScopedCalibrationDetailPage({
       surface="calibration"
     />
   );
-  if (!isDbConfigured()) return genericDetail;
+  if (!(await dbConfigured())) return genericDetail;
 
   const name = experimentNameFromPathSegment(nameSegment);
   const { project } = await requireProjectScope(projectId);

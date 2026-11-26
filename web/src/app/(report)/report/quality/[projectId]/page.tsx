@@ -3,7 +3,8 @@ import { PrintButton } from "@/components/console/quality/report/PrintButton";
 import { ReportDocument } from "@/components/console/quality/report/ReportDocument";
 import "@/components/console/quality/report/quality.css";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { getDb, isDbConfigured } from "@/lib/platform/db/client";
+import { getDb } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { listQualityCalibrations } from "@/lib/synthesis/quality/queries";
 import { loadQualityView } from "@/lib/synthesis/quality/service";
 import {
@@ -33,7 +34,7 @@ export default async function QualityReportPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{ days?: string; calibration?: string }>;
 }) {
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
   const [{ projectId: requestedProjectId }, { days, calibration }] = await Promise.all([
     params,
     searchParams,

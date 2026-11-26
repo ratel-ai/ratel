@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { RankingView } from "@/components/console/adaptive-ranking/RankingView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { loadRanking } from "../data";
 
 export const metadata = { title: "Intent graph" };
@@ -19,7 +19,7 @@ export default async function IntentGraphDetailPage({
 }: {
   params: Promise<{ projectId: string; graphKey: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Adaptive ranking">
         Adaptive ranking becomes available once setup finishes.

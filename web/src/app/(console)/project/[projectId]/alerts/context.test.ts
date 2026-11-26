@@ -31,7 +31,7 @@ const SWITCHES = [
 test("the customMonitoring flag decides, for the reader's organization", async () => {
   const asked: unknown[] = [];
   const deps = (on: boolean): FeaturePageDeps => ({
-    isDbConfigured: () => true,
+    dbConfigured: async () => true,
     requireProjectScope: async () =>
       ({
         project: { id: "p1" },

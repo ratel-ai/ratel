@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { ensureSampleProject } from "@/lib/console/onboarding/provision-sample";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import type { OrgRole } from "@/lib/platform/organization";
 import {
   listProjectsForOrganization,
@@ -66,7 +66,7 @@ const toConsoleProject = ({ id, name, organizationId, slug, isDemo }: Project): 
  * database or a session.
  */
 export const getConsoleScope = cache(async (): Promise<ConsoleScope | null> => {
-  if (!isDbConfigured()) return null;
+  if (!(await dbConfigured())) return null;
   const context = await getSessionContext();
   if (!context) return null;
   return loadConsoleScope(context, {

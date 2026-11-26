@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { ToolsV2Page } from "@/components/console/catalog/CatalogPages";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getProjectById } from "@/lib/platform/projects/queries";
 
 export const metadata = { title: "Tools" };
@@ -11,7 +11,7 @@ export default async function ToolsCatalogPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Tools">Tools appear once setup finishes.</DatabaseUnavailable>
     );

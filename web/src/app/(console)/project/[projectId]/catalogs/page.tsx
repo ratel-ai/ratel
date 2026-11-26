@@ -1,14 +1,14 @@
 import { notFound } from "next/navigation";
 import { CatalogHomeV2Page } from "@/components/console/catalog/CatalogPages";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 
 export const metadata = { title: "Catalog" };
 
 export default async function CatalogsPage({ params }: { params: Promise<{ projectId: string }> }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Catalog">
         The catalog becomes available once setup finishes.

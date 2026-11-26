@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PlaygroundWorkbench } from "@/components/console/playground/PlaygroundWorkbench";
 import { requireProjectScope } from "@/components/console/settings/project-scope";
 import { composition } from "@/lib/composition/ports";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import type { SelectionDetail } from "@/lib/synthesis/experiments/calibration-types";
@@ -52,7 +52,7 @@ export default async function TestSearchPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<SearchParams>;
 }) {
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
   const [{ projectId }, query] = await Promise.all([params, searchParams]);
   const { project } = await requireProjectScope(projectId);
 

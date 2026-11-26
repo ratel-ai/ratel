@@ -3,7 +3,7 @@ import { SettingsFrame } from "@/components/console/settings/SettingsFrame";
 import { composition } from "@/lib/composition";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import { organizationSettingsTabsFor } from "@/lib/console/settings/organization-tabs";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { slackAppAdmin } from "@/lib/views/slack/app-actions";
 import { slackAppAccess } from "./slack/access";
 
@@ -19,7 +19,7 @@ export default async function OrganizationSettingsLayout({
   children: ReactNode;
   params: Promise<{ orgSlug: string }>;
 }) {
-  if (!isDbConfigured()) return children;
+  if (!(await dbConfigured())) return children;
   const [{ orgSlug }, ui] = await Promise.all([params, composition.ui?.()]);
   const { organization, role } = await requireOrganizationScope(orgSlug);
   const tabs = organizationSettingsTabsFor(organization.slug, {

@@ -10,7 +10,7 @@ import { composition } from "@/lib/composition";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import {
   billingSelfServe,
   fullAgentHealthPlanName,
@@ -73,7 +73,7 @@ export default async function AgentHealthPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { projectId } = await params;
-  if (!isDbConfigured()) return <SummaryNoDatabase />;
+  if (!(await dbConfigured())) return <SummaryNoDatabase />;
 
   const { project, organization, user } = await requireProjectScope(projectId);
   const limits = getAgentHealthLimits(organization);

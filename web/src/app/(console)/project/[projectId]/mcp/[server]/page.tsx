@@ -5,7 +5,7 @@ import {
 } from "@/components/console/mcp-servers/McpServerDetailView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { projectRoot } from "@/lib/console/navigation";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { afterOutsideSupportSession } from "@/lib/platform/support-session";
@@ -66,7 +66,7 @@ export default async function McpServerPage({
 }) {
   const { projectId, server: segment } = await params;
   if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="MCP server">
         MCP servers become available once setup finishes.

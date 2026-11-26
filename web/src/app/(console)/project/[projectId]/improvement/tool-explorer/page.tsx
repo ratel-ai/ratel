@@ -1,6 +1,6 @@
 import { permanentRedirect, redirect } from "next/navigation";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { listIntentTools } from "@/lib/readings/tool-explorer/queries";
@@ -26,7 +26,7 @@ export default async function LegacyToolCraftPage({
 }) {
   const [{ projectId }, query] = await Promise.all([params, searchParams]);
   const askId = legacyAskId(query);
-  if (!askId || !UUID.test(askId) || !isDbConfigured())
+  if (!askId || !UUID.test(askId) || !(await dbConfigured()))
     permanentRedirect(legacyToolCraftTarget(projectId, query, null));
 
   // Owned (ADR-0004): the project comes from the console scope.

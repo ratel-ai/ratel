@@ -3,7 +3,7 @@ import { TraceScores } from "@/components/console/scorers/TraceScores";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
 import { TraceView } from "@/components/console/traces/TraceView";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
@@ -32,7 +32,7 @@ export async function TracePageV2({
     tab?: string | readonly string[];
   };
 }) {
-  if (!isDbConfigured()) return <TracesUnavailable title="Trace" />;
+  if (!(await dbConfigured())) return <TracesUnavailable title="Trace" />;
   // The project layout already guarded the id against the session.
   const project = { id: projectId };
 

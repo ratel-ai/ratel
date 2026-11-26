@@ -1,6 +1,6 @@
 import { RankingView } from "@/components/console/adaptive-ranking/RankingView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { loadRanking } from "./data";
 
 export const metadata = { title: "Adaptive ranking" };
@@ -12,7 +12,7 @@ export default async function AdaptiveRankingPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Adaptive ranking">
         Adaptive ranking becomes available once setup finishes.

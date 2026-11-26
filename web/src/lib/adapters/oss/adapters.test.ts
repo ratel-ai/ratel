@@ -9,20 +9,56 @@ import {
   localEmbedding,
 } from "./embedding-provider";
 import { OSS_LIMITS, ossEntitlements } from "./entitlements";
-import { LOCAL_OPERATOR, LOCAL_ORGANIZATION_ID, localOrganization, ossSession } from "./session";
+import {
+  createOssSession,
+  LOCAL_OPERATOR,
+  LOCAL_ORGANIZATION_ID,
+  localOrganization,
+  ossSession,
+} from "./session";
 import { createOssTelemetry } from "./telemetry";
 
 describe("oss session", () => {
+  // A request that has arrived.
+  const session = createOssSession({ connection: async () => {} });
+
   it("is one local operator, admin of one organization, with no acting-as", async () => {
-    const a = await ossSession.resolveSession();
-    const b = await ossSession.resolveSession();
+    const a = await session.resolveSession();
+    const b = await session.resolveSession();
     assert.deepEqual(a, b);
     assert.equal(a?.user, LOCAL_OPERATOR);
     assert.match(LOCAL_OPERATOR.email ?? "", /\.invalid$/);
     assert.equal(a?.organization.id, LOCAL_ORGANIZATION_ID);
     assert.equal(a?.role, "admin");
     assert.deepEqual(a?.memberships, [{ organization: a?.organization, role: "admin" }]);
-    assert.equal(await ossSession.actingAs(), null);
+    assert.equal(await session.actingAs(), null);
+  });
+
+  it("waits for the request before it answers, as a signed-in edition's session does", async () => {
+    const order: string[] = [];
+    const waiting = createOssSession({
+      connection: async () => {
+        order.push("connection");
+      },
+    });
+    const resolved = await waiting.resolveSession();
+    order.push(`session:${resolved?.user.id}`);
+    assert.deepEqual(order, ["connection", "session:local-operator"]);
+  });
+
+  it("never answers while the request is pending, so a prerender cannot bake the session", async () => {
+    let answered = false;
+    void createOssSession({ connection: () => new Promise<void>(() => {}) })
+      .resolveSession()
+      .then(() => {
+        answered = true;
+      });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(answered, false);
+  });
+
+  it("the composed port answers outside Next, where nothing is prerendered", async () => {
+    assert.deepEqual(await ossSession.resolveSession(), await session.resolveSession());
   });
 
   it("names the organization from app.organizationName, keeping its id and slug", () => {
@@ -32,12 +68,9 @@ describe("oss session", () => {
   });
 
   it("knows its own organization only, with one member", async () => {
-    assert.equal(
-      (await ossSession.getOrganization(LOCAL_ORGANIZATION_ID))?.id,
-      LOCAL_ORGANIZATION_ID,
-    );
-    assert.equal(await ossSession.getOrganization("00000000-0000-4000-8000-000000000999"), null);
-    assert.equal(await ossSession.countMembers(LOCAL_ORGANIZATION_ID), 1);
+    assert.equal((await session.getOrganization(LOCAL_ORGANIZATION_ID))?.id, LOCAL_ORGANIZATION_ID);
+    assert.equal(await session.getOrganization("00000000-0000-4000-8000-000000000999"), null);
+    assert.equal(await session.countMembers(LOCAL_ORGANIZATION_ID), 1);
   });
 });
 

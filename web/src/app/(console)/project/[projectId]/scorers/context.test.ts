@@ -34,7 +34,7 @@ test("with a database: flag off, not found; on, the project", async () => {
   const asked: unknown[] = [];
   const deps = (on: boolean): ScorersPageDeps => ({
     ...noDatabase({}, undefined),
-    isDbConfigured: () => true,
+    dbConfigured: async () => true,
     requireProjectScope: async () => scope,
     featureEnabled: async (...args) => {
       asked.push(args);
@@ -81,7 +81,7 @@ function noDatabase(
 ): ScorersPageDeps {
   const config = { flags, experimentalFeatures: false } as FlagConfig;
   return {
-    isDbConfigured: () => false,
+    dbConfigured: async () => false,
     requireProjectScope: async () => {
       throw new Error("the project must not be read");
     },

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { OrgSkeleton } from "@/components/console/org/OrgSkeleton";
 import { ProjectsPage } from "@/components/console/org/ProjectsPage";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 export const metadata = { title: "Projects" };
 
@@ -13,7 +13,7 @@ export default async function OrganizationProjectsPage({
   params: Promise<{ orgSlug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Projects">
         Projects become available once setup finishes.

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { SelectionRankingDiff } from "@/components/console/calibration/SelectionRankingDiff";
 import { BackLink } from "@/components/console/traces/compare/BackLink";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import type {
@@ -56,7 +56,7 @@ export default async function SelectionInspectorPage({
     params,
     searchParams,
   ]);
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
 
   const name = experimentNameFromPathSegment(nameSegment);
   const { project } = await requireProjectScope(projectId);

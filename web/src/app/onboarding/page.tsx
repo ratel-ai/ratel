@@ -4,7 +4,7 @@ import { OnboardingBackground } from "@/components/console/onboarding/Onboarding
 import { composition } from "@/lib/composition";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import { apiUrl } from "@/lib/platform/app-config";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { billableProjectCount, checkQuota } from "@/lib/platform/entitlements";
 import { PROJECT_LIMIT_PARAM, PROJECT_LIMIT_VALUE } from "@/lib/platform/projects/capacity";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
@@ -49,7 +49,7 @@ export default async function OnboardingPage({
   // via `useActionState` (see CreateProjectForm/KeyReveal). So `createProjectAction`
   // must not revalidate this route: a re-render here would hit this guard (now at
   // cap) and redirect away before the key is ever displayed.
-  if (isDbConfigured()) {
+  if (await dbConfigured()) {
     const ctx = await getSessionContext();
     if (ctx) {
       // Upstream's: a requested organization is any the reader belongs to, else a 404.

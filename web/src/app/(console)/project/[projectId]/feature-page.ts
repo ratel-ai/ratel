@@ -2,11 +2,11 @@ import { notFound } from "next/navigation";
 import { composition } from "@/lib/composition/ports";
 import { type ProjectScope, requireProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { type FeatureFlagDeps, featureEnabled } from "@/lib/platform/experimental-features";
 
 export interface FeaturePageDeps {
-  isDbConfigured: () => boolean;
+  dbConfigured: () => Promise<boolean>;
   requireProjectScope: (projectId: string) => Promise<ProjectScope>;
   featureEnabled: typeof featureEnabled;
   /** The edition's flags port; undefined without one. */
@@ -21,7 +21,7 @@ export interface FeaturePage {
 }
 
 const defaults: FeaturePageDeps = {
-  isDbConfigured,
+  dbConfigured,
   requireProjectScope,
   featureEnabled,
   flagsPort: () => composition.featureFlags,
@@ -41,7 +41,7 @@ export function resolveFeaturePage(
     feature,
     "resolve_page",
     async () => {
-      if (!deps.isDbConfigured()) {
+      if (!(await deps.dbConfigured())) {
         if (!(await enabledWithoutDatabase(deps))) notFound();
         return null;
       }

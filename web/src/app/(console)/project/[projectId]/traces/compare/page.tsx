@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { BackLink } from "@/components/console/traces/compare/BackLink";
 import { TraceCompareView } from "@/components/console/traces/compare/TraceCompareView";
 import { TraceLifecycleComparison } from "@/components/console/traces/compare/TraceLifecycleEvents";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { summarizeTraceForComparison } from "@/lib/synthesis/traces/comparison";
 import {
@@ -23,7 +23,7 @@ export default async function TraceComparePage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<TraceCompareSearchParams>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <p className="rounded-lg border border-coral/40 bg-coral/10 p-3 font-mono text-xs text-cream-dim">
         No database connected yet. Traces become available once setup finishes.

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { EvalGatePage } from "@/components/console/eval-gate/EvalGatePage";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { loadEvalGatePage } from "@/lib/views/eval-gate/page-model";
 import { loadFixContext } from "@/lib/views/eval-gate/service";
@@ -20,7 +20,7 @@ export default async function FixEvalRoute({
 }: {
   params: Promise<{ projectId: string; fixId: string }>;
 }) {
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
   const { projectId, fixId: segment } = await params;
   const { project, organization, user } = await requireProjectScope(projectId);
   if (!(await evalGateEnabledFor(organization))) notFound();

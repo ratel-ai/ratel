@@ -1,5 +1,5 @@
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getLogger } from "@/lib/platform/logger";
 import type { Organization } from "@/lib/platform/organizations";
 import { reportServerException } from "@/lib/platform/telemetry";
@@ -36,7 +36,7 @@ const logger = getLogger("fixes/data");
  * Owned (ADR-0004): the project comes from the console scope, a 404 otherwise.
  */
 export async function loadFixesPage(projectId: string): Promise<FixesPageData> {
-  if (!isDbConfigured()) return { kind: "no-db" };
+  if (!(await dbConfigured())) return { kind: "no-db" };
   const { project, organization, user } = await requireProjectScope(projectId);
   const now = new Date();
   const [model, evalBadges, shipped, progress] = await Promise.all([

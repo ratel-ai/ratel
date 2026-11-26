@@ -75,7 +75,7 @@ test("a project page asks for the last-project cookie when it names another proj
 test("the project layout returns its page when no database is configured", () => {
   assert.match(
     source("app/(console)/project/[projectId]/layout.tsx"),
-    /if \(!isDbConfigured\(\)\) return children/,
+    /if \(!\(await dbConfigured\(\)\)\) return children/,
   );
 });
 
@@ -119,8 +119,23 @@ test("the Sessions list page checks the project scope itself, as its two routes 
   );
 });
 
+test("the root layout reads the edition and the browser config per request, script first, with or without a provider", () => {
+  const layout = source("app/layout.tsx");
+  const root = layout.slice(layout.indexOf("async function RequestRoot"));
+  assert.match(root, /^async function RequestRoot\(.*\) \{\n\s*await connection\(\);/);
+  // Written beside the provider, never inside it: the open-source edition has none.
+  assert.match(
+    root,
+    /<script dangerouslySetInnerHTML=\{\{ __html: appConfigScript\(\) \}\} \/>\s*<Provider>\{children\}<\/Provider>/,
+  );
+  assert.match(layout, /<body[^>]*>\s*<RequestRoot>\{children\}<\/RequestRoot>/);
+  // The metadata reads neither the request nor the deployment's host.
+  const metadata = layout.slice(layout.indexOf("generateMetadata"), layout.indexOf("RootLayout"));
+  assert.doesNotMatch(metadata, /connection|headers|cookies|BASE_URL|publicUrl/);
+});
+
 test("root metadata sets a title template on the product name, a description and an icon", () => {
-  // The layout builds it per request (`generateMetadata`) from `siteMetadata`, on APP_NAME.
+  // The layout builds it statically (`generateMetadata` reads no request) from `siteMetadata`.
   assert.match(source("app/layout.tsx"), /siteMetadata\(APP_NAME,/);
   const metadata = source("lib/platform/site-metadata.ts");
   // biome-ignore lint/suspicious/noTemplateCurlyInString: the placeholder as it is written in the source file

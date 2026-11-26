@@ -7,11 +7,12 @@ npm packages.
 | Path | Holds |
 |---|---|
 | `db/client.ts`, `db/pool.ts` | the lazy drizzle client over node-postgres; `isDbConfigured`, `sslConfig`; the pool's connect, query and keepalive timeouts, and dropping a client whose query timed out |
+| `db/request.ts` | `dbConfigured()`: the database gate for pages, layouts and the helpers they render with, answered per request (`connection()` first) so Cache Components cannot bake the build's "no database" into a page; Biome keeps the bare `isDbConfigured` out of render paths (`biome.json`) |
 | `db/migrate.ts`, `scripts/migrate.mts` | the migrator; `database.migrateOnBoot` (`DATABASE_MIGRATE_ON_BOOT=1`) runs it at startup |
 | `db/migrations/` | the migrations: one baseline file per schema fragment, then one file per change (`pnpm db:generate`, checked by `pnpm db:check`) |
 | `app-config.ts` | `APP_NAME` and `BASE_URL` (origin), from `app.name` and `app.baseUrl` in `web/src/config.ts` on the server and from the page in the browser; `apiUrl()` builds `/api/v1` URLs; `serviceName()` is the edition's short name ("Cloud", set at startup from `productName` and handed to the browser), else `APP_NAME` |
 | `product-name.ts` | `productName()` and `productSlug()`: the edition's full name for the MCP server ("Ratel", `ratel`), else "Ratel" (server-only) |
-| `site-metadata.ts` | the root layout's metadata: title template, icon, and the link preview (`metadataBase`, OpenGraph, Twitter card) from the edition's `linkPreview` or this deployment's name and origin; an origin without a scheme is read as https, and one that does not parse leaves the preview without an origin |
+| `site-metadata.ts` | the root layout's static metadata: title template, icon, and the link preview (OpenGraph, Twitter card) from the edition's `linkPreview` or this deployment's name; no `metadataBase` or `og:url`, since the host is runtime config |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/top-queries.ts` | the statements that cost the database most since the last reset (`pg_stat_statements`; null where it is not installed or not preloaded), which the worker logs once a day |
 | `process-stats.ts` | `process_stats` once a minute from every process (memory, event loop delay), started where this process exports its own telemetry (`instrumentation-node.ts`) |

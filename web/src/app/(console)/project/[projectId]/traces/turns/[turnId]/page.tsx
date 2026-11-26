@@ -4,7 +4,7 @@ import { RunToTest } from "@/components/console/tasks/RunToTest";
 import { TurnDetailView } from "@/components/console/traces/TurnDetailView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { traceTurns } from "@/lib/ledger/schema";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { sessionReplayHref } from "@/lib/views/session-replay/view";
@@ -29,7 +29,7 @@ export default async function TurnTracePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ projectId, turnId }, search] = await Promise.all([params, searchParams]);
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <p className="rounded-lg border border-coral/40 bg-coral/10 p-3 font-mono text-xs text-cream-dim">
         No database connected yet. Traces become available once setup finishes.

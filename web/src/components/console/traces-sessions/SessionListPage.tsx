@@ -1,7 +1,7 @@
 import { ExploreLink } from "@/components/console/explore/ExploreLink";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -43,7 +43,7 @@ export async function SessionListPage({
     Record<string, string | readonly string[] | undefined>
   >;
 }) {
-  if (!isDbConfigured()) return <TracesUnavailable />;
+  if (!(await dbConfigured())) return <TracesUnavailable />;
   // Checked here too, as upstream does: the list shows each session's ask.
   const { project, organization, user } = await requireProjectScope(projectId);
 

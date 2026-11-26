@@ -6,7 +6,7 @@ import type { Session } from "@/lib/contracts/session";
  * The session for this request, shared by every layout and page that renders it (React
  * `cache`). Owned port of upstream `auth-user.ts`: identity, organizations and memberships are
  * the edition's module, behind the session port, so the core reads no identity table.
- * Callers must check `isDbConfigured()` before invoking, as upstream's did.
+ * Callers must check `await dbConfigured()` (`db/request.ts`) before invoking, as upstream's did.
  */
 export type SessionContext = Session;
 

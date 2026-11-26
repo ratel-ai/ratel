@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AgentsView } from "@/components/console/agents/AgentsView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { afterOutsideSupportSession } from "@/lib/platform/support-session";
@@ -37,7 +37,7 @@ export default async function AgentsPage({
 }) {
   const { projectId } = await params;
   if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Agents">
         Agents become available once setup finishes.

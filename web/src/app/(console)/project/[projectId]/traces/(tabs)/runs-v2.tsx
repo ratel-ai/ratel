@@ -2,7 +2,7 @@ import { ExploreLink } from "@/components/console/explore/ExploreLink";
 import { RunsView } from "@/components/console/traces/RunsView";
 import type { TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -64,7 +64,7 @@ export async function RunsPageV2({
   projectId: string;
   searchParams: TraceListSearchParams;
 }) {
-  if (!isDbConfigured()) return <TracesUnavailable />;
+  if (!(await dbConfigured())) return <TracesUnavailable />;
   // The project layout already guarded the id against the session.
   const project = { id: projectId };
 

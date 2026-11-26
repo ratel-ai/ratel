@@ -1,6 +1,6 @@
 import { ApiKeysSettings } from "@/components/console/settings/ApiKeysSettings";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 export const metadata = { title: "API keys" };
 
@@ -9,7 +9,7 @@ export default async function ScopedApiKeysPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Settings">
         API keys become available once setup finishes.
