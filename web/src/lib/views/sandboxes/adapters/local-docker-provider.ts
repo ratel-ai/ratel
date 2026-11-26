@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getLogger } from "@/lib/platform/logger";
+import { snapshotVersionId } from "../domain/snapshot-name";
 import {
   type ExecResult,
   ProviderRefused,
@@ -303,6 +304,27 @@ export function createLocalDockerProvider(options: LocalDockerProviderOptions): 
         labels: vm.Config.Labels ?? {},
         createdAt: new Date(vm.Created),
       }));
+    },
+
+    async listSnapshots() {
+      // The volume of a snapshot carries its name and the deployment.
+      const listed = await must(
+        [
+          "volume",
+          "ls",
+          "--filter",
+          `label=${DEPLOYMENT_LABEL}=${deploymentId}`,
+          "--filter",
+          `label=${SNAPSHOT_LABEL}`,
+          "--format",
+          `{{.Label "${SNAPSHOT_LABEL}"}}`,
+        ],
+        "The snapshots were not listed.",
+      );
+      return listed.stdout.split("\n").flatMap((name) => {
+        const versionId = snapshotVersionId(deploymentId, name.trim());
+        return versionId ? [{ snapshotRef: name.trim(), versionId }] : [];
+      });
     },
   };
 
