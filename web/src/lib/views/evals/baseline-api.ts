@@ -155,13 +155,18 @@ async function comparison(
 ): Promise<Response> {
   const result = await compareWithBaseline(projectId, experimentId, deps.baselines(), baselineId);
   if (result.ok) return reply(200, comparisonView(projectId, result, baselineId, deps));
-  const { reason, message, scorers, pin: pinned } = result.refusal;
+  const { reason, message, scorers, pin: pinned, otherId } = result.refusal;
   if (reason === "not_found") return notFound();
+  const other = otherId && { experimentId: otherId, url: urlOf({ projectId, id: otherId }, deps) };
   return reply(COMPARE_STATUS[reason], {
     error: reason,
     message,
     ...(scorers.length > 0 ? { scorers } : {}),
-    ...(pinned ? { baseline: baselineView(projectId, pinned, deps) } : {}),
+    ...(pinned
+      ? { baseline: baselineView(projectId, pinned, deps) }
+      : other
+        ? { baseline: other }
+        : {}),
   });
 }
 

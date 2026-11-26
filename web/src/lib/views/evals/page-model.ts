@@ -365,7 +365,7 @@ export function comparePageModel(
     choices = [],
     chosenId = null,
   }: {
-    /** The outputs of the trials of both sides, cut to `DIFF_CHARS`, by trial id. */
+    /** The outputs of the trials of both sides, by trial id. Longer than `DIFF_CHARS` is cut. */
     outputs?: ReadonlyMap<string, string>;
     choices?: CompareChoice[];
     chosenId?: string | null;
@@ -373,8 +373,8 @@ export function comparePageModel(
 ): ComparePageModel {
   const shared = { ...ids, choices, chosenId };
   if (!result.ok) {
-    const { pin, ...refusal } = result.refusal;
-    return { ...shared, ok: false, ...refusal, baselineId: pin?.experimentId ?? null };
+    const { pin, otherId, ...refusal } = result.refusal;
+    return { ...shared, ok: false, ...refusal, baselineId: otherId ?? pin?.experimentId ?? null };
   }
   const { pin, baseline, candidate, comparison } = result;
   const before = trialsByCase(baseline.trials);
@@ -439,9 +439,15 @@ function comparedSide(
     meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
     trials: trialViews(trials).map((trial) => ({
       ...trial,
-      output: outputs.get(trial.id) ?? null,
+      output: cut(outputs.get(trial.id)),
     })),
   };
+}
+
+/** An output of a comparison, with "…" when it is longer than `DIFF_CHARS`. */
+function cut(output: string | undefined): string | null {
+  if (output === undefined) return null;
+  return output.length > DIFF_CHARS ? `${output.slice(0, DIFF_CHARS)}…` : output;
 }
 
 function comparedExperiment(experiment: Experiment): ComparedExperiment {

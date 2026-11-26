@@ -86,9 +86,14 @@ const model = (over: Partial<SandboxPageModel> = {}): SandboxPageModel => ({
   runs: [],
   ...over,
 });
-const html = (over: Partial<SandboxPageModel> = {}) =>
+const html = (over: Partial<SandboxPageModel> = {}, canSaveCases = true) =>
   render(
-    createElement(SandboxView, { model: model(over), ratelUrl: "https://ratel.example", now: NOW }),
+    createElement(SandboxView, {
+      model: model(over),
+      ratelUrl: "https://ratel.example",
+      canSaveCases,
+      now: NOW,
+    }),
   );
 const STATES: Record<string, Partial<SandboxPageModel>> = {
   empty: {},
@@ -195,6 +200,11 @@ test("the version shows its declared input, params, tools with modes and run mod
   const text = visibleText(html(STATES.full));
   assert.match(text, /Declared: http run · 4 parameters · 2 tools/);
   assert.match(text, /Run mode/);
+});
+
+test("Save as case shows only when evals is on and the person can write", () => {
+  assert.match(visibleText(html(STATES.full)), /Save as case/);
+  assert.doesNotMatch(visibleText(html(STATES.full, false)), /Save as case/);
 });
 
 test("a wrong setting of the server shows in a banner with its name", () => {

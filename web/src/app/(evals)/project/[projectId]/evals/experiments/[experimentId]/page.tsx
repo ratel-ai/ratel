@@ -46,7 +46,8 @@ export default async function ExperimentPage({
         store.trials(found.id),
         createDrizzleBaselineStore(db).get(project.id),
         store.caseVersions(found.caseVersions.map(({ versionId }) => versionId)),
-        store.outputPreviews(found.id, PREVIEW_CHARS),
+        // One more character than the grid shows, so a cut output gets its "…".
+        store.outputPreviews(found.id, PREVIEW_CHARS + 1),
       ]);
       return { model: experimentPageModel(found, trials, { versions, outputs }), baseline };
     },

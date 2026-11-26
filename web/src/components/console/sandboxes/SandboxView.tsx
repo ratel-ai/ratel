@@ -31,11 +31,14 @@ secrets: [OPENAI_API_KEY]`;
 export function SandboxView({
   model,
   ratelUrl,
+  canSaveCases = false,
   now,
 }: {
   model: SandboxPageModel;
   /** The address that a push goes to. */
   ratelUrl: string;
+  /** Whether a run can be saved as an eval case: evals on and a write allowed. */
+  canSaveCases?: boolean;
   /** ISO time the page was rendered, so relative times agree on server and client. */
   now: string;
 }) {
@@ -81,6 +84,7 @@ export function SandboxView({
           projectId={model.projectId}
           versions={model.versions}
           runs={model.runs}
+          canSaveCases={canSaveCases}
           configured={model.configured}
           now={now}
         />

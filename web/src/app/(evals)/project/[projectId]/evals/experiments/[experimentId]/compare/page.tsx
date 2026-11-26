@@ -54,10 +54,21 @@ export default async function ComparePage({
       const sides = result.ok
         ? [result.baseline.experiment.id, result.candidate.experiment.id]
         : [];
-      const outputs = await Promise.all(sides.map((id) => store.outputPreviews(id, DIFF_CHARS)));
+      const outputs = await Promise.all(
+        sides.map((id) => store.outputPreviews(id, DIFF_CHARS + 1)),
+      );
+      const pinnedId = pin?.experimentId ?? null;
       const choices = recent
         .filter(({ state }) => state === "completed")
-        .map((experiment) => compareChoice(experiment, pin?.experimentId ?? null));
+        .map((experiment) => compareChoice(experiment, pinnedId));
+      // The chosen experiment stays in the list when it is older, or not completed.
+      if (chosenId && !choices.some(({ id }) => id === chosenId)) {
+        choices.unshift(
+          result.ok
+            ? compareChoice(result.baseline.experiment, pinnedId)
+            : { id: chosenId, label: `Experiment ${chosenId.slice(0, 8)}`, pinned: false },
+        );
+      }
       return { result, choices, outputs: new Map(outputs.flatMap((map) => [...map])) };
     },
     { attributes: { "project.id": project.id } },

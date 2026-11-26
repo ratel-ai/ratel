@@ -251,6 +251,11 @@ test("a chosen experiment is the other side, and the pinned baseline is the defa
   await handleUnpinByMember(UNPIN, PROJECT_ID, t.member());
   assert.equal((await handleCompareByKey(next, t.key(), chosen)).status, 200);
   assert.equal((await handleCompareByKey(next, t.key())).status, 409);
+  // A refusal against a chosen experiment still names it.
+  const running = await t.experiment(["pass"], { end: false });
+  const refused = await (await handleCompareByKey(next, t.key(), running)).json();
+  assert.deepEqual([refused.error, refused.baseline.experimentId], ["not_completed", running]);
+  assert.ok(!("pinnedBy" in refused.baseline));
 });
 
 test("other scorers are refused with the reason and the names", async () => {

@@ -25,6 +25,7 @@ import {
   caseLabels,
   caseRow,
   comparePageModel,
+  DIFF_CHARS,
   experimentPageModel,
   PREVIEW_CHARS,
   readyVersions,
@@ -579,6 +580,16 @@ test("a chosen experiment: the setup differences, then both outputs with a word 
   assert.match(html, /<mark[^>]*line-through[^>]*>[^<]*refunded/);
   assert.match(html, /<mark[^>]*>Dear /);
   assert.ok(text.includes("Your order A107 is late."));
+  const long = comparePageModel(
+    { projectId: PROJECT_ID, experimentId: "b" },
+    { ok: true, pin: null, baseline, candidate, comparison },
+    "user_1",
+    { outputs: new Map([["b-worse", "x".repeat(DIFF_CHARS + 1)]]) },
+  );
+  assert.ok(long.ok);
+  const cutOutput = long.changed[0]?.candidate?.trials[0]?.output ?? "";
+  assert.equal(cutOutput.length, DIFF_CHARS + 1);
+  assert.ok(cutOutput.endsWith("…"));
   assert.ok(html.includes('aria-label="Compare with"'));
 });
 
@@ -591,7 +602,13 @@ test("a refused comparison shows the reason and the scorers that differ", () => 
     { projectId: PROJECT_ID, experimentId: "b" },
     {
       ok: false,
-      refusal: { reason: "scorers_differ", message: "The scorers differ.", scorers, pin },
+      refusal: {
+        reason: "scorers_differ",
+        message: "The scorers differ.",
+        scorers,
+        pin,
+        otherId: "base-1",
+      },
     },
     "u",
   );

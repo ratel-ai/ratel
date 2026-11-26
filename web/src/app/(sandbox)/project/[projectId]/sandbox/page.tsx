@@ -9,6 +9,7 @@ import { publicBaseUrl } from "@/lib/platform/public-url";
 import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
+import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { createDrizzleRunStore } from "@/lib/views/sandboxes/adapters/drizzle-run-store";
 import { createDrizzleSecretStore } from "@/lib/views/sandboxes/adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "@/lib/views/sandboxes/adapters/drizzle-version-store";
@@ -37,7 +38,10 @@ export default async function SandboxPage({ params }: { params: Promise<{ projec
   const session = await getSessionContext();
   if (!session) redirect("/");
   const { project, role } = await getProjectScope(projectId);
-  const canEdit = role === "admin" && !(await isRestrictedBySupportSession());
+  const restricted = await isRestrictedBySupportSession();
+  const canEdit = role === "admin" && !restricted;
+  // "Save as case" writes an eval case: it needs the evals flag and a write.
+  const canSaveCases = !restricted && (await evalsEnabledForProject(project.id));
   const db = getDb();
   const model = await withFeatureSpan(
     "sandboxes",
@@ -56,5 +60,12 @@ export default async function SandboxPage({ params }: { params: Promise<{ projec
       }),
     { attributes: { "project.id": project.id } },
   );
-  return <SandboxView model={model} ratelUrl={publicBaseUrl()} now={new Date().toISOString()} />;
+  return (
+    <SandboxView
+      model={model}
+      ratelUrl={publicBaseUrl()}
+      canSaveCases={canSaveCases}
+      now={new Date().toISOString()}
+    />
+  );
 }

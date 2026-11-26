@@ -51,12 +51,14 @@ export function SandboxRunOnce({
   versions,
   runs,
   configured,
+  canSaveCases = false,
   now,
 }: {
   projectId: string;
   versions: VersionRow[];
   runs: RunRow[];
   configured: boolean;
+  canSaveCases?: boolean;
   now: string;
 }) {
   const ready = versions.filter((version) => version.status === "ready");
@@ -122,7 +124,7 @@ export function SandboxRunOnce({
           </div>
           <div className="flex min-w-0 flex-col gap-4">
             {shown ? (
-              <RunResult projectId={projectId} run={shown} now={now} />
+              <RunResult projectId={projectId} run={shown} canSave={canSaveCases} now={now} />
             ) : (
               <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-line p-6 text-ui text-fg-subtle">
                 The output of a run shows here.
@@ -270,7 +272,17 @@ function VersionFacts({ version }: { version: VersionRow }) {
 }
 
 /** The output first, then the tool calls, the logs and the numbers of the run. */
-function RunResult({ projectId, run, now }: { projectId: string; run: RunRow; now: string }) {
+function RunResult({
+  projectId,
+  run,
+  canSave,
+  now,
+}: {
+  projectId: string;
+  run: RunRow;
+  canSave: boolean;
+  now: string;
+}) {
   const status = STATUS[run.status];
   const { result } = run;
   const usage = result?.usage;
@@ -288,7 +300,9 @@ function RunResult({ projectId, run, now }: { projectId: string; run: RunRow; no
               Open the trace
             </Link>
           ) : null}
-          {result?.status === "completed" ? <SaveAsCase projectId={projectId} run={run} /> : null}
+          {canSave && result?.status === "completed" ? (
+            <SaveAsCase projectId={projectId} run={run} />
+          ) : null}
         </span>
       </div>
       {run.reason && !result?.error ? <p className="text-ui text-fg-muted">{run.reason}</p> : null}
