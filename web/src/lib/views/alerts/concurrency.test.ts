@@ -46,7 +46,9 @@ after(async () => {
   await asAdmin(`drop database ${DATABASE}`);
 });
 
-test("F446-4: creates at the same time never pass the limit of rules", { skip: !server }, async () => {
+test("F446-4: creates at the same time never pass the limit of rules", {
+  skip: !server,
+}, async () => {
   const db = drizzle(pool, { schema }) as unknown as store.AlertsDb;
   await pool.query(
     `insert into alert_rules (project_id, name, query, operator, threshold, window_minutes, created_by, updated_by)
@@ -54,7 +56,9 @@ test("F446-4: creates at the same time never pass the limit of rules", { skip: !
     [PROJECT, MAX_ALERT_RULES - 1],
   );
   const results = await Promise.all(
-    Array.from({ length: 10 }, () => changeAlert({ projectId: PROJECT, action: "create", draft: DRAFT }, deps(db))),
+    Array.from({ length: 10 }, () =>
+      changeAlert({ projectId: PROJECT, action: "create", draft: DRAFT }, deps(db)),
+    ),
   );
   assert.equal(results.filter(({ ok }) => ok).length, 1);
   assert.deepEqual(

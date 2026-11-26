@@ -229,6 +229,34 @@ export async function listAlertEvents(
 
 export type AlertEvent = Awaited<ReturnType<typeof listAlertEvents>>[number];
 
+/** How long a state change is kept (the owner's choice). */
+export const ALERT_HISTORY_DAYS = 90;
+/** Rows one prune deletes at most, so a long backlog never makes one long statement. */
+const PRUNE_LIMIT = 5_000;
+
+/**
+ * Retention: one bounded batch of the state changes older than `ALERT_HISTORY_DAYS`, the oldest
+ * first. A message still pending is kept: `deliverAlerts` expires it. Returns the rows deleted.
+ */
+export async function pruneAlertEvents(
+  { now = () => new Date(), limit = PRUNE_LIMIT }: { now?: () => Date; limit?: number } = {},
+  db: Pick<AlertsDb, "execute"> = getDb(),
+): Promise<number> {
+  const before = new Date(now().getTime() - ALERT_HISTORY_DAYS * 86_400_000);
+  const result = await db.execute(sql`
+    delete from ${alertEvents}
+    where id in (
+      select id from ${alertEvents}
+      where ${alertEvents.at} < ${before.toISOString()}::timestamptz
+        and ${alertEvents.delivery} <> 'pending'
+      order by ${alertEvents.at}
+      limit ${limit}
+    )
+    returning id
+  `);
+  return result.rows.length;
+}
+
 /** The project's own destinations only; an unknown one is left out. */
 async function setDestinations(
   tx: Pick<AlertsDb, "select" | "insert" | "delete">,

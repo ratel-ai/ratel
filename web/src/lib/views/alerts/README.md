@@ -8,14 +8,14 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 | `alert_rules` | a rule and its current state (migration 0051) |
 | `alert_destinations` | where messages go: a channel of the organization's Slack workspace (`../slack`), or a webhook, its URL sealed for the row, and the last 4 characters (migrations 0052 and 0053) |
 | `alert_rule_destinations` | which destinations a rule notifies |
-| `alert_events` | one row per state change, with the condition and the value of that time. A row with a notice is also the outbox of its message |
+| `alert_events` | one row per state change, with the condition and the value of that time. A row with a notice is also the outbox of its message. Kept 90 days (index of migration 0054) |
 
 | File | Holds |
 |---|---|
 | `types.ts` | the rule, the states and the limits; safe for the browser |
 | `domain.ts` | `nextState`, `breaches`, the evaluation window and interval; pure |
 | `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's |
-| `store.ts` | the reads and writes of rules and their history; `listAlertingRules`: the rules that alert now, for the Overview |
+| `store.ts` | the reads and writes of rules and their history; `pruneAlertEvents`: the retention; `listAlertingRules`: the rules that alert now, for the Overview |
 | `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each |
 | `deliver.ts` | `deliverAlerts`: claims and sends the pending messages |
 | `notifier.ts` | the `AlertNotifier` port, with `memoryNotifier` for tests |
@@ -28,7 +28,7 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 | `webhook-post.ts` | one POST with a deadline and no redirect, on `node:https`: a `fetch` span carries the URL |
 | `format.ts`, `links.ts` | how an alert reads, and the pages' addresses; safe for the browser |
 | `preview.ts` | `loadAlertPreview`: the last 7 days for the form's chart |
-| `register.ts` | the `alerts_evaluate` before-step of the drain: evaluate, then deliver |
+| `register.ts` | the `alerts_evaluate` before-step of the drain: evaluate, then deliver; the `alert_events_prune` after-step |
 
 Rules:
 
@@ -58,5 +58,8 @@ Rules:
   back, never in a log, an event, an error or an answer. An error keeps Slack's status and code only.
 - A channel that the app cannot post to is saved too, with what to do. Its `access_error` is Slack's
   code of the last refusal; a post that arrives clears it.
+- The history keeps 90 days (the owner's choice). Each tick, `alert_events_prune` deletes one batch
+  of 5,000 older rows at most, the oldest first, whatever `DATA_RETENTION_ENABLED` says: the history
+  is the alerts' own log and outbox, not telemetry. A message still pending is never pruned.
 - Events: `feature.alerts.fired`, `.recovered`, `.delivery_failed`, `.skipped` (one per rule and process), `.changed` and
   `.destination_changed`, with ids only.

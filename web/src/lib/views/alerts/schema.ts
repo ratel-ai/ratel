@@ -131,6 +131,8 @@ export const alertEvents = pgTable(
   },
   (t) => [
     index("alert_events_rule_at_idx").on(t.ruleId, t.at),
+    // The retention's read: the oldest rows first.
+    index("alert_events_at_idx").on(t.at),
     index("alert_events_pending_idx").on(t.at).where(sql`${t.delivery} = 'pending'`),
     check("alert_events_notice_check", sql`${t.notice} in ('fire', 'recovery')`),
     check(

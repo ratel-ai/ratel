@@ -19,7 +19,7 @@ import {
 } from "./destinations";
 import { evaluateAlerts } from "./evaluate";
 import { type AlertNotifier, memoryNotifier } from "./notifier";
-import { alertsStep } from "./register";
+import { alertsRegistration, alertsStep } from "./register";
 import { slackMessage } from "./slack-message";
 import * as store from "./store";
 import type { AlertDraft } from "./types";
@@ -281,7 +281,12 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
   for (let i = 1; i < MAX_ATTEMPTS; i++)
     assert.equal((await deliverAlerts(notifier, on, db)).retrying, 1);
   assert.equal((await deliverAlerts(notifier, on, db)).failures.length, 1);
-  assert.deepEqual(await deliverAlerts(notifier, on, db), { sent: 0, retrying: 0, expired: 0, failures: [] });
+  assert.deepEqual(await deliverAlerts(notifier, on, db), {
+    sent: 0,
+    retrying: 0,
+    expired: 0,
+    failures: [],
+  });
   const [event] = await store.listAlertEvents(PROJECT, id, db);
   assert.deepEqual([event.delivery, event.attempts, event.error], ["failed", 4, "unreachable"]);
 
@@ -310,10 +315,7 @@ test("F446-3: the pending messages of a project that is off never hold up anothe
   const notifier = memoryNotifier();
   const flagOn = async (projectId: string) => projectId === PROJECT;
   const result = await deliverAlerts(notifier, { now: () => now, flagOn }, db);
-  assert.deepEqual(
-    [result.sent, notifier.notices.map(({ ruleId }) => ruleId)],
-    [1, [on]],
-  );
+  assert.deepEqual([result.sent, notifier.notices.map(({ ruleId }) => ruleId)], [1, [on]]);
   const { rows } = await client.query<{ delivery: string; n: number }>(
     "select delivery, count(*)::int as n from alert_events where rule_id = $1 group by 1",
     [off],
@@ -330,6 +332,28 @@ test("F446-3: a message still pending after a day expires, with a log", async ()
   const [event] = await store.listAlertEvents(PROJECT, id, db);
   assert.deepEqual([event.delivery, event.error], ["failed", "The message expired unsent."]);
   assert.deepEqual(notifier.notices, []);
+});
+
+test("F446-5: the history keeps 90 days, pruned in bounded batches on the tick", async () => {
+  const id = await rule();
+  const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
+  await pending(id, 3, days(91));
+  await client.query("update alert_events set delivery = 'sent'");
+  await pending(id, 1, days(91));
+  await pending(id, 1, days(89));
+  const prune = () => store.pruneAlertEvents({ now: () => now, limit: 2 }, db);
+  assert.deepEqual([await prune(), await prune(), await prune()], [2, 1, 0]);
+  const { rows } = await client.query<{ delivery: string; old: boolean }>(
+    "select delivery, at < $1 as old from alert_events order by at",
+    [days(90)],
+  );
+  assert.deepEqual(rows, [
+    { delivery: "pending", old: true },
+    { delivery: "pending", old: false },
+  ]);
+  const step = alertsRegistration.drainSteps?.find(({ name }) => name === "alert_events_prune");
+  assert.deepEqual([step?.phase, step?.retentionOnly], ["after", undefined]);
+  assert.equal(store.ALERT_HISTORY_DAYS, 90);
 });
 
 test("a rule keeps its project's destinations only; a removed one leaves the rule", async () => {

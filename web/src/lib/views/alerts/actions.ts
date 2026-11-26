@@ -36,10 +36,7 @@ export interface AlertActionDeps extends AlertAccessDeps {
   features(subject: AlertSubject): Promise<MetricFeatures>;
   store: Pick<
     typeof store,
-    | "createAlertRule"
-    | "updateAlertRule"
-    | "setAlertRuleEnabled"
-    | "deleteAlertRule"
+    "createAlertRule" | "updateAlertRule" | "setAlertRuleEnabled" | "deleteAlertRule"
   >;
   observe(fields: {
     project_id: string;

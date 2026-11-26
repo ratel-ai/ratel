@@ -3,6 +3,7 @@ import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { deliverAlerts } from "@/lib/views/alerts/deliver";
 import { evaluateAlerts } from "@/lib/views/alerts/evaluate";
 import { slackNotifier } from "@/lib/views/alerts/slack";
+import { pruneAlertEvents } from "@/lib/views/alerts/store";
 
 type TrackProjectEvent = ReturnType<typeof createBackgroundObservability>["trackProjectEvent"];
 
@@ -66,4 +67,20 @@ export function alertsStep(deps: AlertsStepDeps = defaultDeps): DrainStep {
   };
 }
 
-export const alertsRegistration: Registration = { drainSteps: [alertsStep()] };
+/**
+ * One bounded batch of the history past 90 days each tick. The history is the alerts' own log and
+ * outbox, not telemetry, so it expires whatever `DATA_RETENTION_ENABLED` says (no `retentionOnly`).
+ */
+export function alertEventsPruneStep(
+  prune: () => Promise<number> = () => pruneAlertEvents(),
+): DrainStep {
+  return {
+    name: "alert_events_prune",
+    phase: "after",
+    run: async () => ({ alertEventsPruned: await prune() }),
+  };
+}
+
+export const alertsRegistration: Registration = {
+  drainSteps: [alertsStep(), alertEventsPruneStep()],
+};
