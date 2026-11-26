@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { after, before, describe, test } from "node:test";
+import { after, afterEach, before, describe, test } from "node:test";
 import { getConfig } from "@/config";
 import { createBoatProvider } from "../adapters/boat-provider";
 import { createLocalDockerProvider } from "../adapters/local-docker-provider";
@@ -76,8 +76,11 @@ function contract(
     before(() => {
       provider = make();
     });
+    // Each test deletes its VMs at its end: a trial account of the provider runs 2 VMs at once.
+    afterEach(async () => {
+      for (const vmRef of made.splice(0)) await provider.deleteVm(vmRef);
+    });
     after(async () => {
-      for (const vmRef of made) await provider.deleteVm(vmRef);
       for (const name of snapshots) await provider.deleteSnapshot(name);
     });
     const start = async (request: StartVmRequest = BASE) => {
