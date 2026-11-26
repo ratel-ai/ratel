@@ -7,6 +7,13 @@ export type AgentScript = {
   imageId?: string;
   /** False: `docker run -d` fails. */
   starts?: boolean;
+  /** The stderr of a `docker run -d` or `docker create` that fails. */
+  startError?: string;
+  /**
+   * The polls of the image wait that find no image. A VM from a snapshot loads its images a few
+   * seconds after it is ready. `never`: the image never comes.
+   */
+  imageMissingPolls?: number | "never";
   /** `stopped`: the container ends before it is healthy. `no_port`: nothing listens on $PORT. */
   health?: "ok" | "never" | "stopped" | "no_port";
   /**
@@ -48,6 +55,7 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
   /** Each run request that a container got. */
   const requests: unknown[] = [];
   let nextPort = 32768;
+  let imagePolls = 0;
   provider.onExec = (vm, { command }) => {
     const requestPath = /(?:@|< )(\/tmp\/\S+request\.json)/.exec(command)?.[1];
     const request = requestPath ? vm.files.get(requestPath)?.toString() : undefined;
@@ -62,11 +70,18 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
     }
     const name = /--name (\S+)/.exec(command)?.[1] ?? "";
     if (command.startsWith("docker load")) return ok("Loaded image: agent:latest\n");
+    if (command.includes("docker image inspect") && command.includes("seq")) {
+      imagePolls++;
+      const missing = script.imageMissingPolls ?? 0;
+      return missing === "never" || imagePolls <= missing ? ok("", 1) : ok();
+    }
     if (command.startsWith("docker image inspect")) {
       return ok(`${script.imageId ?? `sha256:${"c".repeat(64)}`}\n`);
     }
     if (command.startsWith("docker create")) {
-      if (script.starts === false) return ok("", 125, "docker: no such image.\n");
+      if (script.starts === false) {
+        return ok("", 125, script.startError ?? "docker: no such image.\n");
+      }
       containers.add(name);
       if (script.volumes) volumes.add(`volume-of-${name}`);
       made.push({ name, hostPort: null });
@@ -75,7 +90,9 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
       return ok(stdout, exitCode, stderr);
     }
     if (command.startsWith("docker run -d")) {
-      if (script.starts === false) return ok("", 125, "docker: no such image.\n");
+      if (script.starts === false) {
+        return ok("", 125, script.startError ?? "docker: no such image.\n");
+      }
       containers.add(name);
       if (script.volumes) volumes.add(`volume-of-${name}`);
       const hostPort = nextPort++;
