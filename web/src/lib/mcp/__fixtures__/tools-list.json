@@ -3654,7 +3654,7 @@
   {
     "name": "sandbox_list",
     "title": "List Ratel sandboxes",
-    "description": "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name, its newest versions with their status, and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+    "description": "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name and its newest versions with their status. It also returns the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3681,7 +3681,7 @@
   {
     "name": "sandbox_get_version",
     "title": "Read a Ratel sandbox version",
-    "description": "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, and the tools with their modes.",
+    "description": "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options. It also returns the tools with their modes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3717,7 +3717,7 @@
   {
     "name": "sandbox_run",
     "title": "Run a Ratel sandbox version",
-    "description": "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds for the result. If the run is not complete then, call sandbox_get_run with the run id.",
+    "description": "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. It returns the run id and the status. A complete run also has the input, the output and the tool calls. For a run that is not complete, call sandbox_get_run.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3735,7 +3735,7 @@
           "description": "The id of a version. sandbox_list gives the version ids."
         },
         "name": {
-          "description": "The name of a sandbox. It runs the newest ready version. Give this or versionId.",
+          "description": "The name of a sandbox. The tool runs its newest ready version. Give this or versionId.",
           "type": "string",
           "minLength": 1,
           "maxLength": 63
@@ -3744,7 +3744,7 @@
           "description": "The input of the agent. Use the shape of input.example of sandbox_get_version."
         },
         "params": {
-          "description": "Values for the params that the version declares. Other names are refused.",
+          "description": "Values for the params that the version declares. The tool refuses other names.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -3784,7 +3784,7 @@
   {
     "name": "sandbox_get_run",
     "title": "Read a Ratel sandbox run",
-    "description": "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output, the params, the tool calls, the error of a failed run and the end of the container logs.",
+    "description": "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output and the params. It also returns the tool calls, the error of a failed run and the end of the container logs.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3820,7 +3820,7 @@
   {
     "name": "evals_list_cases",
     "title": "List eval cases",
-    "description": "Use this tool to see the eval cases of the project. It returns each case with its name, labels, approved version number and draft. Only an approved case counts in an eval run.",
+    "description": "Use this tool to see the eval cases of the project. It returns each case with its id, name, labels, approved version number and draft version number. Only an approved case counts in an eval run.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3883,7 +3883,7 @@
   {
     "name": "evals_create_case",
     "title": "Create an eval case",
-    "description": "Use this tool to save an input as an eval case, for example a sandbox run with a bad answer. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and answer of that run. A case needs a gating scorer before approval.",
+    "description": "Use this tool to save an input as an eval case. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and the answer of a sandbox run. It returns the case id, the draft version number and the state. A case needs a gating scorer before approval.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4038,7 +4038,7 @@
   {
     "name": "evals_approve_case",
     "title": "Approve an eval case",
-    "description": "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It refuses a draft with no input or no gating scorer.",
+    "description": "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It returns the case id, the version number and the state. It refuses a draft with no input or no gating scorer.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4076,7 +4076,7 @@
   {
     "name": "evals_start_run",
     "title": "Start an eval run",
-    "description": "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Call evals_get_run until the state is completed.",
+    "description": "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id, the state, and the numbers of cases and trials at once. Call evals_get_run until the state is completed.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4254,7 +4254,7 @@
   {
     "name": "evals_compare",
     "title": "Compare two eval runs",
-    "description": "Use this tool to compare an eval run with the pinned baseline, or with baselineRunId. It returns the verdict, the rule that decided it, and the changed cases with the outputs of both runs. It refuses runs whose scorers differ and says why.",
+    "description": "Use this tool to compare an eval run with the pinned baseline, or with baselineRunId. It returns the verdict and the rule that decided it. It also returns the changed cases with the outputs of both runs. It refuses runs whose scorers differ and gives the reason.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4296,7 +4296,7 @@
   {
     "name": "evals_pin_baseline",
     "title": "Pin the eval baseline",
-    "description": "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. evals_compare uses the baseline when no baselineRunId is given.",
+    "description": "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. It returns the baseline run id and the time of the pin. evals_compare uses this baseline when you give no baselineRunId.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
