@@ -23,7 +23,6 @@ import {
   type DestinationActionResult,
 } from "@/lib/views/alerts/destination-actions";
 import {
-  countDestinations,
   createChannelDestination,
   createDestination,
   deleteDestination,
@@ -76,7 +75,6 @@ export async function changeDestinationAction(
     changeDestination(input, {
       ...access,
       canSeal: secretBoxConfigured,
-      count: (projectId) => countDestinations(projectId),
       create: (destination) => createDestination(destination),
       channelAccess: (organizationId, channelId) =>
         channelAccess(organizationId, channelId, slackWorkspace()),

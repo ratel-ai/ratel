@@ -50,9 +50,9 @@ Rules:
 - A message is tried 4 times at most (the first and 3 more), one per tick. `sent_to` keeps a retry
   from repeating it where it arrived. A process that dies between a send and its record can repeat
   that message: the claim ends after 2 minutes.
-- A project has 100 rules at most. The count and the insert are one transaction under the project's
-  advisory lock, so creates at the same time never pass it (`concurrency.test.ts`, with
-  `TEST_POSTGRES_URL`).
+- A project has 100 rules and 20 destinations at most. The count and the insert are one
+  transaction under the project's advisory lock (`platform/db/project-lock.ts`), so creates at the
+  same time never pass them (`concurrency.test.ts`, with `TEST_POSTGRES_URL`).
 - A change of the rule evaluates it on the next tick. A paused rule is not evaluated.
 - A webhook URL is a secret: sealed with `platform/secret-box` (needs `RATEL_SECRET_KEY`), never read
   back, never in a log, an event, an error or an answer. An error keeps Slack's status and code only.

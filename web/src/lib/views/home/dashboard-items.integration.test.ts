@@ -76,8 +76,8 @@ before(async () => {
 beforeEach(() => client.exec("delete from dashboards"));
 after(() => client.close());
 
-const board = (projectId = PROJECT) =>
-  createDashboard(
+const board = async (projectId = PROJECT) => {
+  const made = await createDashboard(
     {
       projectId,
       name: "Board",
@@ -87,6 +87,9 @@ const board = (projectId = PROJECT) =>
     },
     db,
   );
+  assert.ok(made);
+  return made;
+};
 
 async function overview(layout: OverviewLayout, window: 7 | 30 = 7) {
   const { dashboards } = await loadFocusedOverview({

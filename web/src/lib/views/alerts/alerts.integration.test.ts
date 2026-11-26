@@ -389,7 +389,7 @@ test("a channel destination is one per project, and keeps its last access", asyn
   };
   const id = await createChannelDestination(input, db);
   assert.ok(id);
-  assert.equal(await createChannelDestination(input, db), null);
+  assert.equal(await createChannelDestination(input, db), "taken");
   const other = await createChannelDestination({ ...input, projectId: OTHER }, db);
   assert.ok(other);
   await recordAccess(id, null, db);

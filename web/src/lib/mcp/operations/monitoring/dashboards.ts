@@ -584,7 +584,6 @@ async function run(
       features: async () => FEATURES,
       scorers: (projectId) => scorerOptions(projectId, db),
       store: {
-        countDashboards: (projectId) => store.countDashboards(projectId, db),
         createDashboard: (input) => store.createDashboard(input, db),
         updateDashboard: (input) => store.updateDashboard(input, db),
         deleteDashboard: (projectId, id) => store.deleteDashboard(projectId, id, db),

@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { lockProjectScope } from "@/lib/platform/db/project-lock";
 import { storedQuery } from "@/lib/views/alerts/parse-rule";
 import {
   alertDestinations,
@@ -135,9 +136,7 @@ export async function createAlertRule(
 ): Promise<string | null> {
   const { destinationIds, ...rule } = draft;
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`alert_rules:${projectId}`}, 0))`,
-    );
+    await lockProjectScope(tx, "alert_rules", projectId);
     if ((await countAlertRules(projectId, tx)) >= MAX_ALERT_RULES) return null;
     const [row] = await tx
       .insert(alertRules)
