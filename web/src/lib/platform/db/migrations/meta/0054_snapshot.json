@@ -1,5 +1,5 @@
 {
-  "id": "42ebd466-d35f-480c-b028-750de62f3459",
+  "id": "42a61cfa-7415-4f8f-a6d0-0a39fdb5cf7f",
   "prevId": "8b00eaf4-25f8-4255-8e85-5715101c4bc1",
   "version": "7",
   "dialect": "postgresql",
@@ -4629,97 +4629,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.org_holds": {
-      "name": "org_holds",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "since": {
-          "name": "since",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "org_holds_organization_idx": {
-          "name": "org_holds_organization_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"org_holds\".\"organization_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "org_holds_project_idx": {
-          "name": "org_holds_project_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"org_holds\".\"project_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "org_holds_project_id_projects_id_fk": {
-          "name": "org_holds_project_id_projects_id_fk",
-          "tableFrom": "org_holds",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "org_holds_one_scope": {
-          "name": "org_holds_one_scope",
-          "value": "num_nonnulls(\"org_holds\".\"organization_id\", \"org_holds\".\"project_id\") = 1"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.api_keys": {
@@ -10354,6 +10263,21 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "alert_events_at_idx": {
+          "name": "alert_events_at_idx",
+          "columns": [
             {
               "expression": "at",
               "isExpression": false,

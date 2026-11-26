@@ -291,12 +291,14 @@ test("before a reading: today's states, and no section the page no longer has", 
   }
 });
 
+const StubShareDialog = () => createElement("div", { "data-share-dialog": "" });
+
 test("shared: the edition's dialog stays in the header", () => {
   const html = page({
     share: {
       link: null,
       canManage: true,
-      Dialog: () => createElement("div", { "data-share-dialog": "" }),
+      Dialog: StubShareDialog,
     },
   });
   assert.match(html, /data-share-dialog/);

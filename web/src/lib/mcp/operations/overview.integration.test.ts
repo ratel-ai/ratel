@@ -127,6 +127,7 @@ const empty = ({ layout = DEFAULT_LAYOUT }: Parameters<typeof loadFocusedOvervie
   lastEventAt: NOW,
   telemetryRead: true,
   hasTelemetry: true,
+  tracesSeen: "in_window" as const,
   layout,
   metrics: null,
   topology: null,
@@ -458,7 +459,8 @@ test("the view gets the page's own data, and only a view does", async () => {
   const viewed = await call("get_overview", {}, ANA, true);
   assert.ok(viewed.ok);
   assert.equal(viewed.view?.kind, "overview");
-  assert.equal((viewed.view?.overview as { project: { id: string } }).project.id, PROJECT_ID);
+  assert.ok(viewed.view);
+  assert.equal((viewed.view.overview as { project: { id: string } }).project.id, PROJECT_ID);
 });
 
 test("one widget: only its data, with the page's numbers, for both ranges", async () => {
@@ -646,7 +648,7 @@ const BOARD_WIDGET = {
 
 async function withBoard(over: Partial<OverviewOperationDeps> = {}) {
   const at = await setup(over);
-  const { id } = await createDashboard(
+  const made = await createDashboard(
     {
       projectId: PROJECT_ID,
       name: "Board",
@@ -656,6 +658,8 @@ async function withBoard(over: Partial<OverviewOperationDeps> = {}) {
     },
     at.db as never,
   );
+  assert.ok(made);
+  const { id } = made;
   const ref = { dashboardId: id, widgetId: "runs" };
   return { ...at, id, ref, entry: dashboardItemId(id, "runs") };
 }
@@ -705,8 +709,8 @@ test("a dashboard widget: the page and the widget alone have its numbers, and th
     assert.equal(widget.href, `/project/${PROJECT_ID}/dashboards/${id}`);
     assert.equal(widget.result.kind, "metric");
     assert.equal(typeof widget.summary, "string");
-    assert.ok(viewed.ok);
-    const { dashboards } = viewed.view?.overview as {
+    assert.ok(viewed.ok && viewed.view);
+    const { dashboards } = viewed.view.overview as {
       dashboards: Record<string, { kind: string }>;
     };
     assert.equal(dashboards[entry].kind, "widget");
@@ -752,7 +756,7 @@ test("a dashboard widget: the same refusals as the web", async () => {
   for (const params of wrong)
     assert.equal((await at(on.call, params))?.[0], "invalid_params", JSON.stringify(params));
   for (let index = 0; index < MAX_DASHBOARD_ITEMS; index += 1) {
-    const { id } = await createDashboard(
+    const made = await createDashboard(
       {
         projectId: PROJECT_ID,
         name: `B${index}`,
@@ -762,6 +766,8 @@ test("a dashboard widget: the same refusals as the web", async () => {
       },
       on.db as never,
     );
+    assert.ok(made);
+    const { id } = made;
     assert.equal(await at(on.call, { ...add, dashboardId: id }), null);
   }
   assert.deepEqual(await at(on.call, add), ["conflict", "too_many"]);

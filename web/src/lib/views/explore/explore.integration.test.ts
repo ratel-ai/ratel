@@ -326,7 +326,6 @@ async function change(input: object): Promise<string> {
     scorers: async () => [],
     isRestricted: async () => false,
     store: {
-      countDashboards: (projectId) => store.countDashboards(projectId, db),
       createDashboard: (input) => store.createDashboard(input, db),
       updateDashboard: (input) => store.updateDashboard(input, db),
       deleteDashboard: (projectId, id) => store.deleteDashboard(projectId, id, db),

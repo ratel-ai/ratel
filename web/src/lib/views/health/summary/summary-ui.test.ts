@@ -309,9 +309,11 @@ function anImport(over: Partial<ImportSummary> = {}): ImportSummary {
   };
 }
 
+const NoImporter = () => null;
+
 /** An edition's importer, as the page receives it; the Importer itself renders nothing here. */
 function importsOf(list: ImportSummary[]): NonNullable<SummaryViewProps["imports"]> {
-  return { list, contactUrl: null, sourceLabel: {}, Importer: () => null };
+  return { list, contactUrl: null, sourceLabel: {}, Importer: NoImporter };
 }
 
 function page(over: Partial<SummaryViewProps> = {}, search = ""): string {
@@ -1172,10 +1174,16 @@ for (const [name, state, expected] of STATES) {
   });
 }
 
+const StubImporter = ({ variant }: { variant: string }) =>
+  createElement("div", { "data-stub-importer": variant });
+
 test("an edition's importer: offered by the state and the menu, mounted once, its source names in the copy", () => {
-  const Importer = ({ variant }: { variant: string }) =>
-    createElement("div", { "data-stub-importer": variant });
-  const imports = { list: [], contactUrl: null, sourceLabel: { langsmith: "LangSmith" }, Importer };
+  const imports = {
+    list: [],
+    contactUrl: null,
+    sourceLabel: { langsmith: "LangSmith" },
+    Importer: StubImporter,
+  };
   const empty = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, imports });
   assert.match(empty, /No runs yet[^]*Import past runs[^]*Get an API key/);
   assert.match(empty, /data-stub-importer="history"/);

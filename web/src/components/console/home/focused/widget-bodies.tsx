@@ -1,13 +1,18 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { StatRow } from "@ratel/design-system/stat-row";
-import { EmptyState } from "@ratel/design-system/states";
-import { ArrowRight, CircleCheck } from "lucide-react";
+import { ArrowRight, CircleCheck, Hourglass, Inbox, Lock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AttentionList } from "@/components/console/home/AttentionList";
 import { AlertsWidget } from "@/components/console/home/focused/AlertsWidget";
 import { HealthWidget } from "@/components/console/home/focused/HealthWidget";
-import { focusedStats } from "@/components/console/home/overview-stats";
+import {
+  EmptyAction,
+  type EmptyWindow,
+  TracesAction,
+  WidgetEmpty,
+} from "@/components/console/home/focused/WidgetEmpty";
+import { focusedStats, isSdkOnly } from "@/components/console/home/overview-stats";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
 import { fmtCount } from "@/lib/platform/format";
 import type {
@@ -31,13 +36,14 @@ export function widgetBodies(
   peekHref?: PeekHref,
 ): Record<OverviewWidgetId, ReactNode> {
   const { metrics, topology, health, attention, alerts, root, rangeParam } = data;
+  const at: EmptyWindow = { root, window: data.window, tracesSeen: data.tracesSeen };
   const reload = data.window === 7 ? root : `${root}?range=${rangeParam}`;
   return {
     metrics:
       metrics === "failed" ? (
         <NotLoaded title="These numbers did not load." href={reload} />
       ) : (
-        metrics && <Metrics data={metrics} peekHref={peekHref} />
+        metrics && <Metrics data={metrics} at={at} peekHref={peekHref} />
       ),
     topology:
       topology === "failed" ? (
@@ -50,12 +56,18 @@ export function widgetBodies(
             range={rangeParam}
             linked={linked}
             bare
+            empty={at}
           />
         )
       ),
-    health: health && <HealthWidget health={health} window={data.window} />,
+    health:
+      health?.card.kind === "state" && health.card.reason === "failed" ? (
+        <NotLoaded title={health.card.line} href={reload} />
+      ) : (
+        health && <HealthWidget health={health} at={at} />
+      ),
     attention: attention && (
-      <NeedsAttention attention={attention} reload={reload} peekHref={peekHref} />
+      <NeedsAttention attention={attention} at={at} reload={reload} peekHref={peekHref} />
     ),
     alerts:
       alerts === "failed" ? (
@@ -66,25 +78,52 @@ export function widgetBodies(
   };
 }
 
-function Metrics({ data, peekHref }: { data: MetricsData; peekHref?: PeekHref }) {
+function Metrics({
+  data,
+  at,
+  peekHref,
+}: {
+  data: MetricsData;
+  at: EmptyWindow;
+  peekHref?: PeekHref;
+}) {
   const stats = focusedStats(data).map(({ peek, ...stat }) =>
     peek && peekHref ? { ...stat, href: peekHref(peek) } : { ...stat, peek },
   );
-  return (
+  const row = (
     <StatRow
       stats={stats}
       // No frame: only the lines between the numbers. A change that does not fit beside its number goes under it.
       className="min-h-0 flex-1 overflow-auto rounded-none border-0 lg:[&>div]:px-3 lg:[&>div]:py-2.5 [&>div:hover]:bg-app [&>div:hover_dt]:text-fg [&_dd]:flex-wrap"
     />
   );
+  // The numbers stay: a zero is a zero, and what needs a run is a dash.
+  if (data.traces.count > 0 || isSdkOnly(data)) return row;
+  return (
+    <>
+      {row}
+      <div
+        data-widget-empty="metrics"
+        className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t border-line px-3 py-2"
+      >
+        <p className="min-w-0 flex-1 basis-56 text-ui text-fg-muted">
+          {at.tracesSeen === "none" ? "No traces yet." : `No runs in the last ${at.window} days.`}{" "}
+          Send traces to fill in these numbers.
+        </p>
+        <TracesAction {...at} />
+      </div>
+    </>
+  );
 }
 
 function NeedsAttention({
   attention,
+  at,
   reload,
   peekHref,
 }: {
   attention: FocusedAttention;
+  at: EmptyWindow;
   reload: string;
   peekHref?: PeekHref;
 }) {
@@ -96,26 +135,10 @@ function NeedsAttention({
   );
   if (items.length === 0 && partial)
     return <NotLoaded title="Needs attention did not load." href={reload} />;
+  if (items.length === 0) return <NothingListed attention={attention} at={at} />;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      {items.length === 0 ? (
-        <EmptyState
-          icon={CircleCheck}
-          title="Nothing needs you right now"
-          description="Failed runs, issues and fixes show up here."
-          action={
-            <Link
-              href={healthHref}
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
-            >
-              Open Agent health
-            </Link>
-          }
-          className="py-6"
-        />
-      ) : (
-        <AttentionList items={items} bare />
-      )}
+      <AttentionList items={items} bare />
       {partial ? (
         <p className="border-t border-line px-4 py-2.5 text-xs text-fg-subtle">
           Some checks did not load.
@@ -132,6 +155,59 @@ function NeedsAttention({
       ) : null}
     </div>
   );
+}
+
+/** An empty list says "nothing" only where everything was checked. */
+function NothingListed({
+  attention: { state, moreIssues, healthHref },
+  at,
+}: {
+  attention: FocusedAttention;
+  at: EmptyWindow;
+}) {
+  const openHealth = <EmptyAction href={healthHref}>Open Agent health</EmptyAction>;
+  switch (state) {
+    case "no_data":
+      return (
+        <WidgetEmpty
+          name="attention-no-data"
+          icon={Inbox}
+          title="Nothing to check yet"
+          description={`${at.tracesSeen === "none" ? "There are no traces yet." : `Nothing arrived in the last ${at.window} days.`} Send traces, and failed runs, issues and fixes show up here.`}
+          action={<TracesAction {...at} />}
+        />
+      );
+    case "early":
+      return (
+        <WidgetEmpty
+          name="attention-early"
+          icon={Hourglass}
+          title="Too early to say"
+          description="Nothing is found so far. Agent health has no full reading yet, so issues can still show up."
+          action={openHealth}
+        />
+      );
+    case "locked":
+      return (
+        <WidgetEmpty
+          name="attention-locked"
+          icon={Lock}
+          title={`${fmtCount(moreIssues)} ${moreIssues === 1 ? "issue is" : "issues are"} not on your plan`}
+          description="Your plan hides what was found. Agent health says how to see it."
+          action={openHealth}
+        />
+      );
+    case "clear":
+      return (
+        <WidgetEmpty
+          name="attention-clear"
+          icon={CircleCheck}
+          title="Nothing needs you right now"
+          description="Failed runs, issues and fixes show up here."
+          action={openHealth}
+        />
+      );
+  }
 }
 
 export function NotLoaded({ title, href }: { title: string; href: string }) {

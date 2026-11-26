@@ -7,7 +7,8 @@ const view: ViewBindings = {
     "The project's Overview: the widgets a person keeps, in their order, one widget, or the changes of the layout.",
   // The dashboard widgets are drawn with the console's charts (~350 KB over the 421 KB before them):
   // the map's shapes are ~210 KB of it. Clusters are a table, as in the dashboard view.
-  budgetKb: 800,
+  // React 19.3 adds ~30 KB to every view.
+  budgetKb: 830,
   bindings: [
     { tool: "get_overview", config: {} },
     { tool: "change_overview_layout", config: {} },

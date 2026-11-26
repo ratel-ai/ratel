@@ -717,7 +717,6 @@ function deps(overrides: Partial<DashboardActionDeps> = {}): DashboardActionDeps
     scorers: async () => [],
     isRestricted: async () => false,
     store: {
-      countDashboards: (projectId) => countDashboards(projectId, db),
       createDashboard: (input) => createDashboard(input, db),
       updateDashboard: (input) => updateDashboard(input, db),
       deleteDashboard: (projectId, id) => deleteDashboard(projectId, id, db),

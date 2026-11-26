@@ -383,8 +383,15 @@
     {
       "idx": 54,
       "version": "7",
-      "when": 1795640022802,
-      "tag": "0054_org_holds",
+      "when": 1795659636500,
+      "tag": "0054_alert_events_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795680186842,
+      "tag": "0055_org_holds",
       "breakpoints": true
     }
   ]

@@ -112,6 +112,7 @@ function reads(over: Partial<FocusedReads> = {}) {
     tasks: async () => null,
     dailyAggregates: async () => [],
     alerting: async () => [],
+    alertRules: async () => ({ total: 0, on: 0, noData: 0 }),
     dashboards: async () => ({}),
     context: async () => ({ split: null, suggestions: [], promptCacheHitRate: null }),
     ...over,
@@ -430,6 +431,117 @@ test("a plan that caps the health window says which window the score is for", as
   assert.match(visibleText(page(data)), /Last 7 days, the most your plan reads/);
 });
 
+const emptyOf = (html: string) =>
+  [...html.matchAll(/data-widget-empty="([^"]+)"/g)].map((match) => match[1]);
+const TELEMETRY = (latestSpanAt: Date | null) => async () => ({
+  hasEvents: true,
+  hasSpans: latestSpanAt !== null,
+  latestEventAt: AT,
+  latestSpanAt,
+});
+const NO_MAP = topologyModel({
+  agents: [],
+  handoffs: [],
+  servers: [],
+  calls: [],
+  hidden: new Set(),
+  names: new Map(),
+});
+
+test("no traces: each widget says so, asks for traces, and none of them looks like a load", async () => {
+  const nothing = {
+    health: async () => ({ ...pendingHealthModel(7), turns: 0, floor: 50 }),
+    topology: async () => NO_MAP,
+  };
+  const none = page(await load({ ...nothing, telemetry: TELEMETRY(null) }));
+  assert.deepEqual(emptyOf(none), [
+    "metrics",
+    "topology-none",
+    "health-no_turns",
+    "attention-no-data",
+    "alerts-none",
+  ]);
+  assert.doesNotMatch(none, /animate-pulse|role="status"|score-beat|score-wave|data-calculating/);
+  assert.doesNotMatch(visibleText(none), /Nothing needs you|Calculating|of 100/);
+  assert.match(visibleText(none), /Runs 0.*Spend \$0\.00/, "a zero stays a zero");
+
+  const older = page(
+    await load({ ...nothing, telemetry: TELEMETRY(new Date("2026-11-01T00:00:00.000Z")) }),
+  );
+  assert.deepEqual(emptyOf(older).slice(0, 2), ["metrics", "topology-window"]);
+  assert.match(older, new RegExp(`href="/project/${PROJECT_ID}\\?range=30d"`));
+  assert.doesNotMatch(visibleText(older), /No traces yet/);
+});
+
+test("each reason for no score keeps its own words, and only a first reading is being calculated", async () => {
+  const health = async (over: Partial<HealthPageModel>) =>
+    page(
+      await load(
+        { health: async () => ({ ...MODEL, ...over }) },
+        { layout: removed("metrics", "topology", "attention", "alerts") },
+      ),
+    );
+  const workflows = MODEL.workflows ?? ({ items: [], unserved: [] } as never);
+  for (const [over, words] of [
+    [{ turns: 12, floor: 50 }, /not ready yet 12 of the 50 turns a score needs\. Send more traces/],
+    [{ turns: 0, floor: 50 }, /A score needs 50 turns, and the last 7 days have none/],
+    [{ computedAt: null }, /Calculating the score.*Send more traces/],
+    [{ workflows: { ...workflows, blocked: "no_tool_calls" as const } }, /traces with tool calls/],
+    [{ workflows: { ...workflows, blocked: "mixed_runs" as const } }, /traces with turn ids/],
+    [{ score: null }, /No score in this reading/],
+  ] as const) {
+    const html = await health(over);
+    const text = visibleText(html);
+    assert.match(text, words);
+    assert.match(html, /data-health-score-ring="empty"/);
+    assert.doesNotMatch(html, /data-ring-cell="(lit|tip|target)"|data-health-score="/);
+    assert.equal(/Calculating/.test(text), "computedAt" in over);
+    assert.match(html, /href="[^"]*\/health"/, "Agent health stays a click away");
+  }
+  const failed = page(
+    await load({ health: fail }, { layout: removed("metrics", "topology", "attention", "alerts") }),
+  );
+  assert.deepEqual(emptyOf(failed), []);
+  assert.match(visibleText(failed), /The Health score did not load\. Try again/);
+});
+
+test("alerts: no rule, all paused, no data and none firing are four states", async () => {
+  const alerts = async (counts: { total: number; on: number; noData: number }) =>
+    page(
+      await load(
+        { alertRules: async () => counts },
+        { layout: removed("metrics", "topology", "attention", "health") },
+      ),
+    );
+  const none = await alerts({ total: 0, on: 0, noData: 0 });
+  assert.match(visibleText(none), /No alerts yet.*Create alert/);
+  assert.match(none, /href="[^"]*\/alerts\/new"/);
+  assert.match(visibleText(await alerts({ total: 2, on: 0, noData: 0 })), /All alerts are paused/);
+  assert.match(visibleText(await alerts({ total: 2, on: 1, noData: 1 })), /No data to check yet/);
+  assert.match(visibleText(await alerts({ total: 2, on: 2, noData: 1 })), /No alert fires now/);
+  const unread = await load(
+    { alertRules: fail },
+    { layout: removed("metrics", "topology", "attention", "health") },
+  );
+  assert.match(visibleText(page(unread)), /No alert fires now/, "unread is not none");
+});
+
+test("a dashboard widget: a zero is drawn, no data says so, and a failed read is red", async () => {
+  const result = (samples: number) => ({
+    kind: "metric" as const,
+    bucket: "day" as const,
+    buckets: [],
+    series: [{ groups: [], total: 0, samples, values: [] }],
+  });
+  assert.match(visibleText(await withItem({ ...COST_ITEM, result: result(3) })), /\$0\.00/);
+  const empty = await withItem({ ...COST_ITEM, result: result(0) });
+  assert.ok(emptyOf(empty).includes("item-window"));
+  assert.match(
+    visibleText(await withItem({ ...COST_ITEM, result: null })),
+    /The numbers could not be read\. Try again/,
+  );
+});
+
 test("without a score, the card says why in one line", () => {
   const line = (model: HealthPageModel | null) => {
     const card = healthCard(model);
@@ -550,7 +662,7 @@ const WITH_ITEM = changeLayout(removed("topology"), {
   widget: ITEM,
   source: { title: "Cost", w: 6, h: 5 },
 });
-const COST_ITEM: DashboardItem = {
+const COST_ITEM: Extract<DashboardItem, { kind: "widget" }> = {
   kind: "widget",
   title: "Cost now",
   dashboard: { name: "Board", href: `/project/${PROJECT_ID}/dashboards/${BOARD}` },

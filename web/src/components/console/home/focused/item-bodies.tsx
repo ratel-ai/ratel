@@ -1,6 +1,14 @@
+import { ChartColumn } from "lucide-react";
 import type { ReactNode } from "react";
 import { WidgetCardBody } from "@/components/console/dashboards/WidgetCardBody";
+import {
+  type EmptyWindow,
+  TracesAction,
+  WidgetEmpty,
+} from "@/components/console/home/focused/WidgetEmpty";
 import { NotLoaded } from "@/components/console/home/focused/widget-bodies";
+import type { QueryResult } from "@/lib/synthesis/metrics/query";
+import { isEmptyResult } from "@/lib/views/dashboards/chart-model";
 import type { DashboardItem } from "@/lib/views/home/dashboard-items";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
 import {
@@ -44,6 +52,7 @@ export function itemBodies({
   root,
   window,
   rangeParam,
+  tracesSeen,
 }: Omit<FocusedOverviewData, "lastEventAt">): Partial<Record<OverviewItemId, ReactNode>> {
   const reload = window === 7 ? root : `${root}?range=${rangeParam}`;
   return Object.fromEntries(
@@ -54,6 +63,10 @@ export function itemBodies({
       const item = dashboards?.[id];
       if (item?.kind !== "widget") return [];
       const { widget, result, range, filters } = item;
+      if (!widget.missingScorer && result === null)
+        return [[id, <NotLoaded key={id} title="The numbers could not be read." href={reload} />]];
+      if (!widget.missingScorer && result && isEmpty(result))
+        return [[id, <ItemEmpty key={id} at={{ root, window, tracesSeen }} />]];
       return [
         [
           id,
@@ -70,4 +83,38 @@ export function itemBodies({
       ];
     }),
   );
+}
+
+function ItemEmpty({ at }: { at: EmptyWindow }) {
+  return at.tracesSeen === "none" ? (
+    <WidgetEmpty
+      padded={false}
+      name="item-none"
+      icon={ChartColumn}
+      title="No traces yet"
+      description="Send traces to fill in this widget."
+      action={<TracesAction {...at} />}
+    />
+  ) : (
+    <WidgetEmpty
+      padded={false}
+      name="item-window"
+      icon={ChartColumn}
+      title={`No data in the last ${at.window} days`}
+      description={
+        at.tracesSeen === "before"
+          ? "Send traces to fill in this widget."
+          : "Nothing in these days matches this widget and its filters."
+      }
+      action={at.tracesSeen === "before" ? <TracesAction {...at} /> : undefined}
+    />
+  );
+}
+
+/** Nothing was measured, which is not a measured zero. The other kinds say it in their own drawing. */
+function isEmpty(result: QueryResult): boolean {
+  if (result.kind === "metric") return isEmptyResult(result);
+  if (result.kind === "flow" || result.kind === "step_flow" || result.kind === "funnel")
+    return result.sample.matched === 0;
+  return false;
 }

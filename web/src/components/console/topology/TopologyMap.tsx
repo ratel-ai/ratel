@@ -1,7 +1,8 @@
 import { cn } from "@ratel/design-system/cn";
-import { EmptyState } from "@ratel/design-system/states";
-import { Bot, Box, type LucideIcon, Server, Waypoints } from "lucide-react";
+import { Bot, Box, type LucideIcon, Server } from "lucide-react";
 import Link from "next/link";
+import type { EmptyWindow } from "@/components/console/home/focused/WidgetEmpty";
+import { TopologyEmpty } from "@/components/console/topology/TopologyEmpty";
 import { formatInteger, formatPercent } from "@/lib/synthesis/traces/v2/format";
 import { agentHref, agentsHref } from "@/lib/views/agents/paths";
 import { mcpServerHref, mcpServersHref } from "@/lib/views/mcp-servers/paths";
@@ -31,6 +32,7 @@ export function TopologyMap({
   range,
   linked,
   bare = false,
+  empty,
 }: {
   projectId: string;
   graph: Topology;
@@ -40,11 +42,21 @@ export function TopologyMap({
   linked: boolean;
   /** A widget, without a frame: the map fills it and scrolls both ways. */
   bare?: boolean;
+  /** What an empty map says. */
+  empty: EmptyWindow;
 }) {
   const layout = topologyLayout(graph);
   const hrefOf = (node: TopologyNode) => (linked ? nodeHref(projectId, node, range) : null);
   const has = (kind: TopologyNodeKind) => graph.nodes.some((node) => node.kind === kind);
-  if (graph.nodes.length === 0) return <TopologyEmpty bare={bare} />;
+  if (graph.nodes.length === 0)
+    return (
+      <div
+        className={bare ? "flex min-h-0 flex-1 flex-col" : "rounded-lg border border-line"}
+        data-topology="empty"
+      >
+        <TopologyEmpty {...empty} />
+      </div>
+    );
   return (
     <div
       className={cn(
@@ -118,25 +130,6 @@ export function TopologyMap({
           <SeeAll href={mcpServersHref(projectId, { range })}>See all MCP servers</SeeAll>
         ) : null}
       </footer>
-    </div>
-  );
-}
-
-function TopologyEmpty({ bare }: { bare: boolean }) {
-  return (
-    <div
-      className={
-        bare
-          ? "flex min-h-0 flex-1 flex-col justify-center overflow-auto"
-          : "rounded-lg border border-line"
-      }
-      data-topology="empty"
-    >
-      <EmptyState
-        icon={Waypoints}
-        title="No agents or MCP servers in this window"
-        description="They show once spans name an agent (gen_ai.agent.name) or call an MCP server. Try a longer window."
-      />
     </div>
   );
 }
