@@ -8,7 +8,7 @@ const NOW = new Date("2026-11-26T12:00:00Z");
 function key(overrides: Partial<ApiKeyCtaRecord> = {}): ApiKeyCtaRecord {
   return {
     name: "Onboarding",
-    keyPrefix: "rtl_a1b2c3d4",
+    keyPrefix: "rtl_abc",
     createdAt: new Date("2026-11-20T09:30:00Z"),
     revokedAt: null,
     expiresAt: null,
@@ -34,9 +34,9 @@ test("an active key: the CTA views it, and the next step is the first trace", ()
   assert.equal(cta.href, "/project/p1/settings/api-keys");
   assert.deepEqual(cta.key, {
     name: "Onboarding",
-    keyPrefix: "rtl_a1b2c3d4",
+    keyPrefix: "rtl_abc",
     createdAt: "2026-11-20T09:30:00.000Z",
-    detail: "Onboarding · rtl_a1b2c3d4… · created Nov 20, 2026",
+    detail: "Onboarding · rtl_abc… · created Nov 20, 2026",
   });
   assert.equal(cta.next.label, "Send your first trace");
   assert.equal(cta.next.href, TRACES_DOCS);
@@ -79,7 +79,7 @@ test("the key shown is the one the snippets use: Full before scoped, then newest
 
 test("an unnamed key is described by its prefix and date alone", () => {
   const cta = apiKeyCta("p1", [key({ name: null })], NOW);
-  assert.equal(cta.key?.detail, "rtl_a1b2c3d4… · created Nov 20, 2026");
+  assert.equal(cta.key?.detail, "rtl_abc… · created Nov 20, 2026");
 });
 
 test("the created date is the UTC day, whatever the server's zone", () => {

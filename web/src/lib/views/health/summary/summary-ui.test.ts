@@ -57,7 +57,7 @@ const WITH_KEY = apiKeyCta(
   [
     {
       name: "Onboarding",
-      keyPrefix: "rtl_a1b2c3d4",
+      keyPrefix: "rtl_abc",
       createdAt: new Date("2026-11-20T09:30:00Z"),
       revokedAt: null,
       expiresAt: null,

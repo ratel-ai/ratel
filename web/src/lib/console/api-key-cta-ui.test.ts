@@ -14,7 +14,7 @@ const WITH_KEY = apiKeyCta(
   [
     {
       name: "Onboarding",
-      keyPrefix: "rtl_a1b2c3d4",
+      keyPrefix: "rtl_abc",
       createdAt: new Date("2026-11-20T09:30:00Z"),
       revokedAt: null,
       expiresAt: null,
@@ -49,7 +49,7 @@ test("setup guide with the onboarding key: step 1 is done and names it, the next
   assert.match(text, /Your API key is ready/);
   assert.match(html, /aria-label="Step 1 done"/);
   assert.match(html, new RegExp(`href="${KEYS}"[^>]*>View API keys<`));
-  assert.match(text, /Onboarding · rtl_a1b2c3d4… · created Nov 20, 2026/);
+  assert.match(text, /Onboarding · rtl_abc… · created Nov 20, 2026/);
   assert.match(text, /Next: add the SDK and send your first trace/);
   assert.doesNotMatch(text, /Create an API key/);
 });
