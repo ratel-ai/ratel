@@ -237,6 +237,13 @@ test("with no provider the page says not configured, with the push command", () 
   assert.doesNotMatch(visibleText(html()), /not configured/);
 });
 
+test("the push command sets the variable that the ratel CLI reads, with the API root", () => {
+  // The CLI reads RATEL_BASE_URL (with /api/v1). With another name it pushes to its default server.
+  const text = visibleText(html());
+  assert.match(text, /export RATEL_BASE_URL=https:\/\/ratel\.example\/api\/v1/);
+  assert.doesNotMatch(text, /RATEL_URL=/);
+});
+
 test("no text of the page names the provider", () => {
   for (const [name, state] of Object.entries(STATES)) {
     assert.match(visibleText(html(state)), /Ratel sandbox/, name);

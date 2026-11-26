@@ -96,7 +96,7 @@ export function SandboxView({
             samples={[
               {
                 label: "Shell",
-                code: `export RATEL_URL=${ratelUrl}\nexport RATEL_API_KEY=<a key with full access>\nratel push`,
+                code: `export RATEL_BASE_URL=${ratelUrl}/api/v1\nexport RATEL_API_KEY=<a key with full access>\nratel push`,
               },
               { label: "ratel.yaml", code: RATEL_YAML },
             ]}
