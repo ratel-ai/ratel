@@ -7,8 +7,8 @@ import {
   WidgetEmpty,
 } from "@/components/console/home/focused/WidgetEmpty";
 import { NotLoaded } from "@/components/console/home/focused/widget-bodies";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import { isEmptyResult } from "@/lib/views/dashboards/chart-model";
+import type { WidgetResult } from "@/lib/views/dashboards/types";
 import type { DashboardItem } from "@/lib/views/home/dashboard-items";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
 import {
@@ -112,7 +112,7 @@ function ItemEmpty({ at }: { at: EmptyWindow }) {
 }
 
 /** Nothing was measured, which is not a measured zero. The other kinds say it in their own drawing. */
-function isEmpty(result: QueryResult): boolean {
+function isEmpty(result: WidgetResult): boolean {
   if (result.kind === "metric") return isEmptyResult(result);
   if (result.kind === "flow" || result.kind === "step_flow" || result.kind === "funnel")
     return result.sample.matched === 0;

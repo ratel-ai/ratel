@@ -23,7 +23,6 @@ import { placeWords } from "@/lib/console/grid/edit-mode";
 import { type GridItem, type GridStep, stepped } from "@/lib/console/grid/layout";
 import { projectRoot } from "@/lib/console/navigation";
 import { metricOffered } from "@/lib/synthesis/metrics/catalog";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   filterChips,
@@ -54,6 +53,7 @@ import type {
   GridPosition,
   Widget,
   WidgetInput,
+  WidgetResult,
 } from "@/lib/views/dashboards/types";
 import {
   isFilterable,
@@ -93,7 +93,7 @@ export function DashboardView({
   filters: DashboardFilters;
   /** Why the filters of the address cannot be shown, or null. */
   problem: string | null;
-  widgets: readonly { widget: DashboardWidget; result: QueryResult | null }[];
+  widgets: readonly { widget: DashboardWidget; result: WidgetResult | null }[];
   facets: TraceFilterBarFacets;
   timeWindow: TimeWindow;
   /** Alerts are on: a widget can start one. */
@@ -452,7 +452,9 @@ export function DashboardView({
                       <>
                         {Object.keys(filters).length > 0 &&
                         !isFilterable(widget.query) &&
-                        widget.query.kind !== "clusters" ? (
+                        widget.query.kind !== "clusters" &&
+                        // The page's filter applies to RQL text when it runs.
+                        widget.query.kind !== "sql" ? (
                           <p className="shrink-0 text-xs text-fg-subtle">Not filtered</p>
                         ) : null}
                         <FilterNote

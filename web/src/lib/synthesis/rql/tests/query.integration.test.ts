@@ -32,8 +32,8 @@ import { pglitePool } from "./test-support";
 
 /**
  * Kind `sql` of the query object through `runQuery`: the seam `synthesis/rql/query.ts` registers,
- * the window of the scope, the language version, and the errors as RQL wrote them. The seam has no
- * flag check: its callers are behind `customMonitoring`. The other kinds run on a database of their own.
+ * the window of the scope, the language version, and the errors as RQL wrote them. The other kinds
+ * run on a database of their own.
  */
 
 const NOW = new Date();
@@ -101,7 +101,7 @@ after(async () => {
 
 describe("runQuery of kind sql", () => {
   test("it gives the table of the RQL runner, over the window of the scope", async () => {
-    use({});
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id, duration_ms from traces order by trace_id"),
@@ -123,7 +123,7 @@ describe("runQuery of kind sql", () => {
   });
 
   test("a time condition in the text narrows the window of the scope", async () => {
-    use({});
+    use();
     const result = await runQuery(
       project,
       sql(
@@ -136,7 +136,7 @@ describe("runQuery of kind sql", () => {
   });
 
   test("more rows than the limit are cut and marked", async () => {
-    use({});
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id from traces order by trace_id limit 1"),
@@ -156,7 +156,7 @@ describe("runQuery of kind sql", () => {
 
   for (const [kind, query, read, expected] of OTHER_KINDS) {
     test(`kind ${kind} runs as before`, async () => {
-      use({});
+      use();
       const result = await runQuery(OTHER_PROJECT, query, SCOPE, others.db);
       assert.equal(result.kind, kind);
       assert.deepEqual(read(result), expected);
@@ -164,7 +164,7 @@ describe("runQuery of kind sql", () => {
   }
 
   test("a compile error comes back as RQL wrote it", async () => {
-    use({});
+    use();
     await assert.rejects(runQuery(project, sql("select * from spans"), SCOPE, NO_DB), (error) => {
       assert.ok(error instanceof QueryError);
       assert.equal(error.detail?.code, "unknown_table");
@@ -187,24 +187,23 @@ describe("runQuery of kind sql", () => {
     );
   });
 
-  test("a filter of the page or dashboard is refused: the text says what it keeps", async () => {
-    use({});
-    await assert.rejects(
-      runQuery(
-        project,
-        sql("select trace_id from traces"),
-        { ...SCOPE, filter: { models: ["m"] } },
-        NO_DB,
-      ),
-      (error) => error instanceof QueryError && error.detail?.code === "rql_filter",
+  test("a filter of the page or dashboard keeps the rows whose trace matches", async () => {
+    use();
+    const all = await runQuery(project, sql("select count(*) from traces"), SCOPE, NO_DB);
+    const none = await runQuery(
+      project,
+      sql("select count(*) from traces"),
+      { ...SCOPE, filter: { models: ["no such model"] } },
+      NO_DB,
     );
+    assert.deepEqual([all.rows, none.rows], [[[2]], [[0]]]);
   });
 });
 
 /** The runner asks for `limit + 1` rows: only the LIMIT changes, never a literal of equal value. */
 describe("a literal of the value of the limit", () => {
   test("equal to the default limit, it filters with its own value", async () => {
-    use({});
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id from traces where duration_ms = 100 order by trace_id"),
@@ -216,7 +215,7 @@ describe("a literal of the value of the limit", () => {
   });
 
   test("equal to an explicit limit, it filters with its own value, and the cut is marked", async () => {
-    use({});
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id from traces where duration_ms / 100 = 1 order by trace_id limit 1"),
@@ -228,7 +227,7 @@ describe("a literal of the value of the limit", () => {
   });
 
   test("a literal after the LIMIT in the order of the parameters keeps its value", async () => {
-    use({});
+    use();
     // The parameters are the window, 100, 1 (the LIMIT) and 5: the last one is not the LIMIT.
     const result = await runQuery(
       project,
@@ -245,7 +244,7 @@ describe("a literal of the value of the limit", () => {
 
 describe("the language version of a saved query", () => {
   test("a version newer than this RQL is refused", async () => {
-    use({});
+    use();
     await assert.rejects(
       runQuery(project, sql("select trace_id from traces", RQL_VERSION + 1), SCOPE, NO_DB),
       (error) =>
@@ -287,7 +286,7 @@ function sql(text: string, rqlVersion = RQL_VERSION): Query & SqlQuery {
   return { version: 1, kind: "sql", text, rqlVersion };
 }
 
-function use(deps: { run?: Partial<RqlRunDeps>; rqlVersion?: number }) {
+function use(deps: { run?: Partial<RqlRunDeps>; rqlVersion?: number } = {}) {
   metricSeams.sql = sqlQueryRunner({
     rqlVersion: deps.rqlVersion,
     run: {

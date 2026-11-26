@@ -390,6 +390,33 @@ test("an alert made through MCP equals the one the web app makes", async () => {
   assert.deepEqual({ ...byMcp, id: "" }, { ...byWeb, id: "" });
 });
 
+test("change_alert takes RQL text that gives one number", async () => {
+  const sqlAlert = (text: string) => ({
+    ...ALERT,
+    name: "Failed traces",
+    threshold: 3,
+    query: { version: 1, kind: "sql", rqlVersion: 1, text },
+  });
+  const many = await m.call("change_alert", {
+    action: "create",
+    alert: sqlAlert("select service_name, count(*) from traces group by service_name"),
+  });
+  assert.ok(!many.ok);
+  assert.match(many.message, /gives 2 columns/);
+  const { alertId, alert } = await m.data<{
+    alertId: string;
+    alert: { condition: string; query: object; lastError: null };
+  }>("change_alert", {
+    action: "create",
+    alert: sqlAlert("select count(*) from traces where has_error"),
+  });
+  assert.equal(alert.condition, "RQL query is above 3 over 15 minutes");
+  assert.deepEqual(alert.query, sqlAlert("select count(*) from traces where has_error").query);
+  assert.equal(alert.lastError, null);
+  const saved = await getAlertRule(PROJECT, alertId, m.db);
+  assert.equal(saved?.query?.kind, "sql");
+});
+
 test("an alert is updated, paused, resumed, read with its history and deleted", async () => {
   const { destinationId } = await m.data<{ destinationId: string }>("change_alert_destination", {
     action: "add_channel",

@@ -5,9 +5,8 @@ import {
   previewWidgetAction,
   type WidgetPreview,
 } from "@/app/(console)/project/[projectId]/dashboards/actions";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { DashboardRange } from "@/lib/views/dashboards/links";
-import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
+import type { DashboardFilters, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import { canonicalJson } from "@/lib/views/dashboards/widget";
 
 const PREVIEW_DELAY_MS = 200;
@@ -19,7 +18,7 @@ export type Preview =
   | Extract<WidgetPreview, { ok: false }>;
 
 /** Results the page came with, by `previewKey`; null for one that failed. */
-export type ServedResults = ReadonlyMap<string, QueryResult | null>;
+export type ServedResults = ReadonlyMap<string, WidgetResult | null>;
 
 /** The widget's numbers as it changes. The last ones stay, dimmed, until the next arrive. */
 export function useWidgetPreview(

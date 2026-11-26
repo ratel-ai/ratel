@@ -1824,7 +1824,8 @@
               "step_flow",
               "funnel",
               "clusters",
-              "geography"
+              "geography",
+              "sql"
             ]
           },
           "layout": {

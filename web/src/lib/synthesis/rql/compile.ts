@@ -13,6 +13,7 @@ export type { RqlSchemaDescription } from "./domain/describe";
 export { describeRqlSchema } from "./domain/describe";
 export type { RqlError, RqlErrorCode } from "./domain/errors";
 export { RQL_LIMITS } from "./domain/limits";
+export type { RqlPageFilter } from "./domain/page-filter";
 export type { RqlCompiled } from "./domain/run";
 export type { RqlWindow } from "./domain/window";
 

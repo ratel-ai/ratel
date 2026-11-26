@@ -10,12 +10,13 @@ import {
   metricOffered,
   type QueryScope,
 } from "@/lib/synthesis/metrics/catalog";
-import { type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
-import type { BrokenWidget, Widget, WidgetInput } from "@/lib/views/dashboards/types";
+import { QueryError, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import type { BrokenWidget, Widget, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import { queryMetric } from "@/lib/views/dashboards/widget";
 // What these modules own is read through what they register.
 import "@/lib/views/scorers/metrics";
 import "@/lib/views/dashboards/clusters";
+import "@/lib/synthesis/rql/query";
 
 /** Widgets read at once: a full dashboard must not take the whole connection pool. */
 const CONCURRENCY = 4;
@@ -24,27 +25,33 @@ type Load = (
   projectId: string,
   widget: WidgetInput,
   scope: QueryScope,
-) => Promise<QueryResult | null>;
+) => Promise<WidgetResult | null>;
 
-/** One widget's numbers, bounded, or null when the read failed. */
+/**
+ * One widget's numbers, bounded, or null when the read failed. A query of kind sql runs on the
+ * read-only RQL path with its own limits, under the page's filter like the other kinds, and a refusal of RQL (a
+ * compile or a run error) comes back as the message and the fix, for the person to correct.
+ */
 export const loadWidget = (
   projectId: string,
   widget: WidgetInput,
   scope: QueryScope,
   /** Another database than the pool's, in tests. */
   db?: BoundReadDb,
-): Promise<QueryResult | null> =>
-  loadOrFallback<QueryResult | null>({
-    operation: "dashboard_widget",
-    distinctId: `project:${projectId}`,
-    fallback: null,
-    load: () =>
-      withStatementTimeout((db) => runQuery(projectId, widget.query, scope, db), {
+): Promise<WidgetResult | null> =>
+  widget.query.kind === "sql"
+    ? loadSqlWidget(projectId, widget.query, scope, db)
+    : loadOrFallback<QueryResult | null>({
         operation: "dashboard_widget",
-        timeoutMs: supplementaryReadTimeoutMs(),
-        db,
-      }),
-  });
+        distinctId: `project:${projectId}`,
+        fallback: null,
+        load: () =>
+          withStatementTimeout((db) => runQuery(projectId, widget.query, scope, db), {
+            operation: "dashboard_widget",
+            timeoutMs: supplementaryReadTimeoutMs(),
+            db,
+          }),
+      });
 
 /** Every widget's numbers, in order. One that is broken, failed, waits for a scorer, or whose switch is off, is null. */
 export async function loadWidgets(
@@ -56,8 +63,8 @@ export async function loadWidgets(
   scope: QueryScope,
   features: MetricFeatures,
   load: Load = (project, widget, at) => loadWidget(project, widget, at),
-): Promise<(QueryResult | null)[]> {
-  const results: (QueryResult | null)[] = new Array(widgets.length).fill(null);
+): Promise<(WidgetResult | null)[]> {
+  const results: (WidgetResult | null)[] = new Array(widgets.length).fill(null);
   let next = 0;
   const worker = async () => {
     while (next < widgets.length) {
@@ -73,4 +80,25 @@ export async function loadWidgets(
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   return results;
+}
+
+async function loadSqlWidget(
+  projectId: string,
+  query: Extract<WidgetInput["query"], { kind: "sql" }>,
+  scope: QueryScope,
+  db: BoundReadDb | undefined,
+): Promise<WidgetResult | null> {
+  try {
+    // The runner of kind sql reads through the RQL pool: `db` is only the contract's argument.
+    return await runQuery(projectId, query, scope, db);
+  } catch (error) {
+    if (error instanceof QueryError && error.detail)
+      return { kind: "refused", message: error.message, ...error.detail };
+    return loadOrFallback<null>({
+      operation: "dashboard_widget",
+      distinctId: `project:${projectId}`,
+      fallback: null,
+      load: () => Promise.reject(error),
+    });
+  }
 }

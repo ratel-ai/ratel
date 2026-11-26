@@ -9,7 +9,6 @@ import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import {
   changeDashboard,
   type DashboardActionInput,
@@ -27,6 +26,7 @@ import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { resolveWidgetRange } from "@/lib/views/dashboards/range";
 import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
+import type { WidgetResult } from "@/lib/views/dashboards/types";
 import { scorerNames } from "@/lib/views/scorers/picker";
 import { metricFeatures } from "./context";
 
@@ -97,7 +97,7 @@ export async function exportDashboardAction(
   }
 }
 
-export type WidgetPreview = { ok: true; result: QueryResult } | { ok: false; error: string };
+export type WidgetPreview = { ok: true; result: WidgetResult } | { ok: false; error: string };
 
 /** The editor's live preview: the numbers a widget would show, before it is saved. */
 export async function previewWidgetAction(

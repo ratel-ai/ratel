@@ -1,6 +1,6 @@
-import type { Aggregation, MetricQuery } from "@/lib/contracts/query";
+import type { Aggregation } from "@/lib/contracts/query";
 import { getMetric, type MetricUnit, nothingIsZero } from "@/lib/synthesis/metrics/catalog";
-import type { AlertCondition, AlertState, AlertWindow } from "@/lib/views/alerts/types";
+import type { AlertCondition, AlertQuery, AlertState, AlertWindow } from "@/lib/views/alerts/types";
 import { formatMetric } from "@/lib/views/dashboards/chart-model";
 import { queryName } from "@/lib/views/dashboards/widget";
 
@@ -21,7 +21,7 @@ export const WINDOW_LABELS: Readonly<Record<AlertWindow, string>> = {
 
 /** "Latency p95 is above 2s over 5 minutes" */
 export function conditionText(
-  { query }: { query: MetricQuery | null },
+  { query }: { query: AlertQuery | null },
   condition: AlertCondition,
 ): string {
   const unit = unitOf(query);
@@ -29,8 +29,10 @@ export function conditionText(
 }
 
 /** Null without a query: its numbers have no unit. */
-export function unitOf(query: MetricQuery | null): MetricUnit | null {
-  return (query && getMetric(query.measures[0].measure)?.unit) ?? null;
+export function unitOf(query: AlertQuery | null): MetricUnit | null {
+  // The number of RQL text has no unit the catalog knows.
+  if (!query || query.kind === "sql") return null;
+  return getMetric(query.measures[0].measure)?.unit ?? null;
 }
 
 /** A share keeps one decimal, so it does not read as its own threshold. */

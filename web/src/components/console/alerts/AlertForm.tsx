@@ -15,7 +15,7 @@ import { type FormEvent, useState, useTransition } from "react";
 import { changeAlertAction } from "@/app/(console)/project/[projectId]/alerts/actions";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { projectSettingsRoot } from "@/lib/console/settings/tabs";
-import { type MetricQuery, metricQuery, parseQuery } from "@/lib/contracts/query";
+import { metricQuery, parseQuery } from "@/lib/contracts/query";
 import { getMetric } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import {
@@ -31,16 +31,30 @@ import {
   type AlertDestination,
   type AlertDraft,
   type AlertOperator,
+  type AlertQuery,
   type AlertRule,
   type AlertWindow,
   MAX_ALERT_NAME,
 } from "@/lib/views/alerts/types";
-import { changeQuery, type QueryChange, queryName } from "@/lib/views/dashboards/widget";
+import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
+import {
+  changeQuery,
+  type QueryChange,
+  queryName,
+  sqlWidgetQuery,
+} from "@/lib/views/dashboards/widget";
 import { slackErrorText } from "@/lib/views/slack/errors";
 import { Choice, MetricFields, MetricFilter } from "../dashboards/MetricFields";
+import { SqlFields } from "../dashboards/SqlFields";
 import { AlertPreviewChart } from "./AlertPreviewChart";
 
 const DEFAULT_QUERY = metricQuery("error_rate", "rate");
+/** What a new RQL alert starts from when its metric has no RQL form: one row, one number. */
+const DEFAULT_SQL = "select count(*) as traces from traces where has_error";
+const MODES = [
+  { value: "form", label: "Metric" },
+  { value: "sql", label: "SQL" },
+] as const;
 const OPERATORS: readonly { value: AlertOperator; label: string }[] = [
   { value: "above", label: "Above" },
   { value: "below", label: "Below" },
@@ -59,7 +73,7 @@ export function AlertForm({
   /** Null: a new one. */
   rule: AlertRule | null;
   /** What a new one measures at first. */
-  start: MetricQuery | null;
+  start: AlertQuery | null;
   facets: TraceFilterBarFacets;
   destinations: readonly AlertDestination[];
   /** Channels of a Slack workspace that is not connected any more are among them. */
@@ -67,10 +81,11 @@ export function AlertForm({
 }) {
   const router = useRouter();
   const scorers = useScorers();
-  const [query, setQuery] = useState<MetricQuery>(() => startQuery(rule?.query ?? start));
+  const [query, setQuery] = useState<AlertQuery>(() => startQuery(rule?.query ?? start));
   const [name, setName] = useState(rule?.name ?? "");
   const [operator, setOperator] = useState<AlertOperator>(rule?.operator ?? "above");
-  const unit = getMetric(query.measures[0].measure)?.unit ?? "count";
+  // The number of RQL text has no unit: it is compared as it is.
+  const unit = (query.kind === "metric" && getMetric(query.measures[0].measure)?.unit) || "count";
   const [thresholdText, setThresholdText] = useState(
     // A threshold without its query has no unit.
     rule?.query ? thresholdInput(rule.threshold, unit) : "",
@@ -89,6 +104,7 @@ export function AlertForm({
   const defaultName = queryName(query);
 
   function edit(change: QueryChange) {
+    if (query.kind !== "metric") return;
     const next = changeQuery(query, change, scorers ?? []);
     // A threshold in another unit is another threshold.
     if (getMetric(next.measures[0].measure)?.unit !== unit) setThresholdText("");
@@ -128,18 +144,42 @@ export function AlertForm({
 
   return (
     <form noValidate onSubmit={save} className="flex max-w-3xl flex-col gap-8">
-      <Section title="1. Metric">
+      <Section title={query.kind === "sql" ? "1. RQL value" : "1. Metric"}>
         <div className="flex flex-col gap-4">
-          <MetricFields query={query} onChange={edit} />
-          <MetricFilter
-            query={query}
-            facets={facets}
-            onChange={(next) =>
-              setQuery((current) =>
-                changeQuery(current, { filter: next(current.filters) }, scorers ?? []),
-              )
-            }
-          />
+          <Choice label="Watch">
+            <SegmentedControl
+              label="Watch"
+              options={MODES}
+              value={query.kind === "sql" ? "sql" : "form"}
+              onValueChange={(mode) => {
+                setThresholdText("");
+                setQuery(mode === "sql" ? sqlOf(query) : DEFAULT_QUERY);
+              }}
+            />
+          </Choice>
+          {query.kind === "sql" ? (
+            <SqlFields
+              query={query}
+              result={null}
+              onChange={setQuery}
+              window="The alert's window is its window."
+            />
+          ) : (
+            <>
+              <MetricFields query={query} onChange={edit} />
+              <MetricFilter
+                query={query}
+                facets={facets}
+                onChange={(next) =>
+                  setQuery((current) =>
+                    current.kind === "metric"
+                      ? changeQuery(current, { filter: next(current.filters) }, scorers ?? [])
+                      : current,
+                  )
+                }
+              />
+            </>
+          )}
         </div>
       </Section>
 
@@ -188,7 +228,11 @@ export function AlertForm({
               )}
             </Field>
           </div>
-          <p className="text-xs text-fg-subtle">{alertWindowText(query.measures[0].aggregation)}</p>
+          <p className="text-xs text-fg-subtle">
+            {query.kind === "sql"
+              ? "The query runs over the last window, on traces by when they started. It must give one row with one number. An error marks the alert as failing: it does not fire."
+              : alertWindowText(query.measures[0].aggregation)}
+          </p>
           <AlertPreviewChart
             projectId={projectId}
             query={query}
@@ -278,6 +322,13 @@ export function AlertForm({
 }
 
 /** A query the contract no longer allows cannot be edited: the form starts again. */
-function startQuery(query: MetricQuery | null): MetricQuery {
+function startQuery(query: AlertQuery | null): AlertQuery {
   return query && parseQuery(query).ok ? query : DEFAULT_QUERY;
+}
+
+/** The RQL text of the metric, when it has one: the alert keeps watching the same number. */
+function sqlOf(query: AlertQuery): AlertQuery {
+  if (query.kind === "sql") return query;
+  const rql = metricAsRql({ title: "", chart: "number", query }, "hour");
+  return sqlWidgetQuery(rql.ok ? rql.text : DEFAULT_SQL);
 }

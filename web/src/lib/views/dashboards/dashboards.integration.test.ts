@@ -4,9 +4,13 @@ import { drizzle } from "drizzle-orm/pglite";
 import { type MeasureId, type MetricQuery, metricQuery } from "@/lib/contracts/query";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { type MetricsDb, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import { type MetricsDb, metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import { changeDashboard, type DashboardActionDeps } from "@/lib/views/dashboards/actions";
-import { loadWidgets } from "@/lib/views/dashboards/data";
+import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
 import { dashboardDocumentSchema, exportDashboard } from "@/lib/views/dashboards/document";
 import { barChange, filtersProblem } from "@/lib/views/dashboards/filters";
 import { gridPositionSchema, inReadingOrder } from "@/lib/views/dashboards/layout";
@@ -28,6 +32,7 @@ import {
   MAX_WIDGETS,
   type WidgetInput,
   type WidgetQuery,
+  type WidgetResult,
 } from "@/lib/views/dashboards/types";
 import {
   changeQuery,
@@ -35,6 +40,7 @@ import {
   queryScorerId,
   scorersOfMetric,
   scorerWidget,
+  sqlWidgetQuery,
   widgetName,
 } from "@/lib/views/dashboards/widget";
 
@@ -494,6 +500,56 @@ test("a widget that does not fit the metric catalog or its chart is refused", as
   assert.deepEqual(await widgets(id), []);
 });
 
+test("a sql widget: saved, loaded, refused by RQL, exported and imported", async () => {
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(client)),
+      gate: createRqlGate(),
+      observe: async () => {},
+    },
+  });
+  const id = await created("RQL");
+  const widget: WidgetInput = {
+    title: "Traces",
+    query: sqlWidgetQuery("select count(*) as traces from traces"),
+    chart: "sql",
+  };
+  await refused(
+    { action: "add-widget", dashboardId: id, widget: { ...widget, chart: "table" } },
+    /drawn as chart "sql"/,
+  );
+  assert.ok((await run({ action: "add-widget", dashboardId: id, widget })).ok);
+  const [stored] = await widgets(id);
+  assert.deepEqual(stored, { ...widget, id: stored.id, layout: stored.layout });
+
+  const scope = {
+    since: new Date(Date.now() - 3_600_000),
+    until: new Date(),
+    filter: { environments: ["prod"] },
+  };
+  const result = await loadWidget(PROJECT, stored, scope, db as never);
+  assert.deepEqual(result, {
+    kind: "sql",
+    columns: [{ name: "traces", type: "integer" }],
+    rows: [[0]],
+    truncated: false,
+  });
+  const wrong = { ...stored, query: sqlWidgetQuery("select * from spans") };
+  const refusal = await loadWidget(PROJECT, wrong, scope, db as never);
+  assert.equal(refusal?.kind, "refused");
+  assert.ok(refusal?.kind === "refused" && refusal.code === "unknown_table" && refusal.fix);
+
+  const source = await getDashboard(PROJECT, id, db);
+  assert.ok(source);
+  const document = exportDashboard(source, []);
+  assert.deepEqual(document.widgets[0].query, widget.query);
+  const imported = await run({ projectId: OTHER, action: "import", document });
+  assert.ok(imported.ok, JSON.stringify(imported));
+  const copy = await getDashboard(OTHER, imported.dashboardId, db);
+  assert.ok(copy);
+  assert.deepEqual(exportDashboard(copy, []), document);
+});
+
 test("a scorer widget is accepted with customMonitoring only", async () => {
   const id = await created();
   const widget = scorerWidget({ id: OTHER, verdict: true });
@@ -767,6 +823,6 @@ async function titles(id: string) {
   return inReadingOrder(await widgets(id)).map((item) => item.title);
 }
 
-function seriesOf(result: QueryResult | null) {
+function seriesOf(result: WidgetResult | null) {
   return result?.kind === "metric" ? result.series : undefined;
 }

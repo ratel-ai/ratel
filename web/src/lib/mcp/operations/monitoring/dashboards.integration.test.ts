@@ -469,7 +469,7 @@ test("a step flow: its steps in the text form, its schema, and the path of what 
   }
 });
 
-test("query_monitoring refuses a panel of kind sql: no panel draws its rows", async () => {
+test("query_monitoring refuses a panel of kind sql: it is asked alone, or kept as a widget", async () => {
   const refused = await m.call("query_monitoring", {
     queries: [
       { query: EXAMPLES.metric },
@@ -478,7 +478,90 @@ test("query_monitoring refuses a panel of kind sql: no panel draws its rows", as
   });
   assert.ok(!refused.ok);
   assert.equal(refused.error, "invalid_params");
-  assert.match(refused.message, /kind sql cannot be a widget, a panel/);
+  assert.match(refused.message, /kind sql cannot be a panel/);
+});
+
+test("a sql widget: change_dashboard, get_dashboard and import_dashboard carry it", async () => {
+  await insertTrace(m.client, "a", 100, true);
+  await insertTrace(m.client, "b", 300);
+  const sql = {
+    version: 1,
+    kind: "sql",
+    text: "select count(*) as traces from traces",
+    rqlVersion: 1,
+  };
+  const { dashboardId } = await m.data<{ dashboardId: string }>("change_dashboard", {
+    action: "create",
+    name: "RQL",
+  });
+  const add = { action: "add_widget", dashboardId, widget: { query: sql, chart: "sql" } };
+  await m.data("change_dashboard", add);
+  const broken = { query: { ...sql, text: "select * from spans" }, chart: "sql" };
+  await m.data("change_dashboard", { ...add, widget: broken });
+  await m.data("change_dashboard", {
+    action: "set_filters",
+    dashboardId,
+    filters: { environments: ["production"] },
+  });
+  const read = await m.data<{
+    widgets: { summary: string }[];
+    document: { widgets: { query: object; chart: string }[] };
+  }>("get_dashboard", { dashboardId });
+  // The dashboard's filter narrows it as it runs (`synthesis/rql/domain/page-filter.ts`).
+  assert.equal(read.widgets[0].summary, "1 row of 1 column: traces.");
+  assert.match(read.widgets[1].summary, /RQL refused the query: .*spans/);
+  assert.deepEqual(read.document.widgets[0], { ...read.document.widgets[0], query: sql });
+
+  const imported = await m.data<{ dashboardId: string }>("import_dashboard", {
+    document: read.document,
+  });
+  const copy = await store.getDashboard(PROJECT, imported.dashboardId, m.db);
+  assert.deepEqual(
+    copy?.widgets.map((widget) => "query" in widget && widget.query),
+    [sql, broken.query],
+  );
+  const { catalog } = await m.data<{ catalog: { kinds: { kind: string; charts: string[] }[] } }>(
+    "describe_monitoring_schema",
+    { part: "catalog" },
+  );
+  assert.deepEqual(catalog.kinds.find(({ kind }) => kind === "sql")?.charts, ["sql"]);
+});
+
+test("query_monitoring as sql gives the RQL text of a metric (Edit as SQL)", async () => {
+  await insertTrace(m.client, "a", 100, true);
+  await insertTrace(m.client, "b", 300);
+  const params = {
+    query: {
+      version: 1,
+      kind: "metric",
+      measures: [{ measure: "trace_count", aggregation: "count" }],
+    },
+    chart: "number",
+    as: "sql",
+  };
+  const { text, query } = await m.data<{ text: string; query: { kind: string; text: string } }>(
+    "query_monitoring",
+    params,
+  );
+  assert.equal(text, "select count(*) as value\nfrom traces");
+  assert.deepEqual([query.kind, query.text], ["sql", text]);
+  // The text gives the numbers of the form.
+  const form = await m.data<{ result: { series: { total: number }[] } }>("query_monitoring", {
+    query: params.query,
+    chart: "number",
+  });
+  const rows = await m.data<{ result: { rows: unknown[][] } }>("query_monitoring", { query });
+  assert.deepEqual(rows.result.rows, [[form.result.series[0].total]]);
+  const rate = await m.call("query_monitoring", {
+    ...params,
+    query: {
+      version: 1,
+      kind: "metric",
+      measures: [{ measure: "error_rate", aggregation: "rate" }],
+    },
+  });
+  assert.ok(!rate.ok);
+  assert.match(rate.message, /cannot compute a rate/);
 });
 
 test("query_monitoring runs each kind", async () => {

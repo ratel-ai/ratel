@@ -223,3 +223,15 @@ test("<> is the same as !=", () => {
     `select "name" as "c1" from "rql"."events" where ${WINDOW} and ("model" <> $3::text) limit $4::bigint`,
   );
 });
+
+test("oneRow: no GROUP BY and only aggregates give one row at most", () => {
+  for (const [text, oneRow] of [
+    ["select count(*) from traces", true],
+    ["select avg(duration_ms) / 1000 as seconds, max(cost_usd) from traces where has_error", true],
+    ["select count(*) from traces group by service_name", false],
+    ["select service_name, count(*) from traces group by service_name", false],
+    ["select duration_ms from traces", false],
+    ["select distinct count(*) from traces", false],
+  ] as const)
+    assert.equal(compiled(text).oneRow, oneRow, text);
+});

@@ -693,7 +693,10 @@ function dashboardWidgetsView(data: FocusedOverviewData, tracker: TruncationTrac
         chart: widget.chart,
         filters,
         summary: headline(widget.query, result),
-        result: result && cappedResult(widget.query, result, ITEM_ROWS, tracker),
+        result:
+          result && result.kind !== "refused"
+            ? cappedResult(widget.query, result, ITEM_ROWS, tracker)
+            : result,
       },
     ];
   });
