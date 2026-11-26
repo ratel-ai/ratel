@@ -89,7 +89,8 @@ after(() => client.close());
 test("a panel of each kind runs, and saves as an equal widget", async () => {
   const id = await change({ action: "create", name: "Board" });
   const range = resolveTraceRange({}, new Date());
-  for (const kind of WIDGET_KINDS) {
+  // Kind sql runs on the RQL path behind its flag: `dashboards.integration.test.ts` saves and reads it.
+  for (const kind of WIDGET_KINDS.filter((kind) => kind !== "sql")) {
     const decoded = decodePanels(encodePanels([widgetOfKind(kind, START_PANEL)]));
     assert.ok(decoded.ok);
     const [panel] = decoded.panels;
@@ -251,7 +252,7 @@ function alertOf(href: string): MetricQuery {
     alertQueryOf(value === IN_FRAGMENT ? hash.slice(1) : value),
     FEATURES,
   );
-  assert.ok(parsed.ok);
+  assert.ok(parsed.ok && parsed.query.kind === "metric");
   return parsed.query;
 }
 

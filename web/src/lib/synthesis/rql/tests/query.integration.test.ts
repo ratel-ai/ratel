@@ -216,17 +216,16 @@ describe("runQuery of kind sql", () => {
     );
   });
 
-  test("a filter of the page or dashboard is refused: the text says what it keeps", async () => {
+  test("a filter of the page or dashboard keeps the rows whose trace matches", async () => {
     use({ flags: FLAG_ON });
-    await assert.rejects(
-      runQuery(
-        project,
-        sql("select trace_id from traces"),
-        { ...SCOPE, filter: { models: ["m"] } },
-        NO_DB,
-      ),
-      (error) => error instanceof QueryError && error.detail?.code === "rql_filter",
+    const all = await runQuery(project, sql("select count(*) from traces"), SCOPE, NO_DB);
+    const none = await runQuery(
+      project,
+      sql("select count(*) from traces"),
+      { ...SCOPE, filter: { models: ["no such model"] } },
+      NO_DB,
     );
+    assert.deepEqual([all.rows, none.rows], [[[2]], [[0]]]);
   });
 });
 

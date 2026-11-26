@@ -42,7 +42,7 @@ export function AlertsList({
             {row.name}
           </Link>
           <span className="min-w-0 truncate text-xs text-fg-subtle">
-            {row.problem ?? conditionText(row, row)}
+            {row.problem ?? (row.lastError ? `Failing: ${row.lastError}` : conditionText(row, row))}
           </span>
         </span>
       ),

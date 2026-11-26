@@ -1,6 +1,7 @@
 import type { BinaryOp, UnaryOp } from "./ast";
 import type { RqlTable } from "./catalog";
 import type { CheckedExpr, CheckedSelect, ParamType, ParamValue } from "./check";
+import { pageFilterConditions, type RqlPageFilter } from "./page-filter";
 import type { RqlWindow } from "./window";
 
 /**
@@ -57,9 +58,14 @@ export function rewriteSelect(
   select: CheckedSelect,
   window: RqlWindow,
   limit: number,
+  filter: RqlPageFilter = {},
 ): RewrittenSql {
   const params = new Params();
-  const windowSql = windowCondition(select.table, params, window);
+  const scope = [
+    windowCondition(select.table, params, window),
+    ...pageFilterCondition(select.table, params, filter),
+  ];
+  const windowSql = scope.join(" and ");
   const print = (expr: CheckedExpr) => printExpr(expr, params);
 
   const items = select.items.map((item, i) => `${print(item.expr)} as ${outputName(i)}`);
@@ -111,6 +117,22 @@ function windowCondition(table: RqlTable, params: Params, window: RqlWindow): st
   const from = params.add(window.from.toISOString(), "timestamptz");
   const to = params.add(window.to.toISOString(), "timestamptz");
   return `${column} >= ${from} and ${column} < ${to}`;
+}
+
+/**
+ * The page filter on a table: on `traces` its own columns; on the other tables the trace of each
+ * row (`trace_id`), so every part applies everywhere, as the metric form filters on the trace's
+ * summary. On `sessions` and `users` it narrows the trace rows before their totals.
+ */
+function pageFilterCondition(table: RqlTable, params: Params, filter: RqlPageFilter): string[] {
+  const param = (value: string | number) =>
+    typeof value === "number" ? params.add(value, "double precision") : params.add(value, "text");
+  const conditions = pageFilterConditions(filter, param);
+  if (conditions.length === 0) return [];
+  if (table.name === "traces") return conditions;
+  return [
+    `"trace_id" in (select "trace_id" from ${quote(RQL_SCHEMA)}.${quote("traces")} where ${conditions.join(" and ")})`,
+  ];
 }
 
 /** The totals of the view's trace rows in the window, one row per key. */

@@ -1,3 +1,4 @@
+import { RqlFlagProvider } from "@/components/console/dashboards/RqlFlag";
 import { ExploreView } from "@/components/console/explore/ExploreView";
 import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
@@ -63,24 +64,27 @@ export default async function ScopedExplorePage({
   ]);
   return (
     <ScorerPickerProvider projectId={projectId} data={scorers}>
-      <ExploreView
-        projectId={projectId}
-        served={panels.map((widget, index) => ({
-          widget,
-          // One that is not complete has not been read.
-          result: parseWidget(widget, features).ok ? results[index] : undefined,
-        }))}
-        problem={problem}
-        filters={filters}
-        facets={facets}
-        dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
-        range={{ preset: range.preset, from: range.from, to: range.to }}
-        timeWindow={{
-          preset: range.preset === EXACT_RANGE ? "custom" : (range.preset as TimeWindow["preset"]),
-          ...days,
-          today: now.toISOString().slice(0, 10),
-        }}
-      />
+      <RqlFlagProvider enabled={features.rql === true}>
+        <ExploreView
+          projectId={projectId}
+          served={panels.map((widget, index) => ({
+            widget,
+            // One that is not complete has not been read.
+            result: parseWidget(widget, features).ok ? results[index] : undefined,
+          }))}
+          problem={problem}
+          filters={filters}
+          facets={facets}
+          dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
+          range={{ preset: range.preset, from: range.from, to: range.to }}
+          timeWindow={{
+            preset:
+              range.preset === EXACT_RANGE ? "custom" : (range.preset as TimeWindow["preset"]),
+            ...days,
+            today: now.toISOString().slice(0, 10),
+          }}
+        />
+      </RqlFlagProvider>
     </ScorerPickerProvider>
   );
 }

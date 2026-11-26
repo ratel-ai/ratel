@@ -95,6 +95,10 @@ export function AlertDetail({
           <Callout tone="warning" title="This alert needs attention">
             {`${alert.problem} It is not checked. Pick what it measures and save it.`}
           </Callout>
+        ) : alert.lastError ? (
+          <Callout tone="danger" title="This alert is failing">
+            {`${alert.lastError} It does not fire until its query reads again.`}
+          </Callout>
         ) : null}
         {children}
         <Section title="History" description="Each change of the state, newest first.">

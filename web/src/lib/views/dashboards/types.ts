@@ -1,13 +1,25 @@
-import { type MetricQuery, QUERY_KINDS, type Query, type SqlQuery } from "@/lib/contracts/query";
+import { type MetricQuery, QUERY_KINDS, type Query } from "@/lib/contracts/query";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
+import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
-/** What a widget can show: every kind but `sql`, whose rows no chart draws yet. */
-export type WidgetQuery = Exclude<Query, SqlQuery>;
+/** What a widget can show: every kind. Kind `sql` is behind the `rql` flag. */
+export type WidgetQuery = Query;
 export type WidgetKind = WidgetQuery["kind"];
-export const WIDGET_KINDS = QUERY_KINDS.filter((kind): kind is WidgetKind => kind !== "sql");
-export const SQL_WIDGET_PROBLEM =
-  "A query of kind sql cannot be a widget, a panel or a dashboard query yet: no chart draws its rows.";
+export const WIDGET_KINDS = QUERY_KINDS;
+export const RQL_OFF_PROBLEM =
+  "RQL is off for this project, so a widget of kind sql cannot be saved.";
+
+/** Why RQL refused a query of kind sql: its message, its stable code and the fix. */
+export interface WidgetRefusal {
+  kind: "refused";
+  message: string;
+  code: string;
+  fix: string;
+}
+
+/** What a widget shows: its numbers, or the refusal of its RQL text. */
+export type WidgetResult = QueryResult | WidgetRefusal;
 
 /** How a metric is drawn. Each other query kind has the one chart of its name. */
 export const METRIC_CHARTS = ["line", "bar", "number", "table"] as const;
@@ -19,6 +31,8 @@ export const WIDGET_CHARTS = [
   "funnel",
   "clusters",
   "geography",
+  // The rows of an RQL query: a table, or a chart when they have one time column.
+  "sql",
 ] as const;
 export type WidgetChart = (typeof WIDGET_CHARTS)[number];
 

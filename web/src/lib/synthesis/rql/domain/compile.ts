@@ -3,6 +3,7 @@ import type { RqlTableName, RqlType } from "./catalog";
 import { checkQuery, type ParamValue } from "./check";
 import { RqlCompileError, type RqlError } from "./errors";
 import { RQL_LIMITS } from "./limits";
+import type { RqlPageFilter } from "./page-filter";
 import { rewriteSelect } from "./rewrite";
 import { type RqlWindow, resolveWindow } from "./window";
 
@@ -11,6 +12,8 @@ export interface RqlCompileOptions {
   now: Date;
   /** The window the caller asks for. The default is the last `defaultWindowHours` before `now`. */
   window?: RqlWindow;
+  /** The filter of the page the query runs under: rows whose trace matches (`page-filter.ts`). */
+  filter?: RqlPageFilter;
 }
 
 export type RqlCompileResult =
@@ -28,6 +31,11 @@ export type RqlCompileResult =
       window: { from: string; to: string };
       /** The most rows the query gives: its LIMIT, lowered to `maxLimit`. */
       limit: number;
+      /**
+       * The query gives one row at most: no GROUP BY, and each column an aggregate. What an alert
+       * compares needs it. HAVING can still keep no row.
+       */
+      oneRow: boolean;
     }
   | { ok: false; error: RqlError };
 
@@ -51,7 +59,7 @@ export function compileQuery(
     const window = resolveWindow(options.now, options.window);
     const select = checkQuery(parse(text));
     const limit = Math.min(select.limit ?? RQL_LIMITS.defaultLimit, RQL_LIMITS.maxLimit);
-    const { sql, params, limitParam } = rewriteSelect(select, window, limit);
+    const { sql, params, limitParam } = rewriteSelect(select, window, limit, options.filter);
     return {
       ok: true,
       sql,
@@ -61,6 +69,10 @@ export function compileQuery(
       table: select.table.name,
       window: { from: window.from.toISOString(), to: window.to.toISOString() },
       limit,
+      oneRow:
+        select.groupBy.length === 0 &&
+        !select.distinct &&
+        select.items.every(({ expr }) => expr.aggregate),
     };
   } catch (error) {
     if (error instanceof RqlCompileError) return { ok: false, error: error.error };

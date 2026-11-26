@@ -1,19 +1,28 @@
 "use client";
 
+import { Button } from "@ratel/design-system/button";
 import { Field, Input } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import { SegmentedControl } from "@ratel/design-system/tabs";
+import { SquareCode } from "lucide-react";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
-import { type Dimension, MAX_DIMENSIONS, type MetricQuery } from "@/lib/contracts/query";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
+import {
+  type Bucket,
+  type Dimension,
+  MAX_DIMENSIONS,
+  type MetricQuery,
+} from "@/lib/contracts/query";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
+import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
 import {
   MAX_WIDGET_TITLE,
   METRIC_CHARTS,
+  type MetricWidget,
   WIDGET_KINDS,
   type WidgetChart,
   type WidgetInput,
   type WidgetQuery,
+  type WidgetResult,
 } from "@/lib/views/dashboards/types";
 import {
   CHART_LABELS,
@@ -26,6 +35,7 @@ import {
   type QueryChange,
   queryFilter,
   queryMetric,
+  sqlWidgetQuery,
   widgetName,
   widgetOfKind,
   withFilter,
@@ -35,6 +45,8 @@ import { FlowFields } from "./FlowFields";
 import { FunnelFields } from "./FunnelFields";
 import { GeographyFields } from "./GeographyFields";
 import { Choice, MetricFields, QueryFilter } from "./MetricFields";
+import { useRqlFlag } from "./RqlFlag";
+import { SqlFields } from "./SqlFields";
 import { StepFlowFields } from "./StepFlowFields";
 
 const NO_GROUP = "none";
@@ -53,12 +65,13 @@ export function WidgetFields({
   onChange: (change: (current: WidgetInput) => WidgetInput) => void;
   facets: TraceFilterBarFacets;
   /** The last result read, for the names it offers. */
-  result: QueryResult | null;
+  result: WidgetResult | null;
   /** A change that was not made, said at its field. */
   refused?: { field: RefusedField; message: string } | null;
 }) {
   const { query } = widget;
   const scorers = useScorers();
+  const rql = useRqlFlag();
   const set = (change: Partial<WidgetInput>) =>
     onChange((current) => fitWidget({ ...current, ...change }));
   const setQuery = (change: (query: WidgetQuery) => WidgetQuery) =>
@@ -78,7 +91,9 @@ export function WidgetFields({
         <div className="flex">
           <SegmentedControl
             label="Show"
-            options={WIDGET_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
+            options={WIDGET_KINDS.filter(
+              (value) => value !== "sql" || rql || query.kind === "sql",
+            ).map((value) => ({ value, label: KIND_LABELS[value] }))}
             value={query.kind}
             onValueChange={(kind) => onChange((current) => widgetOfKind(kind, current))}
           />
@@ -94,6 +109,18 @@ export function WidgetFields({
             )
           }
         />
+      ) : null}
+      {query.kind === "metric" && rql ? (
+        <EditAsSql
+          widget={{ ...widget, query }}
+          bucket={result?.kind === "metric" ? result.bucket : (query.bucket ?? "hour")}
+          onEdit={(text) =>
+            onChange((current) => ({ ...current, query: sqlWidgetQuery(text), chart: "sql" }))
+          }
+        />
+      ) : null}
+      {query.kind === "sql" ? (
+        <SqlFields query={query} result={result} onChange={(next) => set({ query: next })} />
       ) : null}
       {query.kind === "flow" ? (
         <FlowFields query={query} facets={facets} onChange={(next) => set({ query: next })} />
@@ -224,5 +251,37 @@ function MetricForm({
         </Field>
       ))}
     </MetricFields>
+  );
+}
+
+/**
+ * `Edit as SQL`: the widget becomes a widget of kind sql with the RQL text of its numbers. It does
+ * not go back to the form. A metric that RQL cannot compute yet says why.
+ */
+function EditAsSql({
+  widget,
+  bucket,
+  onEdit,
+}: {
+  widget: MetricWidget;
+  bucket: Bucket;
+  onEdit: (text: string) => void;
+}) {
+  const rql = metricAsRql(widget, bucket);
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={!rql.ok}
+        onClick={() => rql.ok && onEdit(rql.text)}
+      >
+        <SquareCode className="size-3.5" aria-hidden />
+        Edit as SQL
+      </Button>
+      <p className="text-xs text-fg-subtle">
+        {rql.ok ? "The RQL text of these numbers. It does not go back to the form." : rql.reason}
+      </p>
+    </div>
   );
 }

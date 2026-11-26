@@ -15,9 +15,14 @@ export type AlertItem = Omit<AlertRule, "stateChangedAt"> & { stateChangedAt: st
 const TONES = { ok: "success", alerting: "danger", no_data: "neutral" } as const;
 
 /** A rule that cannot be checked says so before its last state. */
-export function RuleState({ alert }: { alert: Pick<AlertItem, "enabled" | "state" | "problem"> }) {
+export function RuleState({
+  alert,
+}: {
+  alert: Pick<AlertItem, "enabled" | "state" | "problem" | "lastError">;
+}) {
   if (alert.problem) return <StatusDot tone="warning" label="Needs attention" />;
   if (!alert.enabled) return <span className="text-ui text-fg-subtle">Paused</span>;
+  if (alert.lastError) return <StatusDot tone="danger" label="Failing" />;
   return <StateBadge state={alert.state} />;
 }
 

@@ -12,10 +12,14 @@ import {
   createDashboard,
   deleteDashboard,
   getDashboard,
+  getDashboards,
 } from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
-import type { Widget } from "@/lib/views/dashboards/types";
+import type { Widget, WidgetResult } from "@/lib/views/dashboards/types";
+import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
+import { readDashboardItems } from "@/lib/views/home/dashboard-items";
 import { FOCUSED_READS, loadFocusedOverview } from "@/lib/views/home/focused-load";
+import type { OverviewReadScope } from "@/lib/views/home/overview-reads";
 import {
   findDashboardWidget,
   offeredDashboardWidgets,
@@ -217,6 +221,58 @@ test("nothing is read without an entry, and a failed read is not an empty one", 
     },
   });
   assert.equal(failed.dashboards, "failed");
+});
+
+test("an RQL widget shows its rows with the rql flag on, and is not read with it off", async () => {
+  const made = await createDashboard(
+    {
+      projectId: PROJECT,
+      name: "RQL",
+      widgets: [
+        {
+          id: "rql",
+          title: "Traces",
+          query: sqlWidgetQuery("select count(*) as traces from traces"),
+          chart: "sql",
+          layout: { x: 0, y: 0, w: 6, h: 5 },
+        },
+      ],
+      filters: {},
+      ...EDITOR,
+    },
+    db,
+  );
+  assert.ok(made);
+  const rows: WidgetResult = {
+    kind: "sql",
+    columns: [{ name: "traces", type: "integer" }],
+    rows: [[4]],
+    truncated: false,
+  };
+  const at = {
+    projectId: PROJECT,
+    organization: { id: ORG } as OverviewReadScope["organization"],
+    current: { since: new Date(NOW.getTime() - 7 * 86_400_000), until: NOW },
+    before: { since: new Date(NOW.getTime() - 14 * 86_400_000), until: NOW },
+    now: NOW,
+    db,
+  };
+  const id = dashboardItemId(made.id, "rql");
+  const read = (on: boolean) =>
+    readDashboardItems(
+      at,
+      [id],
+      { preset: "7d", from: "", to: "" },
+      {
+        dashboards: getDashboards,
+        widget: async () => rows,
+        rqlEnabled: async () => on,
+      },
+    );
+  const on = (await read(true))[id];
+  assert.equal(on?.kind === "widget" && on.result, rows);
+  const off = (await read(false))[id];
+  assert.equal(off?.kind === "widget" && off.result, null);
 });
 
 test("the picker offers the project's own widgets, by dashboard", async () => {

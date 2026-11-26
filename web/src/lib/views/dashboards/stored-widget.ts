@@ -15,7 +15,7 @@ import {
  */
 
 /** Every switch on: a widget whose switch is off is not broken. */
-const FEATURES = { customMonitoring: true } as const;
+const FEATURES = { customMonitoring: true, rql: true } as const;
 
 export function isBroken(widget: DashboardWidget): widget is BrokenWidget {
   return "problem" in widget;

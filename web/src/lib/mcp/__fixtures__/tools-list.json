@@ -4296,7 +4296,7 @@
           "maxLength": 36
         },
         "query": {
-          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. With the rql flag on, a query of kind sql (RQL text) gives a table. It cannot be a panel.",
+          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. With the rql flag on, a query of kind sql (RQL text) gives a table. It cannot be a panel, but it can be a widget of chart sql.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -4334,7 +4334,8 @@
                   "step_flow",
                   "funnel",
                   "clusters",
-                  "geography"
+                  "geography",
+                  "sql"
                 ],
                 "description": "line, bar, number or table for a metric; else the query's kind."
               }
@@ -4381,6 +4382,13 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 50
+        },
+        "as": {
+          "description": "sql (rql flag): for a lone metric query, give the RQL text of its numbers (the web app's Edit as SQL) instead of running it. A rate, a context metric and a group-by model, tool or agent have none yet: the refusal says why.",
+          "type": "string",
+          "enum": [
+            "sql"
+          ]
         }
       }
     },
@@ -6333,7 +6341,7 @@
                 "type": "string"
               },
               "additionalProperties": {},
-              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}."
+              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}. With the rql flag on, a query of kind sql: RQL text that gives one row with one number, such as {\"version\":1,\"kind\":\"sql\",\"rqlVersion\":1,\"text\":\"select count(*) from traces where has_error\"}. Its window is the rule's window."
             },
             "operator": {
               "type": "string",
@@ -6582,7 +6590,8 @@
                 "step_flow",
                 "funnel",
                 "clusters",
-                "geography"
+                "geography",
+                "sql"
               ],
               "description": "line, bar, number or table for a metric; else the query's kind."
             }

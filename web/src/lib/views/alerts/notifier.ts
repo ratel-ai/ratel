@@ -1,5 +1,4 @@
-import type { MetricQuery } from "@/lib/contracts/query";
-import type { AlertCondition, AlertNoticeKind } from "@/lib/views/alerts/types";
+import type { AlertCondition, AlertNoticeKind, AlertQuery } from "@/lib/views/alerts/types";
 
 /** One message: a rule fired, or recovered. */
 export interface AlertNotice extends AlertCondition {
@@ -10,7 +9,7 @@ export interface AlertNotice extends AlertCondition {
   projectId: string;
   projectName: string;
   /** Null: the rule's stored query is malformed by now. */
-  query: MetricQuery | null;
+  query: AlertQuery | null;
   value: number | null;
   at: Date;
   /** The destinations that already have this message. */

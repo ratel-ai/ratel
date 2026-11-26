@@ -6,6 +6,7 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@ratel/
 import { Skeleton } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import { Braces, ChevronDown, Copy, Ellipsis, LayoutDashboard, Trash2 } from "lucide-react";
+import { useRqlFlag } from "@/components/console/dashboards/RqlFlag";
 import {
   type ServedResults,
   useWidgetPreview,
@@ -57,7 +58,10 @@ export function ExplorePanel({
 }) {
   const { preview, pending } = useWidgetPreview(projectId, widget, range, filters, served);
   const name = widgetName(widget);
-  const complete = parseWidget(widget, { customMonitoring: useScorers() !== null }).ok;
+  const complete = parseWidget(widget, {
+    customMonitoring: useScorers() !== null,
+    rql: useRqlFlag(),
+  }).ok;
 
   async function copyQuery() {
     try {
@@ -79,7 +83,9 @@ export function ExplorePanel({
         </h2>
         {Object.keys(filters).length > 0 &&
         !isFilterable(widget.query) &&
-        widget.query.kind !== "clusters" ? (
+        widget.query.kind !== "clusters" &&
+        // The page's filter applies to RQL text when it runs.
+        widget.query.kind !== "sql" ? (
           <p className="shrink-0 text-xs text-fg-subtle">Not filtered</p>
         ) : null}
         <Menu>

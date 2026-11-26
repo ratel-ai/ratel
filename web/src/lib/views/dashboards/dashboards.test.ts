@@ -15,8 +15,8 @@ import { loadWidgets } from "@/lib/views/dashboards/data";
 import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
-import { type MetricWidget, SQL_WIDGET_PROBLEM } from "@/lib/views/dashboards/types";
-import { scorerWidget } from "@/lib/views/dashboards/widget";
+import { type MetricWidget, RQL_OFF_PROBLEM } from "@/lib/views/dashboards/types";
+import { SQL_CHART_PROBLEM, scorerWidget } from "@/lib/views/dashboards/widget";
 
 const FILTER: TraceFilter = {
   models: ["gpt-4o", "a&b"],
@@ -204,11 +204,17 @@ function grouped(series: [string, number[]][]): MetricResult {
   };
 }
 
-test("a query of kind sql is no widget yet: no chart draws its rows", () => {
+test("a query of kind sql is a widget of chart sql, with the rql flag only", () => {
   const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
+  assert.deepEqual(parseWidget({ title: "", query, chart: "sql" }, { customMonitoring: true }), {
+    ok: false,
+    error: RQL_OFF_PROBLEM,
+  });
+  const on = { customMonitoring: true, rql: true };
+  assert.ok(parseWidget({ title: "", query, chart: "sql" }, on).ok);
   for (const chart of ["table", "number", "line"])
-    assert.deepEqual(parseWidget({ title: "", query, chart }, { customMonitoring: true }), {
+    assert.deepEqual(parseWidget({ title: "", query, chart }, on), {
       ok: false,
-      error: SQL_WIDGET_PROBLEM,
+      error: SQL_CHART_PROBLEM,
     });
 });

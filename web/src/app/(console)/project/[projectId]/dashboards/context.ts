@@ -20,5 +20,9 @@ export async function metricFeatures(subject: {
   organizationId: string;
   actor: string;
 }): Promise<MetricFeatures> {
-  return { customMonitoring: await featureEnabled("customMonitoring", subject) };
+  const [customMonitoring, rql] = await Promise.all([
+    featureEnabled("customMonitoring", subject),
+    featureEnabled("rql", subject),
+  ]);
+  return { customMonitoring, rql };
 }

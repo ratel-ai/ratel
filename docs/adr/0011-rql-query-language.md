@@ -78,6 +78,15 @@ users), and the query's own `WHERE`, `GROUP BY` and the rest apply to those tota
 held the totals could not take the window: a session's total over all time is not its total in
 the window. The views stay simple filters, and the totals have one definition, in the catalog.
 
+**The page filter applies like the window, and through the trace.** A query that runs under a
+page (a dashboard widget, an Explore panel) gets the page's trace filter from the caller, never
+from the text, as it gets the window. The compiler adds it next to the window as bound
+parameters: on `traces` as conditions on its own columns, and on the other four tables as
+`trace_id in (select trace_id from rql.traces where ...)`. Each part of the filter then applies on
+every table, with the meaning the metric form gives it (the rows of the traces that match), so
+`Edit as SQL` keeps a widget's numbers under a filter. On `sessions` and `users` it narrows the
+trace rows before the totals, as the window does. Alert rules have no page and give no filter.
+
 **One catalog, two uses.** `describeRqlSchema()` gives the MCP tool `describe_rql_schema` the
 same tables, columns, functions, limits, rules and examples that the compiler checks against. A
 test compiles every example.

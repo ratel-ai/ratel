@@ -21,6 +21,8 @@ export type MetricSource = "traces" | "context" | "scores";
 /** The switches an entry can wait for. */
 export interface MetricFeatures {
   customMonitoring: boolean;
+  /** The `rql` flag: widgets and alert rules of kind sql. Off unless given. */
+  rql?: boolean;
 }
 
 export interface MetricDefinition {
@@ -121,7 +123,7 @@ export function nothingIsZero(aggregation: Aggregation): boolean {
 
 /** Whether a project with these switches may use the entry. */
 export function metricOffered(metric: MetricDefinition, features: MetricFeatures): boolean {
-  return !metric.feature || features[metric.feature];
+  return !metric.feature || features[metric.feature] === true;
 }
 
 /** The entries a form offers, in menu order. */

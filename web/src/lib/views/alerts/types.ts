@@ -1,4 +1,10 @@
-import type { MetricQuery } from "@/lib/contracts/query";
+import type { MetricQuery, SqlQuery } from "@/lib/contracts/query";
+
+/**
+ * What a rule compares: an ungrouped metric, or (behind the `rql` flag) RQL text that gives one
+ * row with one number.
+ */
+export type AlertQuery = MetricQuery | SqlQuery;
 
 export const ALERT_OPERATORS = ["above", "below"] as const;
 export type AlertOperator = (typeof ALERT_OPERATORS)[number];
@@ -20,7 +26,7 @@ export interface AlertCondition {
 export interface AlertDraft extends AlertCondition {
   name: string;
   /** The query object of a widget, without dimensions: an alert compares one number. */
-  query: MetricQuery;
+  query: AlertQuery;
   /** Where its messages go. Empty: it notifies nobody. */
   destinationIds: string[];
 }
@@ -28,9 +34,11 @@ export interface AlertDraft extends AlertCondition {
 export interface AlertRule extends Omit<AlertDraft, "query"> {
   id: string;
   /** Null: what is stored is no query any more, and the rule needs attention. */
-  query: MetricQuery | null;
+  query: AlertQuery | null;
   /** Why it needs attention. */
   problem: string | null;
+  /** Why its last evaluation failed (an RQL rule whose query RQL refused), or null. It does not fire. */
+  lastError: string | null;
   projectId: string;
   enabled: boolean;
   state: AlertState;
@@ -44,7 +52,7 @@ export interface AlertRule extends Omit<AlertDraft, "query"> {
 export type AlertingRule = Pick<
   AlertRule,
   "id" | "name" | "operator" | "threshold" | "lastValue" | "stateChangedAt"
-> & { query: MetricQuery };
+> & { query: AlertQuery };
 
 /** How many rules a project has, how many are on, and how many of those have no data. */
 export interface AlertRuleCounts {

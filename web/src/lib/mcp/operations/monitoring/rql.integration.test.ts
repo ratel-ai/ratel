@@ -228,7 +228,7 @@ test("query_monitoring refuses kind sql with the rql flag off, and in panels alw
   });
   assert.ok(!panels.ok);
   assert.equal(panels.error, "invalid_params");
-  assert.match(panels.message, /kind sql cannot be a widget, a panel/);
+  assert.match(panels.message, /kind sql cannot be a panel/);
 });
 
 test("describe_monitoring_schema lists kind sql only with the rql flag on", async () => {

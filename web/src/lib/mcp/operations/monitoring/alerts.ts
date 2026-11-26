@@ -56,7 +56,7 @@ const ruleShape = z.strictObject({
   query: z
     .record(z.string(), z.unknown())
     .describe(
-      'A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {"version":1,"kind":"metric","measures":[{"measure":"error_rate","aggregation":"rate"}]}.',
+      'A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {"version":1,"kind":"metric","measures":[{"measure":"error_rate","aggregation":"rate"}]}. With the rql flag on, a query of kind sql: RQL text that gives one row with one number, such as {"version":1,"kind":"sql","rqlVersion":1,"text":"select count(*) from traces where has_error"}. Its window is the rule\'s window.',
     ),
   operator: z.enum(ALERT_OPERATORS),
   threshold: z
@@ -269,7 +269,10 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
           { projectId, ...(await changeOf(params, projectId, deps)) },
           {
             ...callerAccess(ctx, caller),
-            features: async () => ({ customMonitoring: true }),
+            features: async () => ({
+              customMonitoring: true,
+              rql: await deps.rqlEnabled(caller),
+            }),
             store: {
               createAlertRule: (project, draft, actor) =>
                 store.createAlertRule(project, draft, actor, db),
@@ -501,8 +504,16 @@ function listed(rule: AlertRule) {
     unit,
     enabled: rule.enabled,
     state: rule.state,
-    status: rule.problem ? "Needs attention" : rule.enabled ? STATE_LABELS[rule.state] : "Paused",
+    status: rule.problem
+      ? "Needs attention"
+      : !rule.enabled
+        ? "Paused"
+        : rule.lastError
+          ? "Failing"
+          : STATE_LABELS[rule.state],
     problem: rule.problem,
+    /** Why the last evaluation of an RQL rule failed: it does not fire meanwhile. */
+    lastError: rule.lastError,
     lastValue: rule.lastValue,
     lastValueText: rule.lastValue === null ? null : measuredText(rule.lastValue, unit),
     stateChangedAt: rule.stateChangedAt?.toISOString() ?? null,

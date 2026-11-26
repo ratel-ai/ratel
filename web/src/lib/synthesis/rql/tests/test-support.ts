@@ -6,7 +6,11 @@ import type { RqlPool } from "../adapters/pg-executor";
 
 /** A pool over one PGlite. PGlite has one connection, so a client waits for the one before it. */
 export async function pglitePool(): Promise<RqlPool & { end(): Promise<void> }> {
-  const db: PGlite = await createMigratedPGlite();
+  return pglitePoolOf(await createMigratedPGlite());
+}
+
+/** A pool over a PGlite that another fixture made and seeded. */
+export function pglitePoolOf(db: PGlite): RqlPool & { end(): Promise<void> } {
   let queue: Promise<void> = Promise.resolve();
   return {
     async connect() {

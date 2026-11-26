@@ -54,8 +54,8 @@ Dashboards and alerts both call it. Kind `sql` (RQL text) runs here too, through
   caller that can read a scorer entry imports that module.
 - A query the contract does not allow throws `QueryError`. A refusal of RQL (kind `sql`) carries
   `detail: { code, fix }` and the message as RQL wrote them: a compile error, a run error, `rql_off`
-  (the flag), `rql_version` (a version newer than the server's) and `rql_filter` (a filter of the
-  scope: the text says what it keeps).
+  (the flag) and `rql_version` (a version newer than the server's). The filter of the scope keeps
+  the rows whose trace matches (`synthesis/rql`).
 - Kind `sql` reads the window of the scope as the window of the query: a time condition in the text
   narrows it. It reads through the RQL pool, never the `db` argument, and ignores `scope.by`.
 

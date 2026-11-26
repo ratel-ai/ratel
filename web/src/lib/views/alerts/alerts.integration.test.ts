@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import { metricQuery } from "@/lib/contracts/query";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { runQuery } from "@/lib/synthesis/metrics/query";
+import { metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
+import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 import { type AlertActionDeps, changeAlert } from "./actions";
 import { deliverAlerts, MAX_ATTEMPTS } from "./deliver";
 import {
@@ -410,6 +416,92 @@ test("a channel destination is one per project, and keeps its last access", asyn
   await deleteDestination(OTHER, other, db);
 });
 
+test("an RQL rule fires over its threshold, resolves under it, and fails without firing on a refusal", async () => {
+  useRql();
+  const id = await rule({
+    name: "Failed traces",
+    query: sqlWidgetQuery("select count(*) as failed from traces where has_error"),
+    threshold: 1,
+  });
+  const { tick, notifier } = stepper();
+
+  await trace(true);
+  await trace(true);
+  await trace(false);
+  await tick();
+  assert.deepEqual(
+    notifier.notices.map(({ kind, ruleId, value }) => [kind, ruleId, value]),
+    [["fire", id, 2]],
+  );
+
+  // The window moves past the failed traces.
+  await later(10);
+  await trace(false);
+  await tick();
+  assert.deepEqual(
+    notifier.notices.map(({ kind, value }) => [kind, value]),
+    [
+      ["fire", 2],
+      ["recovery", 0],
+    ],
+  );
+
+  // A query RQL refuses at run time marks the rule as failing: no state change, no message.
+  await client.query("update alert_rules set query = $2 where id = $1", [
+    id,
+    sqlWidgetQuery("select count(*) from spans"),
+  ]);
+  await later(10);
+  await trace(true);
+  await trace(true);
+  const failing = await evaluate();
+  assert.equal(failing.failed, 1);
+  const stored = await store.getAlertRule(PROJECT, id, db);
+  assert.equal(stored?.state, "ok");
+  assert.match(stored?.lastError ?? "", /spans.*Fix: /);
+  await tick();
+  assert.equal(notifier.notices.length, 2);
+
+  // Fixed, it reads again and the error goes.
+  await client.query("update alert_rules set query = $2 where id = $1", [
+    id,
+    sqlWidgetQuery("select count(*) from traces where has_error"),
+  ]);
+  await later(10);
+  await trace(true);
+  await trace(true);
+  await tick();
+  const fixed = await store.getAlertRule(PROJECT, id, db);
+  assert.deepEqual([fixed?.state, fixed?.lastError, fixed?.lastValue], ["alerting", null, 2]);
+});
+
+test("an RQL rule must give one row with one number: anything else is refused at save", async () => {
+  const on = { features: async () => ({ customMonitoring: true, rql: true }) };
+  const draft = (text: string) => ({ ...DRAFT, query: sqlWidgetQuery(text) });
+  const refusals: [string, RegExp][] = [
+    ["select count(*), avg(duration_ms) from traces", /gives 2 columns/],
+    ["select count(*) from traces group by service_name", /can give many rows/],
+    ["select duration_ms from traces", /can give many rows/],
+    ["select max(service_name) from traces", /is text/],
+    ["select count(*) from spans", /spans.*Fix: /],
+  ];
+  for (const [text, error] of refusals) {
+    const result = await change({ action: "create", draft: draft(text) }, on);
+    assert.ok(!result.ok, text);
+    assert.match(result.error, error, text);
+  }
+  const off = await change({ action: "create", draft: draft("select count(*) from traces") });
+  assert.ok(!off.ok);
+  assert.match(off.error, /RQL is off/);
+  const created = await change(
+    { action: "create", draft: draft("select count(*) from traces") },
+    on,
+  );
+  assert.ok(created.ok, JSON.stringify(created));
+  const saved = await store.getAlertRule(PROJECT, created.ruleId, db);
+  assert.deepEqual(saved?.query, sqlWidgetQuery("select count(*) from traces"));
+});
+
 test("a person creates, edits, pauses and deletes a rule; others cannot", async () => {
   const created = await change({ action: "create", draft: DRAFT });
   assert.ok(created.ok);
@@ -472,6 +564,18 @@ async function later(minutes: number) {
 
 function evaluate() {
   return evaluateAlerts({ now: () => now, flagOn: async () => true }, db);
+}
+
+/** Kind sql through the RQL runner on this database, with the `rql` flag on. */
+function useRql() {
+  metricSeams.sql = sqlQueryRunner({
+    flags: { config: resolveConfig({ override: { flags: { rql: true } } }), port: undefined },
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(client)),
+      gate: createRqlGate(),
+      observe: async () => {},
+    },
+  });
 }
 
 function stepper() {

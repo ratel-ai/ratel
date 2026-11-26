@@ -30,7 +30,7 @@ import {
 } from "@/lib/views/alerts/destinations";
 import { alertsHref } from "@/lib/views/alerts/links";
 import { parseAlertQuery } from "@/lib/views/alerts/parse-rule";
-import { loadAlertPreview } from "@/lib/views/alerts/preview";
+import { type AlertPreviewResult, loadAlertPreview } from "@/lib/views/alerts/preview";
 import { postTo } from "@/lib/views/alerts/slack";
 import * as store from "@/lib/views/alerts/store";
 import { ALERT_WINDOWS, type AlertWindow } from "@/lib/views/alerts/types";
@@ -97,9 +97,9 @@ export async function changeDestinationAction(
   );
 }
 
-export type AlertPreview = { ok: true; result: MetricResult } | { ok: false; error: string };
+export type AlertPreview = { ok: true; result: AlertPreviewResult } | { ok: false; error: string };
 
-/** The form's chart: the last 7 days of what the alert would measure. */
+/** The form's chart: the last 7 days of what the alert would measure, or the value of its RQL text now. */
 export async function previewAlertAction(
   projectId: string,
   rawQuery: unknown,

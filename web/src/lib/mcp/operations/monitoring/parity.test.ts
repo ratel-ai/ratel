@@ -120,9 +120,10 @@ test("each Explore action is an operation that takes the panel's query object", 
     z.toJSONSchema(operations.get(id)?.params as z.ZodType, { io: "input" }) as unknown as {
       properties: Record<string, { enum?: string[]; maxItems?: number }>;
     };
-  for (const [what, { operation, change }] of Object.entries(EXPLORE)) {
+  for (const [what, { operation, change, as }] of Object.entries(EXPLORE)) {
     assert.ok(operations.has(operation), `${what}: ${operation}`);
     if (change) assert.ok(schemaOf(operation).properties.action.enum?.includes(change), what);
+    if (as) assert.ok(schemaOf(operation).properties.as?.enum?.includes(as), what);
   }
   assert.equal(schemaOf("query_monitoring").properties.queries.maxItems, MAX_PANELS);
   // The page changes and reads nothing that is not in the list.

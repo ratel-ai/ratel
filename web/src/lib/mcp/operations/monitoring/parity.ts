@@ -154,10 +154,17 @@ export const CHANGES: Readonly<
 
 /**
  * What a person does in Explore, which stores nothing, and the operation that does the same with
- * the same query object. `change` is the operation's own `action`.
+ * the same query object. `change` is the operation's own `action`; `as` its own `as`.
  */
-export const EXPLORE: Readonly<Record<string, { operation: string; change?: string }>> = {
+export const EXPLORE: Readonly<
+  Record<string, { operation: string; change?: string; as?: string }>
+> = {
   "run a panel": { operation: "query_monitoring" },
+  "run an RQL query in the SQL mode": { operation: "query_monitoring" },
+  "turn a metric panel into its RQL text (Edit as SQL)": {
+    operation: "query_monitoring",
+    as: "sql",
+  },
   "show two to four panels": { operation: "query_monitoring" },
   "share the page (the result's href)": { operation: "query_monitoring" },
   "open a widget or a trace filter in Explore": { operation: "query_monitoring" },
@@ -174,6 +181,7 @@ export const EXPLORE_FILES = [
   "components/console/explore/SaveToDashboard.tsx",
   "components/console/explore/use-explore-panels.ts",
   "components/console/dashboards/use-widget-preview.ts",
+  "components/console/dashboards/SqlFields.tsx",
 ] as const;
 
 /** The functions a source file exports. */

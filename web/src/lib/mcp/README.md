@@ -38,7 +38,9 @@ query object. `query_monitoring` runs one query, or two to four panels with `que
 window and one set of filters; its `href` is the Explore page with the same panels, filters and
 exact window, and a host with views draws the panels side by side. The filter of a query is a list of
 clauses that must all match: its own properties, then each one of `and`. All clauses with the filters
-of the dashboard or the call are 3,072 bytes of JSON at most.
+of the dashboard or the call are 3,072 bytes of JSON at most. With `as: "sql"` (behind `rql`) it gives
+the RQL text of a lone metric query instead of its numbers: the web app's `Edit as SQL`
+(`views/dashboards/edit-as-sql.ts`), or the reason when the metric has no RQL form yet.
 `change_dashboard` (`create`, `add_widget`) saves a panel, and `change_alert` (`create`) watches an
 ungrouped metric. `EXPLORE` in `operations/monitoring/parity.ts` is that list, and the parity test
 fails for an action of the page that is not in it.

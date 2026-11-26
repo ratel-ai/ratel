@@ -4,7 +4,7 @@ import { parseQuery } from "@/lib/contracts/query";
 import { type MetricFeatures, metricOffered } from "@/lib/synthesis/metrics/catalog";
 import {
   MAX_WIDGET_TITLE,
-  SQL_WIDGET_PROBLEM,
+  RQL_OFF_PROBLEM,
   WIDGET_CHARTS,
   type WidgetInput,
 } from "@/lib/views/dashboards/types";
@@ -33,7 +33,7 @@ export function parseWidget(
     };
   const query = parseOfferedQuery(parsed.data.query, features);
   if (!query.ok) return query;
-  if (query.query.kind === "sql") return { ok: false, error: SQL_WIDGET_PROBLEM };
+  if (query.query.kind === "sql" && !features.rql) return { ok: false, error: RQL_OFF_PROBLEM };
   const widget: WidgetInput = { ...parsed.data, query: query.query };
   const problem = chartProblem(widget);
   return problem ? { ok: false, error: problem } : { ok: true, widget };

@@ -8,7 +8,7 @@ has no database access. The runner (`run.ts`) runs a compiled query on the read-
 
 ```ts
 compileRql(text, { now, window? }):
-  | { ok: true, sql, params, limitParam, columns: { name, type }[], table, window: { from, to }, limit }
+  | { ok: true, sql, params, limitParam, columns: { name, type }[], table, window: { from, to }, limit, oneRow }
   | { ok: false, error: { code, message, fix, at? } }
 describeRqlSchema(): RqlSchemaDescription   // for describe_rql_schema
 runRql(compiled, { projectId }, deps?):
@@ -23,7 +23,9 @@ runRql(compiled, { projectId }, deps?):
 | `domain/limits.ts` | `RQL_LIMITS`: the default and the longest window, the default and the most rows |
 | `domain/ast.ts` | the parsed tree the parser port gives, with a `foreign` node for each refused construct |
 | `domain/check.ts` | pure: the parsed tree to a typed tree of catalog names and literal values, or the error |
-| `domain/rewrite.ts` | pure: prints the SQL from the typed tree; names are quoted catalog names, outputs are `c1`, `c2`..., values are `$n::type` |
+| `domain/rewrite.ts` | pure: prints the SQL from the typed tree; names are quoted catalog names, outputs are `c1`, `c2`..., values are `$n::type`; adds the window and the page filter |
+| `domain/version.ts` | `RQL_VERSION` alone, so a browser bundle that writes a query of kind sql does not take the catalog |
+| `domain/page-filter.ts` | pure: `RqlPageFilter` (the console's trace filter) and its conditions on `rql.traces` |
 | `domain/window.ts`, `domain/compile.ts`, `domain/errors.ts` | the window rules; parse, check and rewrite in one call; the error codes and `nearestName` (edit distance) |
 | `domain/describe.ts` | pure: the schema description (tables, columns, functions, operators, limits, rules, examples) |
 | `ports/parser.ts`, `adapters/pgsql-ast-parser.ts` | the `RqlParser` port and its one adapter |
@@ -107,8 +109,18 @@ something imports `synthesis/rql/query`. The seam refuses the query with `rql_of
 flag is off for the project; that check is here only. The text is compiled at every run, so a
 saved query is checked again at load: a version newer than `RQL_VERSION` is `rql_version`, an older
 one is compiled with today's RQL and, when it no longer compiles, the compile error says so. The
-window of the query is the scope's (`since`, `until`). A filter of the scope is `rql_filter`.
-Widgets, Explore panels, dashboard documents and alerts refuse the kind: none draws rows yet.
+window of the query is the scope's (`since`, `until`). The filter of the scope (the page filter of a
+dashboard or of Explore) goes to the compiler as `filter`: it keeps the rows whose trace matches, as
+the metric form does. On `traces` each part is a condition on its own columns; on `events`,
+`scores`, `sessions` and `users` it is `trace_id in (select trace_id from rql.traces where ...)`, so
+every part (models, tools, services, environments, agents, MCP servers, status, minimum cost,
+minimum tokens and the `and` clauses) applies on every table and no part is left out. On `sessions`
+and `users` it narrows the trace rows before their totals. Each value is a bound parameter. Alert
+rules give no filter.
+A widget of chart `sql` holds the kind (`views/dashboards`: a table, or a chart for rows with one
+time column), and so do dashboard documents and Explore's SQL mode. An alert rule holds it when the
+text gives one row with one number (`oneRow` and the column type, checked at save and at each run;
+`views/alerts`). `query_monitoring` refuses it as one of several panels.
 `query_monitoring` runs a lone query of the kind, and the MCP tool `run_rql` runs its RQL text as
 this kind; `describe_rql_schema` gives `describeRqlSchema()` (`lib/mcp/README.md`, RQL through MCP).
 

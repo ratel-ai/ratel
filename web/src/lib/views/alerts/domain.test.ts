@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { metricQuery } from "@/lib/contracts/query";
 import { breaches, evaluationIntervalMs, evaluationWindow, nextState } from "./domain";
-import { parseAlertQuery, parseRule } from "./parse-rule";
+import { parseAlertQuery, parseRule, sqlAlertProblem } from "./parse-rule";
 
 const ABOVE = { operator: "above", threshold: 10 } as const;
 const BELOW = { operator: "below", threshold: 10 } as const;
@@ -108,15 +108,28 @@ test("a rule from outside is checked like a widget", () => {
   }
 });
 
-test("an alert refuses a query of kind sql: it compares one number", () => {
-  assert.deepEqual(
-    parseAlertQuery(
-      { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 },
-      { customMonitoring: true },
-    ),
-    {
-      ok: false,
-      error: "An alert compares one number: a sql has none.",
-    },
-  );
+test("an alert takes a query of kind sql with the rql flag only", () => {
+  const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
+  assert.deepEqual(parseAlertQuery(query, { customMonitoring: true }), {
+    ok: false,
+    error: "RQL is off for this project, so an alert cannot watch RQL text.",
+  });
+  assert.deepEqual(parseAlertQuery(query, { customMonitoring: true, rql: true }), {
+    ok: true,
+    query,
+  });
+});
+
+test("RQL text is an alert when it gives one row with one number", () => {
+  const now = new Date("2026-11-25T12:00:00Z");
+  assert.equal(sqlAlertProblem("select count(*) from traces where has_error", now), null);
+  assert.equal(sqlAlertProblem("select avg(duration_ms) / 1000 from traces", now), null);
+  for (const [text, problem] of [
+    ["select count(*), max(cost_usd) from traces", /gives 2 columns/],
+    ["select max(service_name) from traces", /is text/],
+    ["select count(*) from traces group by environment", /can give many rows/],
+    ["select cost_usd from traces", /can give many rows/],
+    ["select nope from traces", /Fix: /],
+  ] as const)
+    assert.match(sqlAlertProblem(text, now) ?? "", problem, text);
 });
