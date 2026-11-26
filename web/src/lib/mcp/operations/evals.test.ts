@@ -238,6 +238,7 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     mayReadContent: async () => true,
     organizationIdOf: async () => "org-1",
     now: () => T0,
+    sleep: async () => {},
     ...overrides,
   };
 }
@@ -509,17 +510,45 @@ test("evals_get_run: shows for each case the input, the outputs and the raw coun
   assert.match(result.hint ?? "", /evals_compare/);
 });
 
-test("evals_get_run: a running run hints to poll again", async () => {
+test("evals_get_run: waits for a running run to end", async () => {
+  let reads = 0;
+  const result = ok<{ state: string }>(
+    await call(
+      "evals_get_run",
+      { runId: RUN },
+      {
+        getExperiment: async () => {
+          reads += 1;
+          return reads < 3 ? experiment({ state: "running", finishedAt: null }) : experiment();
+        },
+      },
+    ),
+  );
+  assert.equal(result.data.state, "completed");
+  assert.equal(reads, 3);
+});
+
+test("evals_get_run: a run still running after the wait hints to call again", async () => {
+  let clock = T0.getTime();
   const result = ok<{ state: string }>(
     await call(
       "evals_get_run",
       { runId: RUN },
       {
         getExperiment: async () => experiment({ state: "running", finishedAt: null }),
+        now: () => new Date(clock),
+        sleep: async (ms) => {
+          clock += ms;
+        },
       },
     ),
   );
+  assert.equal(result.data.state, "running");
   assert.match(result.hint ?? "", /again/);
+  assert.ok(
+    clock - T0.getTime() <= 30_000,
+    "the wait stays well under the 60 second limit of a call",
+  );
 });
 
 test("evals_get_trial: shows the output and the scorer reasons", async () => {

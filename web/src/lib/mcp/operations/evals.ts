@@ -13,6 +13,7 @@ import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, truncateText } from "@/lib/mcp/serialize";
 import { getDb } from "@/lib/platform/db/client";
+import { getLogger } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { storable } from "@/lib/platform/storable";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
@@ -78,7 +79,10 @@ export interface EvalsOperationDeps {
     by: { userId: string; now: Date },
   ): Promise<ApproveResult>;
   startExperiment(subject: UsageSubject, start: StartExperiment): Promise<StartExperimentResult>;
-  /** The first step of a new eval run. The sweep does the next ones. It must not throw. */
+  /**
+   * Drives a new eval run in this process until it closes, so an agent does not wait for the
+   * sweep. The sweep still takes the steps that this process does not. It must not throw.
+   */
   advance(experiment: Experiment): void;
   /** The newest first. */
   listExperiments(projectId: string, limit: number): Promise<Experiment[]>;
@@ -93,9 +97,16 @@ export interface EvalsOperationDeps {
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
   organizationIdOf(projectId: string): Promise<string | null>;
   now(): Date;
+  sleep(ms: number): Promise<void>;
 }
 
+const logger = getLogger("mcp/evals");
 const LIST_LIMIT = 50;
+/** How long `evals_get_run` waits for a running eval run to end. Far below the 60 s of a call. */
+export const RUN_WAIT_MS = 20_000;
+const POLL_MS = 2_000;
+/** A run that the process drives longer than this is left to the sweep. */
+const DRIVE_MS = 15 * 60_000;
 const CASES_SHOWN = 100;
 /** The outputs that `evals_get_run` reads, one query each. */
 const OUTPUTS_SHOWN = 60;
@@ -111,8 +122,9 @@ const defaultDeps: EvalsOperationDeps = {
     createDrizzleCaseStore(getDb()).approve(projectId, caseId, draft, by),
   startExperiment: (subject, start) => startExperiment(subject, start, experimentDeps()),
   advance: (experiment) => {
-    void advance(experiment).catch(() => {
+    void drive(experiment).catch((error: unknown) => {
       // The sweep takes the next step of a running eval run.
+      logger.warn({ err: error, experiment_id: experiment.id }, "eval run left to the sweep");
     });
   },
   listExperiments: (projectId, limit) =>
@@ -129,6 +141,7 @@ const defaultDeps: EvalsOperationDeps = {
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
   organizationIdOf: async (projectId) => (await getProjectById(projectId))?.organizationId ?? null,
   now: () => new Date(),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
 
 const caseIdParam = uuidParam().describe("The id of a case. evals_list_cases gives the case ids.");
@@ -412,7 +425,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             cases: experiment.caseVersions.length,
             trials: experiment.caseVersions.length * experiment.trialsPerCase,
           },
-          hint: `The eval run started. Call evals_get_run with runId "${experiment.id}" every 10 to 20 seconds until its state is completed.`,
+          hint: `The eval run started. Call evals_get_run with runId "${experiment.id}". It waits up to ${RUN_WAIT_MS / 1000} seconds for the run to end. Call it again while the state is running.`,
         };
       },
     }),
@@ -454,14 +467,18 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Read an eval run",
       description:
-        "Use this tool to read an eval run. It returns the state and the raw counts, and for each case its input, the output of each trial, the trial results and the scorer results.",
+        "Use this tool to read an eval run. A running run is awaited up to 20 seconds. It returns the state and the raw counts, and for each case its input, the output of each trial, the trial results and the scorer results.",
       keywords: ["evals", "run", "experiment", "results", "outputs", "trials", "counts"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped, runId: runIdParam }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
-        const experiment = await deps.getExperiment(ctx.projectId, params.runId);
+        const experiment = await waitForEnd(
+          deps,
+          ctx.projectId,
+          await deps.getExperiment(ctx.projectId, params.runId),
+        );
         if (!experiment) throw notFound("eval run");
         const [trials, readable] = await Promise.all([
           deps.trials(experiment.id),
@@ -474,7 +491,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           hint: !readable
             ? CONTENT_WITHHELD_HINT
             : experiment.state === "running"
-              ? `The eval run is running. Call evals_get_run with runId "${experiment.id}" again in 10 to 20 seconds.`
+              ? `The eval run is still running after a wait of ${RUN_WAIT_MS / 1000} seconds. Call evals_get_run with runId "${experiment.id}" again.`
               : `The eval run is completed. Call evals_compare with runId "${experiment.id}" to compare it with the baseline, or evals_pin_baseline to make it the baseline.`,
         };
       },
@@ -616,6 +633,32 @@ async function requireEvals(deps: EvalsOperationDeps, projectId: string): Promis
   throw new McpOperationError("forbidden", "Evals are not on for this project.", {
     reason: "evals_off",
   });
+}
+
+/** Waits a short time for a running eval run to end. A call is limited to 60 seconds. */
+async function waitForEnd(
+  deps: EvalsOperationDeps,
+  projectId: string,
+  experiment: Experiment | null,
+): Promise<Experiment | null> {
+  const deadline = deps.now().getTime() + RUN_WAIT_MS;
+  let current = experiment;
+  while (current?.state === "running" && deps.now().getTime() < deadline) {
+    await deps.sleep(POLL_MS);
+    current = (await deps.getExperiment(projectId, current.id)) ?? current;
+  }
+  return current;
+}
+
+/** Steps a new eval run until it closes. Each step is safe next to the sweep. */
+async function drive(experiment: Experiment): Promise<void> {
+  const deps = experimentDeps();
+  const until = Date.now() + DRIVE_MS;
+  while (Date.now() < until) {
+    const step = await advance(experiment, deps, new Date(until));
+    if (step.closed) return;
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+  }
 }
 
 function requester(auth: McpAuthContext): string {
