@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getLogger } from "@/lib/platform/logger";
-import { snapshotVersionId } from "../domain/snapshot-name";
+import { snapshotPrefix, snapshotVersionId } from "../domain/snapshot-name";
 import {
   type ExecRequest,
   type ExecResult,
@@ -215,18 +215,14 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
     },
 
     async listSnapshots() {
+      // The list takes only `name`, `namePrefix` and `org`, and has no pages: a `limit` is a 400.
+      const query: [string, string][] = [["namePrefix", snapshotPrefix(options.deploymentId)]];
+      const page: unknown = await api.call<unknown>("GET", "/saved-snapshots", { query });
       const found: SnapshotInfo[] = [];
-      let cursor: string | null = null;
-      do {
-        const query: [string, string][] = [["limit", "200"]];
-        if (cursor) query.push(["cursor", cursor]);
-        const page: unknown = await api.call<unknown>("GET", "/saved-snapshots", { query });
-        for (const name of snapshotNamesOf(page)) {
-          const versionId = snapshotVersionId(options.deploymentId, name);
-          if (versionId) found.push({ snapshotRef: name, versionId });
-        }
-        cursor = nextCursorOf(page);
-      } while (cursor);
+      for (const name of snapshotNamesOf(page)) {
+        const versionId = snapshotVersionId(options.deploymentId, name);
+        if (versionId) found.push({ snapshotRef: name, versionId });
+      }
       return found;
     },
   };
@@ -535,13 +531,6 @@ function snapshotNamesOf(page: unknown): string[] {
     const name = (item as { name?: unknown } | null)?.name;
     return typeof name === "string" ? [name] : [];
   });
-}
-
-/** The cursor of the next page, or null when there is no next page or the shape is not known. */
-function nextCursorOf(page: unknown): string | null {
-  const info = (page as { pageInfo?: { hasMore?: unknown; nextCursor?: unknown } } | null)
-    ?.pageInfo;
-  return info?.hasMore === true && typeof info.nextCursor === "string" ? info.nextCursor : null;
 }
 
 async function jsonOf(response: Response): Promise<unknown> {

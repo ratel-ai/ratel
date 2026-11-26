@@ -30,6 +30,11 @@ export function snapshotVersionId(deploymentId: string, name: string): string | 
   return UUID.test(rest) ? rest : null;
 }
 
+/** The start of each snapshot name of a deployment: the list of the service filters by it. */
+export function snapshotPrefix(deploymentId: string): string {
+  return prefixOf(deploymentId);
+}
+
 function prefixOf(deploymentId: string): string {
   const tag =
     deploymentId.length <= MAX_TAG
