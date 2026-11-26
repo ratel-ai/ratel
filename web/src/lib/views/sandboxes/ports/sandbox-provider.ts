@@ -1,6 +1,8 @@
 /**
  * The service that runs virtual machines with Docker. A "prepare" VM loads an image and is saved
- * as a snapshot; a "run" VM starts from that snapshot and runs one agent. The developer never sees
+ * as a snapshot; a "smoke" VM starts from that snapshot and runs the smoke check of the version; a
+ * "run" VM starts from that snapshot and runs one agent. Only a VM that got no secret is saved as
+ * a snapshot (`vm-session.ts`). The developer never sees
  * which service it is, so no message of an error of this port names it. One provider serves one
  * deployment: it marks each VM that it starts as a VM of the deployment.
  */
@@ -30,7 +32,7 @@ export const VM_START_TIMEOUT_MS = 12 * 60_000;
 
 export type StartVmRequest = {
   projectId: string;
-  purpose: "prepare" | "run";
+  purpose: "prepare" | "smoke" | "run";
   /** The snapshot to start from. With none, the VM starts from the base image. */
   fromSnapshot?: string;
   /** The service deletes the VM after this time, if Ratel does not. */
@@ -40,7 +42,7 @@ export type StartVmRequest = {
     inbound: "open" | "closed";
     outbound: { mode: "open" } | { mode: "deny" } | { mode: "allow"; allow: readonly string[] };
   };
-  /** False for run VMs: no snapshot of them is kept, so none can be saved. */
+  /** False for smoke and run VMs: no snapshot of them is kept, so none can be saved. */
   keepSnapshots: boolean;
 };
 

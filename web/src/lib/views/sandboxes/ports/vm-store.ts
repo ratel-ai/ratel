@@ -35,6 +35,15 @@ export interface VmStore {
     claim: VmClaim,
     check: (startsToday: number) => Promise<UsageCheck>,
   ): Promise<{ ok: true; vm: RunVm; isNew: boolean } | UsageRefusal>;
+  /**
+   * Counts the start of a VM that takes no run (the smoke check of a version) when `check` passes.
+   * `check` gets the VM starts of the project of this UTC day, as in `claim`, and the start counts
+   * in them. The row stays `starting` with no reference until `markDeleted`, so no claim gets it.
+   */
+  claimStart(
+    start: Pick<VmClaim, "projectId" | "versionId" | "now">,
+    check: (startsToday: number) => Promise<UsageCheck>,
+  ): Promise<{ ok: true; vm: RunVm } | UsageRefusal>;
   markReady(vmId: string, vmRef: string, now: Date): Promise<void>;
   /** The end of a run on the VM. */
   touch(vmId: string, now: Date): Promise<void>;

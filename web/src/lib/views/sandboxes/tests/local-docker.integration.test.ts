@@ -88,6 +88,8 @@ describe("local Docker provider, end to end", {
   let provider: SandboxProvider;
   /** The VMs that were deleted, each with the markers found in it just before. */
   const checked: Array<{ vmRef: string; markers: string }> = [];
+  /** Each VM start: its purpose and its snapshot. */
+  const starts: Array<{ purpose: string; fromSnapshot?: string; keepSnapshots: boolean }> = [];
   const snapshots: string[] = [];
 
   before(() => {
@@ -103,6 +105,11 @@ describe("local Docker provider, end to end", {
     // Each VM is searched for the markers before it goes.
     provider = {
       ...local,
+      startVm(request) {
+        const { purpose, fromSnapshot, keepSnapshots } = request;
+        starts.push({ purpose, fromSnapshot, keepSnapshots });
+        return local.startVm(request);
+      },
       async deleteVm(vmRef) {
         const found = await local
           .exec(vmRef, { command: `ls -1d ${MARKERS.join(" ")} 2>/dev/null; true`, timeoutS: 30 })
@@ -131,6 +138,12 @@ describe("local Docker provider, end to end", {
     assert.equal(ready?.status, "ready", ready?.reason ?? "");
     assert.equal(ready?.smoke?.ok, true);
     snapshots.push(ready?.imageRef ?? "");
+    // The snapshot comes from a prepare VM; the smoke check runs in a second VM from it.
+    assert.deepEqual(starts, [
+      { purpose: "prepare", fromSnapshot: undefined, keepSnapshots: true },
+      { purpose: "smoke", fromSnapshot: ready?.imageRef, keepSnapshots: false },
+    ]);
+    assert.equal(listed(["ps", "-a", "--filter", `label=ratel-deployment=${DEPLOYMENT}`]), "");
     assert.deepEqual(
       (ready?.smoke as { output: { echo: { input: unknown } } }).output.echo.input,
       CONFIG.input.example,
@@ -217,6 +230,10 @@ async function setup(provider: SandboxProvider, work: string) {
     bundles,
     provider,
     secrets,
+    vms,
+    limits: createInMemoryUsageLimits(),
+    organizationIdOf: async () => ORGANIZATION_ID,
+    callbackUrl: () => "http://127.0.0.1:9",
     sealingKey: () => ({ ok: true, key: KEY }),
     enabled: async () => true,
     now: () => new Date(),

@@ -11,6 +11,7 @@ import { sealSecret } from "@/lib/platform/sealed-secrets";
 import { createDrizzleBuildStore } from "../adapters/drizzle-build-store";
 import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
+import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { sandboxesEnabledForProject, sandboxesOffForAll } from "../gate";
 import { runImageBuild } from "../image-build-job";
@@ -79,6 +80,10 @@ async function setup() {
         bundles,
         provider: vms,
         secrets,
+        vms: createDrizzleVmStore(db),
+        limits: createInMemoryUsageLimits(),
+        organizationIdOf: async () => ORGANIZATION_ID,
+        callbackUrl: () => "https://ratel.example",
         sealingKey: () => ({ ok: true, key: SEALING }),
         enabled: async () => true,
         now: () => new Date(),
@@ -199,7 +204,7 @@ test("a valid push goes preparing, then ready, with its smoke result through the
   };
   assert.deepEqual(await t.prepare(versionId), { status: "ready" });
   const version = await read(await t.get(versionId));
-  assert.deepEqual(statuses, ["preparing"]);
+  assert.deepEqual(statuses, ["preparing", "preparing"], "the prepare VM, then the smoke VM");
   assert.equal(version.status, "ready");
   assert.equal(version.reason, null);
   assert.deepEqual(version.config, CONFIG);

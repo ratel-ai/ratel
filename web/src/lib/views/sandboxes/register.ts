@@ -4,10 +4,13 @@ import { SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { getDb } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
+import { publicBaseUrl } from "@/lib/platform/public-url";
 import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
+import { usageLimits } from "@/lib/platform/usage-limits";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleBuildStore } from "./adapters/drizzle-build-store";
 import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
+import { createDrizzleVmStore } from "./adapters/drizzle-vm-store";
 import { sandboxProvider } from "./adapters/provider-from-env";
 import { sandboxesEnabledForProject } from "./gate";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
@@ -31,6 +34,11 @@ export const sandboxesRegistration: Registration = {
         bundles: bundleStore(),
         provider: sandboxProvider(),
         secrets: createDrizzleSecretStore(getDb()),
+        vms: createDrizzleVmStore(getDb()),
+        limits: usageLimits(),
+        organizationIdOf: async (projectId) =>
+          (await getOrganizationByProjectId(projectId))?.id ?? null,
+        callbackUrl: () => getConfig().sandboxes.callbackUrl ?? publicBaseUrl(),
         sealingKey: () => sealedSecretsKey(),
         enabled: (projectId) => sandboxesEnabledForProject(projectId),
         now: () => new Date(),

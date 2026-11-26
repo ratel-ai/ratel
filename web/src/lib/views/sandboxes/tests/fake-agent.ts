@@ -96,11 +96,6 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
       return ok(`${answer.body}\n${answer.status}`);
     }
     if (command.startsWith("docker logs")) return ok(script.logs ?? "");
-    if (command.startsWith("docker ps -aq")) {
-      const files = [...vm.files.keys()].filter((path) => path.startsWith("/tmp/ratel-smoke-"));
-      const listed = command.includes("docker volume ls -q") ? [...volumes] : [];
-      return ok([...containers, ...listed, ...files].map((line) => `${line}\n`).join(""));
-    }
     return command.includes("rm -f") ? ok() : undefined;
   };
   return { containers, volumes, made, requests };

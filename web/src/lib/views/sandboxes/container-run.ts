@@ -7,8 +7,8 @@ import {
   redact,
   tailOf,
 } from "./domain/contract";
-import type { SandboxProvider } from "./ports/sandbox-provider";
 import { envFile } from "./secret-values";
+import type { VmSession } from "./vm-session";
 
 /**
  * One run of an agent image in a new container of a VM: the smoke check of a version and each
@@ -16,7 +16,8 @@ import { envFile } from "./secret-values";
  * command lines. Docker reads the file when it creates the container, and the file goes at once.
  * Each container has its own name, its own files and its own host port, so runs on one VM do not
  * clash. The container, its anonymous volumes and the files are removed at the end, also after a
- * failure.
+ * failure. The env file is a secret file of the {@link VmSession}: after it, the VM never becomes a
+ * snapshot.
  */
 export type ContainerRunInput = {
   /** The name of the container. It is unique in the VM. */
@@ -66,11 +67,7 @@ const COMMAND_TIMEOUT = 124;
 
 const logger = getLogger("sandboxes/container-run");
 
-export async function runContainer(
-  provider: SandboxProvider,
-  vmRef: string,
-  input: ContainerRunInput,
-): Promise<ContainerRun> {
+export async function runContainer(vm: VmSession, input: ContainerRunInput): Promise<ContainerRun> {
   const { config, secrets, filePrefix } = input;
   const port = config.run?.port ?? DEFAULT_PORT;
   const files = { env: `${filePrefix}env`, request: `${filePrefix}request.json` };
@@ -85,14 +82,13 @@ export async function runContainer(
   let ran: Ran;
   let cleaned = false;
   try {
-    await write(provider, vmRef, files.env, env);
-    await write(provider, vmRef, files.request, JSON.stringify(input.request));
-    ran =
-      config.run?.mode === "command"
-        ? await commandMode(provider, vmRef, run)
-        : await httpMode(provider, vmRef, run);
+    const envBody = Buffer.from(env);
+    await vm.writeSecretFile({ path: files.env, body: envBody, size: envBody.length });
+    const requestBody = Buffer.from(JSON.stringify(input.request));
+    await vm.writeFile({ path: files.request, body: requestBody, size: requestBody.length });
+    ran = config.run?.mode === "command" ? await commandMode(vm, run) : await httpMode(vm, run);
   } finally {
-    cleaned = await clean(provider, vmRef, run);
+    cleaned = await clean(vm, run);
   }
   return {
     answer: redactAnswer(ran.answer, hidden),
@@ -109,25 +105,25 @@ export function shellQuote(value: string): string {
 type Run = ContainerRunInput & { port: number; files: { env: string; request: string } };
 type Ran = { answer: ContainerAnswer; durationMs: number; logs: string };
 
-async function httpMode(provider: SandboxProvider, vmRef: string, run: Run): Promise<Ran> {
+async function httpMode(vm: VmSession, run: Run): Promise<Ran> {
   const { name, port, tag, timeoutS, files } = run;
   // Docker picks a free host port, so two containers of one VM do not clash.
-  const started = await provider.exec(vmRef, {
+  const started = await vm.exec({
     command: `docker run -d --name ${name} -p 127.0.0.1::${port} --env-file ${files.env} ${tag}; code=$?; rm -f ${files.env}; [ $code -eq 0 ] || exit $code; docker port ${name} ${port}/tcp | head -n 1`,
     timeoutS: DOCKER_STEP_S,
   });
   if (started.exitCode !== 0) {
     const why = started.stderr.trim().split("\n").at(-1) ?? "";
     const answer = fail("no_health", `The container did not start. ${why}`.trim());
-    return await ended(provider, vmRef, run, answer, 0);
+    return await ended(vm, run, answer, 0);
   }
   const hostPort = /:(\d+)\s*$/.exec(started.stdout.trim())?.[1];
   if (!hostPort) {
     const answer = fail("no_port", `Docker published no port for $PORT (${port}).`);
-    return await ended(provider, vmRef, run, answer, 0);
+    return await ended(vm, run, answer, 0);
   }
   const base = `http://127.0.0.1:${hostPort}`;
-  const health = await provider.exec(vmRef, {
+  const health = await vm.exec({
     command: [
       `end=$(( $(date +%s) + ${HEALTH_WAIT_S} ))`,
       "last=0",
@@ -144,36 +140,36 @@ async function httpMode(provider: SandboxProvider, vmRef: string, run: Run): Pro
     timeoutS: HEALTH_WAIT_S + SLACK_S,
   });
   if (health.exitCode !== 0) {
-    return await ended(provider, vmRef, run, healthFailure(health.exitCode, port), 0);
+    return await ended(vm, run, healthFailure(health.exitCode, port), 0);
   }
   const startedAt = Date.now();
-  const answered = await provider.exec(vmRef, {
+  const answered = await vm.exec({
     command: `curl -sS --max-time ${timeoutS} -X POST -H 'content-type: application/json' --data-binary @${files.request} -w '\\n%{http_code}' ${base}/ratel/run; code=$?; rm -f ${files.request}; exit $code`,
     timeoutS: timeoutS + SLACK_S,
   });
   const durationMs = Date.now() - startedAt;
   if (answered.timedOut || answered.exitCode === CURL_TIMEOUT) {
-    return await ended(provider, vmRef, run, timedOut(timeoutS, "POST /ratel/run"), durationMs);
+    return await ended(vm, run, timedOut(timeoutS, "POST /ratel/run"), durationMs);
   }
   if (answered.exitCode !== 0) {
     const message = `POST /ratel/run closed with no answer (curl exit code ${answered.exitCode}).`;
-    return await ended(provider, vmRef, run, fail("no_answer", message), durationMs);
+    return await ended(vm, run, fail("no_answer", message), durationMs);
   }
   const cut = answered.stdout.lastIndexOf("\n");
   const status = Number(answered.stdout.slice(cut + 1).trim());
   const body = cut < 0 ? "" : answered.stdout.slice(0, cut);
-  return await ended(provider, vmRef, run, judgeHttpAnswer(status, body), durationMs);
+  return await ended(vm, run, judgeHttpAnswer(status, body), durationMs);
 }
 
 /**
  * The request goes on stdin. `docker create` reads the variables, so the file goes before the
  * command runs.
  */
-async function commandMode(provider: SandboxProvider, vmRef: string, run: Run): Promise<Ran> {
+async function commandMode(vm: VmSession, run: Run): Promise<Ran> {
   const { name, tag, timeoutS, config, files } = run;
   const args = (config.run?.command ?? []).map(shellQuote).join(" ");
   const startedAt = Date.now();
-  const ran = await provider.exec(vmRef, {
+  const ran = await vm.exec({
     command: `docker create -i --name ${name} --env-file ${files.env} ${tag} ${args} >/dev/null; code=$?; rm -f ${files.env}; [ $code -eq 0 ] || exit $code; timeout ${timeoutS} docker start -ai ${name} < ${files.request}; code=$?; rm -f ${files.request}; exit $code`,
     timeoutS: timeoutS + SLACK_S,
   });
@@ -197,13 +193,12 @@ function healthFailure(exitCode: number | null, port: number): ContainerAnswer {
 
 /** The end of an HTTP run: the logs of the container, read before it is removed. */
 async function ended(
-  provider: SandboxProvider,
-  vmRef: string,
+  vm: VmSession,
   run: Run,
   answer: ContainerAnswer,
   durationMs: number,
 ): Promise<Ran> {
-  const logs = await provider.exec(vmRef, {
+  const logs = await vm.exec({
     command: `docker logs ${run.name} 2>&1 | tail -c ${SHELL_LOG_BYTES}`,
     timeoutS: DOCKER_STEP_S,
   });
@@ -214,9 +209,9 @@ async function ended(
  * Removes the container with its anonymous volumes, and the files. A failure is logged: the caller
  * decides about the VM.
  */
-async function clean(provider: SandboxProvider, vmRef: string, run: Run): Promise<boolean> {
+async function clean(vm: VmSession, run: Run): Promise<boolean> {
   try {
-    const removed = await provider.exec(vmRef, {
+    const removed = await vm.exec({
       command: `docker rm -f -v ${run.name} >/dev/null 2>&1; rm -f ${run.files.env} ${run.files.request}; true`,
       timeoutS: DOCKER_STEP_S,
     });
@@ -225,11 +220,6 @@ async function clean(provider: SandboxProvider, vmRef: string, run: Run): Promis
     logger.warn({ err: error }, "container not removed");
     return false;
   }
-}
-
-async function write(provider: SandboxProvider, vmRef: string, path: string, text: string) {
-  const body = Buffer.from(text);
-  await provider.writeFile(vmRef, { path, body, size: body.length });
 }
 
 function timedOut(timeoutS: number, what: string): ContainerAnswer {

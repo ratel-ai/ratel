@@ -6,7 +6,7 @@ import { getLogger } from "@/lib/platform/logger";
 import type { SealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { storable } from "@/lib/platform/storable";
 import { type ContainerRun, DEFAULT_TIMEOUT_S, runContainer } from "./container-run";
-import { type RatelYaml, secretNamesOf } from "./domain/config";
+import { secretNamesOf } from "./domain/config";
 import {
   buildRunRequest,
   MAX_REQUEST_BYTES,
@@ -29,6 +29,7 @@ import type { SecretStore } from "./ports/secret-store";
 import type { VersionStore } from "./ports/version-store";
 import type { RunVm, VmStore } from "./ports/vm-store";
 import { openSecretValues } from "./secret-values";
+import { agentVmNetwork, attachVmSession, startVmSession } from "./vm-session";
 
 /**
  * Starts runs and reads them. A run gets a warm VM of its version, or a new one, and a new
@@ -303,10 +304,9 @@ async function executeRun(launch: Launch, provider: SandboxProvider, deps: RunDe
 /** Starts the VM of a claim from the snapshot of the version, and counts its start. */
 async function startVm(launch: Launch, provider: SandboxProvider, deps: RunDeps): Promise<string> {
   const { run, version, vm, subject } = launch;
-  const allow = allowedDomains(version.config, deps.callbackUrl());
   let vmRef: string | null = null;
   try {
-    ({ vmRef } = await provider.startVm({
+    ({ vmRef } = await startVmSession(provider, {
       projectId: run.projectId,
       purpose: "run",
       fromSnapshot: version.imageRef ?? "",
@@ -318,10 +318,7 @@ async function startVm(launch: Launch, provider: SandboxProvider, deps: RunDeps)
         "ratel-vm": vm.id,
       },
       // The runs go through `exec` and curl in the VM, so no caller reaches the VM.
-      network: {
-        inbound: "closed",
-        outbound: allow.length > 0 ? { mode: "allow", allow } : { mode: "deny" },
-      },
+      network: agentVmNetwork(version.config, deps.callbackUrl()),
       keepSnapshots: false,
     }));
     await deps.vms.markReady(vm.id, vmRef, deps.now());
@@ -345,7 +342,7 @@ function runIn(
   deps: RunDeps,
 ): Promise<ContainerRun> {
   const { run, version, token } = launch;
-  return runContainer(provider, vmRef, {
+  return runContainer(attachVmSession(provider, vmRef), {
     name: `run-${run.id}`,
     filePrefix: `/tmp/ratel-run-${run.id}-`,
     config: version.config,
@@ -372,18 +369,6 @@ function outcomeOf({ answer, logs, durationMs }: ContainerRun): RunOutcome {
   const { code, message } = answer.error;
   const status = code === "timeout" ? "timed_out" : "failed";
   return { status, errorCode: code, message, logs, durationMs };
-}
-
-/**
- * The domains that the container may reach: those of ratel.yaml, and this deployment, so the agent
- * can send its traces. An address that is not a domain name (an IP, localhost) is left out.
- */
-function allowedDomains(config: RatelYaml, callbackUrl: string): string[] {
-  const allow = [...(config.network?.allow ?? [])];
-  const host = URL.canParse(callbackUrl) ? new URL(callbackUrl).hostname : "";
-  const isDomain = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(host);
-  if (isDomain && !allow.includes(host)) allow.push(host);
-  return allow;
 }
 
 /** The reason of an infrastructure failure for the developer. It never names the provider. */

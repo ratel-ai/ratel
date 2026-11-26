@@ -24,6 +24,8 @@ export type FakeProvider = SandboxProvider & {
   starts: Array<StartVmRequest & { vmRef: string }>;
   /** Every call of `deleteVm`, in order. */
   deleted: string[];
+  /** Every call of `deleteSnapshot`, in order. */
+  deletedSnapshots: string[];
   execs: Array<{ vmRef: string; command: string }>;
   writes: Array<{ vmRef: string; path: string; body: Buffer }>;
   /**
@@ -57,6 +59,7 @@ export function createFakeProvider({ deploymentId = "test-deployment" } = {}): F
     snapshots: new Map(),
     starts: [],
     deleted: [],
+    deletedSnapshots: [],
     execs: [],
     writes: [],
     onExec: () => undefined,
@@ -125,6 +128,7 @@ export function createFakeProvider({ deploymentId = "test-deployment" } = {}): F
       fake.vms.delete(vmRef);
     },
     async deleteSnapshot(snapshotRef) {
+      fake.deletedSnapshots.push(snapshotRef);
       fake.snapshots.delete(snapshotRef);
     },
     async vmStatus(vmRef) {
