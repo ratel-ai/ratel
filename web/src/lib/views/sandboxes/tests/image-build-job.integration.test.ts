@@ -37,7 +37,7 @@ import { bundleInfo, COMMIT, CONFIG, createSandboxDb, IMAGE, PROJECT_ID, tarGz }
 
 const BUNDLE = tarGz([{ name: "manifest.json", body: "[]" }]);
 const KEY = Buffer.alloc(32, 7);
-const SECRET = "sk-live-secret-5521";
+const SECRET = "sk-live-secret-5521"; // gitleaks:allow (fake test value)
 const ENV_FILE = "/tmp/ratel-smoke-env";
 const REQUEST_FILE = "/tmp/ratel-smoke-request.json";
 const IMAGE_FILE = "/home/user/image.tar";
