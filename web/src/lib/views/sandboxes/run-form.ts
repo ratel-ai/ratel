@@ -91,3 +91,26 @@ export function expectedOutputOf(output: unknown): string | null {
   if (output === undefined || output === null) return null;
   return typeof output === "string" ? output : JSON.stringify(output, null, 2);
 }
+
+/**
+ * Why a version refuses these params, or null. Each name must be declared, with its type, and an
+ * enum value must be one of its options.
+ */
+export function refusedParam(
+  params: readonly ParamSpec[],
+  values: Record<string, unknown>,
+): string | null {
+  const declared = new Map(params.map((param) => [param.name, param]));
+  for (const [name, value] of Object.entries(values)) {
+    const param = declared.get(name);
+    if (!param) return `The version does not declare the param ${name}.`;
+    if (param.type === "enum") {
+      if (!param.options.includes(value as string | number)) {
+        return `The param ${name} must be one of: ${param.options.join(", ")}.`;
+      }
+    } else if (typeof value !== param.type) {
+      return `The param ${name} must be a ${param.type}.`;
+    }
+  }
+  return null;
+}

@@ -55,8 +55,8 @@ export const runRequestSchema = z.object({
     .optional(),
 });
 /**
- * The params of an eval also hold its earlier turns, so a stored request can hold a param that is
- * not a scalar.
+ * A request stored before the earlier turns of an eval moved into `input.messages` holds them in
+ * its params, so a stored param can be other than a scalar.
  */
 export type RunRequest = Omit<z.infer<typeof runRequestSchema>, "params"> & {
   params: Record<string, unknown>;

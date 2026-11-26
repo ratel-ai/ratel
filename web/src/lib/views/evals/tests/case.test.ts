@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { approvalProblem, caseContentSchema, caseDetailsSchema } from "../domain/case";
+import { approvalProblem, caseContentSchema, caseDetailsSchema, runInputOf } from "../domain/case";
 import { caseFromTurn, recordedConversation, type TurnContent } from "../domain/from-turn";
 import { content, NO_REFUND } from "./support";
 
@@ -218,4 +218,31 @@ test("a case has at most 5 judges", () => {
   }));
   assert.equal(caseContentSchema.safeParse(content({ scorers: judges })).success, false);
   assert.equal(caseContentSchema.safeParse(content({ scorers: judges.slice(1) })).success, true);
+});
+
+test("the earlier turns of a case go into the run input as messages, next to the value", () => {
+  const turns = [
+    { role: "user" as const, text: "hi" },
+    { role: "assistant" as const, text: "hello" },
+  ];
+  const messages = [
+    { role: "user", content: "hi" },
+    { role: "assistant", content: "hello" },
+  ];
+  assert.deepEqual(runInputOf({ input: { message: "and now?" }, earlierTurns: turns }), {
+    message: "and now?",
+    messages,
+  });
+  assert.deepEqual(runInputOf({ input: "and now?", earlierTurns: turns }), {
+    value: "and now?",
+    messages,
+  });
+  assert.deepEqual(runInputOf({ input: [1], earlierTurns: turns }), { value: [1], messages });
+  // An input that has messages already keeps them first: the case says the whole conversation.
+  assert.deepEqual(
+    runInputOf({ input: { messages: [{ role: "user", content: "x" }] }, earlierTurns: turns }),
+    { value: { messages: [{ role: "user", content: "x" }] }, messages },
+  );
+  const plain = { message: "x" };
+  assert.equal(runInputOf({ input: plain, earlierTurns: [] }), plain);
 });

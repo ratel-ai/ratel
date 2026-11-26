@@ -1,5 +1,6 @@
 import type { Member } from "@/lib/console/scope/member-access";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
+import type { ParamSpec } from "@/lib/views/sandboxes/run-form";
 import type { ComparisonResult } from "./baseline";
 import { approvedVersion, type CaseVersion, draftVersion, type EvalCase } from "./domain/case";
 import {
@@ -28,8 +29,17 @@ export type CaseRow = {
   /** The number of the version that counts. */
   approved: number | null;
   draft: number | null;
+  /** The input of the approved version, else of the draft, cut to `PREVIEW_CHARS`. */
+  input: string;
+  /** The number of earlier turns that go with the input. */
+  turns: number;
+  /** The expected output, cut to `PREVIEW_CHARS`. Null when the case has none. */
+  expectedOutput: string | null;
   createdAt: string;
 };
+
+/** The longest text of a cell of the cases table. The case page shows the full value. */
+export const PREVIEW_CHARS = 160;
 
 export type CaseVersionView = Omit<CaseVersion, "approvedAt" | "updatedAt"> & {
   approvedAt: string | null;
@@ -50,14 +60,44 @@ export type CaseEditorModel = {
 export type CaseEditor = Pick<Member, "projectId"> & { canEdit: boolean };
 
 export function caseRow(evalCase: EvalCase): CaseRow {
+  const approved = approvedVersion(evalCase);
+  const draft = draftVersion(evalCase);
+  const shown = approved ?? draft;
   return {
     id: evalCase.id,
     name: evalCase.name,
     labels: evalCase.labels,
-    approved: approvedVersion(evalCase)?.number ?? null,
-    draft: draftVersion(evalCase)?.number ?? null,
+    approved: approved?.number ?? null,
+    draft: draft?.number ?? null,
+    input: shown ? preview(shown.input) : "",
+    turns: shown?.earlierTurns.length ?? 0,
+    expectedOutput: shown?.expectedOutput ? preview(shown.expectedOutput) : null,
     createdAt: evalCase.createdAt.toISOString(),
   };
+}
+
+/** The labels of the cases, each one time, in order. */
+export function caseLabels(rows: readonly Pick<CaseRow, "labels">[]): string[] {
+  return [...new Set(rows.flatMap(({ labels }) => labels))].sort();
+}
+
+/** The cases that a run takes: the approved ones, with the label when there is one. */
+export function runnableCases(
+  rows: readonly Pick<CaseRow, "labels" | "approved">[],
+  label: string | null,
+): number {
+  return rows.filter(
+    (row) => row.approved !== null && (label === null || row.labels.includes(label)),
+  ).length;
+}
+
+/** A value as one line of text, cut to `PREVIEW_CHARS`. */
+export function preview(value: unknown): string {
+  const text = (typeof value === "string" ? value : JSON.stringify(value ?? null)).replace(
+    /\s+/g,
+    " ",
+  );
+  return text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS - 1)}…` : text;
 }
 
 export function caseEditorModel(
@@ -95,7 +135,7 @@ export type ExperimentRow = {
   createdAt: string;
 };
 
-export type ReadyVersion = { id: string; name: string; commit: string };
+export type ReadyVersion = { id: string; name: string; commit: string; params: ParamSpec[] };
 
 export type TrialView = Omit<Trial, "experimentId">;
 
@@ -154,7 +194,7 @@ export function experimentPageModel(
 export function readyVersions(versions: readonly SandboxVersionSummary[]): ReadyVersion[] {
   return versions
     .filter(({ status }) => status === "ready")
-    .map(({ id, name, git }) => ({ id, name, commit: git?.commit ?? "" }));
+    .map(({ id, name, git, params }) => ({ id, name, commit: git?.commit ?? "", params }));
 }
 
 /** One of the two experiments of a comparison. */

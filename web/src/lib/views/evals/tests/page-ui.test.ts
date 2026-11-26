@@ -20,9 +20,13 @@ import {
   type CaseEditorModel,
   type CaseVersionView,
   type ComparedCaseRow,
+  caseLabels,
+  caseRow,
   comparePageModel,
   experimentPageModel,
+  PREVIEW_CHARS,
   readyVersions,
+  runnableCases,
 } from "../page-model";
 import { content } from "./support";
 
@@ -68,23 +72,90 @@ test("the rail has Evals only with the flag on", () => {
   assert.ok(!labels(false).includes("Evals"));
 });
 
-test("the list shows which version counts", () => {
-  const row = { id: "c1", name: "Late refund", labels: ["task: refunds"], createdAt: NOW };
+test("the cases table shows the input, the expected output, the labels and which version counts", () => {
+  const row = {
+    id: "c1",
+    name: "Late refund",
+    labels: ["task: refunds"],
+    createdAt: NOW,
+    input: '{"message":"refund A200"}',
+    turns: 2,
+    expectedOutput: "It is refunded.",
+  };
   const html = render(
     createElement(EvalsView, {
       baselineId: null,
       projectId: PROJECT_ID,
       canEdit: true,
       now: NOW,
-      cases: [{ ...row, approved: 1, draft: 2 }],
+      cases: [
+        { ...row, approved: 1, draft: 2 },
+        { ...row, id: "c2", name: "Status", labels: ["status"], approved: null, draft: 1 },
+      ],
       experiments: [],
-      versions: [],
+      versions: [
+        {
+          id: "v1",
+          name: "support-demo",
+          commit: "b".repeat(40),
+          params: [
+            {
+              name: "tone",
+              type: "enum",
+              default: "formal",
+              description: null,
+              options: ["formal", "friendly"],
+            },
+            { name: "depth", type: "number", default: 2, description: "How deep", options: [] },
+          ],
+        },
+      ],
     }),
   );
   const text = visibleText(html);
-  for (const part of ["Late refund", "Approved v1", "Draft v2", "task: refunds", "New case"]) {
+  for (const part of [
+    "Late refund",
+    "refund A200",
+    "+2 turns",
+    "It is refunded.",
+    "Approved v1",
+    "Draft v2",
+    "task: refunds",
+    "New case",
+    "Experiment name",
+    "1 approved case, 3 trials.",
+  ]) {
     assert.ok(text.includes(part), part);
   }
+  assert.ok(html.includes("<table"), "a table");
+  assert.ok(html.includes('type="number"'), "a typed control for depth");
+  assert.doesNotMatch(text, /Params \(JSON\)/);
+});
+
+test("a case row cuts its input and expected output, and counts the cases a label takes", () => {
+  const long = "x".repeat(400);
+  const evalCase = {
+    id: "c1",
+    projectId: PROJECT_ID,
+    name: "Long",
+    labels: ["a"],
+    createdAt: new Date(NOW),
+    createdBy: "u",
+    versions: [{ ...version(), input: { message: long }, expectedOutput: long }],
+  } as unknown as Parameters<typeof caseRow>[0];
+  const row = caseRow(evalCase);
+  assert.equal(row.input.length, PREVIEW_CHARS);
+  assert.ok(row.input.endsWith("…"));
+  assert.equal(row.expectedOutput?.length, PREVIEW_CHARS);
+  const rows = [
+    { labels: ["a"], approved: 1 },
+    { labels: ["a", "b"], approved: null },
+    { labels: ["b"], approved: 2 },
+  ];
+  assert.equal(runnableCases(rows, null), 2);
+  assert.equal(runnableCases(rows, "a"), 1);
+  assert.equal(runnableCases(rows, "c"), 0);
+  assert.deepEqual(caseLabels(rows), ["a", "b"]);
 });
 
 test("the editor of an approved case with a draft shows both", () => {
@@ -143,6 +214,8 @@ test("the experiment page shows the raw counts of each case, and links each tria
     id: "e1",
     projectId: PROJECT_ID,
     organizationId: "o1",
+    name: null,
+    labelFilter: null,
     sandboxVersionId: "sv1",
     sandboxName: "support-demo",
     gitCommit: "b".repeat(40),
@@ -209,6 +282,7 @@ test("Run evals lists ready versions only, and is not there in a support session
     status,
     createdAt: new Date(),
     tools: [],
+    params: [],
   });
   const versions = readyVersions([version("1", "failed"), version("2", "ready")]);
   assert.deepEqual(
@@ -238,6 +312,8 @@ const compared = (id: string, cases: Record<string, TrialResult>) => {
     id,
     projectId: PROJECT_ID,
     organizationId: "o1",
+    name: null,
+    labelFilter: null,
     sandboxVersionId: "sv1",
     sandboxName: "support-demo",
     gitCommit: id.repeat(40),

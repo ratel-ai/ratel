@@ -93,6 +93,8 @@ export const evalExperiments = pgTable(
     // No foreign key: the record stays what it was.
     sandboxVersionId: uuid("sandbox_version_id").notNull(),
     sandboxName: text("sandbox_name").notNull(),
+    name: text("name"),
+    labelFilter: text("label_filter"),
     gitCommit: text("git_commit").notNull(),
     gitDirty: boolean("git_dirty").notNull(),
     params: jsonb("params").$type<Record<string, unknown>>().notNull(),

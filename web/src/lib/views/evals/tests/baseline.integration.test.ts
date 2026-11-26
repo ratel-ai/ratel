@@ -89,6 +89,8 @@ async function setup() {
         organizationId: ORGANIZATION_ID,
         sandboxVersionId: crypto.randomUUID(),
         sandboxName: "support-demo",
+        name: null,
+        labelFilter: null,
         gitCommit: "b".repeat(40),
         gitDirty: false,
         params: {},

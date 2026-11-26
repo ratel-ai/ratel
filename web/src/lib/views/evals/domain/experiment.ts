@@ -20,6 +20,10 @@ export type Experiment = {
   organizationId: string;
   sandboxVersionId: string;
   sandboxName: string;
+  /** The name that the person gave the run. Null when it has none. */
+  name: string | null;
+  /** The label that chose the cases. Null: all approved cases. */
+  labelFilter: string | null;
   gitCommit: string;
   gitDirty: boolean;
   params: Record<string, unknown>;
@@ -72,13 +76,17 @@ export type TrialOutcome = TrialEvidence &
 
 export type Counts = { pass: number; fail: number; invalid: number; open: number };
 
-/** The approved version of each case, and no draft. */
-export function freezeCases(cases: readonly EvalCase[]): {
+/** The approved version of each case, and no draft. With a label, only the cases that have it. */
+export function freezeCases(
+  cases: readonly EvalCase[],
+  label: string | null = null,
+): {
   caseVersions: FrozenCase[];
   scorerSnapshots: Record<string, ScorerSnapshot[]>;
 } {
   const approved = cases.flatMap(
     (evalCase): Array<{ evalCase: EvalCase; version: CaseVersion }> => {
+      if (label !== null && !evalCase.labels.includes(label)) return [];
       const version = approvedVersion(evalCase);
       return version ? [{ evalCase, version }] : [];
     },

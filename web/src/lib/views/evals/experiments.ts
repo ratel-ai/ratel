@@ -7,7 +7,8 @@ import type {
   StartRunOptions,
   StartRunResult,
 } from "@/lib/views/sandboxes";
-import type { CaseVersion } from "./domain/case";
+import { refusedParam } from "@/lib/views/sandboxes/run-form";
+import { type CaseVersion, runInputOf } from "./domain/case";
 import {
   type Experiment,
   freezeCases,
@@ -48,6 +49,9 @@ export type StartExperiment = {
   trialsPerCase: number;
   params: Record<string, unknown>;
   startedBy: string;
+  /** Only the approved cases with this label. All of them when it is not there. */
+  label?: string;
+  name?: string;
 };
 
 export type StartExperimentResult =
@@ -59,7 +63,8 @@ export type StartRefusal =
   | "not_ready"
   | "no_cases"
   | "too_many_running"
-  | "too_many_trials";
+  | "too_many_trials"
+  | "invalid_params";
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -75,7 +80,7 @@ const logger = getLogger("evals/experiments");
 /** Freezes the approved cases and their scorers. The trials start with `advanceExperiment`. */
 export async function startExperiment(
   subject: UsageSubject,
-  { sandboxVersion, trialsPerCase, params, startedBy }: StartExperiment,
+  { sandboxVersion, trialsPerCase, params, startedBy, label, name }: StartExperiment,
   deps: ExperimentDeps,
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
@@ -91,9 +96,15 @@ export async function startExperiment(
   if (version.status !== "ready") {
     return refused("not_ready", `The sandbox version is ${version.status}. Use one that is ready.`);
   }
-  const frozen = freezeCases(await deps.cases.list(projectId));
+  const refusal = refusedParam(version.params, params);
+  if (refusal) return refused("invalid_params", refusal);
+  const frozen = freezeCases(await deps.cases.list(projectId), label ?? null);
   const cases = frozen.caseVersions.length;
-  if (cases === 0) return refused("no_cases", "No case is approved. Approve one first.");
+  if (cases === 0) {
+    return label === undefined
+      ? refused("no_cases", "No case is approved. Approve one first.")
+      : refused("no_cases", `No approved case has the label ${label}.`);
+  }
   if (cases * trialsPerCase > MAX_EXPERIMENT_TRIALS) {
     return refused("too_many_trials", `An experiment has at most ${MAX_EXPERIMENT_TRIALS} trials.`);
   }
@@ -103,6 +114,8 @@ export async function startExperiment(
     organizationId,
     sandboxVersionId: version.id,
     sandboxName: version.name,
+    name: name ?? null,
+    labelFilter: label ?? null,
     // A version pushed with no git information has no commit.
     gitCommit: version.git?.commit ?? "",
     gitDirty: version.git?.dirty ?? false,
@@ -250,14 +263,18 @@ async function startTrial(
   try {
     const version = await deps.experiments.caseVersion(trial.caseVersionId);
     if (!version) throw new Error("the case version is missing");
-    const { input, earlierTurns, toolFixtures } = version;
-    const started = await deps.sandboxes.startRun(experiment.sandboxVersionId, input, {
-      projectId,
-      organizationId,
-      requestedBy: `eval_trial:${trial.id}`,
-      params: earlierTurns.length > 0 ? { ...experiment.params, earlierTurns } : experiment.params,
-      fixtures: toolFixtures,
-    });
+    // The earlier turns are part of the input, not of the params.
+    const started = await deps.sandboxes.startRun(
+      experiment.sandboxVersionId,
+      runInputOf(version),
+      {
+        projectId,
+        organizationId,
+        requestedBy: `eval_trial:${trial.id}`,
+        params: experiment.params,
+        fixtures: version.toolFixtures,
+      },
+    );
     if (started.ok) {
       sandboxRunId = started.run.id;
       return await deps.experiments.markRunning(trial.id, sandboxRunId);
