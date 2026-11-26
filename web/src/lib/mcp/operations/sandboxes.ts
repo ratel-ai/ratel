@@ -1,8 +1,13 @@
 import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
+import {
+  CONTENT_WITHHELD_HINT,
+  defaultContentAccessDeps,
+  mayReadContent,
+} from "@/lib/mcp/operations/content-access";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
-import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
+import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, truncateText } from "@/lib/mcp/serialize";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import {
@@ -37,6 +42,8 @@ export interface SandboxOperationDeps {
   organizationIdOf?(projectId: string): Promise<string | null>;
   sleep(ms: number): Promise<void>;
   now(): number;
+  /** The content rule of `content-access.ts`: run inputs, outputs and logs are captured text. */
+  mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
 }
 
 /** How long `sandbox_run` waits for the result. It stays far below the 60 second limit of a call. */
@@ -46,6 +53,8 @@ const POLL_MS = 1_000;
 export const LOG_CHARS = 4_000;
 const MAX_TOOL_CALLS = 50;
 const TOOL_CALL_CHARS = 2_000;
+/** The input and the output of a run keep this many characters. */
+const VALUE_CHARS = 8_000;
 const VERSIONS_READ = 100;
 const VERSIONS_PER_SANDBOX = 5;
 const ACTIVE = new Set(["queued", "running"]);
@@ -59,6 +68,7 @@ const defaultDeps: SandboxOperationDeps = {
   organizationIdOf: async (projectId) => (await getProjectById(projectId))?.organizationId ?? null,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
+  mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
 };
 
 const versionIdParam = uuidParam().describe(
@@ -73,10 +83,11 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "List Ratel sandboxes",
       description:
-        "Use this tool to find the agents that are pushed to Ratel sandbox. It returns each sandbox name with its newest versions, their status and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+        "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name, its newest versions with their status, and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
       keywords: ["sandbox", "pushed agents", "sandbox versions"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "sandboxes:read",
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
         const versions = await deps.listVersions(ctx.projectId, VERSIONS_READ + 1);
@@ -97,10 +108,11 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "Read a Ratel sandbox version",
       description:
-        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, the declared params with their types and options, the tools with their modes, and the smoke check result.",
+        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, and the tools with their modes.",
       keywords: ["sandbox", "declared params", "input example", "smoke check"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "sandboxes:read",
       params: z.object({ ...projectScoped, versionId: versionIdParam }),
       async execute(ctx, params) {
         const version = await deps.getVersion(ctx.projectId, params.versionId);
@@ -121,10 +133,11 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "Run a Ratel sandbox version",
       description:
-        "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. Then it returns the run with its input, output and tool calls, or the run id and a hint to poll sandbox_get_run.",
+        "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds for the result. If the run is not complete then, call sandbox_get_run with the run id.",
       keywords: ["sandbox", "run agent", "try an input"],
       scope: "project",
       mutates: true,
+      apiKeyScope: "sandboxes:run",
       params: z.object({
         ...projectScoped,
         versionId: versionIdParam.optional(),
@@ -161,7 +174,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
         });
         if (!started.ok) throw refusal(started);
         const run = await waitForEnd(deps, ctx.projectId, started.run);
-        return runResult(run);
+        return runResult(run, await deps.mayReadContent(ctx));
       },
     }),
     defineOperation({
@@ -173,6 +186,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       keywords: ["sandbox", "run result", "container logs"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "sandboxes:read",
       params: z.object({
         ...projectScoped,
         runId: uuidParam().describe("The id of a run. sandbox_run gives it."),
@@ -180,7 +194,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       async execute(ctx, params) {
         const run = await deps.getRun(ctx.projectId, params.runId);
         if (!run) throw notFound("sandbox run");
-        return runResult(run);
+        return runResult(run, await deps.mayReadContent(ctx));
       },
     }),
   ];
@@ -306,33 +320,46 @@ async function waitForEnd(
   return run;
 }
 
-/** Input and output first: they are what the agent asked for. The rest explains them. */
-function runResult(run: SandboxRun) {
+/**
+ * Input and output first: they are what the agent asked for. The rest explains them. Without
+ * content access the captured text (input, output, params, tool call data, logs) is null.
+ */
+function runResult(run: SandboxRun, readable: boolean) {
   const status = sandboxRunStatus(run.status);
-  const logs = tail(run.logs);
+  const logs = readable ? tail(run.logs) : { text: null, truncated: false };
   const toolCalls = capRows(toolCallsOf(run), MAX_TOOL_CALLS);
-  let truncated = logs.truncated || toolCalls.truncated;
+  const input = readable ? preview(run.request.input) : { value: null, truncated: false };
+  const output = readable
+    ? preview(run.result?.output ?? run.response?.output ?? null)
+    : { value: null, truncated: false };
+  let truncated = logs.truncated || toolCalls.truncated || input.truncated || output.truncated;
   const calls = toolCalls.rows.map((call) => {
+    if (!readable) return { name: call.name, source: call.source ?? call.mode ?? null };
     const view = capJson(call);
     truncated ||= view.truncated;
     return view.value;
   });
   const active = ACTIVE.has(run.status);
+  const hint = active
+    ? `The run is ${run.status}. Call sandbox_get_run with runId "${run.id}" again in a few seconds.`
+    : status === "failed"
+      ? "The run failed. Read error and logs. Call sandbox_get_version to check the input and params."
+      : "The run is complete. To run it again with another input, call sandbox_run.";
   return {
     data: {
       runId: run.id,
       status,
-      input: run.request.input,
-      output: run.result?.output ?? run.response?.output ?? null,
+      input: input.value,
+      output: output.value,
       ...(status === "failed"
         ? {
             error: {
               code: run.errorCode ?? "run_failed",
-              message: run.reason ?? "The run failed.",
+              message: readable ? (run.reason ?? "The run failed.") : null,
             },
           }
         : {}),
-      params: run.request.params,
+      params: readable ? run.request.params : null,
       toolCalls: calls,
       ...(toolCalls.truncated ? { toolCallCount: toolCallsOf(run).length } : {}),
       logs,
@@ -341,14 +368,18 @@ function runResult(run: SandboxRun) {
       traceId: run.traceId,
       createdAt: run.createdAt.toISOString(),
       finishedAt: run.finishedAt?.toISOString() ?? null,
+      ...(readable ? {} : { contentWithheld: true }),
     },
     ...(truncated ? { truncated: true } : {}),
-    hint: active
-      ? `The run is ${run.status}. Call sandbox_get_run with runId "${run.id}" in a few seconds.`
-      : status === "failed"
-        ? "The run failed. Read error and logs. Call sandbox_get_version to check the input and params."
-        : `The run is complete. To run it again with another input, call sandbox_run.`,
+    hint: readable ? hint : `${hint} ${CONTENT_WITHHELD_HINT}`,
   };
+}
+
+/** A JSON value as it is when it is small, else a text preview of it. */
+function preview(value: unknown): { value: unknown; truncated: boolean } {
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
+  if (text.length <= VALUE_CHARS) return { value, truncated: false };
+  return { value: truncateText(text, VALUE_CHARS).text, truncated: true };
 }
 
 function toolCallsOf(run: SandboxRun): ReadonlyArray<Record<string, unknown>> {

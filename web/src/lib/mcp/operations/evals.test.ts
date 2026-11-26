@@ -649,3 +649,70 @@ test("evals_pin_baseline: pins a completed run", async () => {
   const result = ok<{ baselineRunId: string }>(await call("evals_pin_baseline", { runId: RUN }));
   assert.equal(result.data.baselineRunId, RUN);
 });
+
+// — Key scopes and captured text —————————————————————————————————————————————————
+
+test("evals_start_run: a key with mcp:write but without evals:write is refused", async () => {
+  const key: McpAuthContext = { ...auth, scopes: ["mcp:read", "mcp:write"] } as McpAuthContext;
+  const result = failure(
+    await dispatchOperation(
+      "evals_start_run",
+      {},
+      { registry: buildRegistry(evalsOperations(fakeDeps())), auth: key },
+    ),
+  );
+  assert.equal(result.error, "forbidden");
+  assert.match(result.message, /evals:write/);
+});
+
+test("evals_get_run: withholds inputs and outputs without content access, and still says to call again", async () => {
+  const result = ok<{
+    cases: Array<{ input: unknown; trials: Array<{ output: unknown }> }>;
+    contentWithheld?: boolean;
+  }>(
+    await call(
+      "evals_get_run",
+      { runId: RUN },
+      {
+        mayReadContent: async () => false,
+        getExperiment: async () => experiment({ state: "running", finishedAt: null }),
+        ...advancingClock(),
+      },
+    ),
+  );
+  assert.equal(result.data.cases[0]?.input, null);
+  assert.equal(result.data.cases[0]?.trials[0]?.output, null);
+  assert.equal(result.data.contentWithheld, true);
+  assert.match(result.hint ?? "", /again/);
+});
+
+test("evals_get_trial: withholds the output and the scorer reasons without content access", async () => {
+  const result = ok<{ output: unknown; scorers: Array<{ reason: unknown }> }>(
+    await call(
+      "evals_get_trial",
+      { runId: RUN, trialId: TRIAL },
+      { mayReadContent: async () => false },
+    ),
+  );
+  assert.equal(result.data.output, null);
+  assert.equal(result.data.scorers[0]?.reason, null);
+});
+
+test("evals_compare: withholds the outputs without content access", async () => {
+  const result = ok<{
+    changedCases: Array<{ baseline: { output: unknown }; candidate: { output: unknown } }>;
+  }>(await call("evals_compare", { runId: RUN }, { mayReadContent: async () => false }));
+  assert.equal(result.data.changedCases[0]?.baseline.output, null);
+  assert.equal(result.data.changedCases[0]?.candidate.output, null);
+});
+
+/** A clock that each sleep moves on, so a wait for a running run ends. */
+function advancingClock(): Pick<EvalsOperationDeps, "now" | "sleep"> {
+  let clock = T0.getTime();
+  return {
+    now: () => new Date(clock),
+    sleep: async (ms) => {
+      clock += ms;
+    },
+  };
+}

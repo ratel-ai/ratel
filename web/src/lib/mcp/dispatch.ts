@@ -157,9 +157,10 @@ export async function dispatchOperation(
     // tools need `mcp:read`, changing ones `mcp:write`. Checked before the
     // project is resolved, so a refusal reveals nothing about it.
     if (deps.auth.kind === "api-key") {
-      const needed = mcpOperationScope(operation);
-      if (!apiKeyPolicy(deps.auth.scopes).allows(needed))
-        throw forbidden(missingScopeMessage(needed));
+      const policy = apiKeyPolicy(deps.auth.scopes);
+      for (const needed of [mcpOperationScope(operation), operation.apiKeyScope]) {
+        if (needed && !policy.allows(needed)) throw forbidden(missingScopeMessage(needed));
+      }
     }
     let scope = resolveScope(deps.auth, operation, requestedProjectId);
     if (deps.projectOwner) {
