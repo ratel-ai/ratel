@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true, sandboxes: true });
+const operations = assembleOperations({ focusedConsole: true, sandboxes: true, evals: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -209,6 +209,17 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["sandbox_get_version", false],
   ["sandbox_run", true],
   ["sandbox_get_run", false],
+  // Evals on Ratel sandbox (decision `mcp-surface`), behind the `evals` flag.
+  ["evals_list_cases", false],
+  ["evals_get_case", false],
+  ["evals_create_case", true],
+  ["evals_approve_case", true],
+  ["evals_start_run", true],
+  ["evals_list_runs", false],
+  ["evals_get_run", false],
+  ["evals_get_trial", false],
+  ["evals_compare", false],
+  ["evals_pin_baseline", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

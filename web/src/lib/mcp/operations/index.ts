@@ -9,6 +9,7 @@ import {
   editionRegistrations,
   placeEditionOperations,
 } from "@/lib/mcp/operations/edition";
+import { evalsOperations } from "@/lib/mcp/operations/evals";
 import { experimentOperations } from "@/lib/mcp/operations/experiments";
 import { healthOperations } from "@/lib/mcp/operations/health";
 import { improvementOperations } from "@/lib/mcp/operations/improvement";
@@ -46,6 +47,8 @@ export interface AssembleOptions {
   focusedConsole?: boolean;
   /** List the Ratel sandbox tools (`sandboxes` flag of the caller). Off, they do not exist. */
   sandboxes?: boolean;
+  /** List the eval tools (`evals` flag of the caller). Off, they do not exist. */
+  evals?: boolean;
 }
 
 /**
@@ -85,6 +88,7 @@ export function assembleOperations(
     ...playgroundOperations(),
     ...shipOperations(),
     ...(options.sandboxes ? sandboxOperations() : []),
+    ...(options.evals ? evalsOperations() : []),
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),

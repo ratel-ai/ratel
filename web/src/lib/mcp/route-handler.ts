@@ -13,6 +13,7 @@ import {
 import { type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
 import { mcpLaunchAccess } from "@/lib/mcp/launch-access";
 import { buildRequestRegistry } from "@/lib/mcp/operations";
+import { evalsForCaller } from "@/lib/mcp/operations/evals";
 import { loopReadOperations, loopWriteOperations } from "@/lib/mcp/operations/loop";
 import {
   loopEvalSetReadOperations,
@@ -116,6 +117,8 @@ export interface McpRouteDeps {
   focusedConsole?: (auth: McpAuthContext) => Promise<boolean>;
   /** `sandboxes`, for this caller: whether the Ratel sandbox tools exist. */
   sandboxes?: (auth: McpAuthContext) => Promise<boolean>;
+  /** `evals`, for this caller: whether the eval tools exist. */
+  evals?: (auth: McpAuthContext) => Promise<boolean>;
   /** The built views, checked against the registry (lib/mcp/apps/load.ts). */
   appCatalog?: () => McpAppCatalog;
   now?: () => number;
@@ -438,11 +441,12 @@ async function runMessages(
   /** The client shows views: the model is told the person already sees the data. */
   clientRendersViews: boolean,
 ): Promise<JSONRPCMessage[]> {
-  const [focusedConsole, sandboxes] = await Promise.all([
+  const [focusedConsole, sandboxes, evals] = await Promise.all([
     (deps.focusedConsole ?? focusedConsoleForCaller)(auth),
     (deps.sandboxes ?? sandboxesForCaller)(auth),
+    (deps.evals ?? evalsForCaller)(auth),
   ]);
-  const registry = buildRequestRegistry({ focusedConsole, sandboxes });
+  const registry = buildRequestRegistry({ focusedConsole, sandboxes, evals });
   const apps = built && viewsFor(built, (tool) => tool === "whoami" || registry.has(tool));
   const server = createRatelMcpServer({
     auth,
