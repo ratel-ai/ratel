@@ -15,7 +15,14 @@ import { createRequire } from "node:module";
 import { parseArgs } from "node:util";
 import { getConfig } from "@/config";
 import { configuredHandler } from "@/ingest-consumer";
-import { addToRange, emptyRange, rebuildHandler, removeRange, type ReplayRange } from "@/ingest-replay";
+import {
+  addToRange,
+  emptyRange,
+  keepPartialTraces,
+  rebuildHandler,
+  removeRange,
+  type ReplayRange,
+} from "@/ingest-replay";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import { decodeEnvelope, type Envelope } from "@/lib/ingest/queue/envelope";
 import { createKafkaClient } from "@/lib/ingest/queue/kafka/client";
@@ -47,10 +54,17 @@ async function main(): Promise<void> {
   });
   const isMargin = (envelope: Envelope) => envelope.receivedAt < from || envelope.receivedAt >= to;
 
+  let keptTraces = 0;
   let handler = configuredHandler({ traceMetering: loadMetering() });
   if (mode === "rebuild") {
     const range = await scan(kafka, topic, expected, isMargin);
-    await getDb().transaction((tx) => removeRange(tx, range));
+    await getDb().transaction(
+      async (tx) => {
+        keptTraces = await keepPartialTraces(tx, range);
+        await removeRange(tx, range);
+      },
+      { isolationLevel: "repeatable read" },
+    );
     handler = rebuildHandler(handler, range, isMargin);
   }
 
@@ -72,7 +86,14 @@ async function main(): Promise<void> {
   });
   await queue.close();
   console.log(
-    JSON.stringify({ event: "replayed", mode, stored: counts.ack, deadLettered: counts["dead-letter"] }),
+    JSON.stringify({
+      event: "replayed",
+      mode,
+      stored: counts.ack,
+      deadLettered: counts["dead-letter"],
+      // Filled, not rebuilt: a span of theirs is in no replayed envelope.
+      ...(mode === "rebuild" ? { keptTraces } : {}),
+    }),
   );
   process.exit(counts["dead-letter"] > 0 ? 1 : 0);
 }
@@ -106,7 +127,7 @@ async function scan(
         try {
           if (message.value) {
             const envelope = decodeEnvelope(message.value);
-            if (!isMargin(envelope)) addToRange(range, envelope);
+            addToRange(range, envelope, isMargin(envelope));
           }
         } catch (error) {
           reject(error);

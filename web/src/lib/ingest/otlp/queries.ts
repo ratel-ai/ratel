@@ -45,6 +45,9 @@ export type EventWithMetric = {
 
 export type EventsDb = Pick<ReturnType<typeof getDb>, "insert" | "select" | "transaction">;
 
+/** A statement takes 65,535 parameters, and an export up to 5,000 calls of 15 columns. */
+const EVENT_INSERT_CHUNK_SIZE = 500;
+
 /** A per-source token map for one aggregate bucket. */
 export type SourceSums = Record<ContextSource, number>;
 
@@ -86,30 +89,37 @@ export async function insertEventsWithMetrics(
   const unique = [...byHash.values()];
 
   return db.transaction(async (tx) => {
-    const inserted = await tx
-      .insert(events)
-      .values(unique.map((r) => r.event))
-      .onConflictDoNothing({ target: [events.projectId, events.dedupeHash] })
-      .returning({ id: events.id, dedupeHash: events.dedupeHash });
-    const stored = new Set(inserted.map((e) => e.dedupeHash));
-    const bare = await eventsWithoutMetrics(
-      projectId,
-      [...byHash.keys()].filter((hash) => !stored.has(hash)),
-      tx,
-    );
+    let count = 0;
+    for (let offset = 0; offset < unique.length; offset += EVENT_INSERT_CHUNK_SIZE) {
+      const part = unique.slice(offset, offset + EVENT_INSERT_CHUNK_SIZE);
+      const inserted = await tx
+        .insert(events)
+        .values(part.map((r) => r.event))
+        .onConflictDoNothing({ target: [events.projectId, events.dedupeHash] })
+        .returning({ id: events.id, dedupeHash: events.dedupeHash });
+      const stored = new Set(inserted.map((e) => e.dedupeHash));
+      const bare = await eventsWithoutMetrics(
+        projectId,
+        part.flatMap(({ event: { dedupeHash } }) =>
+          dedupeHash != null && !stored.has(dedupeHash) ? [dedupeHash] : [],
+        ),
+        tx,
+      );
 
-    const metricRows: NewEventMetric[] = [];
-    for (const e of [...inserted, ...bare]) {
-      const r = e.dedupeHash != null ? byHash.get(e.dedupeHash) : undefined;
-      if (r) metricRows.push({ ...r.metric, eventId: e.id, projectId });
+      const metricRows: NewEventMetric[] = [];
+      for (const e of [...inserted, ...bare]) {
+        const r = e.dedupeHash != null ? byHash.get(e.dedupeHash) : undefined;
+        if (r) metricRows.push({ ...r.metric, eventId: e.id, projectId });
+      }
+      if (metricRows.length > 0) {
+        await tx
+          .insert(eventMetrics)
+          .values(metricRows)
+          .onConflictDoNothing({ target: eventMetrics.eventId });
+      }
+      count += inserted.length;
     }
-    if (metricRows.length > 0) {
-      await tx
-        .insert(eventMetrics)
-        .values(metricRows)
-        .onConflictDoNothing({ target: eventMetrics.eventId });
-    }
-    return inserted.length;
+    return count;
   });
 }
 

@@ -22,6 +22,8 @@ export type ReplayDb = Pick<ReturnType<typeof getDb>, "execute">;
 export interface ReplayRange {
   /** Per project. */
   traceIds: Map<string, Set<string>>;
+  /** `<trace>/<span>` of every envelope that is replayed, those around the range too. */
+  spans: Map<string, Set<string>>;
   logIds: Map<string, Set<string>>;
   eventIds: Map<string, Set<string>>;
   envelopeIds: Map<string, Set<string>>;
@@ -30,6 +32,7 @@ export interface ReplayRange {
 export function emptyRange(): ReplayRange {
   return {
     traceIds: new Map(),
+    spans: new Map(),
     logIds: new Map(),
     eventIds: new Map(),
     envelopeIds: new Map(),
@@ -42,13 +45,27 @@ function add(map: Map<string, Set<string>>, projectId: string, ids: Iterable<str
   map.set(projectId, set);
 }
 
-/** An envelope that does not decode stored nothing, and is left to the consumer. */
-export function addToRange(range: ReplayRange, envelope: Envelope): void {
+const spanKey = (traceId: string, spanId: string) => `${traceId}/${spanId}`;
+
+/**
+ * An envelope that does not decode stored nothing, and is left to the consumer. Of one around the range
+ * (`isMargin`) only its spans count: they can be stored again.
+ */
+export function addToRange(range: ReplayRange, envelope: Envelope, isMargin = false): void {
   const { projectId } = envelope;
+  if (envelope.signal === "traces") {
+    const spans = spansOf(envelope);
+    add(
+      range.spans,
+      projectId,
+      spans.map((span) => spanKey(span.traceId, span.spanId)),
+    );
+    if (!isMargin) add(range.traceIds, projectId, traceIdsIn(spans));
+  }
+  if (isMargin) return;
   add(range.envelopeIds, projectId, [envelope.id]);
   switch (envelope.signal) {
     case "traces":
-      add(range.traceIds, projectId, traceIdsOf(envelope));
       return;
     case "logs": {
       const read = readOtlpExport(envelope, {
@@ -80,18 +97,49 @@ export function addToRange(range: ReplayRange, envelope: Envelope): void {
   }
 }
 
-export function traceIdsOf(envelope: Envelope): string[] {
+function spansOf(envelope: Envelope): { traceId: string; spanId: string }[] {
   if (envelope.signal !== "traces") return [];
   const read = readOtlpExport(envelope, { decode: decodeTraceExport, limit: `${MAX_SPANS} spans` });
-  return read.ok
-    ? [...new Set(read.decoded.spans.map((span) => span.traceId).filter(Boolean))]
-    : [];
+  return read.ok ? read.decoded.spans : [];
+}
+
+const traceIdsIn = (spans: { traceId: string }[]) => [
+  ...new Set(spans.map((span) => span.traceId).filter(Boolean)),
+];
+
+export function traceIdsOf(envelope: Envelope): string[] {
+  return traceIdsIn(spansOf(envelope));
 }
 
 const CHUNK = 500;
 
 /**
- * Removes the range's rows and what was derived from them: spans and their calls, the events lifted from
+ * Takes the traces out of a REBUILD that have a stored span no replayed envelope holds: stored before
+ * their organization was on a topic, or while this runs. Removing them would lose that span. They are
+ * filled instead. Returns how many.
+ */
+export async function keepPartialTraces(db: ReplayDb, range: ReplayRange): Promise<number> {
+  let kept = 0;
+  for (const [projectId, ids] of range.traceIds) {
+    const held = range.spans.get(projectId) ?? new Set();
+    for (const traceIds of chunks(new Set(ids))) {
+      const { rows } = (await db.execute(sql`
+        select trace_id, span_id from otel_spans
+        where project_id = ${projectId} and trace_id = any(${textArray(traceIds)})`)) as unknown as {
+        rows: { trace_id: string; span_id: string }[];
+      };
+      for (const row of rows) {
+        if (held.has(spanKey(row.trace_id, row.span_id))) continue;
+        if (ids.delete(row.trace_id)) kept += 1;
+      }
+    }
+  }
+  return kept;
+}
+
+/**
+ * Run it with `keepPartialTraces` in one repeatable read: a span that comes meanwhile is not seen, and
+ * stays. Removes the range's rows and what was derived from them: spans and their calls, the events lifted from
  * spans, the trace's summary and turns, log records, runtime events and the raw captures. What a removed
  * runtime event had counted in `tool_usage_counters` is taken back, because storing it again counts it
  * again. Readings that jobs make over the whole window (intents, health) follow when those jobs run.
