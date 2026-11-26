@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
 import { getConfig } from "@/config";
 import { createBoatProvider } from "../adapters/boat-provider";
+import { createLocalDockerProvider } from "../adapters/local-docker-provider";
 import { sandboxProvider } from "../adapters/provider-from-env";
 import type { SandboxProvider, StartVmRequest } from "../ports/sandbox-provider";
 import { type FakeBoatServer, startFakeBoatServer } from "./fake-boat-server";
 import { createFakeProvider } from "./fake-provider";
+import { DOCKER_SKIP, dockerAnswers } from "./support";
 
 const RUN_ID = randomUUID();
 const BASE: StartVmRequest = {
@@ -38,6 +40,17 @@ contract(
       inlineMaxBytes: 64,
     }),
   {},
+);
+
+// The local Docker daemon, when it answers. The first run builds the VM image.
+const docker = dockerAnswers();
+contract(
+  "local docker",
+  () => createLocalDockerProvider({ deploymentId: `contract-${RUN_ID.slice(0, 8)}` }),
+  {
+    skip: docker ? false : `${DOCKER_SKIP}: local-docker contract skipped`,
+    timeout: 600_000,
+  },
 );
 
 // The real provider, when this process is set up for it. It costs a few cents.
