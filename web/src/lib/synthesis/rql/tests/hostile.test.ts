@@ -20,7 +20,7 @@ const COMPILER_WORDS = new Set(
  */
 function residue(sql: string): string {
   return sql
-    .replace("timestamptz '2000-01-01 00:00:00+00'", " ")
+    .replace("timestamptz '2000-01-03 00:00:00+00'", " ")
     .replace(/"[a-z_][a-z0-9_]*"/g, " ")
     .replace(/\$\d+::(?:text|bigint|double precision|boolean|timestamptz|interval)/g, " ")
     .replace(/\b0\.(?:5|9|95|99)\b/g, " ")

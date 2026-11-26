@@ -63,6 +63,15 @@ the caller gives it (by default the last 24 hours, at most 30 days), never the q
 time filter in `WHERE` can only narrow it. The `LIMIT` is lowered to a cap (1000; 100 when the
 query has none). The bounds are in `domain/limits.ts`.
 
+**The cost of one query is bounded.** Before the parse, which takes time that grows faster than
+the text, the compiler refuses a text over 4000 characters, a second statement after a `;`, a
+list over 100 items and an expression over 200 levels deep. It refuses more than 50 output
+columns (each column of `*` counts). The runner reads the rows through a cursor, cuts each cell
+at 2000 characters and stops the rows at 1 MB of JSON; a cut marks the result `truncated`. A
+project runs at most 2 queries at the same time, and the RQL pool has 8 connections, so one
+project cannot hold every connection. Kind `sql` takes the place of the project before the
+compile. A run that waits past the connect timeout of the pool is `rql_busy`.
+
 **Wall 2: the database.** The compiled SQL reads only the views `rql.events`, `rql.traces`,
 `rql.scores`, `rql.sessions` and `rql.users`. Each view filters on a per-transaction project
 setting, and they are `security_barrier` views: the planner applies that filter before any
@@ -80,6 +89,10 @@ emits a windowed derived query: it filters those trace rows on the window, group
 users), and the query's own `WHERE`, `GROUP BY` and the rest apply to those totals. A view that
 held the totals could not take the window: a session's total over all time is not its total in
 the window. The views stay simple filters, and the totals have one definition, in the catalog.
+
+**`user_id` is the raw end-user id.** Each view names the storage column `end_user_id` as
+`user_id`. Its value is the end-user id as `trace_events` stores it: not hashed, and not a person of
+the console.
 
 **The page filter applies like the window, and through the trace.** A query that runs under a
 page (a dashboard widget, an Explore panel) gets the page's trace filter from the caller, never

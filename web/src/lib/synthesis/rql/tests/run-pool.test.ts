@@ -56,7 +56,7 @@ test("with RQL_DATABASE_URL set, every RQL query goes to its pool and none to th
   assert.equal(made.length, 1);
   assert.equal(made[0].url, REPLICA);
   assert.ok(made[0].queries.includes(`set local role ${RQL_ROLE}`));
-  assert.ok(made[0].queries.includes(compiled.sql));
+  assert.ok(made[0].queries.some((query) => query.endsWith(compiled.sql)));
   assert.deepEqual(primary.queries, []);
 });
 

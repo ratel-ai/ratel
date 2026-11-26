@@ -98,7 +98,7 @@ test("a timestamp is an ISO string", async () => {
   assert.deepEqual(result.rows, [["2026-11-25T10:00:00.000Z"]]);
 });
 
-test("the fifth parallel query of one project is refused, another project still runs", async () => {
+test("one query over the parallel cap of a project is refused, another project still runs", async () => {
   const query = compiled("select trace_id from traces");
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {
@@ -116,7 +116,7 @@ test("the fifth parallel query of one project is refused, another project still 
   assert.equal(fifth.ok, false);
   assert.ok(!fifth.ok);
   assert.equal(fifth.error.code, "rql_busy");
-  assert.match(fifth.error.message, /4 queries/);
+  assert.match(fifth.error.message, new RegExp(`${RQL_LIMITS.parallelQueriesPerProject} queries`));
   assert.ok(fifth.error.fix.length > 0);
   assert.equal(runs.length, RQL_LIMITS.parallelQueriesPerProject, "the fifth never ran");
 

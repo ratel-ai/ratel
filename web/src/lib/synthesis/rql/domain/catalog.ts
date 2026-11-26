@@ -432,7 +432,8 @@ export const RQL_FUNCTIONS: readonly RqlFunction[] = [
     name: "time_bucket",
     signature: "time_bucket('<n> minute|hour|day|week', timestamp)",
     returns: "timestamp",
-    description: "The start of the bucket of the timestamp. Buckets start at 2000-01-01 00:00 UTC.",
+    description:
+      "The start of the bucket of the timestamp. Buckets start at 2000-01-03 00:00 UTC, a Monday: a day starts at midnight UTC and a week on Monday.",
     aggregate: false,
     example:
       "select time_bucket('1 hour', started_at) as hour, count(*) from traces group by hour order by hour",

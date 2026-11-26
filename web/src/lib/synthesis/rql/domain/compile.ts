@@ -2,6 +2,7 @@ import type { ParseResult } from "./ast";
 import type { RqlTableName, RqlType } from "./catalog";
 import { checkQuery, type ParamValue } from "./check";
 import { RqlCompileError, type RqlError } from "./errors";
+import { guardText } from "./guard";
 import { RQL_LIMITS } from "./limits";
 import type { RqlPageFilter } from "./page-filter";
 import { rewriteSelect } from "./rewrite";
@@ -56,8 +57,11 @@ export function compileQuery(
         },
       };
     }
+    guardText(text);
     const window = resolveWindow(options.now, options.window);
-    const select = checkQuery(parse(text));
+    const parsed = parse(text);
+    guardDepth(parsed);
+    const select = checkQuery(parsed);
     const limit = Math.min(select.limit ?? RQL_LIMITS.defaultLimit, RQL_LIMITS.maxLimit);
     const { sql, params, limitParam } = rewriteSelect(select, window, limit, options.filter);
     return {
@@ -76,6 +80,34 @@ export function compileQuery(
     };
   } catch (error) {
     if (error instanceof RqlCompileError) return { ok: false, error: error.error };
+    // A tree deeper than the stack: refused as the depth check refuses it.
+    if (error instanceof RangeError && /call stack/i.test(error.message))
+      return { ok: false, error: tooDeep() };
     throw error;
   }
+}
+
+/** Refuses a parsed tree deeper than `maxExpressionDepth`, with no recursion. */
+function guardDepth(parsed: ParseResult): void {
+  if (!parsed.ok) return;
+  const stack: { node: unknown; depth: number }[] = [{ node: parsed.statements, depth: 0 }];
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop() as { node: unknown; depth: number };
+    if (depth > RQL_LIMITS.maxExpressionDepth) throw new RqlCompileError(tooDeep());
+    if (node === null || typeof node !== "object") continue;
+    const nested = Array.isArray(node) ? depth : depth + 1;
+    for (const [key, value] of Object.entries(node)) {
+      if (key !== "at" && value !== null && typeof value === "object") {
+        stack.push({ node: value, depth: nested });
+      }
+    }
+  }
+}
+
+function tooDeep(): RqlError {
+  return {
+    code: "syntax_error",
+    message: `The query nests expressions more than ${RQL_LIMITS.maxExpressionDepth} levels deep.`,
+    fix: "Write a flatter expression: fewer NOT, parentheses or operators in a chain.",
+  };
 }

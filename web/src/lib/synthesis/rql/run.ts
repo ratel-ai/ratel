@@ -24,6 +24,7 @@ import type { RqlExecutor } from "./ports/executor";
 export type { RqlGate } from "./domain/gate";
 export { createRqlGate } from "./domain/gate";
 export type { RqlCompiled, RqlRunError, RqlRunErrorCode, RqlRunResult } from "./domain/run";
+export { busyError } from "./domain/run";
 
 export interface RqlRunOptions {
   projectId: string;
@@ -49,7 +50,13 @@ export interface RqlRunDeps {
 }
 
 /** One gate per process: the parallel cap holds across every caller of `runRql`. */
-const processGate = createRqlGate();
+export const rqlProcessGate = createRqlGate();
+
+/**
+ * The gate of a caller that holds the place of the project already: it entered the gate before
+ * the compile, so a busy project is refused before its text costs a parse.
+ */
+export const placeHeld: RqlGate = { enter: () => () => {} };
 
 export async function runRql(
   compiled: RqlCompiled,
@@ -66,7 +73,7 @@ export async function runRql(
       const result = await executeCompiled(compiled, {
         projectId: options.projectId,
         executor,
-        gate: deps.gate ?? processGate,
+        gate: deps.gate ?? rqlProcessGate,
         timeoutMs: deps.timeoutMs ?? RQL_LIMITS.timeoutMs,
       });
       const observation: RqlRunObservation = {
