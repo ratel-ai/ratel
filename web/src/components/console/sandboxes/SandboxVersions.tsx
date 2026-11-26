@@ -11,7 +11,7 @@ import type { VersionRow } from "@/lib/views/sandboxes/page-model";
 const STATUS: Record<VersionRow["status"], { label: string; tone: Tone }> = {
   uploading: { label: "Uploading", tone: "neutral" },
   uploaded: { label: "Waiting", tone: "neutral" },
-  building: { label: "Building", tone: "info" },
+  preparing: { label: "Preparing", tone: "info" },
   ready: { label: "Ready", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
 };
@@ -32,6 +32,18 @@ export function SandboxVersions({ versions, now }: { versions: VersionRow[]; now
             <li key={version.id} className="flex flex-col gap-1 px-4 py-3">
               <VersionHead version={version} now={now} />
               {version.reason ? <p className="text-ui text-fg-muted">{version.reason}</p> : null}
+              {version.smoke && !version.smoke.ok ? (
+                <p className="text-ui text-fg-muted">
+                  Smoke check: <code className="font-mono text-xs">{version.smoke.error.code}</code>
+                </p>
+              ) : null}
+              {version.smoke?.logs ? (
+                <Disclosure title="Smoke check logs">
+                  <pre className="max-h-80 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
+                    {version.smoke.logs}
+                  </pre>
+                </Disclosure>
+              ) : null}
               {version.buildLog ? (
                 <Disclosure title="Build log">
                   <pre className="max-h-80 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
@@ -53,9 +65,11 @@ function VersionHead({ version, now }: { version: VersionRow; now: string }) {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <span className="text-ui font-medium text-fg">{version.name}</span>
       <Badge tone={status.tone}>{status.label}</Badge>
-      <code className="font-mono text-xs text-fg-muted" title={version.commit}>
-        {version.commit.slice(0, 12)}
-      </code>
+      {version.commit ? (
+        <code className="font-mono text-xs text-fg-muted" title={version.commit}>
+          {version.commit.slice(0, 12)}
+        </code>
+      ) : null}
       {version.dirty ? <Badge tone="warning">Uncommitted changes</Badge> : null}
       <span className="ml-auto text-xs text-fg-subtle" title={version.createdAt}>
         {formatRelativeTime(version.createdAt, now)}

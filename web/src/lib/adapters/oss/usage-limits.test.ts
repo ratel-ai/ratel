@@ -19,7 +19,7 @@ test("the hard limits are the decided values", async () => {
     sandbox_run_seconds: 1800,
     sandbox_runs_per_day: 5000,
     sandbox_versions_per_day: 100,
-    sandbox_bundle_bytes: 1024 ** 3,
+    sandbox_bundle_bytes: 2 * 1024 ** 3,
   });
   assert.equal(await ossUsageLimits.limit(SUBJECT, "sandbox_runs_per_day"), 5000);
 });

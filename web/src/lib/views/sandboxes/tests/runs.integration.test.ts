@@ -20,8 +20,9 @@ import { createFakeProvider } from "./fake-provider";
 import {
   bundleInfo,
   COMMIT,
+  CONFIG,
   createSandboxDb,
-  MANIFEST,
+  IMAGE,
   ORGANIZATION_ID,
   OTHER_PROJECT_ID,
   PROJECT_ID,
@@ -44,7 +45,8 @@ async function setup(limitOverrides: Parameters<typeof createInMemoryUsageLimits
     {
       projectId: PROJECT_ID,
       apiKeyId: null,
-      manifest: MANIFEST,
+      config: CONFIG,
+      image: IMAGE,
       git: { commit: COMMIT, dirty: false },
       bundle: bundleInfo(bundle),
     },
@@ -67,7 +69,16 @@ async function setup(limitOverrides: Parameters<typeof createInMemoryUsageLimits
     await builds.claim(PROJECT_ID, versionId, new Date());
     const imageRef = `rv-${versionId}`;
     provider.snapshots.set(imageRef, new Map());
-    await builds.finish(versionId, { status: "ready", imageRef, log: "" }, new Date());
+    await builds.finish(
+      versionId,
+      {
+        status: "ready",
+        imageRef,
+        smoke: { ok: true, output: 1, durationMs: 1, logs: "" },
+        log: "",
+      },
+      new Date(),
+    );
   };
   let clock = Date.now();
   const deps: RunDeps = {

@@ -3,6 +3,7 @@ import { gzipSync } from "node:zlib";
 import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import type { RatelYaml } from "../domain/config";
 
 export const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 export const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -23,7 +24,7 @@ export async function createSandboxDb() {
 
 export type TarEntry = { name: string; body?: string; type?: string; link?: string };
 
-/** A gzip tar of these entries, as the CLI writes one. */
+/** A gzip tar of these entries. */
 export function tarGz(entries: TarEntry[]): Buffer {
   const blocks = entries.flatMap(({ name, body = "", type = "0", link = "" }) => {
     const header = Buffer.alloc(512);
@@ -43,24 +44,18 @@ export function tarGz(entries: TarEntry[]): Buffer {
   return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
 }
 
-export function pax(path: string): TarEntry {
-  const record = (length: number) => `${length} path=${path}\n`;
-  let length = record(0).length;
-  while (record(length).length !== length) length = record(length).length;
-  return { name: "pax", type: "x", body: record(length) };
-}
-
 export function bundleInfo(bundle: Buffer) {
   return { sha256: createHash("sha256").update(bundle).digest("hex"), bytes: bundle.length };
 }
 
-export const MANIFEST = {
-  v: 1 as const,
+/** A parsed ratel.yaml of an HTTP agent. */
+export const CONFIG = {
   name: "support-agent",
-  entry: "src/agent.ts",
-  base: "node:24-slim",
-  install: ["npm install"],
+  run: { mode: "http", port: 8080, timeoutSeconds: 120 },
+  input: { example: { message: "Refund order 42" } },
+  params: { model: { type: "enum", options: ["small", "large"], default: "small" } },
   secrets: ["OPENAI_API_KEY"],
-  tools: [{ name: "refund_order", sideEffect: true, fake: true }],
-};
+  tools: { lookup_order: { mode: "live" }, refund_order: { mode: "simulated" } },
+} satisfies RatelYaml;
+export const IMAGE = { digest: `sha256:${"c".repeat(64)}`, platform: "linux/amd64" };
 export const COMMIT = "b".repeat(40);

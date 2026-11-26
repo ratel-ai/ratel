@@ -3,8 +3,9 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageLimitsPort, UsageRefusal } from "@/lib/contracts/usage-limits";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { getLogger } from "@/lib/platform/logger";
-import { type SealedSecretsKey, unsealSecret } from "@/lib/platform/sealed-secrets";
+import type { SealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { storable } from "@/lib/platform/storable";
+import { secretNamesOf } from "./domain/config";
 import {
   encodeRunInput,
   MAX_ENCODED_INPUT_BYTES,
@@ -12,12 +13,12 @@ import {
   type SandboxRun,
   type ToolFixture,
 } from "./domain/run";
-import type { SandboxVersion } from "./domain/version";
 import { imageTag, NOT_CONFIGURED_REASON } from "./image-build-job";
 import type { RunStore } from "./ports/run-store";
 import type { SandboxProvider } from "./ports/sandbox-provider";
 import type { SecretStore } from "./ports/secret-store";
 import type { VersionStore } from "./ports/version-store";
+import { envFile, openSecretValues } from "./secret-values";
 
 /** Starts runs and reads them. A run has one new instance. */
 export type RunDeps = {
@@ -89,7 +90,7 @@ export async function startRun(
   if (encoded.length > MAX_ENCODED_INPUT_BYTES) {
     return refused("input_too_large", "The input, the params and the fixtures are too large.");
   }
-  const secrets = await openSecrets(version, deps);
+  const secrets = await openSecretValues(projectId, secretNamesOf(version.config), deps);
   if (!secrets.ok) return secrets;
 
   const callbackUrl = deps.callbackUrl();
@@ -249,44 +250,6 @@ async function startContainer(
     });
     throw error;
   }
-}
-
-/** The variables in the `--env-file` form of Docker: one `NAME=value` a line. */
-function envFile(env: Record<string, string>): string {
-  const lines = Object.entries(env).map(([name, value]) => {
-    // The form has no way to hold a line break. The message names the variable, not its value.
-    if (/[\r\n]/.test(value)) throw new Error(`the variable ${name} holds a line break`);
-    return `${name}=${value}\n`;
-  });
-  return lines.join("");
-}
-
-/** The clear values of the secrets that the manifest names, and no other secret. */
-async function openSecrets(
-  version: SandboxVersion,
-  deps: RunDeps,
-): Promise<
-  | { ok: true; values: Record<string, string> }
-  | { ok: false; reason: RefusalReason; message: string }
-> {
-  const names = version.manifest.secrets;
-  if (names.length === 0) return { ok: true, values: {} };
-  const sealing = deps.sealingKey();
-  if (!sealing.ok) return refused("not_configured", sealing.message);
-  const sealed = await deps.secrets.readSealed(version.projectId, names);
-  const missing = names.filter((name) => !sealed.has(name));
-  if (missing.length > 0) {
-    return refused("missing_secrets", `Set these secrets first: ${missing.join(", ")}.`);
-  }
-  const values: Record<string, string> = {};
-  for (const [name, text] of sealed) {
-    try {
-      values[name] = unsealSecret(sealing.key, { projectId: version.projectId, name }, text);
-    } catch {
-      return refused("missing_secrets", `The secret ${name} does not open any more. Set it again.`);
-    }
-  }
-  return { ok: true, values };
 }
 
 function refused(reason: RefusalReason, message: string) {

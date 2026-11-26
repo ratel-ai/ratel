@@ -1,0 +1,16 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "params": {
+    "model": {
+      "type": "enum",
+      "options": [
+        "x",
+        "y"
+      ],
+      "default": "z"
+    }
+  }
+}

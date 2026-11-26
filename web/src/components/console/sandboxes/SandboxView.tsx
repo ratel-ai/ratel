@@ -28,7 +28,7 @@ export function SandboxView({
   const router = useRouter();
   const building = model.versions.some(
     (version) =>
-      version.status === "building" || (version.status === "uploaded" && version.reason === null),
+      version.status === "preparing" || (version.status === "uploaded" && version.reason === null),
   );
   useEffect(() => {
     if (!building) return;

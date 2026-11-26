@@ -1,0 +1,7 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "entry": "src/agent.ts"
+}

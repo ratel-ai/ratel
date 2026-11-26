@@ -1,0 +1,16 @@
+{
+  "config": {
+    "name": "support-agent",
+    "input": {
+      "example": "hi"
+    }
+  },
+  "image": {
+    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "platform": "linux/amd64"
+  },
+  "bundle": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 123
+  }
+}

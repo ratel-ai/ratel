@@ -1,0 +1,18 @@
+{
+  "name": "command-agent",
+  "image": {
+    "ref": "ghcr.io/acme/agent:1.2"
+  },
+  "run": {
+    "mode": "command",
+    "command": [
+      "python",
+      "agent.py"
+    ]
+  },
+  "input": {
+    "example": {
+      "text": "hi"
+    }
+  }
+}

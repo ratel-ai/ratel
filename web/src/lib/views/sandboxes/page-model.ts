@@ -1,5 +1,7 @@
+import { secretNamesOf } from "./domain/config";
 import type { SandboxRun } from "./domain/run";
 import { runView } from "./domain/run";
+import type { SmokeResult } from "./domain/smoke";
 import type { SandboxVersion, VersionStatus } from "./domain/version";
 import type { RunStore } from "./ports/run-store";
 import type { SecretStore } from "./ports/secret-store";
@@ -21,11 +23,12 @@ export type VersionRow = {
   name: string;
   status: VersionStatus;
   reason: string | null;
-  commit: string;
+  /** Null when the push had no git information. */
+  commit: string | null;
   dirty: boolean;
   createdAt: string;
   buildLog: string | null;
-  tools: Array<{ name: string; sideEffect: boolean }>;
+  smoke: SmokeResult | null;
 };
 
 export type SecretRow = {
@@ -72,11 +75,11 @@ function versionRow(version: SandboxVersion): VersionRow {
     name: version.name,
     status: version.status,
     reason: version.reason,
-    commit: version.git.commit,
-    dirty: version.git.dirty,
+    commit: version.git?.commit ?? null,
+    dirty: version.git?.dirty ?? false,
     createdAt: version.createdAt.toISOString(),
     buildLog: version.buildLog,
-    tools: version.manifest.tools.map(({ name, sideEffect }) => ({ name, sideEffect })),
+    smoke: version.smoke,
   };
 }
 
@@ -89,7 +92,9 @@ export function secretRows(
   for (const version of versions) {
     if (!latest.has(version.name)) latest.set(version.name, version);
   }
-  const declared = new Set([...latest.values()].flatMap((version) => version.manifest.secrets));
+  const declared = new Set(
+    [...latest.values()].flatMap((version) => secretNamesOf(version.config)),
+  );
   const set = new Map(secrets.map((secret) => [secret.name, secret.updatedAt.toISOString()]));
   return [...new Set([...declared, ...set.keys()])]
     .map((name) => ({ name, updatedAt: set.get(name) ?? null, declared: declared.has(name) }))

@@ -7,9 +7,13 @@ import { resolveConfig } from "@/config";
 import { createInMemoryUsageLimits } from "@/lib/contracts/usage-limits.fake";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
+import { sealSecret } from "@/lib/platform/sealed-secrets";
+import { createDrizzleBuildStore } from "../adapters/drizzle-build-store";
+import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { sandboxesEnabledForProject, sandboxesOffForAll } from "../gate";
+import { runImageBuild } from "../image-build-job";
 import {
   handleCreateVersion,
   handleFinalizeVersion,
@@ -18,18 +22,22 @@ import {
   handleUploadBundle,
   type PushApiDeps,
 } from "../push-api";
+import { type AgentScript, scriptAgent } from "./fake-agent";
+import { createFakeProvider } from "./fake-provider";
 import {
   bundleInfo,
   COMMIT,
+  CONFIG,
   createSandboxDb,
-  MANIFEST,
+  IMAGE,
   ORGANIZATION_ID,
   OTHER_PROJECT_ID,
   PROJECT_ID,
   tarGz,
 } from "./support";
 
-const BUNDLE = tarGz([{ name: "src/agent.ts", body: "export default () => 1;" }]);
+const BUNDLE = tarGz([{ name: "manifest.json", body: "[]" }]);
+const SEALING = Buffer.alloc(32, 9);
 const WRITE = BEARER_ROUTE_SCOPES["POST /api/v1/sandboxes/versions"];
 const READ = BEARER_ROUTE_SCOPES["GET /api/v1/sandboxes"];
 const KEYS: Record<string, { projectId: string; scopes: string[] }> = {
@@ -39,6 +47,7 @@ const KEYS: Record<string, { projectId: string; scopes: string[] }> = {
   other: { projectId: OTHER_PROJECT_ID, scopes: ["*"] },
 };
 const ON = resolveConfig({ env: { FF_SANDBOXES: "1" } });
+const GET = new Request("http://10.0.0.7:3000/x");
 
 type Over = {
   key?: string;
@@ -46,6 +55,7 @@ type Over = {
   limits?: Parameters<typeof createInMemoryUsageLimits>[0];
   on?: boolean;
   provider?: boolean;
+  origin?: string | null;
 };
 
 async function setup() {
@@ -53,7 +63,36 @@ async function setup() {
   const bundles = createLocalBundleStore(mkdtempSync(join(tmpdir(), "bundles-")));
   const uploaded: string[] = [];
   const records: unknown[] = [];
-  const deps = ({ key = "full", scope = WRITE, limits, on = true, provider = true }: Over = {}) => {
+  const secrets = createDrizzleSecretStore(db);
+  const sealed = sealSecret(SEALING, { projectId: PROJECT_ID, name: "OPENAI_API_KEY" }, "sk-1");
+  await secrets.set(PROJECT_ID, "OPENAI_API_KEY", sealed, "user_1");
+  const vms = createFakeProvider();
+  const agent = (script?: AgentScript) => scriptAgent(vms, script);
+  agent();
+  /** The build job of a version, as the worker runs it after the push. */
+  const prepare = (versionId: string) =>
+    runImageBuild(
+      PROJECT_ID,
+      { versionId },
+      {
+        builds: createDrizzleBuildStore(db),
+        bundles,
+        provider: vms,
+        secrets,
+        sealingKey: () => ({ ok: true, key: SEALING }),
+        enabled: async () => true,
+        now: () => new Date(),
+        every: () => () => {},
+      },
+    );
+  const deps = ({
+    key = "full",
+    scope = WRITE,
+    limits,
+    on = true,
+    provider = true,
+    origin = "https://ratel.example",
+  }: Over = {}) => {
     const usage = createInMemoryUsageLimits(limits);
     const config = on ? ON : resolveConfig();
     return {
@@ -89,24 +128,40 @@ async function setup() {
       onUploaded: async (version) => {
         uploaded.push(version.id);
       },
-      publicUrl: (path) => `https://ratel.example${path}`,
+      publicOrigin: () => origin,
     } satisfies PushApiDeps;
   };
   const create = (over?: Over, body: unknown = input()) =>
     handleCreateVersion(post(JSON.stringify(body)), deps(over));
   const upload = (id: string, body: Buffer = BUNDLE, over?: Over) =>
     handleUploadBundle(post(body), id, deps(over));
-  const finalize = (id: string, over?: Over) => handleFinalizeVersion(id, deps(over));
-  const get = (id: string, over?: Over) => handleGetVersion(id, deps({ scope: READ, ...over }));
+  const finalize = (id: string, over?: Over) => handleFinalizeVersion(GET, id, deps(over));
+  const get = (id: string, over?: Over) =>
+    handleGetVersion(GET, id, deps({ scope: READ, ...over }));
+  const list = (over?: Over) => handleListVersions(GET, deps({ scope: READ, ...over }));
   const push = async (over?: Over) => {
     const { versionId } = await read(await create(over));
     await upload(versionId);
     return { versionId, finalized: await finalize(versionId) };
   };
-  return { client, deps, create, upload, finalize, get, push, uploaded, records };
+  return {
+    client,
+    deps,
+    create,
+    upload,
+    finalize,
+    get,
+    list,
+    push,
+    prepare,
+    agent,
+    vms,
+    uploaded,
+    records,
+  };
 }
 
-test("a push stores the version with its commit, its dirty flag and its bundle", async () => {
+test("a push stores the version with its config, image, commit and tarball", async () => {
   const t = await setup();
   const created = await t.create();
   assert.equal(created.status, 201);
@@ -118,23 +173,162 @@ test("a push stores the version with its commit, its dirty flag and its bundle",
     authorize: true,
   });
   assert.equal((await t.upload(body.versionId)).status, 204);
-  assert.equal((await t.finalize(body.versionId)).status, 202);
+  const finalized = await t.finalize(body.versionId);
+  assert.equal(finalized.status, 202);
+  assert.equal((await read(finalized)).status, "uploaded");
   const version = await read(await t.get(body.versionId));
   assert.equal(version.status, "uploaded");
+  assert.equal(version.name, CONFIG.name);
+  assert.deepEqual(version.config, CONFIG);
+  assert.deepEqual(version.image, IMAGE);
   assert.deepEqual(version.git, { commit: COMMIT, dirty: true });
   assert.deepEqual(version.bundle, bundleInfo(BUNDLE));
-  assert.deepEqual(version.manifest, MANIFEST);
+  assert.equal(version.url, `https://ratel.example/project/${PROJECT_ID}/sandbox`);
+  assert.equal("manifest" in version, false);
   assert.deepEqual(t.uploaded, [body.versionId]);
+});
+
+test("a valid push goes preparing, then ready, with its smoke result through the version API", async () => {
+  const t = await setup();
+  const { versionId } = await t.push();
+  const statuses: string[] = [];
+  const startVm = t.vms.startVm;
+  t.vms.startVm = async (request) => {
+    statuses.push((await read(await t.get(versionId))).status);
+    return startVm(request);
+  };
+  assert.deepEqual(await t.prepare(versionId), { status: "ready" });
+  const version = await read(await t.get(versionId));
+  assert.deepEqual(statuses, ["preparing"]);
+  assert.equal(version.status, "ready");
+  assert.equal(version.reason, null);
+  assert.deepEqual(version.config, CONFIG);
+  assert.equal(version.smoke.ok, true);
+  assert.deepEqual(version.smoke.output, { reply: "refunded" });
+  assert.equal(typeof version.smoke.durationMs, "number");
+  assert.equal(JSON.stringify(version).includes(`rv-${versionId}`), false, "no snapshot name");
+  assert.equal(t.vms.snapshots.size, 1);
+  assert.equal(t.vms.vms.size, 0);
+});
+
+const FAILURES: Array<[string, AgentScript, string]> = [
+  ["no health", { health: "never" }, "no_health"],
+  ["not JSON", { answer: { status: 200, body: "ok" } }, "not_json"],
+  ["not a run response", { answer: { status: 200, body: '{"text":"hi"}' } }, "invalid_response"],
+  ["a 500 with no error", { answer: { status: 500, body: "{}" } }, "invalid_error"],
+];
+
+for (const [what, script, code] of FAILURES) {
+  test(`a smoke check with ${what} gives failed with ${code} and the logs through the version API`, async () => {
+    const t = await setup();
+    t.agent({ ...script, logs: "agent booted\n" });
+    const { versionId } = await t.push();
+    assert.deepEqual(await t.prepare(versionId), { status: "failed" });
+    const version = await read(await t.get(versionId));
+    assert.equal(version.status, "failed");
+    assert.equal(version.smoke.ok, false);
+    assert.equal(version.smoke.error.code, code);
+    assert.equal(version.reason, version.smoke.error.message);
+    assert.equal(version.smoke.logs, "agent booted\n");
+    assert.equal(t.vms.snapshots.size, 0);
+    assert.equal(t.vms.vms.size, 0);
+  });
+}
+
+test("command mode: a non-zero exit gives failed with stderr through the version API", async () => {
+  const t = await setup();
+  t.agent({ command: { exitCode: 2, stderr: "no input\n" } });
+  const config = {
+    name: "cli",
+    run: { mode: "command", command: ["./agent"] },
+    input: { example: 1 },
+  };
+  const { versionId } = await read(await t.create({}, { ...input(), config }));
+  await t.upload(versionId);
+  await t.finalize(versionId);
+  await t.prepare(versionId);
+  const version = await read(await t.get(versionId));
+  assert.equal(version.status, "failed");
+  assert.equal(version.smoke.error.code, "run_failed");
+  assert.equal(version.smoke.logs, "no input\n");
+});
+
+test("with no public origin the upload address is the origin that the client called", async () => {
+  const t = await setup();
+  const created = await handleCreateVersion(
+    new Request("http://10.0.0.7:3000/api/v1/sandboxes/versions", {
+      method: "POST",
+      headers: { "x-forwarded-host": "staging.ratel.sh", "x-forwarded-proto": "https" },
+      body: JSON.stringify(input()),
+    }),
+    t.deps({ origin: null }),
+  );
+  const { versionId, upload } = await read(created);
+  assert.equal(
+    upload.url,
+    `https://staging.ratel.sh/api/v1/sandboxes/versions/${versionId}/bundle`,
+  );
+  const direct = await handleCreateVersion(post(JSON.stringify(input())), t.deps({ origin: null }));
+  assert.match((await read(direct)).upload.url, /^http:\/\/x\/api\/v1\/sandboxes\/versions\//);
+});
+
+test("an invalid ratel.yaml is refused with its path, and no version or VM starts", async () => {
+  const t = await setup();
+  const bad = [
+    [
+      { ...CONFIG, params: { model: { type: "enum", options: ["a"], default: "b" } } },
+      /^config\.params\.model\.default: /,
+    ],
+    [{ ...CONFIG, entry: "src/agent.ts" }, /^config\.entry: /],
+    [
+      { ...CONFIG, secrets: ["RATEL_TOKEN"] },
+      /^config\.secrets\.0: The prefix of this name is reserved/,
+    ],
+    [{ ...CONFIG, input: {} }, /^config\.input\.example: /],
+  ] as const;
+  for (const [config, message] of bad) {
+    const refused = await t.create({}, { ...input(), config });
+    assert.equal(refused.status, 400);
+    const body = await read(refused);
+    assert.equal(body.error, "invalid");
+    assert.match(body.message, message);
+  }
+  assert.deepEqual((await read(await t.list())).versions, []);
+  assert.equal(t.vms.starts.length, 0);
+});
+
+test("a tarball over the size limit is refused with the limit, and no VM starts", async () => {
+  const t = await setup();
+  const refused = await t.create({ limits: { sandbox_bundle_bytes: 10 } });
+  assert.equal(refused.status, 413);
+  const body = await read(refused);
+  assert.deepEqual(
+    [body.error, body.limit, body.max],
+    ["limit_reached", "sandbox_bundle_bytes", 10],
+  );
+  assert.match(body.message, /sandbox_bundle_bytes/);
+  assert.deepEqual((await read(await t.list())).versions, []);
+  assert.equal(t.vms.starts.length, 0);
+});
+
+test("a push with no git information has a null git", async () => {
+  const t = await setup();
+  const { git: _, ...noGit } = input();
+  const { versionId } = await read(await t.create({}, noGit));
+  assert.equal((await read(await t.get(versionId))).git, null);
 });
 
 test("two pushes of the same folder give two versions, and the first does not change", async () => {
   const t = await setup();
   const first = await t.push();
+  await t.prepare(first.versionId);
   const before = await read(await t.get(first.versionId));
+  assert.equal(before.status, "ready");
   const second = await t.push();
+  await t.prepare(second.versionId);
   assert.notEqual(first.versionId, second.versionId);
   assert.deepEqual(await read(await t.get(first.versionId)), before);
-  const list = await read(await handleListVersions(t.deps({ scope: READ })));
+  const list = await read(await t.list());
   assert.deepEqual(
     list.versions.map((v: { versionId: string }) => v.versionId).sort(),
     [first.versionId, second.versionId].sort(),
@@ -145,7 +339,7 @@ test("no route changes a stored version", async () => {
   const t = await setup();
   const { versionId } = await t.push();
   const before = await read(await t.get(versionId));
-  const other = tarGz([{ name: "other.ts", body: "x" }]);
+  const other = tarGz([{ name: "other", body: "x" }]);
   assert.equal((await t.upload(versionId, other)).status, 409);
   assert.equal((await t.upload(versionId)).status, 409);
   assert.equal((await t.finalize(versionId)).status, 202);
@@ -160,18 +354,6 @@ test("finalize without a bundle, and an upload of another bundle, are refused", 
   const wrong = await t.upload(versionId, Buffer.concat([BUNDLE, Buffer.from("x")]));
   assert.equal((await read(wrong)).error, "bundle_mismatch");
   assert.equal((await t.upload(versionId)).status, 204, "the right bundle still fits");
-});
-
-test("a bundle with a ../ entry is refused", async () => {
-  const t = await setup();
-  const evil = tarGz([{ name: "../evil.sh", body: "x" }]);
-  const { versionId } = await read(await t.create({}, { ...input(), bundle: bundleInfo(evil) }));
-  await t.upload(versionId, evil);
-  const refused = await t.finalize(versionId);
-  assert.equal(refused.status, 422);
-  assert.match((await read(refused)).message, /leaves the project folder/);
-  assert.equal((await read(await t.get(versionId))).status, "failed");
-  assert.deepEqual(t.uploaded, []);
 });
 
 test("a key needs the scope", async () => {
@@ -193,19 +375,9 @@ test("a key of another project cannot read, upload or finalize the version", asy
   assert.equal((await t.get(versionId, { key })).status, 404);
   assert.equal((await t.upload(versionId, BUNDLE, { key })).status, 404);
   assert.equal((await t.finalize(versionId, { key })).status, 404);
-  const list = await read(await handleListVersions(t.deps({ key, scope: READ })));
+  const list = await read(await t.list({ key }));
   assert.deepEqual(list.versions, []);
   assert.equal((await t.get("not-a-uuid")).status, 404);
-});
-
-test("a bundle over the size limit is refused with the limit name", async () => {
-  const t = await setup();
-  const refused = await t.create({ limits: { sandbox_bundle_bytes: 10 } });
-  assert.equal(refused.status, 413);
-  const body = await read(refused);
-  assert.equal(body.error, "limit_reached");
-  assert.equal(body.limit, "sandbox_bundle_bytes");
-  assert.equal(body.max, 10);
 });
 
 test("a push over the daily limit is refused with the limit name, for its project only", async () => {
@@ -262,7 +434,7 @@ test("with the flag off every route answers 404, with and without a key", async 
       await t.upload(versionId, BUNDLE, off),
       await t.finalize(versionId, off),
       await t.get(versionId, off),
-      await handleListVersions(t.deps({ ...off, scope: READ })),
+      await t.list(off),
     ];
     assert.deepEqual(
       answers.map((response) => response.status),
@@ -272,7 +444,12 @@ test("with the flag off every route answers 404, with and without a key", async 
 });
 
 function input() {
-  return { manifest: MANIFEST, git: { commit: COMMIT, dirty: true }, bundle: bundleInfo(BUNDLE) };
+  return {
+    config: CONFIG,
+    image: IMAGE,
+    git: { commit: COMMIT, dirty: true },
+    bundle: bundleInfo(BUNDLE),
+  };
 }
 
 function post(body: string | Buffer): Request {
@@ -283,22 +460,3 @@ function post(body: string | Buffer): Request {
 async function read(response: Response): Promise<any> {
   return response.json();
 }
-
-test("a refused bundle fails its version, and the check does not run again", async () => {
-  const t = await setup();
-  const bad = tarGz([{ name: "../evil.sh", body: "x" }]);
-  const { versionId } = await read(await t.create({}, { ...input(), bundle: bundleInfo(bad) }));
-  assert.equal((await t.upload(versionId, bad)).status, 204);
-  const first = await t.finalize(versionId);
-  assert.equal(first.status, 422);
-  const version = await read(await t.get(versionId));
-  assert.equal(version.status, "failed");
-  assert.match(version.reason, /leaves the project/);
-  assert.equal((await t.finalize(versionId)).status, 202);
-});
-
-test("a manifest with a NUL character is refused", async () => {
-  const t = await setup();
-  const manifest = { ...MANIFEST, install: ["npm\0install"] };
-  assert.equal((await t.create({}, { ...input(), manifest })).status, 400);
-});

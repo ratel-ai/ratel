@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createVersionSchema, manifestSchema, secretNameSchema } from "../domain/manifest";
+import { createVersionSchema, ratelYamlSchema, secretNameSchema } from "../domain/config";
 import { runResultSchema } from "../domain/run";
+import { errorSchema, runResponseSchema } from "../domain/smoke";
 
 // Copies of the conformance vectors of protocol/sandbox/v1 (ratel-sdk).
 const VECTORS = join(import.meta.dirname, "vectors");
 const SCHEMAS = {
-  manifest: manifestSchema,
+  "ratel-yaml": ratelYamlSchema,
   "create-version.request": createVersionSchema,
+  "run-response": runResponseSchema,
+  error: errorSchema,
   "run-result": runResultSchema,
 };
 
@@ -35,4 +38,22 @@ test("the refusal of a reserved secret name has no name of a provider", () => {
       "The prefix of this name is reserved. Use another name.",
     );
   }
+});
+
+test("an enum default that is not an option is refused at its path", () => {
+  const refusal = ratelYamlSchema.safeParse({
+    name: "a",
+    input: { example: 1 },
+    params: { model: { type: "enum", options: ["x"], default: "y" } },
+  });
+  assert.ok(!refusal.success);
+  assert.deepEqual(refusal.error.issues[0]?.path, ["params", "model", "default"]);
+});
+
+test("a configuration with a NUL character is refused: Postgres cannot store it", () => {
+  const body = JSON.parse(
+    readFileSync(join(VECTORS, "valid", "create-version.request.full.json"), "utf8"),
+  );
+  body.config.input.example = "a\0b";
+  assert.equal(createVersionSchema.safeParse(body).success, false);
 });

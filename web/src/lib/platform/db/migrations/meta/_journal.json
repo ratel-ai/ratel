@@ -386,6 +386,20 @@
       "when": 1795613545500,
       "tag": "0054_sandbox_instances",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795692191193,
+      "tag": "0055_sandbox_version_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795692210126,
+      "tag": "0056_sandbox_version_config_only",
+      "breakpoints": true
     }
   ]
 }

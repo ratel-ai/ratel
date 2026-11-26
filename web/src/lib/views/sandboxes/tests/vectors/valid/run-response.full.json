@@ -1,0 +1,43 @@
+{
+  "output": {
+    "reply": "Order 42 is refunded."
+  },
+  "toolCalls": [
+    {
+      "name": "lookup_order",
+      "args": {
+        "id": "42"
+      },
+      "result": {
+        "status": "shipped"
+      },
+      "mode": "live"
+    },
+    {
+      "name": "refund_order",
+      "args": {
+        "id": "42"
+      },
+      "result": {
+        "refunded": true
+      },
+      "mode": "simulated"
+    },
+    {
+      "name": "cancel_order",
+      "args": {
+        "id": "42"
+      },
+      "mode": "simulated",
+      "error": {
+        "code": "no_fake",
+        "message": "The tool cancel_order is simulated and has no fake handler."
+      }
+    }
+  ],
+  "usage": {
+    "inputTokens": 1200,
+    "outputTokens": 80,
+    "costUsd": 0.0048
+  }
+}

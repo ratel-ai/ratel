@@ -3,8 +3,10 @@ import { SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { getDb } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
+import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleBuildStore } from "./adapters/drizzle-build-store";
+import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
 import { sandboxProvider } from "./adapters/provider-from-env";
 import { sandboxesEnabledForProject } from "./gate";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
@@ -15,7 +17,7 @@ import { sweepRuns } from "./run-sweep";
 const UNQUEUED_MS = 2 * 60_000;
 
 /**
- * What Ratel sandboxes contribute to the background machinery: the image build, which the reaper
+ * What Ratel sandboxes contribute to the background machinery: the image preparation, which the reaper
  * spares while it sends heartbeats (it can outlast the stale-job window), and the sweeps that end
  * an interrupted build, queue a build that was never queued, and end runs and their instances.
  */
@@ -26,6 +28,8 @@ export const sandboxesRegistration: Registration = {
         builds: createDrizzleBuildStore(getDb()),
         bundles: bundleStore(),
         provider: sandboxProvider(),
+        secrets: createDrizzleSecretStore(getDb()),
+        sealingKey: () => sealedSecretsKey(),
         enabled: (projectId) => sandboxesEnabledForProject(projectId),
         now: () => new Date(),
         every: (ms, beat) => {

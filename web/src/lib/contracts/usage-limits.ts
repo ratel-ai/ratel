@@ -11,7 +11,8 @@ export const SANDBOX_HARD_LIMITS = {
   sandbox_run_seconds: 30 * 60,
   sandbox_runs_per_day: 5_000,
   sandbox_versions_per_day: 100,
-  sandbox_bundle_bytes: 1024 ** 3,
+  // A gzip of `docker save`.
+  sandbox_bundle_bytes: 2 * 1024 ** 3,
 };
 
 export type UsageLimitName = keyof typeof SANDBOX_HARD_LIMITS;

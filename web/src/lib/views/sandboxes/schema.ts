@@ -13,8 +13,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
-import type { SandboxManifest } from "./domain/manifest";
+import type { RatelYaml } from "./domain/config";
 import type { RunInput, RunResult } from "./domain/run";
+import type { SmokeResult } from "./domain/smoke";
 
 /** The tables of Ratel sandboxes (the `sandboxes` flag). */
 
@@ -32,7 +33,10 @@ export const sandboxes = pgTable(
   (t) => [uniqueIndex("sandboxes_project_name_idx").on(t.projectId, t.name)],
 );
 
-/** One push. Only the build columns (status, reason, image, log, build times) change after it. */
+/**
+ * One push of an image. Only the preparation columns (status, reason, snapshot, smoke, log, build
+ * times) change after it.
+ */
 export const sandboxVersions = pgTable(
   "sandbox_versions",
   {
@@ -43,17 +47,25 @@ export const sandboxVersions = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => sandboxes.id, { onDelete: "cascade" }),
-    manifest: jsonb("manifest").$type<SandboxManifest>().notNull(),
-    gitCommit: text("git_commit").notNull(),
-    gitDirty: boolean("git_dirty").notNull(),
+    // The parsed ratel.yaml (`ratel-yaml.schema.json`).
+    config: jsonb("config").$type<RatelYaml>().notNull(),
+    // The image id that the push named (`sha256:...`) and its platform. Null before images.
+    imageDigest: text("image_digest"),
+    imagePlatform: text("image_platform"),
+    // Null when the push had no git information.
+    gitCommit: text("git_commit"),
+    gitDirty: boolean("git_dirty"),
     bundleSha256: text("bundle_sha256").notNull(),
     bundleBytes: bigint("bundle_bytes", { mode: "number" }).notNull(),
     // The key that pushed. No foreign key: a deleted key must not change a version.
     apiKeyId: uuid("api_key_id"),
-    // "uploading" | "uploaded" | "building" | "ready" | "failed"
+    // "uploading" | "uploaded" | "preparing" | "ready" | "failed"
     status: text("status").notNull().default("uploading"),
     reason: text("reason"),
+    // The name of the snapshot that holds the loaded image.
     imageRef: text("image_ref"),
+    // The smoke check (`version.schema.json#/$defs/smoke`).
+    smoke: jsonb("smoke").$type<SmokeResult>(),
     buildLog: text("build_log"),
     buildStartedAt: timestamp("build_started_at", { withTimezone: true }),
     buildHeartbeatAt: timestamp("build_heartbeat_at", { withTimezone: true }),
