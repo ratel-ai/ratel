@@ -1,1 +1,0 @@
-CREATE INDEX "sandbox_versions_snapshot_idx" ON "sandbox_versions" USING btree ("status","sandbox_id") WHERE "sandbox_versions"."image_ref" is not null;

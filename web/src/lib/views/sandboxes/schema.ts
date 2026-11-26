@@ -75,10 +75,6 @@ export const sandboxVersions = pgTable(
   (t) => [
     index("sandbox_versions_project_created_idx").on(t.projectId, t.createdAt),
     index("sandbox_versions_sandbox_created_idx").on(t.sandboxId, t.createdAt),
-    // The snapshot sweep reads only the versions that hold a snapshot.
-    index("sandbox_versions_snapshot_idx")
-      .on(t.status, t.sandboxId)
-      .where(sql`${t.imageRef} is not null`),
   ],
 );
 
