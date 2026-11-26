@@ -18,6 +18,7 @@ npm packages.
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
 | `db/tenant-scope.test.ts` | upstream's source check, a copy: every read of a big telemetry table names a project, or says why not with a `// cross-project:` comment |
 | `db/statement-timeout.ts` | bounded reads with `SET LOCAL statement_timeout` |
+| `db/project-lock.ts` | `lockProjectScope`: a project's advisory lock for one transaction, so a limit counted under it holds for the insert |
 | `projects/` | `schema.ts` and `queries.ts` for projects and API keys (`listProjectsForOrganizations`: the projects of every organization the reader belongs to, in one read, for the shell) |
 | `organizations.ts` | organizations by id or by project, through the session port: the edition owns the table |
 | `projects/names.ts` | project name limits and normalization, safe for client components |

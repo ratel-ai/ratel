@@ -19,7 +19,7 @@ import {
 } from "./destinations";
 import { evaluateAlerts } from "./evaluate";
 import { type AlertNotifier, memoryNotifier } from "./notifier";
-import { alertsStep } from "./register";
+import { alertsRegistration, alertsStep } from "./register";
 import { slackMessage } from "./slack-message";
 import * as store from "./store";
 import type { AlertDraft } from "./types";
@@ -281,7 +281,12 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
   for (let i = 1; i < MAX_ATTEMPTS; i++)
     assert.equal((await deliverAlerts(notifier, on, db)).retrying, 1);
   assert.equal((await deliverAlerts(notifier, on, db)).failures.length, 1);
-  assert.deepEqual(await deliverAlerts(notifier, on, db), { sent: 0, retrying: 0, failures: [] });
+  assert.deepEqual(await deliverAlerts(notifier, on, db), {
+    sent: 0,
+    retrying: 0,
+    expired: 0,
+    failures: [],
+  });
   const [event] = await store.listAlertEvents(PROJECT, id, db);
   assert.deepEqual([event.delivery, event.attempts, event.error], ["failed", 4, "unreachable"]);
 
@@ -294,11 +299,61 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
     },
   };
   assert.equal((await deliverAlerts(nested, on, db)).retrying, 1);
-  assert.deepEqual(inside, [{ sent: 0, retrying: 0, failures: [] }]);
+  assert.deepEqual(inside, [{ sent: 0, retrying: 0, expired: 0, failures: [] }]);
   assert.doesNotMatch(
     (await store.listAlertEvents(PROJECT, id, db))[0].error ?? "",
     /hooks\.slack/,
   );
+});
+
+test("F446-3: the pending messages of a project that is off never hold up another project's", async () => {
+  const off = await store.createAlertRule(OTHER, DRAFT, "u", db);
+  assert.ok(off);
+  await pending(off, 101, new Date(now.getTime() - 60_000));
+  const on = await rule();
+  await pending(on, 1, now);
+  const notifier = memoryNotifier();
+  const flagOn = async (projectId: string) => projectId === PROJECT;
+  const result = await deliverAlerts(notifier, { now: () => now, flagOn }, db);
+  assert.deepEqual([result.sent, notifier.notices.map(({ ruleId }) => ruleId)], [1, [on]]);
+  const { rows } = await client.query<{ delivery: string; n: number }>(
+    "select delivery, count(*)::int as n from alert_events where rule_id = $1 group by 1",
+    [off],
+  );
+  assert.deepEqual(rows, [{ delivery: "pending", n: 101 }], "kept for when the flag is on again");
+});
+
+test("F446-3: a message still pending after a day expires, with a log", async () => {
+  const id = await rule();
+  await pending(id, 1, new Date(now.getTime() - 25 * 3_600_000));
+  const notifier = memoryNotifier();
+  const result = await deliverAlerts(notifier, { now: () => now, flagOn: async () => false }, db);
+  assert.equal(result.expired, 1);
+  const [event] = await store.listAlertEvents(PROJECT, id, db);
+  assert.deepEqual([event.delivery, event.error], ["failed", "The message expired unsent."]);
+  assert.deepEqual(notifier.notices, []);
+});
+
+test("F446-5: the history keeps 90 days, pruned in bounded batches on the tick", async () => {
+  const id = await rule();
+  const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
+  await pending(id, 3, days(91));
+  await client.query("update alert_events set delivery = 'sent'");
+  await pending(id, 1, days(91));
+  await pending(id, 1, days(89));
+  const prune = () => store.pruneAlertEvents({ now: () => now, limit: 2 }, db);
+  assert.deepEqual([await prune(), await prune(), await prune()], [2, 1, 0]);
+  const { rows } = await client.query<{ delivery: string; old: boolean }>(
+    "select delivery, at < $1 as old from alert_events order by at",
+    [days(90)],
+  );
+  assert.deepEqual(rows, [
+    { delivery: "pending", old: true },
+    { delivery: "pending", old: false },
+  ]);
+  const step = alertsRegistration.drainSteps?.find(({ name }) => name === "alert_events_prune");
+  assert.deepEqual([step?.phase, step?.retentionOnly], ["after", undefined]);
+  assert.equal(store.ALERT_HISTORY_DAYS, 90);
 });
 
 test("a rule keeps its project's destinations only; a removed one leaves the rule", async () => {
@@ -334,7 +389,7 @@ test("a channel destination is one per project, and keeps its last access", asyn
   };
   const id = await createChannelDestination(input, db);
   assert.ok(id);
-  assert.equal(await createChannelDestination(input, db), null);
+  assert.equal(await createChannelDestination(input, db), "taken");
   const other = await createChannelDestination({ ...input, projectId: OTHER }, db);
   assert.ok(other);
   await recordAccess(id, null, db);
@@ -385,8 +440,21 @@ test("a person creates, edits, pauses and deletes a rule; others cannot", async 
   assert.equal((await change({ action: "delete", ruleId })).ok, false);
 });
 
+/** `count` fire messages of a rule, waiting since `at`. */
+async function pending(ruleId: string, count: number, at: Date) {
+  await client.query(
+    `insert into alert_events (rule_id, from_state, to_state, value, operator, threshold,
+       window_minutes, at, notice, delivery)
+     select $1, 'ok', 'alerting', 1, 'above', 0.5, 5, $2::timestamptz + make_interval(secs => g / 1000.0), 'fire', 'pending'
+     from generate_series(1, $3) g`,
+    [ruleId, at, count],
+  );
+}
+
 async function rule(over: Partial<Parameters<typeof store.createAlertRule>[1]> = {}) {
-  return store.createAlertRule(PROJECT, { ...DRAFT, ...over }, "u", db);
+  const id = await store.createAlertRule(PROJECT, { ...DRAFT, ...over }, "u", db);
+  assert.ok(id);
+  return id;
 }
 
 async function trace(failed: boolean) {
@@ -421,7 +489,6 @@ function stepper() {
 
 function change(input: Record<string, unknown>, over: Partial<AlertActionDeps> = {}) {
   const bound = {
-    countAlertRules: (p: string) => store.countAlertRules(p, db),
     createAlertRule: (p, d, a) => store.createAlertRule(p, d, a, db),
     updateAlertRule: (p, i, d, a) => store.updateAlertRule(p, i, d, a, db),
     setAlertRuleEnabled: (p, i, e, a) => store.setAlertRuleEnabled(p, i, e, a, db),

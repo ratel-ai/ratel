@@ -186,3 +186,45 @@ test("an address or a coordinate cannot be read from an attribute that spans sto
   }
   for (const change of [{ country: " " }, { extra: "x" }]) assert.ok(!parse(change).ok);
 });
+
+test("F445-11: many distinct places never block the process, and each is located", async () => {
+  let calls = 0;
+  const slow: GeoLookups = {
+    address: null,
+    reverse: async () => () => {
+      calls += 1;
+      const until = performance.now() + 1;
+      while (performance.now() < until);
+      return { country: "IT", region: null };
+    },
+  };
+  const spans = Array.from(
+    { length: 2_000 },
+    (_, i) =>
+      ({
+        attributes: { "geo.location.lat": 45 + i / 10_000, "geo.location.lon": 9 },
+        resourceAttributes: {},
+      }) as unknown as DecodedSpan,
+  );
+  spans.push({
+    attributes: { "geo.country.iso_code": "FR" },
+    resourceAttributes: {},
+  } as unknown as DecodedSpan);
+  let longest = 0;
+  let last = performance.now();
+  let beating = true;
+  const beat = () => {
+    const at = performance.now();
+    longest = Math.max(longest, at - last);
+    last = at;
+    if (beating) setImmediate(beat);
+  };
+  setImmediate(beat);
+  await locateSpans(spans, DEFAULT_GEO_ATTRIBUTES, slow);
+  beating = false;
+  longest = Math.max(longest, performance.now() - last);
+  assert.ok(longest < 100, `the event loop waited ${Math.round(longest)} ms`);
+  assert.equal(calls, 2_000);
+  assert.ok(spans.slice(0, 2_000).every(({ attributes }) => attributes[GEO_COUNTRY_KEY] === "IT"));
+  assert.equal(spans[2_000].attributes[GEO_COUNTRY_KEY], "FR", "codes need no lookup");
+});

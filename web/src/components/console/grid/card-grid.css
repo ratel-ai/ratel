@@ -63,16 +63,12 @@ body:has(.react-grid-item.resizing) * {
   cursor: se-resize;
   touch-action: none;
 }
-.react-grid-item > .react-resizable-handle::after {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--ds-fg-subtle);
-  border-bottom: 2px solid var(--ds-fg-subtle);
-  border-bottom-right-radius: 3px;
-  content: "";
+/* The card draws the mark (`CardFrame`'s resize handle, which the keyboard uses). A finger needs 44 px. */
+@media (pointer: coarse) {
+  .react-grid-item:not(.react-grid-placeholder) > .react-resizable-handle {
+    width: 44px;
+    height: 44px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .react-grid-item {

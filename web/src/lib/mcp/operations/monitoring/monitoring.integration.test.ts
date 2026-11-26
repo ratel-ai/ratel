@@ -299,7 +299,6 @@ test("an alert made through MCP equals the one the web app makes", async () => {
       features: async () => ({ customMonitoring: true }),
       store: {
         ...store,
-        countAlertRules: (p) => store.countAlertRules(p, m.db),
         createAlertRule: (p, d, a) => store.createAlertRule(p, d, a, m.db),
       },
       observe: async () => {},

@@ -83,7 +83,7 @@ export interface DashboardActionDeps {
   isRestricted(): Promise<boolean>;
   store: Pick<
     typeof store,
-    "countDashboards" | "createDashboard" | "updateDashboard" | "deleteDashboard" | "changeWidgets"
+    "createDashboard" | "updateDashboard" | "deleteDashboard" | "changeWidgets"
   >;
   observe(fields: {
     project_id: string;
@@ -162,9 +162,8 @@ async function apply(
     case "create-starter": {
       const starter = input.action === "create-starter";
       const name = starter ? STARTER_NAME : dashboardName(input.name);
-      await checkRoom(projectId, store);
       const widgets = starter ? starterWidgets() : [];
-      return store.createDashboard({ projectId, name, widgets, ...editor });
+      return roomFor(await store.createDashboard({ projectId, name, widgets, ...editor }));
     }
     case "import": {
       const read = importDashboard(input.document, {
@@ -172,14 +171,15 @@ async function apply(
         features: await features(),
       });
       if (!read.ok) throw new Refusal(read.error);
-      await checkRoom(projectId, store);
       const { widgets, missingScorers, ...rest } = read.dashboard;
-      const { id } = await store.createDashboard({
-        projectId,
-        ...rest,
-        widgets: widgets.map((widget) => ({ ...widget, id: randomUUID() })),
-        ...editor,
-      });
+      const { id } = roomFor(
+        await store.createDashboard({
+          projectId,
+          ...rest,
+          widgets: widgets.map((widget) => ({ ...widget, id: randomUUID() })),
+          ...editor,
+        }),
+      );
       return { id, missingScorers };
     }
     case "rename": {
@@ -278,12 +278,10 @@ function checkFilters(widgets: readonly WidgetInput[], filters: DashboardFilters
   if (problem) throw new Refusal(problem);
 }
 
-async function checkRoom(
-  projectId: string,
-  { countDashboards }: DashboardActionDeps["store"],
-): Promise<void> {
-  if ((await countDashboards(projectId)) >= MAX_DASHBOARDS)
-    throw new Refusal(`A project can have ${MAX_DASHBOARDS} dashboards.`);
+/** The dashboard made, or a refusal: the store counts with the insert, and null is the limit. */
+function roomFor<D>(created: D | null): D {
+  if (created === null) throw new Refusal(`A project can have ${MAX_DASHBOARDS} dashboards.`);
+  return created;
 }
 
 function checkedDefaults(raw: unknown): DashboardDefaults {

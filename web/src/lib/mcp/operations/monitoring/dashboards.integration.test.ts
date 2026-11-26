@@ -208,7 +208,6 @@ test("an import through MCP equals the web app's", async () => {
       scorers: (projectId) => scorerOptions(projectId, m.db),
       store: {
         ...store,
-        countDashboards: (projectId) => store.countDashboards(projectId, m.db),
         createDashboard: (input) => store.createDashboard(input, m.db),
       },
       observe: async () => {},

@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
@@ -19,6 +19,8 @@ export interface DeliveryResult {
   sent: number;
   /** Tried again on the next tick. */
   retrying: number;
+  /** Still pending after `EXPIRE_MS`: given up. */
+  expired: number;
   failures: { projectId: string; ruleId: string; attempts: number }[];
 }
 
@@ -26,6 +28,9 @@ export interface DeliveryResult {
 export const MAX_ATTEMPTS = 4;
 /** A send that did not report back for this long was lost with its process. */
 const CLAIM_MS = 120_000;
+/** A message that waited this long says nothing of now any more, for example while its flag was off. */
+export const EXPIRE_MS = 24 * 3_600_000;
+const EXPIRED = "The message expired unsent.";
 const BATCH = 100;
 const TIME_BUDGET_MS = 20_000;
 
@@ -34,7 +39,9 @@ const logger = getLogger("alerts/deliver");
 /**
  * Send the pending messages, oldest first. A message is claimed, with its attempt counted, before
  * it is sent: no transaction is open during a send and two ticks never send the same one. A failed
- * one stays pending for the next tick, up to `MAX_ATTEMPTS`.
+ * one stays pending for the next tick, up to `MAX_ATTEMPTS`. The messages of a project whose flag is
+ * off stay pending and are left out of this tick's next reads, so they never hold up the other
+ * projects. A message pending for `EXPIRE_MS` is given up.
  */
 export async function deliverAlerts(
   notifier: AlertNotifier,
@@ -45,34 +52,63 @@ export async function deliverAlerts(
   const on =
     options.flagOn ?? ((projectId: string) => featureEnabled("customMonitoring", { projectId }));
   const startedAt = Date.now();
-  const result: DeliveryResult = { sent: 0, retrying: 0, failures: [] };
-  for (const pending of await pendingEvents(db, now())) {
-    if (Date.now() - startedAt >= (options.timeBudgetMs ?? TIME_BUDGET_MS)) break;
-    if (!(await on(pending.notice.projectId))) continue;
-    const attempts = await claim(db, pending.notice.eventId, now());
-    if (attempts === null) continue;
-    const { notice } = pending;
-    const outcome = await attempt(notifier, notice, attempts);
-    const delivery =
-      outcome.error === null ? "sent" : attempts >= MAX_ATTEMPTS ? "failed" : "pending";
-    await db
-      .update(alertEvents)
-      .set({ delivery, claimedAt: null, sentTo: outcome.sentTo, error: outcome.error })
-      .where(eq(alertEvents.id, notice.eventId));
-    if (delivery === "sent") result.sent += 1;
-    else if (delivery === "pending") result.retrying += 1;
-    else result.failures.push({ projectId: notice.projectId, ruleId: notice.ruleId, attempts });
+  const overBudget = () => Date.now() - startedAt >= (options.timeBudgetMs ?? TIME_BUDGET_MS);
+  const result: DeliveryResult = {
+    sent: 0,
+    retrying: 0,
+    expired: await expire(db, now()),
+    failures: [],
+  };
+  const off = new Set<string>();
+  // Each message once per tick: a failed one is claimable again at once.
+  const seen = new Set<string>();
+  while (seen.size < BATCH && !overBudget()) {
+    const batch = await pendingEvents(db, now(), { off: [...off], seen: [...seen] });
+    if (batch.length === 0) break;
+    for (const { notice } of batch) {
+      if (seen.size >= BATCH || overBudget()) break;
+      if (off.has(notice.projectId)) continue;
+      if (!(await on(notice.projectId))) {
+        off.add(notice.projectId);
+        logger.info({ project_id: notice.projectId }, "alert messages held: the flag is off");
+        continue;
+      }
+      seen.add(notice.eventId);
+      const attempts = await claim(db, notice.eventId, now());
+      if (attempts === null) continue;
+      const outcome = await attempt(notifier, notice, attempts);
+      const delivery =
+        outcome.error === null ? "sent" : attempts >= MAX_ATTEMPTS ? "failed" : "pending";
+      await db
+        .update(alertEvents)
+        .set({ delivery, claimedAt: null, sentTo: outcome.sentTo, error: outcome.error })
+        .where(eq(alertEvents.id, notice.eventId));
+      if (delivery === "sent") result.sent += 1;
+      else if (delivery === "pending") result.retrying += 1;
+      else result.failures.push({ projectId: notice.projectId, ruleId: notice.ruleId, attempts });
+    }
   }
   return result;
 }
 
-async function pendingEvents(db: Db, now: Date): Promise<{ notice: AlertNotice }[]> {
+/** The oldest claimable messages, without those of the projects in `off` and the ones `seen`. */
+async function pendingEvents(
+  db: Db,
+  now: Date,
+  { off, seen }: { off: readonly string[]; seen: readonly string[] },
+): Promise<{ notice: AlertNotice }[]> {
   const rows = await db
     .select({ event: alertEvents, rule: alertRules, projectName: projects.name })
     .from(alertEvents)
     .innerJoin(alertRules, eq(alertRules.id, alertEvents.ruleId))
     .innerJoin(projects, eq(projects.id, alertRules.projectId))
-    .where(claimable(now))
+    .where(
+      and(
+        claimable(now),
+        off.length > 0 ? notInArray(alertRules.projectId, [...off]) : undefined,
+        seen.length > 0 ? notInArray(alertEvents.id, [...seen]) : undefined,
+      ),
+    )
     .orderBy(alertEvents.at, alertEvents.id)
     .limit(BATCH);
   return rows.flatMap(({ event, rule, projectName }) =>
@@ -96,6 +132,19 @@ async function pendingEvents(db: Db, now: Date): Promise<{ notice: AlertNotice }
         }
       : [],
   );
+}
+
+/** Gives up the messages pending for `EXPIRE_MS`, whatever their project's flag. */
+async function expire(db: Db, now: Date): Promise<number> {
+  const before = new Date(now.getTime() - EXPIRE_MS);
+  const rows = await db
+    .update(alertEvents)
+    .set({ delivery: "failed", claimedAt: null, error: EXPIRED })
+    .where(sql`${claimable(now)} and ${alertEvents.at} < ${before.toISOString()}::timestamptz`)
+    .returning({ ruleId: alertEvents.ruleId });
+  if (rows.length > 0)
+    logger.warn({ expired: rows.length, before: before.toISOString() }, "alert messages expired");
+  return rows.length;
 }
 
 /** The attempt's number, or null when another tick has the message. */

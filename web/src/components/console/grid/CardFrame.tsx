@@ -22,7 +22,7 @@ import {
   MoveVertical,
   X,
 } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { type KeyboardEvent, type ReactNode, useId } from "react";
 import type { GridStep } from "@/lib/console/grid/layout";
 
 const MOVES: readonly [GridStep, string, LucideIcon][] = [
@@ -37,6 +37,17 @@ const SIZES: readonly [GridStep, string, LucideIcon][] = [
   ["taller", "Taller", MoveVertical],
   ["shorter", "Shorter", MoveVertical],
 ];
+
+/** The arrow keys on the corner handle: its corner goes where the arrow points. */
+const RESIZE_KEYS: Readonly<Record<string, GridStep>> = {
+  ArrowRight: "wider",
+  ArrowLeft: "narrower",
+  ArrowDown: "taller",
+  ArrowUp: "shorter",
+};
+
+/** The card whose resize handle took the last step: the focus goes back there, not to the toolbar. */
+let resizedFrom: string | null = null;
 
 export interface CardEdit {
   can: (step: GridStep) => boolean;
@@ -158,17 +169,55 @@ export function CardFrame({
           </span>
         </div>
       ) : null}
+      {edit ? <ResizeHandle id={id} title={title} edit={edit} /> : null}
     </section>
   );
 }
 
-/** Its first control that is shown: the menu, or Remove where there is nothing to arrange. */
+/**
+ * The corner mark, always shown in edit mode, and the keyboard's way to resize: it takes the focus,
+ * and an arrow key is one step. A pointer resizes by the grid's own handle over it (`card-grid.css`),
+ * which is 44 px on touch. Below `lg` the cards are one column and do not resize.
+ */
+function ResizeHandle({ id, title, edit }: { id: string; title: string; edit: CardEdit }) {
+  function onKeyDown(event: KeyboardEvent) {
+    const step = RESIZE_KEYS[event.key];
+    if (!step) return;
+    event.preventDefault();
+    if (!edit.can(step)) return;
+    resizedFrom = id;
+    edit.step(step);
+  }
+  return (
+    <button
+      type="button"
+      id={resizeId(id)}
+      data-grid-resize=""
+      aria-label={`Resize ${title}`}
+      aria-keyshortcuts="ArrowRight ArrowLeft ArrowDown ArrowUp"
+      title="Resize: arrow keys"
+      onKeyDown={onKeyDown}
+      className="absolute right-0 bottom-0 size-6 rounded-br-lg rounded-tl-md outline-none after:absolute after:right-[5px] after:bottom-[5px] after:size-[7px] after:rounded-br-[3px] after:border-r-2 after:border-b-2 after:border-fg-subtle after:content-[''] focus-visible:ring-2 focus-visible:ring-focus max-lg:hidden"
+    />
+  );
+}
+
+/**
+ * Its first control that is shown: the menu, or Remove where there is nothing to arrange. After a
+ * step from the resize handle, the handle again.
+ */
 export function focusToolbar(id: string) {
+  if (resizedFrom === id) {
+    resizedFrom = null;
+    document.getElementById(resizeId(id))?.focus();
+    return;
+  }
   const buttons = document.getElementById(toolbarId(id))?.querySelectorAll("button") ?? [];
   [...buttons].find((button) => button.offsetParent !== null)?.focus();
 }
 
 const toolbarId = (id: string) => `card-${id}-toolbar`;
+const resizeId = (id: string) => `card-${id}-resize`;
 
 function Steps({
   label,

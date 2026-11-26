@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { lockProjectScope } from "@/lib/platform/db/project-lock";
 import { storedQuery } from "@/lib/views/alerts/parse-rule";
 import {
   alertDestinations,
@@ -95,7 +96,10 @@ export async function getAlertRule(
   return row ? readRule(row) : null;
 }
 
-export async function countAlertRules(projectId: string, db: AlertsDb = getDb()): Promise<number> {
+export async function countAlertRules(
+  projectId: string,
+  db: Pick<AlertsDb, "select"> = getDb(),
+): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(alertRules)
@@ -120,14 +124,20 @@ export async function countAlertRuleStates(
   return row;
 }
 
+/**
+ * Null when the project has `MAX_ALERT_RULES` already. The count and the insert are one transaction
+ * under the project's lock, so creates at the same time never pass the limit.
+ */
 export async function createAlertRule(
   projectId: string,
   draft: AlertDraft,
   actor: string,
   db: AlertsDb = getDb(),
-): Promise<string> {
+): Promise<string | null> {
   const { destinationIds, ...rule } = draft;
   return db.transaction(async (tx) => {
+    await lockProjectScope(tx, "alert_rules", projectId);
+    if ((await countAlertRules(projectId, tx)) >= MAX_ALERT_RULES) return null;
     const [row] = await tx
       .insert(alertRules)
       .values({ ...rule, projectId, createdBy: actor, updatedBy: actor })
@@ -217,6 +227,34 @@ export async function listAlertEvents(
 }
 
 export type AlertEvent = Awaited<ReturnType<typeof listAlertEvents>>[number];
+
+/** How long a state change is kept (the owner's choice). */
+export const ALERT_HISTORY_DAYS = 90;
+/** Rows one prune deletes at most, so a long backlog never makes one long statement. */
+const PRUNE_LIMIT = 5_000;
+
+/**
+ * Retention: one bounded batch of the state changes older than `ALERT_HISTORY_DAYS`, the oldest
+ * first. A message still pending is kept: `deliverAlerts` expires it. Returns the rows deleted.
+ */
+export async function pruneAlertEvents(
+  { now = () => new Date(), limit = PRUNE_LIMIT }: { now?: () => Date; limit?: number } = {},
+  db: Pick<AlertsDb, "execute"> = getDb(),
+): Promise<number> {
+  const before = new Date(now().getTime() - ALERT_HISTORY_DAYS * 86_400_000);
+  const result = await db.execute(sql`
+    delete from ${alertEvents}
+    where id in (
+      select id from ${alertEvents}
+      where ${alertEvents.at} < ${before.toISOString()}::timestamptz
+        and ${alertEvents.delivery} <> 'pending'
+      order by ${alertEvents.at}
+      limit ${limit}
+    )
+    returning id
+  `);
+  return result.rows.length;
+}
 
 /** The project's own destinations only; an unknown one is left out. */
 async function setDestinations(

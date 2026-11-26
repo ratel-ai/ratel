@@ -647,7 +647,7 @@ const BOARD_WIDGET = {
 
 async function withBoard(over: Partial<OverviewOperationDeps> = {}) {
   const at = await setup(over);
-  const { id } = await createDashboard(
+  const made = await createDashboard(
     {
       projectId: PROJECT_ID,
       name: "Board",
@@ -657,6 +657,8 @@ async function withBoard(over: Partial<OverviewOperationDeps> = {}) {
     },
     at.db as never,
   );
+  assert.ok(made);
+  const { id } = made;
   const ref = { dashboardId: id, widgetId: "runs" };
   return { ...at, id, ref, entry: dashboardItemId(id, "runs") };
 }
@@ -753,7 +755,7 @@ test("a dashboard widget: the same refusals as the web", async () => {
   for (const params of wrong)
     assert.equal((await at(on.call, params))?.[0], "invalid_params", JSON.stringify(params));
   for (let index = 0; index < MAX_DASHBOARD_ITEMS; index += 1) {
-    const { id } = await createDashboard(
+    const made = await createDashboard(
       {
         projectId: PROJECT_ID,
         name: `B${index}`,
@@ -763,6 +765,8 @@ test("a dashboard widget: the same refusals as the web", async () => {
       },
       on.db as never,
     );
+    assert.ok(made);
+    const { id } = made;
     assert.equal(await at(on.call, { ...add, dashboardId: id }), null);
   }
   assert.deepEqual(await at(on.call, add), ["conflict", "too_many"]);

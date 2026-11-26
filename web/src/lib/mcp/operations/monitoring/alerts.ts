@@ -20,7 +20,6 @@ import { getProjectById } from "@/lib/platform/projects/queries";
 import { changeAlert } from "@/lib/views/alerts/actions";
 import { changeDestination } from "@/lib/views/alerts/destination-actions";
 import {
-  countDestinations,
   createChannelDestination,
   createDestination,
   deleteDestination,
@@ -272,7 +271,6 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
             ...callerAccess(ctx, caller),
             features: async () => ({ customMonitoring: true }),
             store: {
-              countAlertRules: (project) => store.countAlertRules(project, db),
               createAlertRule: (project, draft, actor) =>
                 store.createAlertRule(project, draft, actor, db),
               updateAlertRule: (project, id, draft, actor) =>
@@ -340,7 +338,6 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
           {
             ...callerAccess(ctx, caller),
             canSeal: () => deps.canSeal(),
-            count: (project) => countDestinations(project, db),
             create: (input) => createDestination({ ...input, key: deps.secretKey }, db),
             channelAccess: (organizationId, channelId) =>
               deps.slack.channelAccess(organizationId, channelId),
