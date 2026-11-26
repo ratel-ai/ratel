@@ -195,6 +195,7 @@ function taskList(rows: TaskRow[]): TaskListModel {
       allRuns: 60,
       finishRate: 0.9,
       correctionsPer100: 2,
+      correctionsWindowDays: 30,
       correctionsRecorded: true,
     },
     rows,

@@ -138,6 +138,7 @@ const TASKS: TaskListModel = {
     allRuns: 1_284,
     finishRate: 0.8,
     correctionsPer100: 12,
+    correctionsWindowDays: 30,
     correctionsRecorded: true,
   },
   rows: [

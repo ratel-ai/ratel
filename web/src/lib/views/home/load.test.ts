@@ -296,6 +296,7 @@ test("the tiles read intents, tasks, self-corrections and fixes, each failing on
       allRuns: 10,
       finishRate: 0.8,
       correctionsPer100: null,
+      correctionsWindowDays: null,
       correctionsRecorded: false,
     },
     rows: [
