@@ -9,7 +9,7 @@ import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { type ServerEventName, trackServerEvent } from "@/lib/platform/telemetry";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { QueryError, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
-// Fills `metricSeams.sql`: kind sql runs behind the `rql` flag (run_rql, query_monitoring).
+// Fills `metricSeams.sql`: kind sql (run_rql, query_monitoring).
 import "@/lib/synthesis/rql/query";
 import { postTo } from "@/lib/views/alerts/slack";
 import { loadWidget } from "@/lib/views/dashboards/data";
@@ -24,12 +24,6 @@ import { slackWorkspace } from "@/lib/views/slack/workspace";
  */
 export interface MonitoringDeps {
   enabled(subject: { projectId: string; organizationId: string; actor: string }): Promise<boolean>;
-  /** The `rql` flag: RQL and the query kind `sql`. */
-  rqlEnabled(subject: {
-    projectId: string;
-    organizationId: string;
-    actor: string;
-  }): Promise<boolean>;
   db(): ReturnType<typeof getDb>;
   previewScorer(...args: Parameters<typeof previewScorer>): ReturnType<typeof previewScorer>;
   countLastWeek(...args: Parameters<typeof countLastWeek>): ReturnType<typeof countLastWeek>;
@@ -53,7 +47,6 @@ export interface MonitoringDeps {
 
 export const defaultMonitoringDeps: MonitoringDeps = {
   enabled: (subject) => featureEnabled("customMonitoring", subject),
-  rqlEnabled: (subject) => featureEnabled("rql", subject),
   db: () => getDb(),
   previewScorer: (...args) => previewScorer(...args),
   countLastWeek: (...args) => countLastWeek(...args),
@@ -98,34 +91,14 @@ export async function requireMonitoring(
   if (!(await deps.enabled(caller)))
     throw new McpOperationError(
       "forbidden",
-      "Custom monitoring (scorers, dashboards and alerts) is off for this project. get_flag_status shows customMonitoring.",
+      "Custom monitoring (scorers, dashboards, alerts and RQL) is off for this project. get_flag_status shows customMonitoring.",
       { reason: "custom_monitoring_off" },
-    );
-  return caller;
-}
-
-/** Refuses with `forbidden` while `rql` is off for the caller. */
-export async function requireRql(
-  deps: Pick<MonitoringDeps, "rqlEnabled">,
-  ctx: OperationContext,
-): Promise<MonitoringCaller> {
-  const caller = {
-    projectId: ctx.projectId,
-    organizationId: ctx.organizationId ?? "",
-    actor: mcpActor(ctx.auth, ctx.projectId),
-  };
-  if (!(await deps.rqlEnabled(caller)))
-    throw new McpOperationError(
-      "forbidden",
-      "RQL is off for this project: the rql flag is off. get_flag_status shows rql.",
-      { reason: "rql_off" },
     );
   return caller;
 }
 
 /** The RQL codes that are not a problem of the query text. */
 const RQL_ERROR_CODES: Readonly<Record<string, McpErrorCode>> = {
-  rql_off: "forbidden",
   rql_busy: "rate_limited",
   rql_timeout: "timeout",
   rql_unavailable: "unavailable",

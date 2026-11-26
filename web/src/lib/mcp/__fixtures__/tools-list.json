@@ -4296,7 +4296,7 @@
           "maxLength": 36
         },
         "query": {
-          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. With the rql flag on, a query of kind sql (RQL text) gives a table. It cannot be a panel.",
+          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. A query of kind sql (RQL text) gives a table. It cannot be a panel.",
           "type": "object",
           "propertyNames": {
             "type": "string"

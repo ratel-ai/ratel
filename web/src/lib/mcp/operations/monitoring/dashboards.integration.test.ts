@@ -470,14 +470,12 @@ test("a step flow: its steps in the text form, its schema, and the path of what 
 });
 
 test("query_monitoring refuses a panel of kind sql: no panel draws its rows", async () => {
-  m.set.rql = true;
   const refused = await m.call("query_monitoring", {
     queries: [
       { query: EXAMPLES.metric },
       { query: { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 } },
     ],
   });
-  m.set.rql = false;
   assert.ok(!refused.ok);
   assert.equal(refused.error, "invalid_params");
   assert.match(refused.message, /kind sql cannot be a widget, a panel/);

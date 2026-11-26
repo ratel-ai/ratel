@@ -189,7 +189,7 @@ type Runner<K extends Query["kind"]> = (
 /**
  * What another module owns. Empty until that module fills it: the scorers
  * (`views/scorers/metrics`) fill `scores` and `funnel`, `views/dashboards/clusters` fills `clusters`,
- * and `synthesis/rql/query` fills `sql` (behind the `rql` flag).
+ * and `synthesis/rql/query` fills `sql`.
  */
 export const metricSeams: {
   scores?: MetricSourceQuery;

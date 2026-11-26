@@ -5,7 +5,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { createMcpRouteHandler } from "@/lib/mcp/route-handler";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 
-/** What a client is told exists, with `rql` on and off for it. */
+/** What a client is told exists, with `customMonitoring` on and off for it. */
 
 const auth: McpAuthContext = {
   kind: "api-key",
@@ -35,7 +35,7 @@ async function call(on: boolean, method: string, params: unknown = {}) {
     launchAccess: async () => true,
     mcpApps: async () => true,
     focusedConsole: async () => false,
-    rql: async () => on,
+    customMonitoring: async () => on,
     appCatalog: () => catalog,
   });
   const response = await handler(
@@ -55,7 +55,7 @@ async function call(on: boolean, method: string, params: unknown = {}) {
   };
 }
 
-test("rql on: both tools are listed as reads, and run_rql has the table view", async () => {
+test("customMonitoring on: both tools are listed as reads, and run_rql has the table view", async () => {
   const { tools } = (await call(true, "tools/list")).result;
   const named = (name: string) => tools.find((tool) => tool.name === name);
   for (const tool of TOOLS) assert.equal(named(tool)?.annotations.readOnlyHint, true, tool);
@@ -64,7 +64,7 @@ test("rql on: both tools are listed as reads, and run_rql has the table view", a
   assert.ok(resources.some(({ uri }) => uri === "ui://ratel/table"));
 });
 
-test("rql off: no tool and no view of it exists, and a call is refused", async () => {
+test("customMonitoring off: no tool and no view of it exists, and a call is refused", async () => {
   const { tools } = (await call(false, "tools/list")).result;
   assert.ok(!tools.some(({ name }) => TOOLS.includes(name)));
   assert.ok(tools.some(({ name }) => name === "query_monitoring"));

@@ -1,5 +1,4 @@
 import { isEmptyFilter, type SqlQuery } from "@/lib/contracts/query";
-import { type FeatureFlagDeps, featureEnabled } from "@/lib/platform/experimental-features";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { metricSeams, QueryError, type SqlResult } from "@/lib/synthesis/metrics/query";
 import { compileRql, RQL_VERSION } from "./compile";
@@ -7,15 +6,14 @@ import { type RqlRunDeps, runRql } from "./run";
 
 /**
  * Kind `sql` of the query object: `runQuery` sends it here through `metricSeams.sql`, which this
- * file fills on import. The `rql` flag is checked here, where the seam is wired, and nowhere
- * deeper. The text is compiled at every run, so a saved query is checked again at load against the
+ * file fills on import. It has no flag check: each caller of `runQuery` is behind
+ * `customMonitoring` already (`query_monitoring`, `run_rql`, the dashboards, Explore and the alerts).
+ * The text is compiled at every run, so a saved query is checked again at load against the
  * RQL of today. The window of the scope is the window of the query; a time condition in the text
  * narrows it. Every refusal is a `QueryError` with the code, the message and the fix of RQL.
  */
 
 export interface SqlQueryDeps {
-  /** How the `rql` flag is read: the composition's by default. */
-  flags: Partial<FeatureFlagDeps>;
   /** The runner's executor, gate, timeout and observer: the RQL pool's by default. */
   run: Partial<RqlRunDeps>;
   /** The RQL version of this build. A test gives a later one to reach the path of older queries. */
@@ -26,17 +24,10 @@ type SqlRunner = NonNullable<typeof metricSeams.sql>;
 
 metricSeams.sql = sqlQueryRunner();
 
-/** The runner of kind `sql`, refused while the `rql` flag is off for the project. */
+/** The runner of kind `sql`. */
 export function sqlQueryRunner(deps: Partial<SqlQueryDeps> = {}): SqlRunner {
-  const { flags = {}, run = {}, rqlVersion = RQL_VERSION } = deps;
-  return async (projectId, query, scope) => {
-    if (!(await featureEnabled("rql", { projectId }, flags)))
-      throw new QueryError("RQL is off for this project, so a query of kind sql cannot run.", {
-        code: "rql_off",
-        fix: "Turn the rql flag on (get_flag_status shows it), or ask with another kind of query.",
-      });
-    return runSqlQuery(projectId, query, scope, { run, rqlVersion });
-  };
+  const { run = {}, rqlVersion = RQL_VERSION } = deps;
+  return (projectId, query, scope) => runSqlQuery(projectId, query, scope, { run, rqlVersion });
 }
 
 async function runSqlQuery(

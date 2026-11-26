@@ -64,7 +64,7 @@ function stubbed(operation: McpOperation): McpOperation {
 }
 
 const registry = buildRegistry(
-  [...buildRequestRegistry({ focusedConsole: true, rql: true }).values()].map(stubbed),
+  [...buildRequestRegistry({ focusedConsole: true, customMonitoring: true }).values()].map(stubbed),
 );
 const catalog = buildMcpAppCatalog(VIEWS, new Set(["whoami", ...registry.keys()]));
 

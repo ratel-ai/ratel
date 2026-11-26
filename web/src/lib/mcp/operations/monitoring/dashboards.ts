@@ -20,7 +20,6 @@ import {
   refusal,
   required,
   requireMonitoring,
-  requireRql,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { cappedResult, countOf, headline } from "@/lib/mcp/operations/monitoring/results";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
@@ -116,7 +115,7 @@ export const EXAMPLES = {
   },
 } as const satisfies Record<WidgetKind, z.input<typeof querySchema>>;
 
-/** Kind sql, in the catalog only with the `rql` flag on. */
+/** Kind sql (RQL text), in the catalog. */
 const SQL_KIND = {
   kind: "sql",
   charts: [],
@@ -150,12 +149,11 @@ export function dashboardReadOperations(
           .describe("catalog: without the two schemas. query or dashboard: one schema alone."),
       }),
       async execute(ctx, { part }) {
-        const caller = await requireMonitoring(deps, ctx);
+        await requireMonitoring(deps, ctx);
         const has = (wanted: string) => part === "all" || part === wanted;
-        const sql = has("catalog") && (await deps.rqlEnabled(caller));
         return {
           data: {
-            ...(has("catalog") ? { catalog: catalog(sql) } : {}),
+            ...(has("catalog") ? { catalog: catalog() } : {}),
             ...(has("query") ? { query: jsonSchema(querySchema) } : {}),
             ...(has("dashboard") ? { dashboard: jsonSchema(dashboardDocumentSchema) } : {}),
           },
@@ -177,7 +175,7 @@ export function dashboardReadOperations(
         query: queryParam
           .optional()
           .describe(
-            `A query object. ${EXAMPLE_QUERY} ${EXAMPLE_STEP_FLOW} With the rql flag on, a query of kind sql (RQL text) gives a table. It cannot be a panel.`,
+            `A query object. ${EXAMPLE_QUERY} ${EXAMPLE_STEP_FLOW} A query of kind sql (RQL text) gives a table. It cannot be a panel.`,
           ),
         queries: z
           .array(panelParam)
@@ -200,7 +198,7 @@ export function dashboardReadOperations(
         const caller = await requireMonitoring(deps, ctx);
         const { projectId } = caller;
         const sql = loneSql(params);
-        if (sql) return sqlAnswer(deps, ctx, caller, sql, params);
+        if (sql) return sqlAnswer(deps, caller, sql, params);
         const panels = askedPanels(params);
         const filter = parsedFilters(params.filters);
         const tooLong = filtersProblem(
@@ -514,15 +512,13 @@ function loneSql(params: QueryParams): SqlQuery | undefined {
   return parsedQuery(raw, ["query"]) as SqlQuery;
 }
 
-/** A query of kind sql: its table, behind the `rql` flag, with the errors of RQL. */
+/** A query of kind sql: its table, with the errors of RQL. */
 async function sqlAnswer(
   deps: MonitoringDeps,
-  ctx: OperationContext,
   { projectId }: MonitoringCaller,
   query: SqlQuery,
   params: QueryParams,
 ) {
-  await requireRql(deps, ctx);
   if (params.chart)
     throw invalidParams(SQL_CHART_PROBLEM, [{ path: "chart", message: SQL_CHART_PROBLEM }]);
   const window = resolveWindow(params, SQL_WINDOW, deps.now());
@@ -796,7 +792,7 @@ function parsedFilters(raw: unknown): Dashboard["filters"] | undefined {
   throw invalidParams(`The filters are invalid at "${at}": ${message}`, [{ path: at, message }]);
 }
 
-function catalog(sql: boolean) {
+function catalog() {
   return {
     kinds: [
       ...WIDGET_KINDS.map((kind) => ({
@@ -804,7 +800,7 @@ function catalog(sql: boolean) {
         charts: kind === "metric" ? METRIC_CHARTS : [kind],
         example: EXAMPLES[kind],
       })),
-      ...(sql ? [SQL_KIND] : []),
+      SQL_KIND,
     ],
     measures: offeredMetrics(FEATURES).map(
       ({ id, label, description, unit, aggregations, dimensions, buckets, filterable }) => ({

@@ -1,6 +1,5 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { resolveConfig } from "@/config";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchResult, type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation } from "@/lib/mcp/registry";
@@ -58,8 +57,6 @@ export interface Monitoring {
   /** The state a test changes. */
   set: {
     on: boolean;
-    /** The `rql` flag. Off by default. */
-    rql: boolean;
     channels: Awaited<ReturnType<MonitoringDeps["slack"]["listChannels"]>>;
     access: Awaited<ReturnType<MonitoringDeps["slack"]["channelAccess"]>>;
     post: Awaited<ReturnType<MonitoringDeps["slack"]["post"]>>;
@@ -85,7 +82,6 @@ export async function monitoring(
   const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
   const set: Monitoring["set"] = {
     on: true,
-    rql: false,
     channels: { ok: true, channels: [], partial: false },
     access: { ok: true, teamId: "T1", name: "alerts" },
     post: { ok: true },
@@ -103,7 +99,6 @@ export async function monitoring(
   };
   const deps: MonitoringDeps = {
     enabled: async () => set.on,
-    rqlEnabled: async () => set.rql,
     db: () => db,
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),
@@ -179,11 +174,6 @@ function runRqlOn(client: PGlite) {
     },
   };
   metricSeams.sql = sqlQueryRunner({
-    flags: {
-      config: resolveConfig({ override: { flags: { rql: true }, experimentalFeatures: false } }),
-      edition: "Ratel OSS",
-      port: undefined,
-    },
     run: { executor: createPgRqlExecutor(pool), gate: createRqlGate(), observe: async () => {} },
   });
 }

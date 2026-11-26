@@ -100,8 +100,8 @@ export const PARITY: Readonly<Record<string, Covered>> = {
  * entry here goes.
  */
 export const MCP_ONLY: Readonly<Record<string, string>> = {
-  describe_rql_schema: "the console has no RQL page yet (the rql flag)",
-  run_rql: "the console has no RQL page yet (the rql flag)",
+  describe_rql_schema: "the console has no RQL page yet",
+  run_rql: "the console has no RQL page yet",
 };
 
 /** Each change a module's action takes (its `action: "…"`), and the operation's own `action`, or the operation it is alone. */

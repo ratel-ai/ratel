@@ -7,7 +7,7 @@ import { assembleOperations } from "@/lib/mcp/operations";
 import { DAY_MS } from "@/lib/mcp/windows";
 import { describeRqlSchema, RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { dashboardReadOperations, EXAMPLES } from "./dashboards";
-import { rqlForCaller, rqlOperations } from "./rql";
+import { customMonitoringForCaller, rqlOperations } from "./rql";
 import {
   insertTrace,
   KEY_AUTH,
@@ -46,7 +46,6 @@ before(async () => {
 });
 beforeEach(() => {
   m.set.on = true;
-  m.set.rql = true;
 });
 after(() => m.client.close());
 
@@ -144,22 +143,21 @@ test("each RQL tool with and without access to the project", async () => {
   }
 });
 
-test("the RQL tools follow the rql flag, not customMonitoring", async () => {
-  m.set.on = false;
+test("the RQL tools follow customMonitoring: off, each call is refused", async () => {
   for (const [id, params] of CALLS) assert.ok((await m.call(id, params)).ok, id);
-  m.set.on = true;
-  m.set.rql = false;
+  m.set.on = false;
   for (const [id, params] of CALLS) {
     const off = await m.call(id, params);
     assert.ok(!off.ok, id);
     assert.equal(off.error, "forbidden", id);
-    assert.equal(off.reason, "rql_off", id);
-    assert.match(off.message, /rql/, id);
+    assert.equal(off.reason, "custom_monitoring_off", id);
+    assert.match(off.message, /customMonitoring/, id);
   }
 });
 
-test("the RQL tools are listed only with the rql flag on", () => {
-  const ids = (rql: boolean) => assembleOperations({ rql }).map(({ id }) => id);
+test("the RQL tools are listed only with customMonitoring on", () => {
+  const ids = (customMonitoring: boolean) =>
+    assembleOperations({ customMonitoring }).map(({ id }) => id);
   for (const id of ["describe_rql_schema", "run_rql"]) {
     assert.ok(ids(true).includes(id), id);
     assert.ok(!ids(false).includes(id), id);
@@ -170,24 +168,24 @@ test("the RQL tools are listed only with the rql flag on", () => {
   );
 });
 
-test("the rql flag of a connection: an API key's project, or any organization of a person", async () => {
+test("customMonitoring of a connection: an API key's project, or any organization of a person", async () => {
   const asked: FlagSubject[] = [];
   const on = (organizationId: string) => async (subject: FlagSubject) => {
     asked.push(subject);
     return subject.organizationId === organizationId;
   };
-  assert.equal(await rqlForCaller(KEY_AUTH, on(ORG)), true);
+  assert.equal(await customMonitoringForCaller(KEY_AUTH, on(ORG)), true);
   assert.deepEqual(asked, [
     { organizationId: ORG, projectId: PROJECT, actor: `project:${PROJECT}` },
   ]);
-  assert.equal(await rqlForCaller(KEY_AUTH, on(MISSING)), false);
+  assert.equal(await customMonitoringForCaller(KEY_AUTH, on(MISSING)), false);
   const person: McpAuthContext = personAuth("member");
-  assert.equal(await rqlForCaller(person, on(ORG)), true);
-  assert.equal(await rqlForCaller(person, on(MISSING)), false);
-  assert.equal(await rqlForCaller(personAuth("member", MISSING), on(MISSING)), true);
+  assert.equal(await customMonitoringForCaller(person, on(ORG)), true);
+  assert.equal(await customMonitoringForCaller(person, on(MISSING)), false);
+  assert.equal(await customMonitoringForCaller(personAuth("member", MISSING), on(MISSING)), true);
 });
 
-test("query_monitoring runs a query of kind sql with the rql flag on, and gives its table", async () => {
+test("query_monitoring runs a query of kind sql with customMonitoring on, and gives its table", async () => {
   const data = await m.data<{ summary: string; result: Table }>("query_monitoring", {
     query: SQL_QUERY,
   });
@@ -214,15 +212,15 @@ test("query_monitoring runs a query of kind sql with the rql flag on, and gives 
   assert.ok(wrong.fix);
 });
 
-test("query_monitoring refuses kind sql with the rql flag off, and in panels always", async () => {
-  m.set.rql = false;
+test("query_monitoring refuses kind sql with customMonitoring off, and in panels always", async () => {
+  m.set.on = false;
   const off = await m.call("query_monitoring", { query: SQL_QUERY });
   assert.ok(!off.ok);
   assert.equal(off.error, "forbidden");
-  assert.equal(off.reason, "rql_off");
-  assert.match(off.message, /rql flag/);
+  assert.equal(off.reason, "custom_monitoring_off");
+  assert.match(off.message, /customMonitoring/);
 
-  m.set.rql = true;
+  m.set.on = true;
   const panels = await m.call("query_monitoring", {
     queries: [{ query: EXAMPLES.metric }, { query: SQL_QUERY }],
   });
@@ -231,7 +229,7 @@ test("query_monitoring refuses kind sql with the rql flag off, and in panels alw
   assert.match(panels.message, /kind sql cannot be a widget, a panel/);
 });
 
-test("describe_monitoring_schema lists kind sql only with the rql flag on", async () => {
+test("describe_monitoring_schema lists kind sql, and refuses with customMonitoring off", async () => {
   const kinds = async () =>
     (
       await m.data<{ catalog: { kinds: { kind: string; note?: string }[] } }>(
@@ -243,6 +241,8 @@ test("describe_monitoring_schema lists kind sql only with the rql flag on", asyn
   assert.ok(sql);
   assert.match(sql.note ?? "", /run_rql/);
   assert.match(sql.note ?? "", /describe_rql_schema/);
-  m.set.rql = false;
-  assert.ok(!(await kinds()).some(({ kind }) => kind === "sql"));
+  m.set.on = false;
+  const off = await m.call("describe_monitoring_schema", { part: "catalog" });
+  assert.ok(!off.ok);
+  assert.equal(off.reason, "custom_monitoring_off");
 });

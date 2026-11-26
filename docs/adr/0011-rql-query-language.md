@@ -3,7 +3,8 @@
 ## Status
 
 Accepted. The compiler, the views, the role, the runner (`web/src/lib/synthesis/rql`) and the MCP
-tools `describe_rql_schema` and `run_rql` are in place, behind `FF_RQL` (off by default).
+tools `describe_rql_schema` and `run_rql` are in place, behind `customMonitoring`
+(`FF_CUSTOM_MONITORING`, off by default), the flag of custom monitoring: RQL has no flag of its own.
 
 ## Context
 

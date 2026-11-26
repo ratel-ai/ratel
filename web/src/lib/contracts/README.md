@@ -19,7 +19,7 @@ written in (`rqlVersion`, a whole number from 1); `synthesis/rql` checks the ver
 
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`,
-`customMonitoring`, `rql`) and the optional
+`customMonitoring`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
 force each one on or off; only that file knows the environment variable of each. Without the port
 each switch is its configured value for the deployment, off when unset (in the open-source
