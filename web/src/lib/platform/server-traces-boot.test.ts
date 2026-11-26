@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { trace } from "@opentelemetry/api";
 import { resolveConfig } from "@/config";
-import { registerNodeInstrumentation as register } from "@/instrumentation.node";
+import { registerNodeInstrumentation as register } from "@/instrumentation-node";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 
 const registerNodeInstrumentation = (
@@ -15,7 +15,7 @@ const registerNodeInstrumentation = (
 import { MCP_TOOL_TRACER } from "@/lib/mcp/telemetry/export";
 import { MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 
-// Server traces at boot (`instrumentation.node.ts`) with only the APM collector configured, as
+// Server traces at boot (`instrumentation-node.ts`) with only the APM collector configured, as
 // Cloud's sidecar is, against a collector on this machine. The registration is once per process,
 // so this case has its own file; the unset case is in self-telemetry-boot.test.ts.
 

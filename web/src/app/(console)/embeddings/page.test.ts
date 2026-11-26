@@ -3,6 +3,8 @@ import { afterEach, beforeEach, test } from "node:test";
 import { composition } from "@/lib/composition";
 import LegacyEmbeddingsPage from "./page";
 
+/** A stub component for an edition slot: it renders nothing. */
+const Nothing = () => null;
 const editionUi = composition.ui;
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -26,9 +28,9 @@ test("the old /embeddings address is a 404 without the edition's embeddings page
 
 test("with the edition's page it redirects for good to the project's embeddings page", async () => {
   composition.ui = async () => ({
-    RootProvider: () => null,
-    AccountMenuItems: () => null,
-    ProjectPages: { embeddings: { title: "Embeddings", Page: () => null } },
+    RootProvider: Nothing,
+    AccountMenuItems: Nothing,
+    ProjectPages: { embeddings: { title: "Embeddings", Page: Nothing } },
   });
   await assert.rejects(
     LegacyEmbeddingsPage({ searchParams: Promise.resolve({ range: "7d" }) }),

@@ -459,7 +459,8 @@ test("the view gets the page's own data, and only a view does", async () => {
   const viewed = await call("get_overview", {}, ANA, true);
   assert.ok(viewed.ok);
   assert.equal(viewed.view?.kind, "overview");
-  assert.equal((viewed.view?.overview as { project: { id: string } }).project.id, PROJECT_ID);
+  assert.ok(viewed.view);
+  assert.equal((viewed.view.overview as { project: { id: string } }).project.id, PROJECT_ID);
 });
 
 test("one widget: only its data, with the page's numbers, for both ranges", async () => {
@@ -708,8 +709,8 @@ test("a dashboard widget: the page and the widget alone have its numbers, and th
     assert.equal(widget.href, `/project/${PROJECT_ID}/dashboards/${id}`);
     assert.equal(widget.result.kind, "metric");
     assert.equal(typeof widget.summary, "string");
-    assert.ok(viewed.ok);
-    const { dashboards } = viewed.view?.overview as {
+    assert.ok(viewed.ok && viewed.view);
+    const { dashboards } = viewed.view.overview as {
       dashboards: Record<string, { kind: string }>;
     };
     assert.equal(dashboards[entry].kind, "widget");

@@ -14,9 +14,15 @@ function Embeddings() {
   return null;
 }
 
+function ApiSkeleton() {
+  return null;
+}
+
+const Nothing = () => null;
+
 async function withUi(ui: Partial<EditionUi>, run: () => Promise<void>) {
   const saved = composition.ui;
-  composition.ui = async () => ({ RootProvider: () => null, AccountMenuItems: () => null, ...ui });
+  composition.ui = async () => ({ RootProvider: Nothing, AccountMenuItems: Nothing, ...ui });
   try {
     await run();
   } finally {
@@ -53,9 +59,6 @@ test("compaction keeps its own route: a redirect to the context split", async ()
 });
 
 test("while an edition page loads, the route shows the edition's skeleton, not the project Overview's", async () => {
-  function ApiSkeleton() {
-    return null;
-  }
   assert.equal(await EditionProjectPageLoading(), null, "nothing without an edition skeleton");
   await withUi({ ProjectPageSkeleton: ApiSkeleton }, async () => {
     const element = await EditionProjectPageLoading();

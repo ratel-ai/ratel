@@ -513,7 +513,8 @@ test("a reply without a usable proposal fails the draft and says why, without a 
     });
     const draft = await latestFixDraft(PROJECT, fix.id, db);
     assert.equal(draft?.status, "failed");
-    assert.equal((draft?.spend as { calls: number }).calls, 1);
+    assert.ok(draft);
+    assert.equal((draft.spend as { calls: number }).calls, 1);
   } finally {
     await client.close();
   }
