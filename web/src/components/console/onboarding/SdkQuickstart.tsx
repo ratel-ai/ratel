@@ -5,30 +5,38 @@ import { CodeBlock } from "@ratel/design-system/code";
 import { SegmentedControl } from "@ratel/design-system/tabs";
 import { type CSSProperties, useMemo, useState } from "react";
 import {
-  buildQuickstartSet,
-  QUICKSTART_LANG_LABELS,
-  QUICKSTART_LANGS,
-  type QuickstartLang,
+  buildQuickstartVariantSet,
+  QUICKSTART_VARIANT_LABELS,
+  QUICKSTART_VARIANTS,
+  type QuickstartVariant,
 } from "@/lib/console/onboarding/quickstart";
 
-const OPTIONS = QUICKSTART_LANGS.map((lang) => ({
-  value: lang,
-  label: QUICKSTART_LANG_LABELS[lang],
+const OPTIONS = QUICKSTART_VARIANTS.map((variant) => ({
+  value: variant,
+  label: QUICKSTART_VARIANT_LABELS[variant],
 }));
 
+/** One line under the switch: when to pick the variant on show. */
+const VARIANT_HINT: Record<QuickstartVariant, string> = {
+  typescript: "Nothing in your app starts OpenTelemetry yet: start it with Ratel's processor.",
+  provider:
+    "Your framework already starts it (Next.js with @vercel/otel, Eve, Mastra): add Ratel's processor to it.",
+  curl: "No install: one request that proves your key reaches Ratel. 202 means accepted.",
+};
+
 /**
- * "Send your first trace": the Ratel SDK wiring for TypeScript, with curl as
- * the zero-install fallback.
+ * The onboarding's Human tab: the wiring by hand. NodeSDK when the app owns no
+ * provider, the span processor alone when the framework already starts one, and
+ * curl as the zero-install key check.
  *
- * Upstream's component sits on its own code block and segmented control; this
- * one is the same shape on the design system's, so the snippet a reader meets
- * here looks like the rest of the console. The snippets themselves are built in
+ * On the design system's code block and segmented control, so the snippet
+ * looks like the rest of the console. The snippets themselves are built in
  * lib/console/onboarding/quickstart.ts (pure, tested); this only picks between them.
  */
 export function SdkQuickstart({
   endpoint,
   serviceName,
-  defaultLang = "typescript",
+  defaultVariant = "typescript",
   maxHeight,
   captureContent = false,
   className,
@@ -37,20 +45,20 @@ export function SdkQuickstart({
   endpoint: string;
   /** Project slug, emitted as the OTel `service.name`. */
   serviceName: string;
-  defaultLang?: QuickstartLang;
+  defaultVariant?: QuickstartVariant;
   /** Cap the snippet's height so it never pushes a CTA below the fold. */
   maxHeight?: number | string;
-  /** Include the content-capture switch in the TypeScript snippet. */
+  /** Include the content-capture switch in the snippets that have one. */
   captureContent?: boolean;
   className?: string;
 }) {
-  const [lang, setLang] = useState<QuickstartLang>(defaultLang);
+  const [variant, setVariant] = useState<QuickstartVariant>(defaultVariant);
   const snippets = useMemo(
-    () => buildQuickstartSet({ endpoint, serviceName, captureContent }),
+    () => buildQuickstartVariantSet({ endpoint, serviceName, captureContent }),
     [endpoint, serviceName, captureContent],
   );
-  const { install, code } = snippets[lang];
-  const label = QUICKSTART_LANG_LABELS[lang];
+  const { install, code } = snippets[variant];
+  const label = QUICKSTART_VARIANT_LABELS[variant];
   // CodeBlock has no height cap of its own: the wrapper clamps its <pre> through
   // a variable, so the bar with the copy button stays put while a long snippet
   // scrolls.
@@ -65,10 +73,18 @@ export function SdkQuickstart({
     // items-start keeps the pill at its natural width; the code blocks below
     // carry w-full.
     <div className={cn("flex flex-col items-start gap-3", className)}>
-      <SegmentedControl options={OPTIONS} value={lang} onValueChange={setLang} label="Language" />
+      <SegmentedControl
+        options={OPTIONS}
+        value={variant}
+        onValueChange={setVariant}
+        label="Setup"
+      />
+      <p className="text-pretty text-xs leading-relaxed text-warm-muted">{VARIANT_HINT[variant]}</p>
       {/* The install line is its own copyable block: one command to paste in a
           shell, separate from the code that goes in a file. curl has none. */}
-      {install && <CodeBlock samples={[{ label, code: install }]} wrap className="w-full" />}
+      {install && (
+        <CodeBlock samples={[{ label, code: install }]} caption="Install" wrap className="w-full" />
+      )}
       <div
         style={clamp}
         className={cn(
@@ -76,7 +92,7 @@ export function SdkQuickstart({
           clamp && "[&_pre]:max-h-(--quickstart-max-h) [&_pre]:overflow-y-auto",
         )}
       >
-        <CodeBlock samples={[{ label, code }]} wrap />
+        <CodeBlock samples={[{ label, code }]} caption={variant === "curl" ? "Shell" : "Code"} />
       </div>
     </div>
   );

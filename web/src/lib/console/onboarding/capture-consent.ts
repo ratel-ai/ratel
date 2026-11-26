@@ -54,7 +54,15 @@ export const READ_SOURCES: readonly ReadSource[] = [
 /** The relay's privacy levels, least to most, as the relay itself names them. */
 export const RELAY_PRIVACY_LEVELS = ["Off", "Redacted", "Tool details", "Full content"] as const;
 
-export const CAPTURE_TOGGLE_LABEL = "Include content capture in my snippet";
+export const CAPTURE_TOGGLE_LABEL = "Ask for content capture";
+
+/**
+ * Under the switch. The switch adds the standard capture setting to the prompt and the snippets,
+ * but what a span carries is decided by whatever emits it: a framework with its own setting
+ * (Eve's tracePolicy) follows that one, so the switch alone is not a promise of content.
+ */
+export const CAPTURE_TOGGLE_NOTE =
+  "Adds the standard capture setting to your prompt and snippets. What actually gets sent is up to whatever emits your agent's traces: a framework with its own setting, like Eve's tracePolicy, follows that setting, so turn it on there too.";
 
 /** Said once, so nobody feels they must send everything or nothing. */
 export const KEEP_BACK_NOTE =

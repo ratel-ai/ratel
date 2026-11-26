@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AgentPromptPanel } from "@/components/console/onboarding/AgentPromptPanel";
 import { CaptureConsentPanel } from "@/components/console/onboarding/CaptureConsentPanel";
 import { SdkQuickstart } from "@/components/console/onboarding/SdkQuickstart";
 import {
   CAPTURE_TOGGLE_LABEL,
+  CAPTURE_TOGGLE_NOTE,
   FIRST_READING_PROMISE,
   KEEP_BACK_NOTE,
   READ_SOURCES,
@@ -101,4 +103,41 @@ test("the snippet carries the capture switch only when the customer opts in", ()
   const on = renderToStaticMarkup(createElement(SdkQuickstart, { ...props, captureContent: true }));
   assert.ok(!off.includes(QUICKSTART_CAPTURE_ENV));
   assert.ok(on.includes(QUICKSTART_CAPTURE_ENV));
+});
+
+test("the capture switch says the emitter decides, not the switch alone", () => {
+  const html = renderPanel();
+  assert.ok(html.includes(CAPTURE_TOGGLE_NOTE.replace(/'/g, "&#x27;")));
+  // The framework that emits the spans has the last word (Eve: tracePolicy).
+  assert.match(CAPTURE_TOGGLE_NOTE, /whatever emits/);
+  assert.match(CAPTURE_TOGGLE_NOTE, /tracePolicy/);
+  const button = html.match(/<button[^>]*role="switch"[^>]*>/)?.[0] ?? "";
+  const describedBy = button.match(/aria-describedby="([^"]+)"/)?.[1];
+  assert.ok(describedBy && html.includes(`id="${describedBy}"`), "the note describes the switch");
+});
+
+test("the Human tab offers NodeSDK, an existing OTel provider and curl", () => {
+  const html = renderToStaticMarkup(
+    createElement(SdkQuickstart, {
+      endpoint: "https://cloud.ratel.sh/api/v1/traces",
+      serviceName: "support-copilot",
+    }),
+  );
+  for (const label of ["NodeSDK", "Existing OTel provider", "curl"]) {
+    assert.ok(html.includes(`>${label}<`), `${label} is offered`);
+  }
+});
+
+test("the agent prompt panel previews the prompt and copies it as the main action", () => {
+  const html = renderToStaticMarkup(
+    createElement(AgentPromptPanel, {
+      projectName: "Support copilot",
+      serviceName: "support-copilot",
+      endpoint: "https://cloud.ratel.sh/api/v1/traces",
+      tracesUrl: "https://cloud.ratel.sh/project/p_1/traces",
+    }),
+  );
+  assert.match(html, /Copy this prompt for your agent/);
+  assert.ok(html.includes("https://cloud.ratel.sh/api/v1/traces"), "the preview shows the prompt");
+  assert.ok(!html.includes("rtl_"), "no key in the preview");
 });
