@@ -272,7 +272,6 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
             ...callerAccess(ctx, caller),
             features: async () => ({ customMonitoring: true }),
             store: {
-              countAlertRules: (project) => store.countAlertRules(project, db),
               createAlertRule: (project, draft, actor) =>
                 store.createAlertRule(project, draft, actor, db),
               updateAlertRule: (project, id, draft, actor) =>

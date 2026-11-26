@@ -303,6 +303,7 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
 
 test("F446-3: the pending messages of a project that is off never hold up another project's", async () => {
   const off = await store.createAlertRule(OTHER, DRAFT, "u", db);
+  assert.ok(off);
   await pending(off, 101, new Date(now.getTime() - 60_000));
   const on = await rule();
   await pending(on, 1, now);
@@ -427,7 +428,9 @@ async function pending(ruleId: string, count: number, at: Date) {
 }
 
 async function rule(over: Partial<Parameters<typeof store.createAlertRule>[1]> = {}) {
-  return store.createAlertRule(PROJECT, { ...DRAFT, ...over }, "u", db);
+  const id = await store.createAlertRule(PROJECT, { ...DRAFT, ...over }, "u", db);
+  assert.ok(id);
+  return id;
 }
 
 async function trace(failed: boolean) {
@@ -462,7 +465,6 @@ function stepper() {
 
 function change(input: Record<string, unknown>, over: Partial<AlertActionDeps> = {}) {
   const bound = {
-    countAlertRules: (p: string) => store.countAlertRules(p, db),
     createAlertRule: (p, d, a) => store.createAlertRule(p, d, a, db),
     updateAlertRule: (p, i, d, a) => store.updateAlertRule(p, i, d, a, db),
     setAlertRuleEnabled: (p, i, e, a) => store.setAlertRuleEnabled(p, i, e, a, db),

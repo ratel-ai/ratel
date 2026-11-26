@@ -95,7 +95,10 @@ export async function getAlertRule(
   return row ? readRule(row) : null;
 }
 
-export async function countAlertRules(projectId: string, db: AlertsDb = getDb()): Promise<number> {
+export async function countAlertRules(
+  projectId: string,
+  db: Pick<AlertsDb, "select"> = getDb(),
+): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(alertRules)
@@ -120,14 +123,22 @@ export async function countAlertRuleStates(
   return row;
 }
 
+/**
+ * Null when the project has `MAX_ALERT_RULES` already. The count and the insert are one transaction
+ * under the project's lock, so creates at the same time never pass the limit.
+ */
 export async function createAlertRule(
   projectId: string,
   draft: AlertDraft,
   actor: string,
   db: AlertsDb = getDb(),
-): Promise<string> {
+): Promise<string | null> {
   const { destinationIds, ...rule } = draft;
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`alert_rules:${projectId}`}, 0))`,
+    );
+    if ((await countAlertRules(projectId, tx)) >= MAX_ALERT_RULES) return null;
     const [row] = await tx
       .insert(alertRules)
       .values({ ...rule, projectId, createdBy: actor, updatedBy: actor })

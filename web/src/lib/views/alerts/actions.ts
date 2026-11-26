@@ -36,7 +36,6 @@ export interface AlertActionDeps extends AlertAccessDeps {
   features(subject: AlertSubject): Promise<MetricFeatures>;
   store: Pick<
     typeof store,
-    | "countAlertRules"
     | "createAlertRule"
     | "updateAlertRule"
     | "setAlertRuleEnabled"
@@ -70,9 +69,10 @@ export async function changeAlert(raw: unknown, deps: AlertActionDeps): Promise<
       const parsed = parseRule(input.draft, await deps.features(subject));
       if (!parsed.ok) return parsed;
       if (input.action === "create") {
-        if ((await deps.store.countAlertRules(projectId)) >= MAX_ALERT_RULES)
+        const created = await deps.store.createAlertRule(projectId, parsed.draft, actor);
+        if (created === null)
           return { ok: false, error: `A project can have ${MAX_ALERT_RULES} alerts.` };
-        id = await deps.store.createAlertRule(projectId, parsed.draft, actor);
+        id = created;
       } else {
         if (!ruleId) return INVALID;
         if (!(await deps.store.updateAlertRule(projectId, ruleId, parsed.draft, actor)))
