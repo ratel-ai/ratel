@@ -13,6 +13,7 @@ import {
   organizationSlugFromPath,
   projectIdFromPath,
   projectRoot,
+  railParts,
   shellOrganization,
   shortcutHref,
   switchProjectHref,
@@ -246,7 +247,7 @@ test("an edition's project group sits between the core pages and Settings, under
       "group:apis:project-models/embeddings:APIs",
       "group:apis:project-models/tool-picker:",
       "settings:catalog:",
-      "settings:mcp-setup:",
+      "footer:mcp-setup:",
       "settings:settings:",
     ],
   );
@@ -301,7 +302,7 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
       "group:ship:ship:Ship",
       "settings:catalog:",
       "settings:group-apis:",
-      "settings:mcp-setup:",
+      "footer:mcp-setup:",
       "settings:settings:",
     ],
   );
@@ -346,7 +347,11 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
   const project = consoleNav({ projectId: P1, additions: [], projectGroups: cloud.projectNav });
   assert.deepEqual(
     project.filter(({ section }) => section === "settings").map(({ id }) => id),
-    ["catalog", "group-apis", "mcp-setup", "settings"],
+    ["catalog", "group-apis", "settings"],
+  );
+  assert.deepEqual(
+    project.filter(({ section }) => section === "footer").map(({ id }) => id),
+    ["mcp-setup"],
   );
   const row = project.find(({ id }) => id === "group-apis");
   assert.equal(row?.icon, "apis");
@@ -389,7 +394,7 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
   assert.equal(first("credits"), "Billing");
 });
 
-test("Settings sits in a section of its own in both rails, the edition's items in another", () => {
+test("Settings sits in a section of its own in both rails, MCP in the footer, the edition's items in another", () => {
   const sectionsOf = (items: ReturnType<typeof consoleNav>) =>
     items.map(({ id, section }) => `${section ?? "main"}:${id}`);
   assert.deepEqual(
@@ -403,7 +408,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "group:improve:improvements",
       "group:ship:ship",
       "settings:catalog",
-      "settings:mcp-setup",
+      "footer:mcp-setup",
       "settings:settings",
       "edition:edition:/admin",
     ],
@@ -474,8 +479,11 @@ test("Dashboards, Explore, Scorers and Alerts are Monitor items only with custom
       ],
     );
     assert.equal(on.find(({ id }) => id === "overview")?.children, undefined);
-    // DESIGN.md's budget: at most 11 items, and 15 with customMonitoring.
-    assert.ok(off.length <= 11);
+    // DESIGN.md's budget: at most 10 items in the list, and 14 with customMonitoring. The
+    // footer's MCP does not count.
+    const list = (items: typeof on) => items.filter(({ section }) => section !== "footer");
+    assert.ok(list(off).length <= 10);
+    assert.ok(list(on).length <= 14);
     assert.equal(on.length, off.length + 4);
     // Everything else on the rail is as it was.
     const pages = ["dashboards", "explore", "scorers", "alerts"];
@@ -762,7 +770,7 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
       "ship|group:ship|Ship",
       "project-models/x|group:apis|APIs",
       "catalog|settings|",
-      "mcp-setup|settings|",
+      "mcp-setup|footer|",
       "settings|settings|",
     ],
   );
@@ -828,7 +836,7 @@ test("focusedConsole on: Self-corrections is an insight and Agent health has no 
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
       "catalog|settings|",
-      "mcp-setup|settings|",
+      "mcp-setup|footer|",
       "settings|settings|",
     ],
   );
@@ -859,7 +867,7 @@ test("the command menu finds Self-corrections by its keywords, flag off and on",
   }
 });
 
-test("MCP sits right above Settings in every project rail and lights on its page only", () => {
+test("MCP sits in the rail footer of every project rail, and Settings stays last in the list", () => {
   const cloud = createComposition("cloud", { eeComposition: createComposition("oss") });
   for (const focusedConsole of [false, true]) {
     for (const customMonitoring of [false, true]) {
@@ -871,10 +879,13 @@ test("MCP sits right above Settings in every project rail and lights on its page
           focusedConsole,
           customMonitoring,
         });
+        const { list, footer } = railParts(items);
         assert.deepEqual(
-          items.slice(-2).map(({ id, section }) => `${id}|${section}`),
-          ["mcp-setup|settings", "settings|settings"],
+          footer.map(({ id }) => id),
+          ["mcp-setup"],
         );
+        assert.equal(list.at(-1)?.id, "settings");
+        assert.equal(list.at(-1)?.section, "settings");
       }
     }
   }
@@ -895,5 +906,45 @@ test("MCP sits right above Settings in every project rail and lights on its page
       ({ id }) => id,
     ),
     ["projects", "integrations", "org-settings"],
+  );
+});
+
+test("railParts splits a rail into the scrolling list and the pinned footer, in rail order", () => {
+  const project = consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] });
+  const { list, footer } = railParts(project);
+  assert.deepEqual(
+    footer.map(({ id }) => id),
+    ["mcp-setup"],
+  );
+  assert.deepEqual(
+    list.map(({ id }) => id),
+    [
+      "overview",
+      "health",
+      "traces",
+      "tasks",
+      "intents",
+      "improvements",
+      "ship",
+      "catalog",
+      "settings",
+      "edition:/admin",
+    ],
+    "Catalog, Settings and the edition's items stay in the list",
+  );
+  const organization = railParts(
+    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }),
+  );
+  assert.deepEqual(
+    organization.list.map(({ id }) => id),
+    ["projects", "integrations", "org-settings"],
+  );
+  assert.deepEqual(organization.footer, [], "the organization rail has no footer item");
+  // The footer item keeps its active state and its ⌘K entry.
+  assert.equal(activeNavItemId(`/project/${P1}/mcp-setup`, project), "mcp-setup");
+  assert.ok(
+    commandEntries({ items: project, projectId: P1, projects: [], pathname: "/" }).some(
+      ({ href }) => href === `/project/${P1}/mcp-setup`,
+    ),
   );
 });
