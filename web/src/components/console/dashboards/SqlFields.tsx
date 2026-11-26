@@ -42,7 +42,7 @@ export function SqlFields({
     <div className="flex flex-col gap-2">
       <Field
         label="RQL query"
-        description={`One SELECT over events, traces, scores, sessions and users. ${window}`}
+        description={`RQL (Ratel Query Language): one SELECT over events, traces, scores, sessions and users. ${window}`}
         error={
           refusal ? (
             <>
