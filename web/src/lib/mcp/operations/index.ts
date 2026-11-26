@@ -27,6 +27,7 @@ import { playgroundOperations } from "@/lib/mcp/operations/playground";
 import { qualityOperations } from "@/lib/mcp/operations/quality";
 import { rankingOperations } from "@/lib/mcp/operations/ranking";
 import { runsOperations } from "@/lib/mcp/operations/runs";
+import { sandboxOperations } from "@/lib/mcp/operations/sandboxes";
 import { scopeOperations } from "@/lib/mcp/operations/scope";
 import { shipOperations } from "@/lib/mcp/operations/ship";
 import {
@@ -43,6 +44,8 @@ export interface AssembleOptions {
   includeWrites?: boolean;
   /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
   focusedConsole?: boolean;
+  /** List the Ratel sandbox tools (`sandboxes` flag of the caller). Off, they do not exist. */
+  sandboxes?: boolean;
 }
 
 /**
@@ -81,6 +84,7 @@ export function assembleOperations(
     ...joinsOperations(),
     ...playgroundOperations(),
     ...shipOperations(),
+    ...(options.sandboxes ? sandboxOperations() : []),
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),

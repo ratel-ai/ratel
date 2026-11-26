@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true });
+const operations = assembleOperations({ focusedConsole: true, sandboxes: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -62,8 +62,13 @@ test("every params schema converts to JSON Schema for discovery", () => {
   }
 });
 
+/** A feature domain keeps its reads and writes together; each write still declares `mutates`. */
+const FEATURE_DOMAINS = new Set(["sandboxes", "evals"]);
+
 test("write operations are exactly those declaring mutates", () => {
-  const mutating = operations.filter((operation) => operation.mutates).map((o) => o.id);
+  const mutating = operations
+    .filter((operation) => operation.mutates && !FEATURE_DOMAINS.has(operation.domain))
+    .map((o) => o.id);
   const inWritesDomain = operations
     .filter((operation) => operation.domain === "writes")
     .map((o) => o.id);
@@ -71,7 +76,7 @@ test("write operations are exactly those declaring mutates", () => {
   assert.deepEqual(
     mutating.sort(),
     inWritesDomain.sort(),
-    "an operation that mutates must live in the writes domain, and vice versa",
+    "an operation that mutates must live in the writes domain or a feature domain, and every writes-domain operation mutates",
   );
 });
 
@@ -199,6 +204,11 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
+  // Ratel sandbox (decision `mcp-surface`), behind the `sandboxes` flag. sandbox_run starts a VM run.
+  ["sandbox_list", false],
+  ["sandbox_get_version", false],
+  ["sandbox_run", true],
+  ["sandbox_get_run", false],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {
