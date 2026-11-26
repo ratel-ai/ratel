@@ -33,6 +33,11 @@ hard limits. `usage-limits.contract.ts` is the test every adapter passes and
 `sandbox-limits.ts` gives the configured limits of the deployment (`SANDBOX_*`), from which an
 edition's adapter starts.
 
+`sandbox-version-holds.ts` is the sandbox versions that another module still needs (the version
+of a pinned eval baseline or of a running eval experiment), so the snapshot sweep of sandboxes
+keeps their snapshots. Evals depend on sandboxes, so the composition root
+(`lib/composition/registry.ts`) wires the evals answer into the sandboxes registration.
+
 `eval-judge.ts` is the judge of evals: one yes or no question about a trial, with a reason from a
 fixed list. The port supplies the model and says who pays. `eval-judge.contract.ts` is the test every
 adapter passes. The composition port is optional.

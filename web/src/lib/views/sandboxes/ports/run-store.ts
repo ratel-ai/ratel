@@ -1,6 +1,7 @@
 import type { UsageCheck, UsageRefusal } from "@/lib/contracts/usage-limits";
 import type { RunResponse } from "../domain/contract";
 import type { RunRequest, RunStatus, SandboxRun } from "../domain/run";
+import type { VersionStatus } from "../domain/version";
 
 export type NewRun = {
   id: string;
@@ -30,14 +31,15 @@ export type OpenRun = Pick<
 
 export interface RunStore {
   /**
-   * Adds a `queued` run when `check` passes. `check` gets the active runs that the project has now
-   * and its runs of this UTC day. Two starts of a project at the same time do not see the same
-   * numbers.
+   * Adds a `queued` run when its version is `ready` and `check` passes. `check` gets the active
+   * runs that the project has now and its runs of this UTC day. Two starts of a project at the same
+   * time do not see the same numbers. A retire of the version takes the same lock, so a start sees
+   * the version retired, or its run keeps the version.
    */
   create(
     run: NewRun,
     check: (present: { active: number; today: number }) => Promise<UsageCheck>,
-  ): Promise<{ ok: true; run: SandboxRun } | UsageRefusal>;
+  ): Promise<{ ok: true; run: SandboxRun } | UsageRefusal | VersionNotReady>;
   /** Removes a `queued` run that did not get a VM. */
   discard(runId: string): Promise<void>;
   get(projectId: string, runId: string): Promise<SandboxRun | null>;
@@ -61,6 +63,9 @@ export interface RunStore {
   /** At most `limit` ended runs with work, then at most `limit` active ones. The oldest first. */
   listOpen(limit: number): Promise<OpenRun[]>;
 }
+
+/** The version of the run is not `ready` (e.g. `retired`), or is gone (null). */
+export type VersionNotReady = { ok: false; versionStatus: VersionStatus | null };
 
 export type RunOutcome =
   | { status: "completed"; response: RunResponse; logs: string; durationMs: number }

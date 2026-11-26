@@ -532,6 +532,11 @@ const CONFIG_SCHEMA = schema({
     },
     /** A run VM with no run for this time is deleted. */
     vmIdleSeconds: setting("SANDBOX_VM_IDLE_SECONDS", positiveCount, D.sandboxes.vmIdleSeconds),
+    /**
+     * The ready versions of each sandbox that keep their snapshots. The sweep retires each older
+     * version that no eval and no run holds, and deletes its snapshot (`snapshot-sweep.ts`).
+     */
+    keepVersions: setting("SANDBOX_KEEP_VERSIONS", positiveCount, D.sandboxes.keepVersions),
   },
   topics: {
     maxTurns: setting("TOPICS_MAX_TURNS", positiveCount, D.topics.maxTurns),

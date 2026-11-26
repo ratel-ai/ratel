@@ -5,6 +5,7 @@ import {
   type DockerCall,
   type DockerCli,
 } from "../adapters/local-docker-provider";
+import { snapshotName } from "../domain/snapshot-name";
 import { ProviderRefused, type StartVmRequest } from "../ports/sandbox-provider";
 
 /** User values with shell characters: each must stay one whole argv entry. */
@@ -148,6 +149,21 @@ test("listVms asks only for the VMs of this deployment, each label one filter", 
       `label=odd=${EVIL}`,
     ].sort(),
   );
+});
+
+test("listSnapshots lists only the snapshots of this deployment with the name of a version", async () => {
+  const version = "0b6c1f0e-5d0a-4c55-9f4e-3d2b1a0f9e8d";
+  const ours = snapshotName("dev", version);
+  const names = [ours, snapshotName("dev-2", version), `rv-${version}`, "rc-contract", ""];
+  const { calls, docker } = spyDocker((args) =>
+    args[0] === "volume" ? { stdout: `${names.join("\n")}\n` } : {},
+  );
+  const provider = createLocalDockerProvider({ deploymentId: "dev", docker });
+  assert.deepEqual(await provider.listSnapshots(), [{ snapshotRef: ours, versionId: version }]);
+  const ls = calls.find(({ args }) => args[0] === "volume");
+  assert.ok(ls);
+  const filters = ls.args.flatMap((arg, i) => (ls.args[i - 1] === "--filter" ? [arg] : []));
+  assert.deepEqual(filters.sort(), ["label=ratel-deployment=dev", "label=ratel-local-snapshot"]);
 });
 
 async function textOf(body: NonNullable<Parameters<DockerCli>[1]>["stdin"]): Promise<string> {

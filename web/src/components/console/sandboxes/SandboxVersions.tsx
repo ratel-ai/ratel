@@ -14,6 +14,7 @@ const STATUS: Record<VersionRow["status"], { label: string; tone: Tone }> = {
   preparing: { label: "Preparing", tone: "info" },
   ready: { label: "Ready", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
+  retired: { label: "Retired", tone: "neutral" },
 };
 
 /** Each pushed version with its commit and its build state, the newest first. */

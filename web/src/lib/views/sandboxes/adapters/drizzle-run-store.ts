@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, inArray, notLike, type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { EVAL_TRIAL_PREFIX, type RunStatus, resultOf, type SandboxRun } from "../domain/run";
+import type { VersionStatus } from "../domain/version";
 import type { RunStore } from "../ports/run-store";
-import { sandboxRuns } from "../schema";
+import { sandboxRuns, sandboxVersions } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "delete" | "transaction">;
 
@@ -16,6 +17,22 @@ export function createDrizzleRunStore(db: Db): RunStore {
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`sandbox_runs:${run.projectId}`}, 0))`,
         );
+        // A retire takes the same lock (`drizzle-retention-store.ts`): this read sees it.
+        const [version] = await tx
+          .select({ status: sandboxVersions.status })
+          .from(sandboxVersions)
+          .where(
+            and(
+              eq(sandboxVersions.id, run.versionId),
+              eq(sandboxVersions.projectId, run.projectId),
+            ),
+          );
+        if (version?.status !== "ready") {
+          return {
+            ok: false as const,
+            versionStatus: (version?.status ?? null) as VersionStatus | null,
+          };
+        }
         const [present] = await tx
           .select({
             active: sql<number>`count(*) filter (where ${sandboxRuns.status} in ('queued', 'running'))::int`,
