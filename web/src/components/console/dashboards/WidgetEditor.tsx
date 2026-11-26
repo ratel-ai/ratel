@@ -112,6 +112,7 @@ function EditorForm({
         }}
         refused={refused ? { field: "filter", message: refused } : null}
         facets={facets}
+        range={range}
         result={preview?.ok ? preview.result : null}
       />
       <section

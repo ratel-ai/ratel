@@ -56,7 +56,10 @@ export const rqlProcessGate = createRqlGate();
  * The gate of a caller that holds the place of the project already: it entered the gate before
  * the compile, so a busy project is refused before its text costs a parse.
  */
-export const placeHeld: RqlGate = { enter: () => () => {} };
+export const placeHeld: RqlGate = { enter: () => () => {}, wait: async () => () => {} };
+
+/** The gate of alert rules: apart from the interactive one, one query per project at a time. */
+export const rqlAlertGate = createRqlGate(RQL_LIMITS.parallelAlertQueriesPerProject);
 
 export async function runRql(
   compiled: RqlCompiled,

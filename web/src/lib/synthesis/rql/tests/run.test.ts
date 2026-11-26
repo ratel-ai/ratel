@@ -223,7 +223,7 @@ test("each run is observed with numbers and an outcome code, never the query or 
   assert.ok(!JSON.stringify(observation).includes("secret-svc"));
 
   const { deps: busy, observed: busyObserved } = deps(executor, {
-    gate: { enter: () => undefined },
+    gate: { enter: () => undefined, wait: async () => undefined },
   });
   await runRql(query, { projectId: PROJECT }, busy);
   assert.equal(busyObserved[0].outcome, "rql_busy");

@@ -10,6 +10,25 @@ import type { MetricResult, MetricSeries, SqlResult } from "@/lib/synthesis/metr
 const NUMERIC_TYPES: readonly string[] = ["number", "integer"];
 const DAY_MS = 86_400_000;
 
+/**
+ * What a reader must know of the rows, as a chart or as a table: that they are not all, and that
+ * a long range ran on its last days. Empty when the rows are whole.
+ */
+export function sqlResultNotes(result: SqlResult): string[] {
+  return [
+    ...(result.clampedToDays
+      ? [
+          `RQL reads at most ${result.clampedToDays} days: these rows are of the last ${result.clampedToDays} days of the range.`,
+        ]
+      : []),
+    ...(result.truncated
+      ? [
+          `Truncated: the query had more rows than its limit, or a cell or the rows were cut at the result cap. These are the first ${result.rows.length} rows. Add a LIMIT, a GROUP BY or a shorter range to read the rest.`,
+        ]
+      : []),
+  ];
+}
+
 /** The rows as a metric result for `MetricChart`, or null when they are a table. */
 export function sqlAsMetric(result: SqlResult): MetricResult | null {
   const times = indexesOf(result, (type) => type === "timestamp");

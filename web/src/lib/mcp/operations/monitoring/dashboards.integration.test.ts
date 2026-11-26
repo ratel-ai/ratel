@@ -527,6 +527,44 @@ test("a sql widget: change_dashboard, get_dashboard and import_dashboard carry i
   assert.deepEqual(catalog.kinds.find(({ kind }) => kind === "sql")?.charts, ["sql"]);
 });
 
+test("a sql widget on a 3 month range: get_dashboard gives the rows of the last 30 days, with the note", async () => {
+  const sql = {
+    version: 1,
+    kind: "sql",
+    text: "select count(*) as traces from traces",
+    rqlVersion: 1,
+  };
+  const { dashboardId } = await m.data<{ dashboardId: string }>("change_dashboard", {
+    action: "create",
+    name: "Long range",
+  });
+  await m.data("change_dashboard", {
+    action: "add_widget",
+    dashboardId,
+    widget: { query: sql, chart: "sql" },
+  });
+  const read = await m.data<{
+    widgets: { summary: string; result?: { clampedToDays?: number } }[];
+  }>("get_dashboard", {
+    dashboardId,
+    since: new Date(NOW.getTime() - 90 * 86_400_000).toISOString(),
+  });
+  assert.match(read.widgets[0].summary, /last 30 days of the range/);
+  // As the console: no RQL text of a metric over a range longer than RQL reads.
+  const long = await m.call("query_monitoring", {
+    query: {
+      version: 1,
+      kind: "metric",
+      measures: [{ measure: "trace_count", aggregation: "count" }],
+    },
+    chart: "number",
+    as: "sql",
+    since: new Date(NOW.getTime() - 60 * 86_400_000).toISOString(),
+  });
+  assert.ok(!long.ok);
+  assert.match(long.message, /at most 30 days/);
+});
+
 test("query_monitoring as sql gives the RQL text of a metric (Edit as SQL)", async () => {
   await insertTrace(m.client, "a", 100, true);
   await insertTrace(m.client, "b", 300);

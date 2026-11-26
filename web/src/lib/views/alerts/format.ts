@@ -12,6 +12,14 @@ export const STATE_LABELS: Readonly<Record<AlertState, string>> = {
   no_data: "No data",
 };
 
+/**
+ * Said when the Watch switch turns a metric into RQL text: the text reads another number. RQL picks
+ * traces by when they started, where an alert's metric counts them when they became known, so a late
+ * trace is never counted; and a sum of no rows is no value, where the metric gives 0.
+ */
+export const METRIC_TO_SQL_WARNING =
+  "The RQL text is close to the metric, not the same number. It counts traces by when they started, so a trace that arrives late is not counted; the metric counts it when it arrives. A sum of no traces is no value in RQL, where the metric gives 0, so a below alert does not fire on an empty window.";
+
 export const WINDOW_LABELS: Readonly<Record<AlertWindow, string>> = {
   5: "5 minutes",
   15: "15 minutes",

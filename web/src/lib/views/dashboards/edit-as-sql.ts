@@ -1,6 +1,7 @@
 import type { Aggregation, Bucket, Dimension, MeasureId } from "@/lib/contracts/query";
 import { RQL_LIMITS } from "@/lib/synthesis/rql/compile";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+import type { DashboardRange } from "@/lib/views/dashboards/links";
 import type { MetricWidget } from "@/lib/views/dashboards/types";
 
 /**
@@ -12,6 +13,12 @@ import type { MetricWidget } from "@/lib/views/dashboards/types";
  */
 
 export type MetricRql = { ok: true; text: string } | { ok: false; reason: string };
+
+/** What a person reads under `Edit as SQL`: where the text differs from the form. */
+export const EDIT_AS_SQL_NOTE =
+  "The RQL text of these numbers. It does not go back to the form. A sum of no rows shows as no value, where the form shows 0. The bucket size is written in the text: it does not follow the range.";
+
+const DAY_MS = 86_400_000;
 
 type Table = "traces" | "scores";
 
@@ -44,6 +51,20 @@ const GROUP_COLUMNS: Partial<Record<Dimension, readonly string[]>> = {
 
 const BUCKET_INTERVALS: Record<Bucket, string> = { hour: "1 hour", day: "1 day" };
 
+/**
+ * Why `Edit as SQL` cannot read this range, or null: RQL reads at most `maxWindowDays`, so a widget
+ * of kind sql on a longer range would show only its last days.
+ */
+export function sqlRangeProblem(range: DashboardRange): string | null {
+  const from = Date.parse(range.from);
+  const to = Date.parse(range.to);
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+  // A range of days ends at the end of its last day.
+  const days = (to - from + (range.to.length === 10 ? DAY_MS : 0)) / DAY_MS;
+  if (days <= RQL_LIMITS.maxWindowDays) return null;
+  return `RQL reads at most ${RQL_LIMITS.maxWindowDays} days, and this range has ${Math.round(days)}. Pick a range of ${RQL_LIMITS.maxWindowDays} days or less to edit as SQL.`;
+}
+
 export function metricAsRql(widget: MetricWidget, bucket: Bucket): MetricRql {
   const {
     query: {
@@ -55,8 +76,13 @@ export function metricAsRql(widget: MetricWidget, bucket: Bucket): MetricRql {
   } = widget;
   const read = MEASURES[measure];
   const aggregate = AGGREGATES[aggregation];
-  if (!read || !aggregate)
+  if (!aggregate)
     return { ok: false, reason: "This metric has no RQL form yet: RQL cannot compute a rate." };
+  if (!read)
+    return {
+      ok: false,
+      reason: "This metric has no RQL form yet: no RQL table has its values.",
+    };
   const groups: string[] = [];
   for (const dimension of dimensions) {
     const columns = GROUP_COLUMNS[dimension];
@@ -84,7 +110,9 @@ export function metricAsRql(widget: MetricWidget, bucket: Bucket): MetricRql {
     ...conditions,
   ];
   const grouped = [...(timed ? ["bucket"] : []), ...groups];
-  const ordered = timed ? ["bucket", ...groups] : groups.length > 0 ? ["value desc"] : [];
+  // Newest buckets first: when the rows pass the limit, the cut drops the oldest, and the chart
+  // puts the buckets back in time order.
+  const ordered = timed ? ["bucket desc", ...groups] : groups.length > 0 ? ["value desc"] : [];
   return {
     ok: true,
     text: [
@@ -128,8 +156,8 @@ function filterConditions(filter: TraceFilter, table: Table): string[] | null {
   anyOf("mcp_servers", filter.mcpServers);
   if (filter.status === "failed") parts.push("has_error");
   if (filter.status === "ok") parts.push("not has_error");
-  if (minCostUsd !== null) parts.push(`cost_usd >= ${minCostUsd}`);
-  if (minTokens !== null) parts.push(`input_tokens + output_tokens >= ${minTokens}`);
+  if (minCostUsd !== null) parts.push(`cost_usd >= ${decimal(minCostUsd)}`);
+  if (minTokens !== null) parts.push(`input_tokens + output_tokens >= ${decimal(minTokens)}`);
   for (const clause of filter.and ?? []) {
     const more = filterConditions(clause, table);
     if (more === null) return null;
@@ -145,6 +173,13 @@ function cleaned(values: readonly string[] | undefined): string[] {
 
 function positive(value: number | undefined): number | null {
   return value !== undefined && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** A number as RQL reads it: plain digits, never an exponent (`1e-7`). */
+function decimal(value: number): string {
+  if (!/e/i.test(String(value))) return String(value);
+  if (Math.abs(value) >= 1e21) return `${BigInt(Math.round(value))}.0`;
+  return value.toFixed(20).replace(/\.?0+$/, "");
 }
 
 function literal(value: string): string {

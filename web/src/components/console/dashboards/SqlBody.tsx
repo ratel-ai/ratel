@@ -5,7 +5,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { Table2 } from "lucide-react";
 import type { SqlResult } from "@/lib/synthesis/metrics/query";
 import { chartModel } from "@/lib/views/dashboards/chart-model";
-import { sqlAsMetric } from "@/lib/views/dashboards/sql-chart";
+import { sqlAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import { MetricChart } from "./MetricChart";
 
 const NUMERIC_TYPES: readonly string[] = ["number", "integer"];
@@ -30,16 +30,32 @@ export function SqlBody({
       />
     );
   const metric = sqlAsMetric(result);
+  // The notes show under a chart as under a table: a cut result never looks whole.
+  const notes = sqlResultNotes(result).map((note) => (
+    <p key={note} className="shrink-0 text-xs text-fg-subtle">
+      {note}
+    </p>
+  ));
   if (metric)
     return (
-      <MetricChart
-        chart="line"
-        model={chartModel(metric, "avg", "count", "line")}
-        result={metric}
-        unit="count"
-        label={label}
-        fill={fill}
-      />
+      // A filled chart takes the height the notes leave, so a note never covers its axis.
+      <div
+        className={
+          fill ? "flex h-full min-h-0 min-w-0 flex-col gap-2" : "flex min-w-0 flex-col gap-2"
+        }
+      >
+        <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
+          <MetricChart
+            chart="line"
+            model={chartModel(metric, "avg", "count", "line")}
+            result={metric}
+            unit="count"
+            label={label}
+            fill={fill}
+          />
+        </div>
+        {notes}
+      </div>
     );
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -56,11 +72,7 @@ export function SqlBody({
           cell: ({ cells }: { cells: unknown[] }) => cellText(cells[column]),
         }))}
       />
-      {result.truncated ? (
-        <p className="text-xs text-fg-subtle">
-          The first {result.rows.length} rows. Add a LIMIT or a GROUP BY to read the rest.
-        </p>
-      ) : null}
+      {notes}
     </div>
   );
 }

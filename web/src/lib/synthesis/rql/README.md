@@ -87,8 +87,12 @@ the compiled SQL with its params and the one at `limitParam` (the `LIMIT`) repla
 - The transaction is read-only and the role has no write grant: a write is refused.
 - `statement_timeout` is `RQL_LIMITS.timeoutMs`: a slow query is `rql_timeout`.
 - The gate: `RQL_LIMITS.parallelQueriesPerProject` (2) queries of one project at a time, in one
-  process. One more is `rql_busy` at once and never reaches the database. Kind `sql` takes the place
-  before the compile, so a busy project costs no parse. The pool has `RQL_POOL_MAX` (8)
+  process. Kind `sql` takes the place before the compile, so a busy project costs no parse, and
+  waits for it up to `RQL_LIMITS.gateWaitMs` (5 s), in order: a dashboard of more queries than
+  the cap waits. None free in that time is `rql_busy`, and never reaches the database. An alert rule
+  read by the evaluator (`scope.purpose: "alert"`) takes `rqlAlertGate`
+  (`RQL_LIMITS.parallelAlertQueriesPerProject`, one query per project) and
+  `RQL_LIMITS.alertTimeoutMs` (2 s) instead. A preview of the alert form stays on the interactive gate. The pool has `RQL_POOL_MAX` (8)
   connections for all projects, more than one project may hold, so another project still gets
   its answer. A run that waits past the connect timeout of the pool is `rql_busy` too.
 

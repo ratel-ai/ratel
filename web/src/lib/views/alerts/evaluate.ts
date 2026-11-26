@@ -28,6 +28,8 @@ export interface EvaluateOptions {
   /** Wall-clock the evaluation may spend before it yields to the next tick. */
   timeBudgetMs?: number;
   flagOn?: (projectId: string) => Promise<boolean>;
+  /** Wall-clock one project's rules may spend in one tick; the rest wait for the next tick. */
+  projectBudgetMs?: number;
 }
 
 export interface StateChange {
@@ -51,14 +53,21 @@ export interface EvaluationResult {
 }
 
 export const EVALUATION_TIME_BUDGET_MS = 20_000;
+/**
+ * The share of a tick one project's rules may take: the slow RQL rules of one project never hold
+ * the rules of the others for more than this. Each RQL rule stops at `RQL_LIMITS.alertTimeoutMs`.
+ */
+export const PROJECT_TIME_BUDGET_MS = 5_000;
 /** Arbitrary but stable; only this evaluator takes it. */
 const ALERTS_ADVISORY_LOCK_KEY = 823_100_132;
 
 const logger = getLogger("alerts/evaluate");
 
 /**
- * Evaluate the due rules of the projects with the flag on, the one that waited longest first. Each
- * rule is one transaction under an advisory lock and its row lock: the state, its history row and
+ * Evaluate the due rules of the projects with the flag on, the one that waited longest first, one
+ * rule of each project in turn, so no project waits behind another's rules. A project stops for the
+ * tick once its rules spent `projectBudgetMs`. Each rule is one transaction under an advisory lock
+ * and its row lock: the state, its history row and
  * the message to send commit together, so a change is recorded, and sent, once. A rule that fails
  * waits for its next turn and does not stop the others; one whose stored query is malformed is skipped.
  */
@@ -77,9 +86,13 @@ export async function evaluateAlerts(
     lockContended: false,
   };
 
-  const due = await dueRules(db, now(), options.flagOn ?? flagOn);
+  const projectBudgetMs = options.projectBudgetMs ?? PROJECT_TIME_BUDGET_MS;
+  const spent = new Map<string, number>();
+  const due = inTurns(await dueRules(db, now(), options.flagOn ?? flagOn));
   for (const rule of due) {
     if (Date.now() - startedAt >= timeBudgetMs) return result;
+    if ((spent.get(rule.projectId) ?? 0) >= projectBudgetMs) continue;
+    const ruleStarted = Date.now();
     try {
       const read = await readSqlFirst(db, rule.id, now());
       const outcome = await db.transaction((tx) => evaluateOne(tx, rule.id, now(), read));
@@ -99,9 +112,29 @@ export async function evaluateAlerts(
       result.failed += 1;
       logger.error({ err, project_id: rule.projectId, rule_id: rule.id }, "alert rule failed");
       await db.update(alertRules).set({ lastEvaluatedAt: now() }).where(eq(alertRules.id, rule.id));
+    } finally {
+      spent.set(rule.projectId, (spent.get(rule.projectId) ?? 0) + Date.now() - ruleStarted);
     }
   }
   return result;
+}
+
+/** The rules in turns: the first due rule of each project, then the second of each, and so on. */
+function inTurns<Rule extends { projectId: string }>(rules: readonly Rule[]): Rule[] {
+  const byProject = new Map<string, Rule[]>();
+  for (const rule of rules) {
+    const list = byProject.get(rule.projectId) ?? [];
+    list.push(rule);
+    byProject.set(rule.projectId, list);
+  }
+  const lists = [...byProject.values()];
+  const turns: Rule[] = [];
+  for (let turn = 0; turns.length < rules.length; turn++)
+    for (const list of lists) {
+      const rule = list[turn];
+      if (rule) turns.push(rule);
+    }
+  return turns;
 }
 
 async function dueRules(
@@ -147,6 +180,7 @@ async function readSqlFirst(db: Db, ruleId: string, now: Date): Promise<SqlRead 
       rule.projectId,
       query,
       evaluationWindow(rule.windowMinutes, now),
+      { reserved: true },
     ),
   };
 }

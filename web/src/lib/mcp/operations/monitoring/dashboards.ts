@@ -38,7 +38,7 @@ import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { dashboardDocumentSchema, exportDashboard } from "@/lib/views/dashboards/document";
-import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
+import { metricAsRql, sqlRangeProblem } from "@/lib/views/dashboards/edit-as-sql";
 import {
   dashboardFiltersSchema,
   defaultsSchema,
@@ -542,6 +542,13 @@ async function editAsSql(deps: MonitoringDeps, params: QueryParams) {
   const window = resolveWindow(params, QUERY_WINDOW, deps.now());
   const metric = getMetric(query.measures[0].measure);
   const bucket = query.bucket ?? (metric ? metricBucket(metric, window) : "day");
+  // As the console: no RQL text for a range longer than RQL reads.
+  const tooLong = sqlRangeProblem({
+    preset: "custom",
+    from: window.since.toISOString(),
+    to: window.until.toISOString(),
+  });
+  if (tooLong) throw invalidParams(tooLong, [{ path: "since", message: tooLong }]);
   const rql = metricAsRql(widget, bucket);
   if (!rql.ok) throw invalidParams(rql.reason, [{ path: "query", message: rql.reason }]);
   const sqlQuery: SqlQuery = {
