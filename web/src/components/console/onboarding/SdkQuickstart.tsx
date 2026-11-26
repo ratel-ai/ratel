@@ -11,18 +11,17 @@ import {
   type QuickstartVariant,
 } from "@/lib/console/onboarding/quickstart";
 
+/** The code block's caption: where the code goes. */
+const CODE_CAPTION: Record<QuickstartVariant, string> = {
+  typescript: "instrumentation.ts",
+  provider: "ratel.ts",
+  curl: "Terminal",
+};
+
 const OPTIONS = QUICKSTART_VARIANTS.map((variant) => ({
   value: variant,
   label: QUICKSTART_VARIANT_LABELS[variant],
 }));
-
-/** One line under the switch: when to pick the variant on show. */
-const VARIANT_HINT: Record<QuickstartVariant, string> = {
-  typescript: "Nothing in your app starts OpenTelemetry yet: start it with Ratel's processor.",
-  provider:
-    "Your framework already starts it (Next.js with @vercel/otel, Eve, Mastra): add Ratel's processor to it.",
-  curl: "No install: one request that proves your key reaches Ratel. 202 means accepted.",
-};
 
 /**
  * The onboarding's Human tab: the wiring by hand. NodeSDK when the app owns no
@@ -79,11 +78,15 @@ export function SdkQuickstart({
         onValueChange={setVariant}
         label="Setup"
       />
-      <p className="text-pretty text-xs leading-relaxed text-warm-muted">{VARIANT_HINT[variant]}</p>
       {/* The install line is its own copyable block: one command to paste in a
           shell, separate from the code that goes in a file. curl has none. */}
       {install && (
-        <CodeBlock samples={[{ label, code: install }]} caption="Install" wrap className="w-full" />
+        <CodeBlock
+          samples={[{ label, code: install }]}
+          caption="Terminal"
+          wrap
+          className="w-full"
+        />
       )}
       <div
         style={clamp}
@@ -92,7 +95,7 @@ export function SdkQuickstart({
           clamp && "[&_pre]:max-h-(--quickstart-max-h) [&_pre]:overflow-y-auto",
         )}
       >
-        <CodeBlock samples={[{ label, code }]} caption={variant === "curl" ? "Shell" : "Code"} />
+        <CodeBlock samples={[{ label, code }]} caption={CODE_CAPTION[variant]} />
       </div>
     </div>
   );

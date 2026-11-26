@@ -85,9 +85,8 @@ export default async function OnboardingPage({
   const page = (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-16">
       <OnboardingBackground />
-      {/* The naming step keeps itself to `max-w-lg` (see Card); the key reveal
-          spends the full width for its prompt beside "What Ratel will read". */}
-      <div className="relative z-10 w-full max-w-5xl">
+      {/* Each step sizes its own card (see Card): `max-w-lg` to name, `max-w-2xl` for the reveal. */}
+      <div className="relative z-10 w-full">
         <CreateProjectForm
           ingestUrl={ingestUrl}
           organization={formOrganization}

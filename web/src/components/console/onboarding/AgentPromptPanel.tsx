@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { useCopyToClipboard } from "@ratel/design-system/use-copy-to-clipboard";
 import { Check, Copy } from "lucide-react";
@@ -26,27 +27,19 @@ export function AgentPromptPanel({
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      <div className="relative overflow-hidden rounded-lg border border-forest-300/70 bg-base-deep/70">
-        <div className="flex h-9 items-center justify-between border-b border-forest-300/70 px-3">
-          <span id={`${previewId}-title`} className="text-xs font-medium text-cream-dim">
-            Prompt for your coding agent
-          </span>
-          <span className="font-mono text-[11px] text-warm-muted">
-            {prompt.split("\n").length} lines
-          </span>
-        </div>
+      <div className="relative overflow-hidden rounded-lg border border-line bg-rail">
         <pre
           id={previewId}
           // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be reachable by keyboard.
           tabIndex={0}
-          className="max-h-80 overflow-y-auto lg:max-h-[31rem] p-3 pb-10 font-mono text-xs leading-5 break-words whitespace-pre-wrap text-cream-dim outline-none focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-inset"
+          className="max-h-56 overflow-y-auto p-4 pb-10 font-mono text-xs leading-5 break-words whitespace-pre-wrap text-fg-subtle outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
         >
           <code translate="no">{prompt}</code>
         </pre>
         {/* Fades the preview's last lines so it reads as "there is more", not as a cut. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-b from-transparent to-base-deep"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b from-transparent to-rail"
         />
       </div>
 
@@ -54,25 +47,17 @@ export function AgentPromptPanel({
         type="button"
         aria-controls={previewId}
         onClick={() => void copyToClipboard(prompt)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-coral px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors duration-120 hover:bg-coral-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-coral"
+        className={cn(buttonVariants({ variant: "primary" }), "h-10 w-full text-sm")}
       >
-        {copyStatus === "copied" ? (
-          <Check className="size-4" aria-hidden />
-        ) : (
-          <Copy className="size-4" aria-hidden />
-        )}
+        {copyStatus === "copied" ? <Check aria-hidden /> : <Copy aria-hidden />}
         <span aria-live="polite">
           {copyStatus === "copied"
-            ? "Copied: paste it into your agent"
+            ? "Copied. Paste it into your coding agent"
             : copyStatus === "failed"
-              ? "Copy failed: select the prompt and copy it"
+              ? "Copy failed. Select the prompt and copy it"
               : "Copy this prompt for your agent"}
         </span>
       </button>
-      <p className="text-pretty text-center text-xs leading-relaxed text-warm-muted">
-        Paste it into Claude Code, Codex, Cursor or any coding agent, in the repo where your agent
-        lives. It wires Ratel in and checks that the first trace arrives.
-      </p>
     </div>
   );
 }

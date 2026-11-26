@@ -109,7 +109,7 @@ test("the capture switch says the emitter decides, not the switch alone", () => 
   const html = renderPanel();
   assert.ok(html.includes(CAPTURE_TOGGLE_NOTE.replace(/'/g, "&#x27;")));
   // The framework that emits the spans has the last word (Eve: tracePolicy).
-  assert.match(CAPTURE_TOGGLE_NOTE, /whatever emits/);
+  assert.match(CAPTURE_TOGGLE_NOTE, /whatever emits your spans has the final say/i);
   assert.match(CAPTURE_TOGGLE_NOTE, /tracePolicy/);
   const button = html.match(/<button[^>]*role="switch"[^>]*>/)?.[0] ?? "";
   const describedBy = button.match(/aria-describedby="([^"]+)"/)?.[1];
