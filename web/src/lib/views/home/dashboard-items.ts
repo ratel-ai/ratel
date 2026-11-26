@@ -1,4 +1,3 @@
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
@@ -48,15 +47,11 @@ type Found = { id: DashboardItemId; dashboard: Dashboard; widget: Widget };
 export interface DashboardItemReads {
   dashboards: typeof getDashboards;
   widget: typeof loadWidget;
-  /** The `rql` flag: the numbers of a widget of kind sql. */
-  rqlEnabled(at: Pick<OverviewReadScope, "projectId" | "organization">): Promise<boolean>;
 }
 
 const DASHBOARD_ITEM_READS: DashboardItemReads = {
   dashboards: getDashboards,
   widget: loadWidget,
-  rqlEnabled: ({ projectId, organization }) =>
-    featureEnabled("rql", { projectId, organizationId: organization.id }),
 };
 
 /** The numbers are the dashboard's own for the Overview's window, under its saved filters. */
@@ -88,8 +83,8 @@ export async function readDashboardItems(
     at.projectId,
     found.map(({ widget }) => widget),
     at.current,
-    // They are on the Overview only with customMonitoring; an RQL widget reads with `rql` on only.
-    { customMonitoring: true, rql: await reads.rqlEnabled(at) },
+    // They are on the Overview only with the flag.
+    { customMonitoring: true },
     (projectId, widget, scope: QueryScope) =>
       reads.widget(projectId, widget, { ...scope, filter: filterOf.get(widget as Widget) }, at.db),
   );

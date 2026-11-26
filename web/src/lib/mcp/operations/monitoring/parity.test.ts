@@ -21,10 +21,7 @@ import {
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const operations = new Map(
-  assembleOperations({ focusedConsole: true, rql: true }).map((operation) => [
-    operation.id,
-    operation,
-  ]),
+  assembleOperations({ focusedConsole: true }).map((operation) => [operation.id, operation]),
 );
 
 test("each console action of these modules has an MCP operation", () => {

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, test } from "node:test";
-import { resolveConfig } from "@/config";
 import {
   clustersQuery,
   flowQuery,
@@ -14,7 +13,6 @@ import {
   type SqlQuery,
   stepFlowQuery,
 } from "@/lib/contracts/query";
-import type { FeatureFlagDeps } from "@/lib/platform/experimental-features";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import {
   type MetricsDb,
@@ -34,25 +32,14 @@ import { pglitePool } from "./test-support";
 
 /**
  * Kind `sql` of the query object through `runQuery`: the seam `synthesis/rql/query.ts` registers,
- * its flag gate, the window of the scope, the language version, and the errors as RQL wrote them.
- * The other kinds run on a database of their own, with the `rql` flag off and on.
+ * the window of the scope, the language version, and the errors as RQL wrote them. The other kinds
+ * run on a database of their own.
  */
 
 const NOW = new Date();
 const HOUR = 3_600_000;
 /** Three days: the trace of two days ago is in it, and outside the default RQL window of 24 hours. */
 const SCOPE: QueryScope = { since: new Date(NOW.getTime() - 72 * HOUR), until: NOW };
-
-const FLAG_ON: Partial<FeatureFlagDeps> = {
-  config: resolveConfig({ override: { flags: { rql: true }, experimentalFeatures: false } }),
-  edition: "Ratel OSS",
-  port: undefined,
-};
-const FLAG_OFF: Partial<FeatureFlagDeps> = {
-  config: resolveConfig({ override: { flags: { rql: false }, experimentalFeatures: false } }),
-  edition: "Ratel OSS",
-  port: undefined,
-};
 
 /** Each kind but `sql`, with a query, the part of its result that reads the seed, and its value. */
 const OTHER_KINDS: [QueryKind, Query, (result: QueryResult) => unknown, unknown][] = [
@@ -113,8 +100,8 @@ after(async () => {
 });
 
 describe("runQuery of kind sql", () => {
-  test("with the flag on, it gives the table of the RQL runner, over the window of the scope", async () => {
-    use({ flags: FLAG_ON });
+  test("it gives the table of the RQL runner, over the window of the scope", async () => {
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id, duration_ms from traces order by trace_id"),
@@ -136,7 +123,7 @@ describe("runQuery of kind sql", () => {
   });
 
   test("a time condition in the text narrows the window of the scope", async () => {
-    use({ flags: FLAG_ON });
+    use();
     const result = await runQuery(
       project,
       sql(
@@ -149,7 +136,7 @@ describe("runQuery of kind sql", () => {
   });
 
   test("more rows than the limit are cut and marked", async () => {
-    use({ flags: FLAG_ON });
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id from traces order by trace_id limit 1"),
@@ -160,17 +147,6 @@ describe("runQuery of kind sql", () => {
     assert.equal(result.truncated, true);
   });
 
-  test("with the flag off, it is refused before the compiler", async () => {
-    use({ flags: FLAG_OFF });
-    await assert.rejects(
-      runQuery(project, sql("select nonsense"), SCOPE, NO_DB),
-      (error: unknown) =>
-        error instanceof QueryError &&
-        /RQL is off for this project/.test(error.message) &&
-        error.detail?.code === "rql_off",
-    );
-  });
-
   test("the other kinds are every kind but sql", () => {
     assert.deepEqual(
       OTHER_KINDS.map(([kind]) => kind),
@@ -179,21 +155,16 @@ describe("runQuery of kind sql", () => {
   });
 
   for (const [kind, query, read, expected] of OTHER_KINDS) {
-    for (const [flag, flags] of [
-      ["off", FLAG_OFF],
-      ["on", FLAG_ON],
-    ] as const) {
-      test(`kind ${kind} runs as before with the flag ${flag}`, async () => {
-        use({ flags });
-        const result = await runQuery(OTHER_PROJECT, query, SCOPE, others.db);
-        assert.equal(result.kind, kind);
-        assert.deepEqual(read(result), expected);
-      });
-    }
+    test(`kind ${kind} runs as before`, async () => {
+      use();
+      const result = await runQuery(OTHER_PROJECT, query, SCOPE, others.db);
+      assert.equal(result.kind, kind);
+      assert.deepEqual(read(result), expected);
+    });
   }
 
   test("a compile error comes back as RQL wrote it", async () => {
-    use({ flags: FLAG_ON });
+    use();
     await assert.rejects(runQuery(project, sql("select * from spans"), SCOPE, NO_DB), (error) => {
       assert.ok(error instanceof QueryError);
       assert.equal(error.detail?.code, "unknown_table");
@@ -204,7 +175,7 @@ describe("runQuery of kind sql", () => {
   });
 
   test("a run error comes back as RQL wrote it", async () => {
-    use({ flags: FLAG_ON, run: { gate: createRqlGate(0) } });
+    use({ run: { gate: createRqlGate(0) } });
     await assert.rejects(
       runQuery(project, sql("select trace_id from traces"), SCOPE, NO_DB),
       (error) => {
@@ -217,7 +188,7 @@ describe("runQuery of kind sql", () => {
   });
 
   test("a filter of the page or dashboard keeps the rows whose trace matches", async () => {
-    use({ flags: FLAG_ON });
+    use();
     const all = await runQuery(project, sql("select count(*) from traces"), SCOPE, NO_DB);
     const none = await runQuery(
       project,
@@ -232,7 +203,7 @@ describe("runQuery of kind sql", () => {
 /** The runner asks for `limit + 1` rows: only the LIMIT changes, never a literal of equal value. */
 describe("a literal of the value of the limit", () => {
   test("equal to the default limit, it filters with its own value", async () => {
-    use({ flags: FLAG_ON });
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id from traces where duration_ms = 100 order by trace_id"),
@@ -244,7 +215,7 @@ describe("a literal of the value of the limit", () => {
   });
 
   test("equal to an explicit limit, it filters with its own value, and the cut is marked", async () => {
-    use({ flags: FLAG_ON });
+    use();
     const result = await runQuery(
       project,
       sql("select trace_id from traces where duration_ms / 100 = 1 order by trace_id limit 1"),
@@ -256,7 +227,7 @@ describe("a literal of the value of the limit", () => {
   });
 
   test("a literal after the LIMIT in the order of the parameters keeps its value", async () => {
-    use({ flags: FLAG_ON });
+    use();
     // The parameters are the window, 100, 1 (the LIMIT) and 5: the last one is not the LIMIT.
     const result = await runQuery(
       project,
@@ -273,7 +244,7 @@ describe("a literal of the value of the limit", () => {
 
 describe("the language version of a saved query", () => {
   test("a version newer than this RQL is refused", async () => {
-    use({ flags: FLAG_ON });
+    use();
     await assert.rejects(
       runQuery(project, sql("select trace_id from traces", RQL_VERSION + 1), SCOPE, NO_DB),
       (error) =>
@@ -284,13 +255,13 @@ describe("the language version of a saved query", () => {
   });
 
   test("an older version that still compiles runs", async () => {
-    use({ flags: FLAG_ON, rqlVersion: 2 });
+    use({ rqlVersion: 2 });
     const result = await runQuery(project, sql("select count(*) from traces", 1), SCOPE, NO_DB);
     assert.deepEqual(result.rows, [[2]]);
   });
 
   test("an older version that no longer compiles says so, with the error of the compiler", async () => {
-    use({ flags: FLAG_ON, rqlVersion: 2 });
+    use({ rqlVersion: 2 });
     await assert.rejects(
       runQuery(project, sql("select * from spans", 1), SCOPE, NO_DB),
       (error) => {
@@ -315,13 +286,8 @@ function sql(text: string, rqlVersion = RQL_VERSION): Query & SqlQuery {
   return { version: 1, kind: "sql", text, rqlVersion };
 }
 
-function use(deps: {
-  flags: Partial<FeatureFlagDeps>;
-  run?: Partial<RqlRunDeps>;
-  rqlVersion?: number;
-}) {
+function use(deps: { run?: Partial<RqlRunDeps>; rqlVersion?: number } = {}) {
   metricSeams.sql = sqlQueryRunner({
-    flags: deps.flags,
     rqlVersion: deps.rqlVersion,
     run: {
       executor: createPgRqlExecutor(pool),

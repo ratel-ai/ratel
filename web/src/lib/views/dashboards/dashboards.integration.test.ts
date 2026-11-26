@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { resolveConfig } from "@/config";
 import { type MeasureId, type MetricQuery, metricQuery } from "@/lib/contracts/query";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -501,9 +500,8 @@ test("a widget that does not fit the metric catalog or its chart is refused", as
   assert.deepEqual(await widgets(id), []);
 });
 
-test("a sql widget: refused with rql off; saved, loaded, refused by RQL, exported and imported with it on", async () => {
+test("a sql widget: saved, loaded, refused by RQL, exported and imported", async () => {
   metricSeams.sql = sqlQueryRunner({
-    flags: { config: resolveConfig({ override: { flags: { rql: true } } }), port: undefined },
     run: {
       executor: createPgRqlExecutor(pglitePoolOf(client)),
       gate: createRqlGate(),
@@ -516,14 +514,11 @@ test("a sql widget: refused with rql off; saved, loaded, refused by RQL, exporte
     query: sqlWidgetQuery("select count(*) as traces from traces"),
     chart: "sql",
   };
-  await refused({ action: "add-widget", dashboardId: id, widget }, /RQL is off/);
-  const on = { features: async () => ({ customMonitoring: true, rql: true }) };
   await refused(
     { action: "add-widget", dashboardId: id, widget: { ...widget, chart: "table" } },
     /drawn as chart "sql"/,
-    on,
   );
-  assert.ok((await run({ action: "add-widget", dashboardId: id, widget }, on)).ok);
+  assert.ok((await run({ action: "add-widget", dashboardId: id, widget })).ok);
   const [stored] = await widgets(id);
   assert.deepEqual(stored, { ...widget, id: stored.id, layout: stored.layout });
 
@@ -543,20 +538,12 @@ test("a sql widget: refused with rql off; saved, loaded, refused by RQL, exporte
   const refusal = await loadWidget(PROJECT, wrong, scope, db as never);
   assert.equal(refusal?.kind, "refused");
   assert.ok(refusal?.kind === "refused" && refusal.code === "unknown_table" && refusal.fix);
-  // With the flag off, a stored one is not read.
-  assert.deepEqual(
-    await loadWidgets(PROJECT, [stored], scope, { customMonitoring: true }, async () => {
-      throw new Error("read");
-    }),
-    [null],
-  );
 
   const source = await getDashboard(PROJECT, id, db);
   assert.ok(source);
   const document = exportDashboard(source, []);
   assert.deepEqual(document.widgets[0].query, widget.query);
-  await refused({ projectId: OTHER, action: "import", document }, /RQL is off/);
-  const imported = await run({ projectId: OTHER, action: "import", document }, on);
+  const imported = await run({ projectId: OTHER, action: "import", document });
   assert.ok(imported.ok, JSON.stringify(imported));
   const copy = await getDashboard(OTHER, imported.dashboardId, db);
   assert.ok(copy);

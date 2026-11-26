@@ -68,7 +68,6 @@ export function AlertForm({
   facets,
   destinations,
   slackLost,
-  rql,
 }: {
   projectId: string;
   /** Null: a new one. */
@@ -79,12 +78,10 @@ export function AlertForm({
   destinations: readonly AlertDestination[];
   /** Channels of a Slack workspace that is not connected any more are among them. */
   slackLost: boolean;
-  /** The `rql` flag: a rule can watch the value of RQL text. */
-  rql: boolean;
 }) {
   const router = useRouter();
   const scorers = useScorers();
-  const [query, setQuery] = useState<AlertQuery>(() => startQuery(rule?.query ?? start, rql));
+  const [query, setQuery] = useState<AlertQuery>(() => startQuery(rule?.query ?? start));
   const [name, setName] = useState(rule?.name ?? "");
   const [operator, setOperator] = useState<AlertOperator>(rule?.operator ?? "above");
   // The number of RQL text has no unit: it is compared as it is.
@@ -149,22 +146,17 @@ export function AlertForm({
     <form noValidate onSubmit={save} className="flex max-w-3xl flex-col gap-8">
       <Section title={query.kind === "sql" ? "1. RQL value" : "1. Metric"}>
         <div className="flex flex-col gap-4">
-          {rql || query.kind === "sql" ? (
-            <Choice label="Watch">
-              <SegmentedControl
-                label="Watch"
-                options={MODES.map((mode) => ({
-                  ...mode,
-                  disabled: mode.value === "sql" && !rql,
-                }))}
-                value={query.kind === "sql" ? "sql" : "form"}
-                onValueChange={(mode) => {
-                  setThresholdText("");
-                  setQuery(mode === "sql" ? sqlOf(query) : DEFAULT_QUERY);
-                }}
-              />
-            </Choice>
-          ) : null}
+          <Choice label="Watch">
+            <SegmentedControl
+              label="Watch"
+              options={MODES}
+              value={query.kind === "sql" ? "sql" : "form"}
+              onValueChange={(mode) => {
+                setThresholdText("");
+                setQuery(mode === "sql" ? sqlOf(query) : DEFAULT_QUERY);
+              }}
+            />
+          </Choice>
           {query.kind === "sql" ? (
             <SqlFields
               query={query}
@@ -330,8 +322,7 @@ export function AlertForm({
 }
 
 /** A query the contract no longer allows cannot be edited: the form starts again. */
-function startQuery(query: AlertQuery | null, rql: boolean): AlertQuery {
-  if (query?.kind === "sql" && !rql) return query;
+function startQuery(query: AlertQuery | null): AlertQuery {
   return query && parseQuery(query).ok ? query : DEFAULT_QUERY;
 }
 

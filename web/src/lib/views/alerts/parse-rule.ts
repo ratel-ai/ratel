@@ -62,10 +62,7 @@ export function parseAlertQuery(
   const parsed = parseOfferedQuery(raw, features);
   if (!parsed.ok) return parsed;
   const { query } = parsed;
-  if (query.kind === "sql")
-    return features.rql
-      ? { ok: true, query }
-      : { ok: false, error: "RQL is off for this project, so an alert cannot watch RQL text." };
+  if (query.kind === "sql") return { ok: true, query };
   if (query.kind !== "metric")
     return { ok: false, error: `An alert compares one number: a ${query.kind} has none.` };
   if (query.dimensions.length > 0)
@@ -78,7 +75,7 @@ export function storedQuery(
   raw: unknown,
 ): { query: AlertQuery; problem: null } | { query: null; problem: string } {
   // Every switch on: a rule whose switch is off is not broken.
-  const parsed = parseAlertQuery(raw, { customMonitoring: true, rql: true });
+  const parsed = parseAlertQuery(raw, { customMonitoring: true });
   return parsed.ok
     ? { query: parsed.query, problem: null }
     : { query: null, problem: parsed.error };

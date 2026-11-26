@@ -14,7 +14,7 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 |---|---|
 | `types.ts` | the rule, the states and the limits; safe for the browser |
 | `domain.ts` | `nextState`, `breaches`, the evaluation window and interval; pure |
-| `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's. Kind `sql` (behind `rql`) is compiled at save and must give one row with one number (`sqlAlertProblem`) |
+| `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's. Kind `sql` is compiled at save and must give one row with one number (`sqlAlertProblem`) |
 | `sql-value.ts` | `measureSqlValue`: the value of an RQL rule over its window on the read-only RQL path, or the error that marks it failing |
 | `store.ts` | the reads and writes of rules and their history; `pruneAlertEvents`: the retention; `listAlertingRules`: the rules that alert now, for the Overview |
 | `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each. An RQL rule reads its value before its transaction; a refusal sets `last_error` (failing: no state change, no message) and the next read clears it |

@@ -108,13 +108,9 @@ test("a rule from outside is checked like a widget", () => {
   }
 });
 
-test("an alert takes a query of kind sql with the rql flag only", () => {
+test("an alert takes a query of kind sql", () => {
   const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
   assert.deepEqual(parseAlertQuery(query, { customMonitoring: true }), {
-    ok: false,
-    error: "RQL is off for this project, so an alert cannot watch RQL text.",
-  });
-  assert.deepEqual(parseAlertQuery(query, { customMonitoring: true, rql: true }), {
     ok: true,
     query,
   });

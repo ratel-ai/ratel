@@ -2,12 +2,7 @@ import { z } from "zod";
 import { hasNoNul, NUL_PROBLEM } from "@/lib/contracts/json-text";
 import { parseQuery } from "@/lib/contracts/query";
 import { type MetricFeatures, metricOffered } from "@/lib/synthesis/metrics/catalog";
-import {
-  MAX_WIDGET_TITLE,
-  RQL_OFF_PROBLEM,
-  WIDGET_CHARTS,
-  type WidgetInput,
-} from "@/lib/views/dashboards/types";
+import { MAX_WIDGET_TITLE, WIDGET_CHARTS, type WidgetInput } from "@/lib/views/dashboards/types";
 import { chartProblem, queryMetric } from "@/lib/views/dashboards/widget";
 
 const widgetShape = z.strictObject({
@@ -33,7 +28,6 @@ export function parseWidget(
     };
   const query = parseOfferedQuery(parsed.data.query, features);
   if (!query.ok) return query;
-  if (query.query.kind === "sql" && !features.rql) return { ok: false, error: RQL_OFF_PROBLEM };
   const widget: WidgetInput = { ...parsed.data, query: query.query };
   const problem = chartProblem(widget);
   return problem ? { ok: false, error: problem } : { ok: true, widget };

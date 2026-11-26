@@ -89,7 +89,7 @@ after(() => client.close());
 test("a panel of each kind runs, and saves as an equal widget", async () => {
   const id = await change({ action: "create", name: "Board" });
   const range = resolveTraceRange({}, new Date());
-  // Kind sql runs on the RQL path behind its flag: `dashboards.integration.test.ts` saves and reads it.
+  // Kind sql runs on the RQL path: `dashboards.integration.test.ts` saves and reads it.
   for (const kind of WIDGET_KINDS.filter((kind) => kind !== "sql")) {
     const decoded = decodePanels(encodePanels([widgetOfKind(kind, START_PANEL)]));
     assert.ok(decoded.ok);

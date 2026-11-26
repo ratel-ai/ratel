@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { resolveConfig } from "@/config";
 import { metricQuery } from "@/lib/contracts/query";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -476,7 +475,6 @@ test("an RQL rule fires over its threshold, resolves under it, and fails without
 });
 
 test("an RQL rule must give one row with one number: anything else is refused at save", async () => {
-  const on = { features: async () => ({ customMonitoring: true, rql: true }) };
   const draft = (text: string) => ({ ...DRAFT, query: sqlWidgetQuery(text) });
   const refusals: [string, RegExp][] = [
     ["select count(*), avg(duration_ms) from traces", /gives 2 columns/],
@@ -486,17 +484,11 @@ test("an RQL rule must give one row with one number: anything else is refused at
     ["select count(*) from spans", /spans.*Fix: /],
   ];
   for (const [text, error] of refusals) {
-    const result = await change({ action: "create", draft: draft(text) }, on);
+    const result = await change({ action: "create", draft: draft(text) });
     assert.ok(!result.ok, text);
     assert.match(result.error, error, text);
   }
-  const off = await change({ action: "create", draft: draft("select count(*) from traces") });
-  assert.ok(!off.ok);
-  assert.match(off.error, /RQL is off/);
-  const created = await change(
-    { action: "create", draft: draft("select count(*) from traces") },
-    on,
-  );
+  const created = await change({ action: "create", draft: draft("select count(*) from traces") });
   assert.ok(created.ok, JSON.stringify(created));
   const saved = await store.getAlertRule(PROJECT, created.ruleId, db);
   assert.deepEqual(saved?.query, sqlWidgetQuery("select count(*) from traces"));
@@ -566,10 +558,9 @@ function evaluate() {
   return evaluateAlerts({ now: () => now, flagOn: async () => true }, db);
 }
 
-/** Kind sql through the RQL runner on this database, with the `rql` flag on. */
+/** Kind sql through the RQL runner on this database. */
 function useRql() {
   metricSeams.sql = sqlQueryRunner({
-    flags: { config: resolveConfig({ override: { flags: { rql: true } } }), port: undefined },
     run: {
       executor: createPgRqlExecutor(pglitePoolOf(client)),
       gate: createRqlGate(),

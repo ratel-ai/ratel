@@ -342,7 +342,6 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "focusedConsole",
     "mcpApps",
     "rankingCatalogDrift",
-    "rql",
     "toolRunInsights",
   ]);
 });

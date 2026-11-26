@@ -45,7 +45,6 @@ import { FlowFields } from "./FlowFields";
 import { FunnelFields } from "./FunnelFields";
 import { GeographyFields } from "./GeographyFields";
 import { Choice, MetricFields, QueryFilter } from "./MetricFields";
-import { useRqlFlag } from "./RqlFlag";
 import { SqlFields } from "./SqlFields";
 import { StepFlowFields } from "./StepFlowFields";
 
@@ -71,7 +70,6 @@ export function WidgetFields({
 }) {
   const { query } = widget;
   const scorers = useScorers();
-  const rql = useRqlFlag();
   const set = (change: Partial<WidgetInput>) =>
     onChange((current) => fitWidget({ ...current, ...change }));
   const setQuery = (change: (query: WidgetQuery) => WidgetQuery) =>
@@ -91,9 +89,7 @@ export function WidgetFields({
         <div className="flex">
           <SegmentedControl
             label="Show"
-            options={WIDGET_KINDS.filter(
-              (value) => value !== "sql" || rql || query.kind === "sql",
-            ).map((value) => ({ value, label: KIND_LABELS[value] }))}
+            options={WIDGET_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
             value={query.kind}
             onValueChange={(kind) => onChange((current) => widgetOfKind(kind, current))}
           />
@@ -110,7 +106,7 @@ export function WidgetFields({
           }
         />
       ) : null}
-      {query.kind === "metric" && rql ? (
+      {query.kind === "metric" ? (
         <EditAsSql
           widget={{ ...widget, query }}
           bucket={result?.kind === "metric" ? result.bucket : (query.bucket ?? "hour")}

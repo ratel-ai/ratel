@@ -3,12 +3,10 @@ import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
-/** What a widget can show: every kind. Kind `sql` is behind the `rql` flag. */
+/** What a widget can show: every kind. */
 export type WidgetQuery = Query;
 export type WidgetKind = WidgetQuery["kind"];
 export const WIDGET_KINDS = QUERY_KINDS;
-export const RQL_OFF_PROBLEM =
-  "RQL is off for this project, so a widget of kind sql cannot be saved.";
 
 /** Why RQL refused a query of kind sql: its message, its stable code and the fix. */
 export interface WidgetRefusal {

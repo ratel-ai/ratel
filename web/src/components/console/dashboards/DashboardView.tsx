@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, startTransition, useCallback, useOptimistic, useState } from "react";
 import { exportDashboardAction } from "@/app/(console)/project/[projectId]/dashboards/actions";
 import { addDashboardWidgetToOverview } from "@/app/(console)/project/[projectId]/overview-actions";
-import { useRqlFlag } from "@/components/console/dashboards/RqlFlag";
 import { type CardEdit, CardFrame, focusToolbar } from "@/components/console/grid/CardFrame";
 import { CardGrid } from "@/components/console/grid/CardGrid";
 import { EditModeBar, focusSoon, InertHeader } from "@/components/console/grid/EditBar";
@@ -109,7 +108,6 @@ export function DashboardView({
   const router = useRouter();
   // Null while scorers are off.
   const scorers = useScorers();
-  const rql = useRqlFlag();
   const { search, pending, go } = useTraceNavigation();
   const { change, saving } = useDashboardAction(projectId);
   // The editor's widget outlives `editing`, so the dialog keeps its content as it closes.
@@ -267,7 +265,6 @@ export function DashboardView({
   }
 
   function available(widget: Widget) {
-    if (widget.query.kind === "sql") return rql;
     const metric = queryMetric(widget.query);
     return !metric || metricOffered(metric, { customMonitoring: scorers !== null });
   }

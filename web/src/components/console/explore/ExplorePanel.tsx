@@ -6,7 +6,6 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@ratel/
 import { Skeleton } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import { Braces, ChevronDown, Copy, Ellipsis, LayoutDashboard, Trash2 } from "lucide-react";
-import { useRqlFlag } from "@/components/console/dashboards/RqlFlag";
 import {
   type ServedResults,
   useWidgetPreview,
@@ -58,10 +57,7 @@ export function ExplorePanel({
 }) {
   const { preview, pending } = useWidgetPreview(projectId, widget, range, filters, served);
   const name = widgetName(widget);
-  const complete = parseWidget(widget, {
-    customMonitoring: useScorers() !== null,
-    rql: useRqlFlag(),
-  }).ok;
+  const complete = parseWidget(widget, { customMonitoring: useScorers() !== null }).ok;
 
   async function copyQuery() {
     try {

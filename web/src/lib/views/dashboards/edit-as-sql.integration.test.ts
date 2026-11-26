@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { resolveConfig } from "@/config";
 import { metricQuery } from "@/lib/contracts/query";
 import { getMetric, metricBucket, type QueryScope } from "@/lib/synthesis/metrics/catalog";
 import {
@@ -88,11 +87,6 @@ before(async () => {
       ('${PROJECT}', '${DEPTH}', 't4', 4, null, '2026-11-03T08:00:00Z');
   `);
   metricSeams.sql = sqlQueryRunner({
-    flags: {
-      config: resolveConfig({ override: { flags: { rql: true }, experimentalFeatures: false } }),
-      edition: "Ratel OSS",
-      port: undefined,
-    },
     run: {
       executor: createPgRqlExecutor(pglitePoolOf(database.client)),
       gate: createRqlGate(),

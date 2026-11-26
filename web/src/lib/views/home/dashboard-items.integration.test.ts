@@ -223,7 +223,7 @@ test("nothing is read without an entry, and a failed read is not an empty one", 
   assert.equal(failed.dashboards, "failed");
 });
 
-test("an RQL widget shows its rows with the rql flag on, and is not read with it off", async () => {
+test("an RQL widget shows its rows", async () => {
   const made = await createDashboard(
     {
       projectId: PROJECT,
@@ -258,7 +258,7 @@ test("an RQL widget shows its rows with the rql flag on, and is not read with it
     db,
   };
   const id = dashboardItemId(made.id, "rql");
-  const read = (on: boolean) =>
+  const read = () =>
     readDashboardItems(
       at,
       [id],
@@ -266,13 +266,10 @@ test("an RQL widget shows its rows with the rql flag on, and is not read with it
       {
         dashboards: getDashboards,
         widget: async () => rows,
-        rqlEnabled: async () => on,
       },
     );
-  const on = (await read(true))[id];
-  assert.equal(on?.kind === "widget" && on.result, rows);
-  const off = (await read(false))[id];
-  assert.equal(off?.kind === "widget" && off.result, null);
+  const item = (await read())[id];
+  assert.equal(item?.kind === "widget" && item.result, rows);
 });
 
 test("the picker offers the project's own widgets, by dashboard", async () => {

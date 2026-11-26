@@ -56,7 +56,7 @@ const ruleShape = z.strictObject({
   query: z
     .record(z.string(), z.unknown())
     .describe(
-      'A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {"version":1,"kind":"metric","measures":[{"measure":"error_rate","aggregation":"rate"}]}. With the rql flag on, a query of kind sql: RQL text that gives one row with one number, such as {"version":1,"kind":"sql","rqlVersion":1,"text":"select count(*) from traces where has_error"}. Its window is the rule\'s window.',
+      'A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {"version":1,"kind":"metric","measures":[{"measure":"error_rate","aggregation":"rate"}]}. Or a query of kind sql: RQL text that gives one row with one number, such as {"version":1,"kind":"sql","rqlVersion":1,"text":"select count(*) from traces where has_error"}. Its window is the rule\'s window.',
     ),
   operator: z.enum(ALERT_OPERATORS),
   threshold: z
@@ -269,10 +269,7 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
           { projectId, ...(await changeOf(params, projectId, deps)) },
           {
             ...callerAccess(ctx, caller),
-            features: async () => ({
-              customMonitoring: true,
-              rql: await deps.rqlEnabled(caller),
-            }),
+            features: async () => ({ customMonitoring: true }),
             store: {
               createAlertRule: (project, draft, actor) =>
                 store.createAlertRule(project, draft, actor, db),

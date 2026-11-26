@@ -1,8 +1,7 @@
 import type { MetricQuery, SqlQuery } from "@/lib/contracts/query";
 
 /**
- * What a rule compares: an ungrouped metric, or (behind the `rql` flag) RQL text that gives one
- * row with one number.
+ * What a rule compares: an ungrouped metric, or RQL text that gives one row with one number.
  */
 export type AlertQuery = MetricQuery | SqlQuery;
 

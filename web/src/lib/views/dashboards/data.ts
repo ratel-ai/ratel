@@ -73,7 +73,6 @@ export async function loadWidgets(
       if ("problem" in widget || widget.missingScorer) continue;
       const query = parseQuery(widget.query);
       if (!query.ok) continue;
-      if (query.query.kind === "sql" && !features.rql) continue;
       const metric = queryMetric(query.query);
       if (metric && !metricOffered(metric, features)) continue;
       results[index] = await load(projectId, widget, scope);

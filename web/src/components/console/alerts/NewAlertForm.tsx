@@ -22,15 +22,13 @@ export function NewAlertForm({
   const [read, setRead] = useState<{ query: AlertQuery | null } | null>(
     inFragment ? null : { query: start },
   );
-  const { rql } = form;
   useEffect(() => {
     if (!inFragment) return;
     const parsed = parseAlertQuery(alertQueryOf(window.location.hash.slice(1)), {
       customMonitoring: true,
-      rql,
     });
     setRead({ query: parsed.ok ? parsed.query : null });
-  }, [inFragment, rql]);
+  }, [inFragment]);
   if (!read) return <Skeleton className="h-96 w-full" />;
   return (
     <>

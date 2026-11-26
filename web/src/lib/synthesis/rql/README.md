@@ -29,7 +29,7 @@ runRql(compiled, { projectId }, deps?):
 | `domain/window.ts`, `domain/compile.ts`, `domain/errors.ts` | the window rules; parse, check and rewrite in one call; the error codes and `nearestName` (edit distance) |
 | `domain/describe.ts` | pure: the schema description (tables, columns, functions, operators, limits, rules, examples) |
 | `ports/parser.ts`, `adapters/pgsql-ast-parser.ts` | the `RqlParser` port and its one adapter |
-| `query.ts` | kind `sql` of the query object: fills `metricSeams.sql` on import (`sqlQueryRunner`), with the `rql` flag check, the version check, the scope window, and every error as a `QueryError` with its code and fix |
+| `query.ts` | kind `sql` of the query object: fills `metricSeams.sql` on import (`sqlQueryRunner`), with the version check, the scope window, and every error as a `QueryError` with its code and fix |
 | `run.ts` | the entry point of a run: `runRql` with the defaults (the RQL pool, the process gate, the timeout of `RQL_LIMITS`), the `feature.rql.run` span and the `feature.rql.query_run` event |
 | `domain/run.ts`, `domain/gate.ts` | the gate first, then limit + 1 rows, the `truncated` mark, the values as JSON, and the run errors; the in-process cap of parallel queries per project |
 | `ports/executor.ts`, `adapters/pg-executor.ts` | the `RqlExecutor` port (and `RqlSetupError`) and its node-postgres adapter: one transaction per run |
@@ -105,8 +105,7 @@ it also runs every test, the timeout too, on Postgres:
 ## Kind `sql` of the query object
 
 `{ "version": 1, "kind": "sql", "text": "<RQL>", "rqlVersion": 1 }` runs through `runQuery` once
-something imports `synthesis/rql/query`. The seam refuses the query with `rql_off` while the `rql`
-flag is off for the project; that check is here only. The text is compiled at every run, so a
+something imports `synthesis/rql/query`. The text is compiled at every run, so a
 saved query is checked again at load: a version newer than `RQL_VERSION` is `rql_version`, an older
 one is compiled with today's RQL and, when it no longer compiles, the compile error says so. The
 window of the query is the scope's (`since`, `until`). The filter of the scope (the page filter of a

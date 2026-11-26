@@ -4296,7 +4296,7 @@
           "maxLength": 36
         },
         "query": {
-          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. With the rql flag on, a query of kind sql (RQL text) gives a table. It cannot be a panel, but it can be a widget of chart sql.",
+          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. A query of kind sql (RQL text) gives a table. It cannot be a panel, but it can be a widget of chart sql.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -4384,7 +4384,7 @@
           "maximum": 50
         },
         "as": {
-          "description": "sql (rql flag): for a lone metric query, give the RQL text of its numbers (the web app's Edit as SQL) instead of running it. A rate, a context metric and a group-by model, tool or agent have none yet: the refusal says why.",
+          "description": "sql: for a lone metric query, give the RQL text of its numbers (the web app's Edit as SQL) instead of running it. A rate, a context metric and a group-by model, tool or agent have none yet: the refusal says why.",
           "type": "string",
           "enum": [
             "sql"
@@ -4481,6 +4481,84 @@
     },
     "annotations": {
       "title": "Get a dashboard",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "describe_rql_schema",
+    "title": "Describe the RQL schema",
+    "description": "Gives RQL, the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users), their columns, the functions, the operators, the limits, the rules and example queries. Call it before run_rql.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Describe the RQL schema",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "run_rql",
+    "title": "Run an RQL query",
+    "description": "Runs one RQL SELECT over the trace data of the project and gives a table: the columns, the rows and a cut mark. describe_rql_schema gives the tables and the rules. An error gives a code, a message and a fix.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000,
+          "description": "One RQL SELECT statement. Example: select model, sum(cost_usd) as cost from events where type = 'llm_call' group by model order by cost desc limit 10"
+        },
+        "rqlVersion": {
+          "description": "The RQL version of the text. Default: 1, the current version.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "since": {
+          "description": "ISO 8601 start of the window. Default: 24 hours before until. The most: 30 days. A longer window is refused.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "annotations": {
+      "title": "Run an RQL query",
       "readOnlyHint": true
     },
     "execution": {
@@ -6341,7 +6419,7 @@
                 "type": "string"
               },
               "additionalProperties": {},
-              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}. With the rql flag on, a query of kind sql: RQL text that gives one row with one number, such as {\"version\":1,\"kind\":\"sql\",\"rqlVersion\":1,\"text\":\"select count(*) from traces where has_error\"}. Its window is the rule's window."
+              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}. Or a query of kind sql: RQL text that gives one row with one number, such as {\"version\":1,\"kind\":\"sql\",\"rqlVersion\":1,\"text\":\"select count(*) from traces where has_error\"}. Its window is the rule's window."
             },
             "operator": {
               "type": "string",

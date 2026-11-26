@@ -46,7 +46,6 @@ export async function loadAlertForm(page: FeaturePage) {
     scorers,
     form: {
       facets,
-      rql: features.rql === true,
       destinations,
       slackLost:
         (slack === null || slack.lost) && destinations.some(({ kind }) => kind === "slack_channel"),

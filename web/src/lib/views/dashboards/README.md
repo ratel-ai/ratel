@@ -29,12 +29,11 @@ widgets on a grid. A widget is one query object
 | `actions.ts` | `changeDashboard`: one change by a person, after membership, the flag and a support-session check (the pages' server action calls it) |
 
 Chart rules: a table needs a group-by, a number has none, a line and a bar take both. Every other
-query kind has the one chart of its name. Kind `sql` (RQL text, behind the `rql` flag) has chart
-`sql`: a table, or a line when its rows have one time column (`sql-chart.ts`). `parseWidget`
-refuses it while the project's `rql` switch is off (`RQL_OFF_PROBLEM`); a stored one stays and shows
-a disabled state. The page filter (the dashboard's, or Explore's) applies to it when it runs: the
-compiler keeps the rows whose trace matches, on every table, so `Edit as SQL` keeps the form's
-numbers under a filter (`edit-as-sql.integration.test.ts`). A refusal of RQL is the widget's result
+query kind has the one chart of its name. Kind `sql` (RQL text) has chart
+`sql`: a table, or a line when its rows have one time column (`sql-chart.ts`). The page filter
+(the dashboard's, or Explore's) applies to it when it runs: the compiler keeps the rows whose trace
+matches, on every table, so `Edit as SQL` keeps the form's numbers under a filter
+(`edit-as-sql.integration.test.ts`). A refusal of RQL is the widget's result
 (`WidgetRefusal`: the message and the fix). `query_monitoring` takes it alone, not as a panel. A move of a flow opens the Traces page for the traces of
 its source: the trace filter knows no order, and no skill. A node of a step flow opens the traces that
 had it at any step, for the same reason; a skill, an intent and a fold open none. A funnel step opens its traces only when

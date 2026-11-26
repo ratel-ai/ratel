@@ -2,7 +2,7 @@ import type { SqlQuery } from "@/lib/contracts/query";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { type MetricsDb, QueryError, runQuery } from "@/lib/synthesis/metrics/query";
 import type { Measurement } from "@/lib/views/alerts/domain";
-// Kind sql runs through the seam this module registers (behind the `rql` flag).
+// Kind sql runs through the seam this module registers.
 import "@/lib/synthesis/rql/query";
 
 const NUMERIC_TYPES: readonly string[] = ["number", "integer"];

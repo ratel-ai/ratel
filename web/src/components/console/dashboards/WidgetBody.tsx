@@ -66,7 +66,7 @@ export function WidgetBody({
   range: DashboardRange;
   /** The dashboard's, for the links to what a widget shows. */
   filters: DashboardFilters;
-  /** False while the switch of the metric, or of RQL for kind sql, is off. */
+  /** False while the switch of the metric is off. */
   available?: boolean;
   /** The scorer of an imported widget, when the project does not have it. */
   missingScorer?: string;
@@ -74,14 +74,6 @@ export function WidgetBody({
   fill?: boolean;
 }) {
   const { query } = widget;
-  if (!available && query.kind === "sql")
-    return (
-      <EmptyState
-        icon={CircleAlert}
-        title="SQL widgets are off for this project"
-        description="The widget keeps its RQL text, and shows its rows again when RQL is on."
-      />
-    );
   if (!available)
     return (
       <EmptyState

@@ -21,8 +21,6 @@ export type MetricSource = "traces" | "context" | "scores";
 /** The switches an entry can wait for. */
 export interface MetricFeatures {
   customMonitoring: boolean;
-  /** The `rql` flag: widgets and alert rules of kind sql. Off unless given. */
-  rql?: boolean;
 }
 
 export interface MetricDefinition {

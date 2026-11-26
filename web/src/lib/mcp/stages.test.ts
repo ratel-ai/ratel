@@ -6,7 +6,7 @@ import { isLineageStage } from "@/lib/views/lineage/types";
 
 const published = [
   "whoami",
-  ...assembleOperations({ focusedConsole: true, rql: true }).map((operation) => operation.id),
+  ...assembleOperations({ focusedConsole: true }).map((operation) => operation.id),
 ];
 
 test("every published tool has a stage entry, so a new tool cannot skip the decision", () => {
