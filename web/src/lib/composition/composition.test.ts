@@ -281,7 +281,8 @@ describe("registry root", () => {
     // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
     // What-if's prune runs with retention off: a timed-out run must free its budget hold. The
     // ingest queue (ADR-0009) reaps and reports first, and drains and prunes with ingest's steps,
-    // whatever retention says.
+    // whatever retention says. The alert history's prune is the views' last step, with retention
+    // off as well: it is the alerts' own log and outbox.
     assert.deepEqual(
       drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
       [
@@ -309,6 +310,7 @@ describe("registry root", () => {
         "after:match_quality_sweep",
         "after:what_if_prune",
         "after:scorers_sweep",
+        "after:alert_events_prune",
       ],
     );
   });
