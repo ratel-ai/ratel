@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { SANDBOX_HARD_LIMITS } from "./src/lib/contracts/usage-limits";
 
 // The Cloud adapters are reached through one build-time alias (ADR-0003). It resolves to the
 // private composition only when the Cloud edition is built; the open-source build never sees ee/.
@@ -27,7 +28,13 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   // Next 16.3 type-checks the whole tsconfig project with `tsc`, tests included; the image has no
   // repo scripts/ for them. Keep the compiler-API checker; `pnpm typecheck` covers the tests.
-  experimental: { useTypeScriptCli: false },
+  // With a proxy (an edition's web/src/proxy.ts), Next keeps only the first 10 MB of a request
+  // body. A push uploads its bundle through `PUT /api/v1/sandboxes/versions/[id]/bundle` when the
+  // bundle store takes no direct upload, so the limit is the largest bundle.
+  experimental: {
+    useTypeScriptCli: false,
+    proxyClientMaxBodySize: SANDBOX_HARD_LIMITS.sandbox_bundle_bytes,
+  },
   // A self-contained server bundle for the image: `node web/server.js`, no pnpm at runtime.
   // The tracing root is the monorepo root so the workspace packages and the native
   // `@ratel-ai/sdk` addon are copied into .next/standalone.
