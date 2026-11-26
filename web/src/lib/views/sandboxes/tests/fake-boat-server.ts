@@ -187,6 +187,23 @@ export async function startFakeBoatServer(): Promise<FakeBoatServer> {
 
   const onSnapshot = (name: string | undefined, request: RecordedRequest): Answer => {
     const { method, json } = request;
+    if (!name && method === "GET") {
+      const all = [...fake.snapshots.values()];
+      const start = Number(request.query.get("cursor") ?? 0);
+      const page = all.slice(start, start + fake.pageSize);
+      const end = start + page.length;
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          snapshots: page.map(({ name, status }) => ({ name, status })),
+          pageInfo: {
+            nextCursor: end < all.length ? String(end) : null,
+            hasMore: end < all.length,
+          },
+        },
+      };
+    }
     if (!name && method === "POST") {
       const sandbox = fake.sandboxes.get(String(json?.sandboxId));
       if (!sandbox) return error(404, "not_found");

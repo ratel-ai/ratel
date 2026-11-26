@@ -414,6 +414,13 @@
       "when": 1795694051749,
       "tag": "0058_sandbox_runs_drop_instances",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795716823769,
+      "tag": "0059_sandbox_versions_snapshot_idx",
+      "breakpoints": true
     }
   ]
 }

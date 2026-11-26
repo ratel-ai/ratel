@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { snapshotVersionId } from "../domain/snapshot-name";
 import {
   type ExecRequest,
   type ExecResult,
@@ -46,7 +47,8 @@ export type FakeProvider = SandboxProvider & {
 
 /**
  * An in-memory provider. It keeps the rules of the port that the contract test checks: each VM
- * carries the deployment label, and `listVms` lists only the VMs of the deployment.
+ * carries the deployment label, `listVms` lists only the VMs of the deployment, and
+ * `listSnapshots` lists only the snapshots with a name of the deployment.
  */
 export function createFakeProvider({ deploymentId = "test-deployment" } = {}): FakeProvider {
   const live = (vmRef: string): FakeVm => {
@@ -139,6 +141,12 @@ export function createFakeProvider({ deploymentId = "test-deployment" } = {}): F
       return [...fake.vms.values()]
         .filter((vm) => Object.entries(own).every(([key, value]) => vm.labels[key] === value))
         .map((vm) => ({ vmRef: vm.vmRef, labels: { ...vm.labels }, createdAt: vm.createdAt }));
+    },
+    async listSnapshots() {
+      return [...fake.snapshots.keys()].flatMap((snapshotRef) => {
+        const versionId = snapshotVersionId(deploymentId, snapshotRef);
+        return versionId ? [{ snapshotRef, versionId }] : [];
+      });
     },
   };
   return fake;

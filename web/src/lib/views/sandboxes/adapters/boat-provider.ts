@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getLogger } from "@/lib/platform/logger";
+import { snapshotVersionId } from "../domain/snapshot-name";
 import {
   type ExecRequest,
   type ExecResult,
@@ -9,6 +10,7 @@ import {
   ProviderRefused,
   ProviderUnavailable,
   type SandboxProvider,
+  type SnapshotInfo,
   type StartVmRequest,
   VM_START_TIMEOUT_MS,
   type VmInfo,
@@ -20,7 +22,8 @@ import {
  * {@link SandboxProvider} on the v1 HTTP API of boat.dev, with plain `fetch`. Each VM starts with
  * no secret of the account (`noEnv`). No error message names the service, and no message or log
  * holds the API key or a value of a file. Each VM carries the label of the deployment, and
- * `listVms` lists only the VMs with it: other deployments can share the account.
+ * `listVms` lists only the VMs with it: other deployments can share the account. In the same way
+ * `listSnapshots` lists only the snapshots with a name of the deployment.
  */
 export type BoatProviderOptions = {
   apiKey: string;
@@ -207,6 +210,22 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
         cursor = page.pageInfo?.hasMore ? (page.pageInfo.nextCursor ?? null) : null;
       } while (cursor);
       return vms;
+    },
+
+    async listSnapshots() {
+      const found: SnapshotInfo[] = [];
+      let cursor: string | null = null;
+      do {
+        const query: [string, string][] = [["limit", "200"]];
+        if (cursor) query.push(["cursor", cursor]);
+        const page: unknown = await api.call<unknown>("GET", "/saved-snapshots", { query });
+        for (const name of snapshotNamesOf(page)) {
+          const versionId = snapshotVersionId(options.deploymentId, name);
+          if (versionId) found.push({ snapshotRef: name, versionId });
+        }
+        cursor = nextCursorOf(page);
+      } while (cursor);
+      return found;
     },
   };
 
@@ -495,6 +514,26 @@ function codeOf(body: unknown): string {
 /** A code that is safe to show: a plain word that does not name the service. */
 function safeCode(code: string): boolean {
   return /^[a-z0-9_]{1,64}$/.test(code) && !/boat|ascii/.test(code);
+}
+
+/**
+ * The names in a page of `GET /saved-snapshots` (`{"snapshots": [{"name": ...}]}`). The shape is
+ * read with care: an item with no string name is left out, and another shape has no name.
+ */
+function snapshotNamesOf(page: unknown): string[] {
+  const items = (page as { snapshots?: unknown } | null)?.snapshots;
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item: unknown) => {
+    const name = (item as { name?: unknown } | null)?.name;
+    return typeof name === "string" ? [name] : [];
+  });
+}
+
+/** The cursor of the next page, or null when there is no next page or the shape is not known. */
+function nextCursorOf(page: unknown): string | null {
+  const info = (page as { pageInfo?: { hasMore?: unknown; nextCursor?: unknown } } | null)
+    ?.pageInfo;
+  return info?.hasMore === true && typeof info.nextCursor === "string" ? info.nextCursor : null;
 }
 
 async function jsonOf(response: Response): Promise<unknown> {

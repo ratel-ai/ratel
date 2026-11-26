@@ -13,6 +13,7 @@ import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
 import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
+import { snapshotName } from "../domain/snapshot-name";
 import { sandboxesEnabledForProject, sandboxesOffForAll } from "../gate";
 import { runImageBuild } from "../image-build-job";
 import { ProviderRefused } from "../ports/sandbox-provider";
@@ -80,6 +81,7 @@ async function setup() {
         builds: createDrizzleBuildStore(db),
         bundles,
         provider: vms,
+        deploymentId: "test-deployment",
         secrets,
         vms: createDrizzleVmStore(db),
         limits: createInMemoryUsageLimits(),
@@ -212,7 +214,11 @@ test("a valid push goes preparing, then ready, with its smoke result through the
   assert.equal(version.smoke.ok, true);
   assert.deepEqual(version.smoke.output, { reply: "refunded" });
   assert.equal(typeof version.smoke.durationMs, "number");
-  assert.equal(JSON.stringify(version).includes(`rv-${versionId}`), false, "no snapshot name");
+  assert.equal(
+    JSON.stringify(version).includes(snapshotName("test-deployment", versionId)),
+    false,
+    "no snapshot name",
+  );
   assert.equal(t.vms.snapshots.size, 1);
   assert.equal(t.vms.vms.size, 0);
 });

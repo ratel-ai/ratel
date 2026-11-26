@@ -4,7 +4,8 @@ import { after, before, describe, test } from "node:test";
 import { getConfig } from "@/config";
 import { createBoatProvider } from "../adapters/boat-provider";
 import { createLocalDockerProvider } from "../adapters/local-docker-provider";
-import { sandboxProvider } from "../adapters/provider-from-env";
+import { sandboxDeploymentId, sandboxProvider } from "../adapters/provider-from-env";
+import { snapshotName } from "../domain/snapshot-name";
 import type { SandboxProvider, StartVmRequest } from "../ports/sandbox-provider";
 import { type FakeBoatServer, startFakeBoatServer } from "./fake-boat-server";
 import { createFakeProvider } from "./fake-provider";
@@ -20,7 +21,7 @@ const BASE: StartVmRequest = {
   keepSnapshots: true,
 };
 
-contract("fake", () => createFakeProvider(), {});
+contract("fake", "test-deployment", () => createFakeProvider(), {});
 
 let server: FakeBoatServer | undefined;
 before(async () => {
@@ -31,6 +32,7 @@ after(async () => {
 });
 contract(
   "adapter on a fake server",
+  "contract",
   () =>
     createBoatProvider({
       apiKey: "k",
@@ -46,6 +48,7 @@ contract(
 const docker = dockerAnswers();
 contract(
   "local docker",
+  `contract-${RUN_ID.slice(0, 8)}`,
   () => createLocalDockerProvider({ deploymentId: `contract-${RUN_ID.slice(0, 8)}` }),
   {
     skip: docker ? false : `${DOCKER_SKIP}: local-docker contract skipped`,
@@ -55,13 +58,14 @@ contract(
 
 // The real provider, when this process is set up for it. It costs a few cents.
 const real = sandboxProvider(getConfig());
-contract("real", () => real as SandboxProvider, {
+contract("real", sandboxDeploymentId(getConfig()), () => real as SandboxProvider, {
   skip: real ? false : "the provider is not set up",
   timeout: 600_000,
 });
 
 function contract(
   label: string,
+  deploymentId: string,
   make: () => SandboxProvider,
   options: { skip?: string | false; timeout?: number },
 ) {
@@ -127,6 +131,19 @@ function contract(
       });
       const read = await provider.exec(copy, { command: "cat /home/user/kept", timeoutS: 30 });
       assert.equal(read.stdout, "kept");
+    });
+
+    test("a saved snapshot of a version is listed with its version", async () => {
+      const vmRef = await start();
+      const versionId = randomUUID();
+      const { snapshotRef } = await provider.saveSnapshot(
+        vmRef,
+        snapshotName(deploymentId, versionId),
+      );
+      snapshots.push(snapshotRef);
+      const listed = await provider.listSnapshots();
+      assert.ok(listed.some((s) => s.snapshotRef === snapshotRef && s.versionId === versionId));
+      assert.ok(listed.every((s) => s.snapshotRef === snapshotName(deploymentId, s.versionId)));
     });
 
     test("VMs are listed by label, and deletes are idempotent", async () => {
