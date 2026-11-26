@@ -125,6 +125,7 @@ const VIEWS = {
       nextCursor: null,
       now: NOW,
       empty: null,
+      noTelemetry: null,
     }),
   spans: () =>
     createElement(SpansView, {
@@ -139,6 +140,7 @@ const VIEWS = {
       nextCursor: null,
       paged: false,
       empty: null,
+      noTelemetry: null,
       latestAt: null,
       widerPreset: null,
     }),

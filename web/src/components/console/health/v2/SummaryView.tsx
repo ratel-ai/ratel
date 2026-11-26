@@ -117,7 +117,7 @@ export interface SummaryViewProps {
    * from the shape of imported spans and no content came with them.
    */
   inferredTools?: boolean;
-  /** The project's API-key CTA for the states before a reading (`loadApiKeyCta`). */
+  /** The API-key CTA for the states before a reading; `HealthStateV2` reads it when absent (tests pass one). */
   apiKey?: ApiKeyCta | null;
   now?: Date;
 }

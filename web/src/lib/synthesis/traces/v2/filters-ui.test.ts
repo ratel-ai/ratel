@@ -44,6 +44,7 @@ function render(search: string, filterFacets: typeof EMPTY_TRACE_FILTER_FACETS |
     nextCursor: null,
     now: "2026-11-10T09:00:00.000Z",
     empty: filterFacets ? "filtered" : "no-telemetry",
+    noTelemetry: null,
     filterFacets,
   });
   return renderToStaticMarkup(inRouter(search, view));
@@ -77,6 +78,7 @@ function renderEntities(entities: boolean | undefined): string {
     nextCursor: null,
     now: "2026-11-10T09:00:00.000Z",
     empty: "filtered",
+    noTelemetry: null,
     filterFacets: {
       ...EMPTY_TRACE_FILTER_FACETS,
       ...(entities

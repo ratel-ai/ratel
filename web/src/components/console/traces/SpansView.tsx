@@ -9,8 +9,8 @@ import { Select } from "@ratel/design-system/select";
 import { EmptyState } from "@ratel/design-system/states";
 import { Layers } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { TabSummary } from "@/components/console/traces-sessions/TabSummary";
-import type { ApiKeyCta } from "@/lib/console/api-key-cta";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import {
   AGENT_DIMENSION_LABEL,
@@ -70,8 +70,11 @@ export interface SpansViewProps {
   nextCursor: string | null;
   paged: boolean;
   empty: TracesEmptyKind | null;
-  /** The API-key CTA the "no-telemetry" state shows (`loadApiKeyCta`); null otherwise. */
-  apiKey?: ApiKeyCta | null;
+  /**
+   * The "no-telemetry" state, drawn on the server (`TracesNoTelemetry`, which
+   * reads the project's API key): the page passes it only in that state.
+   */
+  noTelemetry: ReactNode;
   latestAt: string | null;
   widerPreset: { id: RangePreset; label: string } | null;
 }
@@ -164,12 +167,13 @@ export function SpansView(props: SpansViewProps) {
               }
             />
           </div>
+        ) : empty === "no-telemetry" ? (
+          <div className="rounded-lg border border-line">{props.noTelemetry}</div>
         ) : empty ? (
           <div className="rounded-lg border border-line">
             <TracesEmpty
               kind={empty}
               unit="spans"
-              apiKey={props.apiKey}
               latestAt={props.latestAt}
               onClearFilters={() => go((current) => withoutFilters("spans", current))}
               onWiden={

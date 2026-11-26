@@ -14,7 +14,7 @@ import {
 import { fixLookups } from "@/components/console/health/v2/summary-model";
 import { AskExample } from "@/components/console/health/v2/UnservedSection";
 import { composition } from "@/lib/composition/ports";
-import { apiKeyCta } from "@/lib/console/api-key-cta";
+import { apiKeyCta, noApiKeyCta } from "@/lib/console/api-key-cta";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
   HEALTH_SCORE_VERSION,
@@ -302,6 +302,8 @@ function props(over: Partial<SummaryViewProps> = {}): SummaryViewProps {
     corrections: CARD,
     reportHref: `/report/health/${PROJECT}?days=7&print=1`,
     imports: null,
+    // The page leaves it out and `HealthStateV2` reads it; a test passes it.
+    apiKey: noApiKeyCta(PROJECT),
     now: NOW,
     ...over,
   };

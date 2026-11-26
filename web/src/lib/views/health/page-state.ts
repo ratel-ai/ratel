@@ -287,6 +287,16 @@ export function stateReadiness(state: HealthPageState): HealthReadiness {
   return "no_telemetry";
 }
 
+/**
+ * Whether the state block offers the API key (create it, or view it and send the
+ * first trace): nothing yet, imported runs without tools, and runs outside the
+ * window with no wider window to offer. Only these read the project's keys.
+ */
+export function stateOffersApiKey(state: HealthPageState): boolean {
+  if (state.kind === "outside_window") return state.suggestion === null;
+  return state.kind === "nothing_yet" || state.kind === "imported_no_tools";
+}
+
 /** A page asks for a reading at most this often: a run that just ran and still misses turns is not retried in a loop. */
 export const READING_REQUEST_COOLDOWN_MS = 10 * 60_000;
 /** The longest a page waits between asks, however many runs failed: the daily sweep's own interval. */

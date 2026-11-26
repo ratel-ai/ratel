@@ -6,6 +6,7 @@ import { OpenImportButton } from "@/components/console/health/imports/OpenImport
 import { buttonVariants } from "@/components/console/health/primitives/button";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
+import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
 import { type ApiKeyCta as ApiKeyCtaModel, noApiKeyCta } from "@/lib/console/api-key-cta";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import {
@@ -13,10 +14,11 @@ import {
   DEFAULT_WINDOW_DAYS,
   type WindowDays,
 } from "@/lib/readings/trace-signals/view";
-import type {
-  BuildingPhase,
-  HealthPageState,
-  WindowSuggestion,
+import {
+  type BuildingPhase,
+  type HealthPageState,
+  stateOffersApiKey,
+  type WindowSuggestion,
 } from "@/lib/views/health/page-state";
 import {
   healthStateCopy,
@@ -43,7 +45,7 @@ export interface CollectingStateProps {
   canImport?: boolean;
   /** Where a plan with a longer window can be picked; null hides the link. */
   billingHref?: string | null;
-  /** The project's API-key CTA (`loadApiKeyCta`); absent, "Create an API key". */
+  /** The project's API-key CTA; read for `projectId` when absent (tests pass one). */
   apiKey?: ApiKeyCtaModel | null;
   now?: Date;
 }
@@ -66,9 +68,22 @@ const LINK_BUTTON = cn(buttonVariants({ variant: "outline", size: "sm" }));
  * With some turns but fewer than the floor it is a `role="meter"`:
  * "Collecting · 14 of 50 turns". Runs no reading counts yet read as the
  * reading being built; runs outside the window say when they are from and
- * offer the window that holds them.
+ * offer the window that holds them. Only a state that offers the API key
+ * reads it (`WithApiKeyCta`).
  */
-export function CollectingState({
+export function CollectingState(props: CollectingStateProps) {
+  const { state = null, turns, apiKey, projectId } = props;
+  const offersKey = state ? stateOffersApiKey(state) : turns <= 0;
+  if (!apiKey && offersKey)
+    return (
+      <WithApiKeyCta projectId={projectId}>
+        {(cta) => <CollectingState {...props} apiKey={cta} />}
+      </WithApiKeyCta>
+    );
+  return <CollectingStateBlock {...props} />;
+}
+
+function CollectingStateBlock({
   projectId,
   turns,
   floor,

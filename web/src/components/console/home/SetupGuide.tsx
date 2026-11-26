@@ -5,6 +5,7 @@ import { Section } from "@ratel/design-system/section";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
+import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
 import type { ApiKeyCta as ApiKeyCtaModel } from "@/lib/console/api-key-cta";
 import {
   buildQuickstartSet,
@@ -19,20 +20,34 @@ const DOCS_URL = "https://docs.ratel.sh";
  * a key, the snippet, and a live wait for the first run. The page replaces it
  * with the numbers as soon as anything arrives. A project that already has a
  * usable key (onboarding issues one) is shown that key, not asked for another,
- * and its next step is sending the first trace.
+ * and its next step is sending the first trace. The key is read here
+ * (`WithApiKeyCta`), so only a page that shows the guide reads it.
  */
-export function SetupGuide({
-  apiKey,
-  endpoint,
-  serviceName,
-}: {
-  /** The project's API-key CTA (`loadApiKeyCta`). */
-  apiKey: ApiKeyCtaModel;
+export function SetupGuide(props: SetupGuideProps) {
+  if (!props.apiKey)
+    return (
+      <WithApiKeyCta projectId={props.projectId}>
+        {(apiKey) => <SetupGuide {...props} apiKey={apiKey} />}
+      </WithApiKeyCta>
+    );
+  return <SetupGuideView {...props} apiKey={props.apiKey} />;
+}
+
+type SetupGuideProps = {
+  projectId: string;
   /** Absolute OTLP traces URL for this deployment. */
   endpoint: string;
   /** Project slug, sent as the OpenTelemetry `service.name`. */
   serviceName: string;
-}) {
+  /** The project's API-key CTA; read for `projectId` when absent (tests pass one). */
+  apiKey?: ApiKeyCtaModel;
+};
+
+function SetupGuideView({
+  apiKey,
+  endpoint,
+  serviceName,
+}: SetupGuideProps & { apiKey: ApiKeyCtaModel }) {
   const snippets = buildQuickstartSet({ endpoint, serviceName });
   const install = snippets.typescript.install;
   const samples = QUICKSTART_LANGS.map((lang) => ({

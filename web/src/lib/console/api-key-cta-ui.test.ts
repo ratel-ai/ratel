@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createElement } from "react";
+import { createElement, type ReactElement, type ReactNode } from "react";
 import { CollectingState } from "@/components/console/health/CollectingState";
+import { HealthStateV2 } from "@/components/console/health/v2/HealthStateV2";
 import { SetupGuide } from "@/components/console/home/SetupGuide";
-import { TracesEmpty } from "@/components/console/traces/TracesEmpty";
-import { apiKeyCta, noApiKeyCta } from "@/lib/console/api-key-cta";
+import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
+import { TracesNoTelemetry } from "@/components/console/traces/TracesNoTelemetry";
+import { type ApiKeyCta, apiKeyCta, noApiKeyCta } from "@/lib/console/api-key-cta";
 import { render, visibleText } from "@/lib/views/tasks/test-support";
 
 const PROJECT = "p1";
@@ -28,6 +30,7 @@ const NO_KEY = noApiKeyCta(PROJECT);
 function setupGuide(apiKey: typeof WITH_KEY): string {
   return render(
     createElement(SetupGuide, {
+      projectId: PROJECT,
       apiKey,
       endpoint: "https://ratel.example/v1/traces",
       serviceName: "site-copilot",
@@ -56,11 +59,11 @@ test("setup guide with the onboarding key: step 1 is done and names it, the next
 
 test("traces empty state: the key CTA follows the project's key", () => {
   const none = render(
-    createElement(TracesEmpty, { kind: "no-telemetry", unit: "runs", apiKey: NO_KEY }),
+    createElement(TracesNoTelemetry, { projectId: PROJECT, unit: "runs", apiKey: NO_KEY }),
   );
   assert.match(none, new RegExp(`href="${KEYS}"[^>]*>Create an API key<`));
   const keyed = render(
-    createElement(TracesEmpty, { kind: "no-telemetry", unit: "runs", apiKey: WITH_KEY }),
+    createElement(TracesNoTelemetry, { projectId: PROJECT, unit: "runs", apiKey: WITH_KEY }),
   );
   assert.match(keyed, />Send your first trace</);
   assert.match(keyed, new RegExp(`href="${KEYS}"[^>]*>View API keys<`));
@@ -68,11 +71,63 @@ test("traces empty state: the key CTA follows the project's key", () => {
 });
 
 test("health v1 waiting state: create without a key, first trace and view with one", () => {
-  const none = render(createElement(CollectingState, { projectId: PROJECT, turns: 0, floor: 50 }));
+  const none = render(
+    createElement(CollectingState, { projectId: PROJECT, turns: 0, floor: 50, apiKey: NO_KEY }),
+  );
   assert.match(none, new RegExp(`href="${KEYS}"[^>]*>(?:<svg[\\s\\S]*?</svg>)?Create an API key<`));
   const keyed = render(
     createElement(CollectingState, { projectId: PROJECT, turns: 0, floor: 50, apiKey: WITH_KEY }),
   );
   assert.match(keyed, /Send your first trace<[\s\S]*View API keys</);
   assert.doesNotMatch(keyed, /Create an API key|Get an API key/);
+});
+
+type Loader = ReactElement<{ projectId: string; children: (cta: ApiKeyCta) => ReactNode }>;
+
+/** What a component returns when it is not given the CTA: the loader, for its own project. */
+function loaderOf(node: ReactNode): Loader {
+  const element = node as Loader;
+  assert.equal(element.type, WithApiKeyCta, "reads the key through WithApiKeyCta");
+  assert.equal(element.props.projectId, PROJECT);
+  return element;
+}
+
+test("without a CTA each spot reads its own key, then draws with what it read", () => {
+  const guide = loaderOf(
+    SetupGuide({
+      projectId: PROJECT,
+      endpoint: "https://ratel.example/v1/traces",
+      serviceName: "s",
+    }),
+  );
+  assert.match(render(guide.props.children(WITH_KEY) as ReactElement), /Your API key is ready/);
+
+  const traces = loaderOf(TracesNoTelemetry({ projectId: PROJECT, unit: "spans" }));
+  assert.match(render(traces.props.children(WITH_KEY) as ReactElement), />View API keys</);
+
+  const health = loaderOf(
+    HealthStateV2({
+      projectId: PROJECT,
+      state: { kind: "nothing_yet" },
+      windowDays: 7,
+      canImport: false,
+      billingHref: null,
+    }),
+  );
+  assert.match(render(health.props.children(WITH_KEY) as ReactElement), />Send your first trace</);
+
+  loaderOf(CollectingState({ projectId: PROJECT, turns: 0, floor: 50 }));
+});
+
+test("a state that does not offer the key never reads it", () => {
+  const collecting = HealthStateV2({
+    projectId: PROJECT,
+    state: { kind: "too_few", turns: 3, floor: 50, imported: false, wider: null },
+    windowDays: 7,
+    canImport: false,
+    billingHref: null,
+  }) as ReactElement;
+  assert.notEqual(collecting.type, WithApiKeyCta);
+  const meter = CollectingState({ projectId: PROJECT, turns: 3, floor: 50 }) as ReactElement;
+  assert.notEqual(meter.type, WithApiKeyCta);
 });

@@ -19,6 +19,7 @@ import {
   READING_REQUEST_MAX_COOLDOWN_MS,
   readingRequestDue,
   requestCooldownMs,
+  stateOffersApiKey,
   stateReadiness,
 } from "@/lib/views/health/page-state";
 import { healthStateCopy } from "@/lib/views/health/page-state-copy";
@@ -734,4 +735,26 @@ test("with an edition's plans: too few, and the plan that has a window with enou
     healthStateCopy(locked, { windowDays: 7, now: NOW, plans: false }).body,
     "A reading needs 50. It appears on its own once there are enough.",
   );
+});
+
+test("the API key is offered only by the states that draw its link", () => {
+  const wider = { days: 30 as WindowDays, plan: null };
+  const outside = {
+    kind: "outside_window" as const,
+    turns: 0,
+    imported: false,
+    firstDay: null,
+    lastDay: "2026-10-01",
+  };
+  assert.equal(stateOffersApiKey({ kind: "nothing_yet" }), true);
+  assert.equal(stateOffersApiKey({ kind: "imported_no_tools", runs: 3, source: "langfuse" }), true);
+  assert.equal(stateOffersApiKey({ ...outside, suggestion: null }), true);
+  // A wider window is the way forward there, not a key.
+  assert.equal(stateOffersApiKey({ ...outside, turns: 4, suggestion: wider }), false);
+  assert.equal(
+    stateOffersApiKey({ kind: "too_few", turns: 3, floor: 50, imported: false, wider }),
+    false,
+  );
+  assert.equal(stateOffersApiKey({ kind: "unavailable" }), false);
+  assert.equal(stateOffersApiKey({ kind: "ready" }), false);
 });

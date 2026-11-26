@@ -1,8 +1,8 @@
 import { ExploreLink } from "@/components/console/explore/ExploreLink";
 import { RunsView } from "@/components/console/traces/RunsView";
 import type { TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
+import { TracesNoTelemetry } from "@/components/console/traces/TracesNoTelemetry";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
-import { loadApiKeyCta } from "@/lib/console/api-key-cta-load";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import {
   supplementaryReadTimeoutMs,
@@ -192,8 +192,6 @@ export async function RunsPageV2({
         : "outside-window";
     }
   }
-  // Nothing sent yet: the empty state points at the key the project has, or asks for one.
-  const apiKey = empty === "no-telemetry" ? await loadApiKeyCta(project.id, now) : null;
   const wider = presetCovering(
     latestRunAt,
     view.range.preset,
@@ -261,7 +259,10 @@ export async function RunsPageV2({
       }
       paged={Boolean(view.queryOptions.cursor)}
       empty={empty}
-      apiKey={apiKey}
+      noTelemetry={
+        // Only in that state: a slot given to a client component renders on the server, shown or not.
+        empty === "no-telemetry" ? <TracesNoTelemetry projectId={project.id} unit="runs" /> : null
+      }
       latestRunAt={latestRunAt}
       widerPreset={
         wider

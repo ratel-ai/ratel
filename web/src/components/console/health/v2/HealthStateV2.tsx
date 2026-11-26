@@ -7,12 +7,14 @@ import type { ReactNode } from "react";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
 import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
+import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
 import { type ApiKeyCta as ApiKeyCtaModel, noApiKeyCta } from "@/lib/console/api-key-cta";
 import { agentHealthHref, type WindowDays } from "@/lib/readings/trace-signals/view";
-import type {
-  BuildingPhase,
-  HealthPageState,
-  WindowSuggestion,
+import {
+  type BuildingPhase,
+  type HealthPageState,
+  stateOffersApiKey,
+  type WindowSuggestion,
 } from "@/lib/views/health/page-state";
 import {
   healthStateCopy,
@@ -36,7 +38,7 @@ export interface HealthStateV2Props {
   billingHref: string | null;
   /** The edition's names for import sources, by id. */
   sourceLabel?: Readonly<Record<string, string>>;
-  /** The project's API-key CTA (`loadApiKeyCta`); absent, "Create an API key". */
+  /** The project's API-key CTA; read for `projectId` when absent (tests pass one). */
   apiKey?: ApiKeyCtaModel | null;
   now?: Date;
 }
@@ -49,9 +51,20 @@ export interface HealthStateV2Props {
  * Owned (ADR-0004): the importer is the edition's, and without it the one action besides a
  * wider window is the API key; the edition's source names reach the copy. A project that
  * already has a key is not asked for one: the action is sending the first trace, and the
- * key is "View API keys" beside it (`ApiKeyCta`).
+ * key is "View API keys" beside it (`ApiKeyCta`). Only a state that offers the key reads it
+ * (`WithApiKeyCta`).
  */
-export function HealthStateV2({
+export function HealthStateV2(props: HealthStateV2Props) {
+  if (!props.apiKey && stateOffersApiKey(props.state))
+    return (
+      <WithApiKeyCta projectId={props.projectId}>
+        {(apiKey) => <HealthStateV2 {...props} apiKey={apiKey} />}
+      </WithApiKeyCta>
+    );
+  return <StateBlock {...props} />;
+}
+
+function StateBlock({
   projectId,
   state,
   windowDays,

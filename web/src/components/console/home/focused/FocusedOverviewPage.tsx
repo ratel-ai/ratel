@@ -10,7 +10,6 @@ import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
-import { loadApiKeyCta } from "@/lib/console/api-key-cta-load";
 import { BASE_URL } from "@/lib/platform/app-config";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
@@ -40,7 +39,7 @@ export async function FocusedOverviewPage({
   const window = parseOverviewWindow(range);
   const now = new Date();
   const { layout, revision, undo, read } = await pageLayout(project.id);
-  const [data, linked, dashboardsOn, apiKey] = await Promise.all([
+  const [data, linked, dashboardsOn] = await Promise.all([
     loadFocusedOverview({
       project,
       organization,
@@ -51,8 +50,6 @@ export async function FocusedOverviewPage({
     }),
     projectEntitiesEnabled(organization),
     featureEnabled("customMonitoring", { projectId: project.id, organizationId: organization.id }),
-    // The setup guide shows the key until the first event.
-    loadApiKeyCta(project.id, now),
   ]);
   return (
     <FocusedOverviewView
@@ -86,7 +83,11 @@ export async function FocusedOverviewPage({
         </span>
       }
       setup={
-        <SetupGuide apiKey={apiKey} endpoint={`${BASE_URL}/v1/traces`} serviceName={project.slug} />
+        <SetupGuide
+          projectId={project.id}
+          endpoint={`${BASE_URL}/v1/traces`}
+          serviceName={project.slug}
+        />
       }
       contextPanel={
         data.context ? (

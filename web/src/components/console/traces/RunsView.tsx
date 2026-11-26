@@ -12,7 +12,6 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { MiniVolume } from "@/components/console/traces-sessions/MiniVolume";
 import { SummaryFigure, SummaryNumbers } from "@/components/console/traces-sessions/TabSummary";
-import type { ApiKeyCta } from "@/lib/console/api-key-cta";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { TraceFacets } from "@/lib/synthesis/traces/queries";
 import {
@@ -80,8 +79,11 @@ export interface RunsViewProps {
   paged: boolean;
   /** Why the list is empty, or null when it has runs. */
   empty: TracesEmptyKind | null;
-  /** The API-key CTA the "no-telemetry" state shows (`loadApiKeyCta`); null otherwise. */
-  apiKey?: ApiKeyCta | null;
+  /**
+   * The "no-telemetry" state, drawn on the server (`TracesNoTelemetry`, which
+   * reads the project's API key): the page passes it only in that state.
+   */
+  noTelemetry: ReactNode;
   latestRunAt: string | null;
   /** A wider preset to offer when nothing is in the window. */
   widerPreset: { id: RangePreset; label: string } | null;
@@ -182,12 +184,13 @@ export function RunsView(props: RunsViewProps) {
           />
         ) : null}
 
-        {empty ? (
+        {empty === "no-telemetry" ? (
+          <div className="rounded-lg border border-line">{props.noTelemetry}</div>
+        ) : empty ? (
           <div className="rounded-lg border border-line">
             <TracesEmpty
               kind={empty}
               unit="runs"
-              apiKey={props.apiKey}
               latestAt={props.latestRunAt}
               onClearFilters={() =>
                 go((current) => {
