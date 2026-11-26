@@ -187,6 +187,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       keywords: ["evals", "eval cases", "dataset"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
         await requireEvals(deps, ctx.projectId);
@@ -215,10 +216,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Read an eval case",
       description:
-        "Use this tool to read one eval case. It returns the input, the expected output, the scorers and the state of the newest version, and the version that counts in an eval run.",
+        "Use this tool to read one eval case. It returns the input, the expected output, the scorers and the state of the newest version. It also returns the version that counts in an eval run.",
       keywords: ["evals", "case detail", "expected output"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped, caseId: caseIdParam }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
@@ -254,6 +256,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       keywords: ["evals", "save as case", "new case"],
       scope: "project",
       mutates: true,
+      apiKeyScope: "evals:write",
       params: z.object({
         ...projectScoped,
         name: z
@@ -333,6 +336,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       keywords: ["evals", "approve case"],
       scope: "project",
       mutates: true,
+      apiKeyScope: "evals:write",
       params: z.object({ ...projectScoped, caseId: caseIdParam }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
@@ -379,10 +383,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Start an eval run",
       description:
-        "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Poll evals_get_run until the state is completed.",
+        "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Call evals_get_run until the state is completed.",
       keywords: ["evals", "start eval run"],
       scope: "project",
       mutates: true,
+      apiKeyScope: "evals:write",
       params: z.object({
         ...projectScoped,
         sandboxVersion: z
@@ -434,10 +439,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "List eval runs",
       description:
-        "Use this tool to find eval runs of the project, newest first. It returns each run with its state, sandbox version, raw pass, fail and invalid counts, and which run is the pinned baseline.",
+        "Use this tool to find the eval runs of the project, newest first. It returns each run with its state, sandbox version and raw counts. It also says which run is the pinned baseline.",
       keywords: ["evals", "eval runs"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
         await requireEvals(deps, ctx.projectId);
@@ -467,10 +473,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Read an eval run",
       description:
-        "Use this tool to read an eval run. A running run is awaited up to 20 seconds. It returns the state and the raw counts, and for each case its input, the output of each trial, the trial results and the scorer results.",
+        "Use this tool to read an eval run. If the run is running, this tool waits up to 20 seconds. It returns the state and the raw counts. For each case, it returns the input, the output of each trial and the results.",
       keywords: ["evals", "eval results", "raw counts"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped, runId: runIdParam }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
@@ -488,11 +495,12 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         return {
           data: view.data,
           ...(view.truncated ? { truncated: true } : {}),
-          hint: !readable
-            ? CONTENT_WITHHELD_HINT
-            : experiment.state === "running"
+          hint: [
+            experiment.state === "running"
               ? `The eval run is still running after a wait of ${RUN_WAIT_MS / 1000} seconds. Call evals_get_run with runId "${experiment.id}" again.`
               : `The eval run is completed. Call evals_compare with runId "${experiment.id}" to compare it with the baseline, or evals_pin_baseline to make it the baseline.`,
+            ...(readable ? [] : [CONTENT_WITHHELD_HINT]),
+          ].join(" "),
         };
       },
     }),
@@ -505,6 +513,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       keywords: ["evals", "trial detail", "scorer reason"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "evals:read",
       params: z.object({
         ...projectScoped,
         runId: runIdParam,
@@ -553,6 +562,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       keywords: ["evals", "regression", "verdict"],
       scope: "project",
       mutates: false,
+      apiKeyScope: "evals:read",
       params: z.object({
         ...projectScoped,
         runId: runIdParam,
@@ -586,6 +596,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       keywords: ["evals", "pin baseline"],
       scope: "project",
       mutates: true,
+      apiKeyScope: "evals:write",
       params: z.object({ ...projectScoped, runId: runIdParam }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);

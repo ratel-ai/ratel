@@ -114,6 +114,7 @@ function fakeDeps(overrides: Partial<SandboxOperationDeps> = {}): SandboxOperati
     getRun: async (projectId, id) => (projectId === PROJECT && id === RUN ? run() : null),
     sleep: async () => {},
     now: () => 0,
+    mayReadContent: async () => true,
     ...overrides,
   };
 }
@@ -459,4 +460,79 @@ test("sandbox_get_run: a run of another project is not_found", async () => {
     await call("sandbox_get_run", { runId: RUN }, { getRun: async () => null }),
   );
   assert.equal(result.error, "not_found");
+});
+
+// — Key scopes and captured text —————————————————————————————————————————————————
+
+test("sandbox_run: a key with mcp:write but without sandboxes:run is refused", async () => {
+  let started = false;
+  const key: McpAuthContext = { ...auth, scopes: ["mcp:read", "mcp:write"] } as McpAuthContext;
+  const result = failure(
+    await call(
+      "sandbox_run",
+      { versionId: VERSION, input: {} },
+      {
+        startRun: async () => {
+          started = true;
+          return { ok: true, run: run() };
+        },
+      },
+      key,
+    ),
+  );
+  assert.equal(result.error, "forbidden");
+  assert.match(result.message, /sandboxes:run/);
+  assert.equal(started, false);
+});
+
+test("sandbox_get_run: a key with mcp:read but without sandboxes:read is refused", async () => {
+  const key: McpAuthContext = { ...auth, scopes: ["mcp:read"] } as McpAuthContext;
+  const result = failure(await call("sandbox_get_run", { runId: RUN }, {}, key));
+  assert.equal(result.error, "forbidden");
+  assert.match(result.message, /sandboxes:read/);
+});
+
+for (const id of ["sandbox_get_run", "sandbox_run"]) {
+  test(`${id}: withholds the captured text without content access`, async () => {
+    const failed = run({
+      logs: "user said: secret",
+      status: "failed",
+      errorCode: "run_failed",
+      reason: "echo: secret",
+    });
+    const result = ok<{
+      input: unknown;
+      output: unknown;
+      params: unknown;
+      error: { code: string; message: string | null };
+      toolCalls: Array<Record<string, unknown>>;
+      logs: { text: string | null };
+      contentWithheld?: boolean;
+    }>(
+      await call(id, PARAMS[id] ?? {}, {
+        mayReadContent: async () => false,
+        getRun: async () => failed,
+      }),
+    );
+    assert.equal(result.data.input, null);
+    assert.equal(result.data.output, null);
+    assert.equal(result.data.params, null);
+    assert.equal(result.data.logs.text, null);
+    assert.deepEqual(result.data.error, { code: "run_failed", message: null });
+    assert.deepEqual(result.data.toolCalls, [{ name: "lookup_order", source: "fake" }]);
+    assert.equal(result.data.contentWithheld, true);
+    assert.doesNotMatch(JSON.stringify(result.data), /secret|Where is my order|ships today/);
+  });
+}
+
+test("sandbox_get_run: a large output keeps a preview and is marked truncated", async () => {
+  const base = run().result;
+  assert.ok(base);
+  const big = run({ result: { ...base, output: { reply: "x".repeat(20_000) } } });
+  const result = ok<{ output: unknown }>(
+    await call("sandbox_get_run", { runId: RUN }, { getRun: async () => big }),
+  );
+  assert.equal(typeof result.data.output, "string");
+  assert.ok((result.data.output as string).length < 10_000);
+  assert.equal(result.truncated, true);
 });

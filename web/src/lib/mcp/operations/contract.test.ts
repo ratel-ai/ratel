@@ -231,3 +231,33 @@ test("the operation contract matches the reviewed snapshot", () => {
     "Operations changed. Update EXPECTED_CONTRACT, deciding explicitly whether each new operation mutates.",
   );
 });
+
+/**
+ * A key reaches over MCP only what it reaches over REST: each sandbox and eval tool asks the
+ * feature scope of its REST route too (`api-keys/routes.ts`).
+ */
+const EXPECTED_API_KEY_SCOPES: Readonly<Record<string, string>> = {
+  sandbox_list: "sandboxes:read",
+  sandbox_get_version: "sandboxes:read",
+  sandbox_run: "sandboxes:run",
+  sandbox_get_run: "sandboxes:read",
+  evals_list_cases: "evals:read",
+  evals_get_case: "evals:read",
+  evals_create_case: "evals:write",
+  evals_approve_case: "evals:write",
+  evals_start_run: "evals:write",
+  evals_list_runs: "evals:read",
+  evals_get_run: "evals:read",
+  evals_get_trial: "evals:read",
+  evals_compare: "evals:read",
+  evals_pin_baseline: "evals:write",
+};
+
+test("feature tools ask the API-key scope of their REST route", () => {
+  const actual = Object.fromEntries(
+    operations.flatMap((operation) =>
+      operation.apiKeyScope ? [[operation.id, operation.apiKeyScope]] : [],
+    ),
+  );
+  assert.deepEqual(actual, EXPECTED_API_KEY_SCOPES);
+});
