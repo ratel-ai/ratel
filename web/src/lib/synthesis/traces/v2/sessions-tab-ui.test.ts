@@ -11,14 +11,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RunsTable } from "@/components/console/traces/RunsTable";
 import { TraceSessionBar } from "@/components/console/traces/TraceSessionBar";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
-import { TracesNoTelemetry } from "@/components/console/traces/TracesNoTelemetry";
 import {
   SessionListPanelBody,
   SessionListTable,
   SessionListView,
   type SessionListViewProps,
 } from "@/components/console/traces-sessions/SessionListView";
-import { noApiKeyCta } from "@/lib/console/api-key-cta";
 import type { RunRow } from "@/lib/synthesis/traces/v2/runs";
 import type { SessionListRow } from "@/lib/synthesis/traces/v2/sessions-list";
 
@@ -252,11 +250,6 @@ function renderEmptySessions(empty: SessionListViewProps["empty"]): string {
         nextCursor: null,
         now: "2026-11-02T09:10:00.000Z",
         empty,
-        noTelemetry: createElement(TracesNoTelemetry, {
-          projectId: PROJECT,
-          unit: "runs",
-          apiKey: noApiKeyCta(PROJECT),
-        }),
       }),
     ),
   );

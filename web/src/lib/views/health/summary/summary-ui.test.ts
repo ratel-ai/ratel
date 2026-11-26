@@ -14,7 +14,6 @@ import {
 import { fixLookups } from "@/components/console/health/v2/summary-model";
 import { AskExample } from "@/components/console/health/v2/UnservedSection";
 import { composition } from "@/lib/composition/ports";
-import { apiKeyCta, noApiKeyCta } from "@/lib/console/api-key-cta";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
   HEALTH_SCORE_VERSION,
@@ -50,22 +49,6 @@ import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
  */
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";
-
-/** The project's onboarding key, as `loadApiKeyCta` reads it. */
-const WITH_KEY = apiKeyCta(
-  PROJECT,
-  [
-    {
-      name: "Onboarding",
-      keyPrefix: "rtl_abc",
-      createdAt: new Date("2026-11-20T09:30:00Z"),
-      revokedAt: null,
-      expiresAt: null,
-      scopes: ["*"],
-    },
-  ],
-  new Date("2026-11-26T12:00:00Z"),
-);
 const ROOT = `/project/${PROJECT}`;
 const NOW = new Date("2026-10-21T12:00:00Z");
 const ASK = "export the whole board as a PDF for the client";
@@ -302,8 +285,6 @@ function props(over: Partial<SummaryViewProps> = {}): SummaryViewProps {
     corrections: CARD,
     reportHref: `/report/health/${PROJECT}?days=7&print=1`,
     imports: null,
-    // The page leaves it out and `HealthStateV2` reads it; a test passes it.
-    apiKey: noApiKeyCta(PROJECT),
     now: NOW,
     ...over,
   };
@@ -1194,13 +1175,9 @@ for (const [name, state, expected] of STATES) {
 }
 
 test("before a reading, a project with a key sends the first trace instead of making a key", () => {
-  const html = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, apiKey: WITH_KEY });
+  const html = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, hasApiKey: true });
   assertHouseStyle(html, "nothing yet, with a key");
-  assert.match(
-    html,
-    /No runs yet[^]*data-api-key-step="next"[^>]*>(?:<svg[^]*?<\/svg>)?Send your first trace<[^]*View API keys</,
-  );
-  assert.match(html, new RegExp(`href="/project/${PROJECT}/settings/api-keys"`));
+  assert.match(html, /No runs yet[^]*Send your first trace<[^]*View API keys</);
   assert.doesNotMatch(html, /Create an API key|Get an API key/);
 });
 
@@ -1220,7 +1197,7 @@ test("an edition's importer: offered by the state and the menu, mounted once, it
     model: MOCK_NO_TELEMETRY,
     state: { kind: "nothing_yet" },
     imports,
-    apiKey: WITH_KEY,
+    hasApiKey: true,
   });
   assert.match(keyed, /Import past runs[^]*View API keys/, "the importer leads, the key beside it");
   assert.doesNotMatch(keyed, /Create an API key|Send your first trace/);

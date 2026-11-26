@@ -3,6 +3,7 @@ import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { OverviewView } from "@/components/console/home/OverviewView";
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
+import { hasUsableApiKey } from "@/lib/console/has-api-key";
 import { BASE_URL } from "@/lib/platform/app-config";
 import { loadOverview, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
@@ -29,6 +30,8 @@ export async function OverviewPage({
   const window = parseOverviewWindow(range);
   const now = new Date();
   const data = await loadOverview({ project, organization, window, now });
+  // The setup guide shows until the first event, and points at the key onboarding made.
+  const hasApiKey = !data.hasTelemetry && (await hasUsableApiKey(project.id));
   return (
     <OverviewView
       data={data}
@@ -47,6 +50,7 @@ export async function OverviewPage({
       setup={
         <SetupGuide
           projectId={project.id}
+          hasApiKey={hasApiKey}
           endpoint={`${BASE_URL}/v1/traces`}
           serviceName={project.slug}
         />

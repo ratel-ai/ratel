@@ -10,9 +10,7 @@ import { createElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RunSummaryBody } from "@/components/console/traces/RunPanel";
 import { RunsView, type RunsViewProps } from "@/components/console/traces/RunsView";
-import { TracesNoTelemetry } from "@/components/console/traces/TracesNoTelemetry";
 import { TraceView } from "@/components/console/traces/TraceView";
-import { type ApiKeyCta, apiKeyCta, noApiKeyCta } from "@/lib/console/api-key-cta";
 import type { OtelSpan } from "@/lib/ingest/otlp/schema";
 import { EMPTY_TRACE_AGGREGATE, EMPTY_TRACE_FACETS } from "@/lib/synthesis/traces/queries";
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
@@ -22,27 +20,6 @@ import { type RunRow, runStats } from "./runs";
 import { buildVolumeModel } from "./volume";
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";
-
-/** The no-telemetry slot the page passes, with the CTA it would read. */
-function noTelemetry(apiKey: ApiKeyCta) {
-  return createElement(TracesNoTelemetry, { projectId: PROJECT, unit: "runs", apiKey });
-}
-
-/** The project's onboarding key, as `loadApiKeyCta` reads it. */
-const WITH_KEY = apiKeyCta(
-  PROJECT,
-  [
-    {
-      name: "Onboarding",
-      keyPrefix: "rtl_abc",
-      createdAt: new Date("2026-11-20T09:30:00Z"),
-      revokedAt: null,
-      expiresAt: null,
-      scopes: ["*"],
-    },
-  ],
-  new Date("2026-11-26T12:00:00Z"),
-);
 const TRACE_A = "a".repeat(32);
 const TRACE_B = "b".repeat(32);
 const NOW = "2026-10-15T12:00:00.000Z";
@@ -121,7 +98,6 @@ function runsProps(overrides: Partial<RunsViewProps> = {}): RunsViewProps {
     nextCursor: null,
     paged: false,
     empty: null,
-    noTelemetry: null,
     latestRunAt: null,
     widerPreset: null,
     experiment: null,
@@ -264,11 +240,7 @@ test("a run whose top-level span has not arrived reads as incomplete, with a neu
 });
 
 test("an empty project teaches the first step; a filtered-out list offers to clear", () => {
-  const first = renderRuns("", {
-    rows: [],
-    empty: "no-telemetry",
-    noTelemetry: noTelemetry(noApiKeyCta(PROJECT)),
-  });
+  const first = renderRuns("", { rows: [], empty: "no-telemetry" });
   assert.match(first, /No turns yet/);
   assert.match(
     first,
@@ -283,15 +255,8 @@ test("an empty project teaches the first step; a filtered-out list offers to cle
 });
 
 test("an empty project that has a key sends the first trace, and only views its keys", () => {
-  const html = renderRuns("", {
-    rows: [],
-    empty: "no-telemetry",
-    noTelemetry: noTelemetry(WITH_KEY),
-  });
-  assert.match(
-    html,
-    /href="https:\/\/docs\.ratel\.sh\/observability"[^>]*data-api-key-step="next"[^>]*>Send your first trace</,
-  );
+  const html = renderRuns("", { rows: [], empty: "no-telemetry", hasApiKey: true });
+  assert.match(html, /href="https:\/\/docs\.ratel\.sh\/observability"[^>]*>Send your first trace</);
   assert.match(
     html,
     new RegExp(`href="/project/${PROJECT}/settings/api-keys"[^>]*>View API keys<`),

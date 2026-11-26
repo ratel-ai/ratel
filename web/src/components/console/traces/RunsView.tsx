@@ -79,11 +79,8 @@ export interface RunsViewProps {
   paged: boolean;
   /** Why the list is empty, or null when it has runs. */
   empty: TracesEmptyKind | null;
-  /**
-   * The "no-telemetry" state, drawn on the server (`TracesNoTelemetry`, which
-   * reads the project's API key): the page passes it only in that state.
-   */
-  noTelemetry: ReactNode;
+  /** The project has a usable API key: the "no-telemetry" state then sends the first trace. */
+  hasApiKey?: boolean;
   latestRunAt: string | null;
   /** A wider preset to offer when nothing is in the window. */
   widerPreset: { id: RangePreset; label: string } | null;
@@ -184,13 +181,13 @@ export function RunsView(props: RunsViewProps) {
           />
         ) : null}
 
-        {empty === "no-telemetry" ? (
-          <div className="rounded-lg border border-line">{props.noTelemetry}</div>
-        ) : empty ? (
+        {empty ? (
           <div className="rounded-lg border border-line">
             <TracesEmpty
               kind={empty}
               unit="runs"
+              projectId={projectId}
+              hasApiKey={props.hasApiKey}
               latestAt={props.latestRunAt}
               onClearFilters={() =>
                 go((current) => {

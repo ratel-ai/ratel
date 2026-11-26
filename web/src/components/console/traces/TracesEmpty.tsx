@@ -4,29 +4,36 @@ import { Button } from "@ratel/design-system/button";
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { EmptyState } from "@ratel/design-system/states";
 import { CalendarRange, SearchX } from "lucide-react";
+import { ApiKeyCta, FirstTraceLink } from "@/components/console/settings/ApiKeyCta";
 import { TRACES_DOCS } from "@/lib/console/docs-links";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
-import { emptyNoun, type TracesEmptyUnit } from "./empty-noun";
 
 export type TracesEmptyKind = "no-telemetry" | "events-only" | "outside-window" | "filtered";
 
+const NOUN = { runs: "runs", spans: "spans", logs: "logs" } as const;
+
 /**
- * The ways a Traces list can be empty with something sent (DESIGN.md, Empty
- * states): events but no traces, nothing in this window, or nothing matching
- * the filters. Each says what to do next, with one action. Nothing sent at all
- * ("no-telemetry") is `TracesNoTelemetry`, a Server Component that reads the
- * project's API key; the page passes it to the list as a slot.
+ * Every way a Traces list can be empty (DESIGN.md, Empty states): nothing
+ * sent yet, events but no traces, nothing in this window, or nothing matching
+ * the filters. Each says what to do next, with one action. Nothing sent yet
+ * asks for a key only when the project has none; with one, the action is
+ * sending the first trace.
  */
 export function TracesEmpty({
   kind,
   unit,
+  projectId,
+  hasApiKey = false,
   latestAt,
   onClearFilters,
   onWiden,
 }: {
-  kind: Exclude<TracesEmptyKind, "no-telemetry">;
-  unit: TracesEmptyUnit;
+  kind: TracesEmptyKind;
+  unit: keyof typeof NOUN;
+  projectId: string;
+  /** The project has a usable key (`hasUsableApiKey`), read for "no-telemetry". */
+  hasApiKey?: boolean;
   /** The newest retained record, for "nothing in this window". */
   latestAt?: string | null;
   onClearFilters?: () => void;
@@ -34,8 +41,48 @@ export function TracesEmpty({
   onWiden?: { label: string; run: () => void };
 }) {
   const runNoun = TURN_NOUN;
-  const noun = emptyNoun(unit);
+  const noun = unit === "runs" ? runNoun.lowerMany : NOUN[unit];
+  const docs = (
+    <a
+      href={TRACES_DOCS}
+      target="_blank"
+      rel="noreferrer"
+      className={buttonVariants({ variant: "ghost" })}
+    >
+      Read the docs
+    </a>
+  );
   switch (kind) {
+    case "no-telemetry":
+      return (
+        <EmptyState
+          emblem
+          title={`No ${noun} yet`}
+          description="Send your first trace with the SDK and it shows up here within seconds."
+          action={
+            hasApiKey ? (
+              <FirstTraceLink className={buttonVariants({ variant: "primary" })} />
+            ) : (
+              <ApiKeyCta
+                projectId={projectId}
+                hasApiKey={false}
+                className={buttonVariants({ variant: "primary" })}
+              />
+            )
+          }
+          secondary={
+            hasApiKey ? (
+              <ApiKeyCta
+                projectId={projectId}
+                hasApiKey
+                className={buttonVariants({ variant: "ghost" })}
+              />
+            ) : (
+              docs
+            )
+          }
+        />
+      );
     case "events-only":
       return (
         <EmptyState

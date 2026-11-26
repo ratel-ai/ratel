@@ -5,7 +5,6 @@ import { test } from "node:test";
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import type { SummaryViewProps } from "@/components/console/health/v2/SummaryView";
-import { noApiKeyCta } from "@/lib/console/api-key-cta";
 import type { PillarReading } from "@/lib/readings/trace-signals/health-pillars";
 import {
   HEALTH_SCORE_VERSION,
@@ -77,8 +76,6 @@ function page(over: Partial<Props> = {}, search = ""): string {
     fixes: { open: [COMBINE], applied: [] },
     reportHref: `/report/health/${PROJECT}?days=7&print=1`,
     imports: null,
-    // The page leaves it out and `HealthStateV2` reads it; a test passes it.
-    apiKey: noApiKeyCta(PROJECT),
     ...over,
   };
   return render(createElement(FocusedHealthView, props), {

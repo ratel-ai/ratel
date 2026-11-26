@@ -6,15 +6,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
-import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
-import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
-import { type ApiKeyCta as ApiKeyCtaModel, noApiKeyCta } from "@/lib/console/api-key-cta";
+import { ApiKeyCta, FirstTraceLink } from "@/components/console/settings/ApiKeyCta";
 import { agentHealthHref, type WindowDays } from "@/lib/readings/trace-signals/view";
-import {
-  type BuildingPhase,
-  type HealthPageState,
-  stateOffersApiKey,
-  type WindowSuggestion,
+import type {
+  BuildingPhase,
+  HealthPageState,
+  WindowSuggestion,
 } from "@/lib/views/health/page-state";
 import {
   healthStateCopy,
@@ -38,8 +35,8 @@ export interface HealthStateV2Props {
   billingHref: string | null;
   /** The edition's names for import sources, by id. */
   sourceLabel?: Readonly<Record<string, string>>;
-  /** The project's API-key CTA; read for `projectId` when absent (tests pass one). */
-  apiKey?: ApiKeyCtaModel | null;
+  /** The project has a usable API key (`hasUsableApiKey`): not asked for another. */
+  hasApiKey?: boolean;
   now?: Date;
 }
 
@@ -49,29 +46,16 @@ export interface HealthStateV2Props {
  * the one thing to do about it (DESIGN.md, Empty states). The words come from `healthStateCopy`.
  *
  * Owned (ADR-0004): the importer is the edition's, and without it the one action besides a
- * wider window is the API key; the edition's source names reach the copy. A project that
- * already has a key is not asked for one: the action is sending the first trace, and the
- * key is "View API keys" beside it (`ApiKeyCta`). Only a state that offers the key reads it
- * (`WithApiKeyCta`).
+ * wider window is the API key; the edition's source names reach the copy.
  */
-export function HealthStateV2(props: HealthStateV2Props) {
-  if (!props.apiKey && stateOffersApiKey(props.state))
-    return (
-      <WithApiKeyCta projectId={props.projectId}>
-        {(apiKey) => <HealthStateV2 {...props} apiKey={apiKey} />}
-      </WithApiKeyCta>
-    );
-  return <StateBlock {...props} />;
-}
-
-function StateBlock({
+export function HealthStateV2({
   projectId,
   state,
   windowDays,
   canImport,
   billingHref,
   sourceLabel,
-  apiKey = null,
+  hasApiKey = false,
   now = new Date(),
 }: HealthStateV2Props) {
   // With billing off no plan can be picked, so none is named.
@@ -97,7 +81,7 @@ function StateBlock({
         copy={copy}
         canImport={canImport}
         billingHref={billingHref}
-        apiKey={apiKey ?? noApiKeyCta(projectId)}
+        hasApiKey={hasApiKey}
       />
     </section>
   );
@@ -109,24 +93,37 @@ function StateBody({
   copy,
   canImport,
   billingHref,
-  apiKey,
+  hasApiKey,
 }: {
   projectId: string;
   state: HealthStateV2State;
   copy: StateCopy;
   canImport: boolean;
   billingHref: string | null;
-  apiKey: ApiKeyCtaModel;
+  hasApiKey: boolean;
 }) {
   const importRuns = canImport ? <OpenImportButtonV2 variant="primary" /> : null;
-  // Without the importer, the next step leads: create the key, or send the first trace with it.
-  const getKey = importRuns ?? (
-    <ApiKeyCta cta={apiKey} step="next" icon className={buttonVariants({ variant: "primary" })} />
-  );
-  // Beside it, the key link: always beside the importer, and "View API keys" once there is one.
+  // The importer leads when there is one; else creating the key, or, with one, the first trace.
+  const lead =
+    importRuns ??
+    (hasApiKey ? (
+      <FirstTraceLink icon className={buttonVariants({ variant: "primary" })} />
+    ) : (
+      <ApiKeyCta
+        projectId={projectId}
+        hasApiKey={false}
+        icon
+        className={buttonVariants({ variant: "primary" })}
+      />
+    ));
   const keyLink =
-    importRuns || apiKey.kind === "view" ? (
-      <ApiKeyCta cta={apiKey} icon className={buttonVariants({ variant: "secondary" })} />
+    importRuns || hasApiKey ? (
+      <ApiKeyCta
+        projectId={projectId}
+        hasApiKey={hasApiKey}
+        icon
+        className={buttonVariants({ variant: "secondary" })}
+      />
     ) : undefined;
   switch (state.kind) {
     case "nothing_yet":
@@ -135,7 +132,7 @@ function StateBody({
           emblem
           title={copy.title}
           description={copy.body}
-          action={getKey}
+          action={lead}
           secondary={keyLink}
         />
       );
@@ -147,7 +144,7 @@ function StateBody({
           icon={Wrench}
           title={copy.title}
           description={copy.body}
-          action={getKey}
+          action={lead}
           secondary={keyLink}
         />
       );
@@ -199,7 +196,7 @@ function StateBody({
                 billingHref={billingHref}
               />
             ) : (
-              getKey
+              lead
             )
           }
           secondary={state.suggestion ? undefined : keyLink}

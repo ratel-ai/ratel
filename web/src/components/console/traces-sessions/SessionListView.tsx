@@ -75,11 +75,8 @@ export interface SessionListViewProps {
   /** The request's time, for relative times. */
   now: string;
   empty: SessionsEmptyKind | null;
-  /**
-   * The "no-telemetry" state, drawn on the server (`TracesNoTelemetry`, which
-   * reads the project's API key): the page passes it only in that state.
-   */
-  noTelemetry: ReactNode;
+  /** The project has a usable API key: the "no-telemetry" state then sends the first trace. */
+  hasApiKey?: boolean;
   /** The property bar's values (RC-506); null hides the bar. */
   filterFacets?: TraceFilterFacets | null;
   /** `cloud-project-entities`: the bar has the Agent and MCP server filters (RC-790). */
@@ -168,13 +165,14 @@ export function SessionListView(props: SessionListViewProps) {
           <div className="rounded-lg border border-line" data-sessions-empty="no-sessions">
             <NoSessionsEmpty projectId={projectId} />
           </div>
-        ) : empty === "no-telemetry" ? (
-          <div className="rounded-lg border border-line" data-sessions-empty={empty}>
-            {props.noTelemetry}
-          </div>
         ) : empty ? (
           <div className="rounded-lg border border-line" data-sessions-empty={empty}>
-            <TracesEmpty kind={empty} unit="runs" />
+            <TracesEmpty
+              kind={empty}
+              unit="runs"
+              projectId={projectId}
+              hasApiKey={props.hasApiKey}
+            />
           </div>
         ) : (
           <SessionList

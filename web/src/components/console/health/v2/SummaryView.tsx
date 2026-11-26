@@ -31,7 +31,6 @@ import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLoo
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
 import { WindowSwitch } from "@/components/console/health/v2/WindowSwitch";
-import type { ApiKeyCta } from "@/lib/console/api-key-cta";
 import type {
   HealthImporterProps,
   HealthShareLink,
@@ -117,8 +116,8 @@ export interface SummaryViewProps {
    * from the shape of imported spans and no content came with them.
    */
   inferredTools?: boolean;
-  /** The API-key CTA for the states before a reading; `HealthStateV2` reads it when absent (tests pass one). */
-  apiKey?: ApiKeyCta | null;
+  /** The project has a usable API key: the states before a reading point at it (`HealthStateV2`). */
+  hasApiKey?: boolean;
   now?: Date;
 }
 
@@ -218,7 +217,7 @@ function NotReady({
   canImport,
   imports,
   partial = null,
-  apiKey = null,
+  hasApiKey = false,
   readings,
 }: SummaryViewProps & {
   state: HealthPageState;
@@ -241,7 +240,7 @@ function NotReady({
           canImport={canImport}
           billingHref={billingHref}
           sourceLabel={imports?.sourceLabel}
-          apiKey={apiKey}
+          hasApiKey={hasApiKey}
         />
       )}
       {collecting && readings ? (

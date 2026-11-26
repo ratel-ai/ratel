@@ -5,20 +5,17 @@ import { SearchingBadger } from "@/components/console/badgers/honeybadgers";
 import { OpenImportButton } from "@/components/console/health/imports/OpenImportButton";
 import { buttonVariants } from "@/components/console/health/primitives/button";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
-import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
-import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
-import { type ApiKeyCta as ApiKeyCtaModel, noApiKeyCta } from "@/lib/console/api-key-cta";
+import { ApiKeyCta, FirstTraceLink } from "@/components/console/settings/ApiKeyCta";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import {
   agentHealthHref,
   DEFAULT_WINDOW_DAYS,
   type WindowDays,
 } from "@/lib/readings/trace-signals/view";
-import {
-  type BuildingPhase,
-  type HealthPageState,
-  stateOffersApiKey,
-  type WindowSuggestion,
+import type {
+  BuildingPhase,
+  HealthPageState,
+  WindowSuggestion,
 } from "@/lib/views/health/page-state";
 import {
   healthStateCopy,
@@ -45,8 +42,8 @@ export interface CollectingStateProps {
   canImport?: boolean;
   /** Where a plan with a longer window can be picked; null hides the link. */
   billingHref?: string | null;
-  /** The project's API-key CTA; read for `projectId` when absent (tests pass one). */
-  apiKey?: ApiKeyCtaModel | null;
+  /** The project has a usable API key (`hasUsableApiKey`): not asked for another. */
+  hasApiKey?: boolean;
   now?: Date;
 }
 
@@ -68,22 +65,9 @@ const LINK_BUTTON = cn(buttonVariants({ variant: "outline", size: "sm" }));
  * With some turns but fewer than the floor it is a `role="meter"`:
  * "Collecting · 14 of 50 turns". Runs no reading counts yet read as the
  * reading being built; runs outside the window say when they are from and
- * offer the window that holds them. Only a state that offers the API key
- * reads it (`WithApiKeyCta`).
+ * offer the window that holds them.
  */
-export function CollectingState(props: CollectingStateProps) {
-  const { state = null, turns, apiKey, projectId } = props;
-  const offersKey = state ? stateOffersApiKey(state) : turns <= 0;
-  if (!apiKey && offersKey)
-    return (
-      <WithApiKeyCta projectId={projectId}>
-        {(cta) => <CollectingState {...props} apiKey={cta} />}
-      </WithApiKeyCta>
-    );
-  return <CollectingStateBlock {...props} />;
-}
-
-function CollectingStateBlock({
+export function CollectingState({
   projectId,
   turns,
   floor,
@@ -91,13 +75,12 @@ function CollectingStateBlock({
   windowDays = DEFAULT_WINDOW_DAYS,
   canImport = false,
   billingHref = null,
-  apiKey = null,
+  hasApiKey = false,
   now = new Date(),
 }: CollectingStateProps) {
-  const cta = apiKey ?? noApiKeyCta(projectId);
   if (!state)
     return turns <= 0 ? (
-      <NoTelemetry cta={cta} floor={floor} />
+      <NoTelemetry projectId={projectId} hasApiKey={hasApiKey} floor={floor} />
     ) : (
       <Collecting turns={turns} floor={floor} />
     );
@@ -109,7 +92,14 @@ function CollectingStateBlock({
     case "tool_spans":
       return null;
     case "nothing_yet":
-      return <NoTelemetry cta={cta} floor={floor} canImport={canImport} />;
+      return (
+        <NoTelemetry
+          projectId={projectId}
+          hasApiKey={hasApiKey}
+          floor={floor}
+          canImport={canImport}
+        />
+      );
     case "too_few": {
       // The meter counts finished turns; the ones in progress are said beside it.
       const note = [inProgressLine(state), widerLine(state.wider, plans)].filter(Boolean).join(" ");
@@ -126,7 +116,7 @@ function CollectingStateBlock({
       return (
         <Notice state="imported_no_tools" copy={copy}>
           {canImport && <OpenImportButton />}
-          <ApiKeyLinks cta={cta} />
+          <ApiKeyLinks projectId={projectId} hasApiKey={hasApiKey} />
         </Notice>
       );
     case "unavailable":
@@ -143,7 +133,7 @@ function CollectingStateBlock({
           ) : (
             <>
               {canImport && <OpenImportButton />}
-              <ApiKeyLinks cta={cta} />
+              <ApiKeyLinks projectId={projectId} hasApiKey={hasApiKey} />
             </>
           )}
         </Notice>
@@ -151,22 +141,24 @@ function CollectingStateBlock({
   }
 }
 
-/** Create a key; or, with one, send the first trace and keep the key one click away. */
-function ApiKeyLinks({ cta }: { cta: ApiKeyCtaModel }) {
+/** Create a key; or, with one, send the first trace with the key beside it. */
+function ApiKeyLinks({ projectId, hasApiKey }: { projectId: string; hasApiKey: boolean }) {
   return (
     <>
-      {cta.kind === "view" && <ApiKeyCta cta={cta} step="next" icon className={LINK_BUTTON} />}
-      <ApiKeyCta cta={cta} icon className={LINK_BUTTON} />
+      {hasApiKey && <FirstTraceLink icon className={LINK_BUTTON} />}
+      <ApiKeyCta projectId={projectId} hasApiKey={hasApiKey} icon className={LINK_BUTTON} />
     </>
   );
 }
 
 function NoTelemetry({
-  cta,
+  projectId,
+  hasApiKey,
   floor,
   canImport = false,
 }: {
-  cta: ApiKeyCtaModel;
+  projectId: string;
+  hasApiKey: boolean;
   floor: number;
   canImport?: boolean;
 }) {
@@ -202,7 +194,7 @@ function NoTelemetry({
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         {canImport && <OpenImportButton />}
-        <ApiKeyLinks cta={cta} />
+        <ApiKeyLinks projectId={projectId} hasApiKey={hasApiKey} />
       </div>
     </section>
   );

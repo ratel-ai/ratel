@@ -2,11 +2,8 @@ import { buttonVariants } from "@ratel/design-system/button-variants";
 import { CodeBlock } from "@ratel/design-system/code";
 import { DotLoader } from "@ratel/design-system/dot-matrix";
 import { Section } from "@ratel/design-system/section";
-import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
-import { WithApiKeyCta } from "@/components/console/settings/WithApiKeyCta";
-import type { ApiKeyCta as ApiKeyCtaModel } from "@/lib/console/api-key-cta";
 import {
   buildQuickstartSet,
   QUICKSTART_LANG_LABELS,
@@ -19,35 +16,21 @@ const DOCS_URL = "https://docs.ratel.sh";
  * Before the first event, Overview is a checklist (DESIGN.md, Empty states):
  * a key, the snippet, and a live wait for the first run. The page replaces it
  * with the numbers as soon as anything arrives. A project that already has a
- * usable key (onboarding issues one) is shown that key, not asked for another,
- * and its next step is sending the first trace. The key is read here
- * (`WithApiKeyCta`), so only a page that shows the guide reads it.
+ * key (onboarding issues one) is not asked for another: step 1 points at it.
  */
-export function SetupGuide(props: SetupGuideProps) {
-  if (!props.apiKey)
-    return (
-      <WithApiKeyCta projectId={props.projectId}>
-        {(apiKey) => <SetupGuide {...props} apiKey={apiKey} />}
-      </WithApiKeyCta>
-    );
-  return <SetupGuideView {...props} apiKey={props.apiKey} />;
-}
-
-type SetupGuideProps = {
+export function SetupGuide({
+  projectId,
+  hasApiKey,
+  endpoint,
+  serviceName,
+}: {
   projectId: string;
+  hasApiKey: boolean;
   /** Absolute OTLP traces URL for this deployment. */
   endpoint: string;
   /** Project slug, sent as the OpenTelemetry `service.name`. */
   serviceName: string;
-  /** The project's API-key CTA; read for `projectId` when absent (tests pass one). */
-  apiKey?: ApiKeyCtaModel;
-};
-
-function SetupGuideView({
-  apiKey,
-  endpoint,
-  serviceName,
-}: SetupGuideProps & { apiKey: ApiKeyCtaModel }) {
+}) {
   const snippets = buildQuickstartSet({ endpoint, serviceName });
   const install = snippets.typescript.install;
   const samples = QUICKSTART_LANGS.map((lang) => ({
@@ -72,29 +55,16 @@ function SetupGuideView({
       }
     >
       <ol className="flex flex-col">
-        {apiKey.kind === "view" ? (
-          <Step number={1} title="Your API key is ready" done>
-            <ApiKeyCta
-              cta={apiKey}
-              detail
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
-            />
-          </Step>
-        ) : (
-          <Step number={1} title="Create an API key">
-            <ApiKeyCta
-              cta={apiKey}
-              className={buttonVariants({ variant: "primary", size: "sm" })}
-            />
-          </Step>
-        )}
+        <Step number={1} title={hasApiKey ? "Your API key is ready" : "Create an API key"}>
+          <ApiKeyCta
+            projectId={projectId}
+            hasApiKey={hasApiKey}
+            className={buttonVariants({ variant: hasApiKey ? "secondary" : "primary", size: "sm" })}
+          />
+        </Step>
         <Step
           number={2}
-          title={
-            apiKey.kind === "view"
-              ? "Next: add the SDK and send your first trace"
-              : "Add the SDK and send a run"
-          }
+          title={hasApiKey ? "Add the SDK and send your first trace" : "Add the SDK and send a run"}
         >
           <div className="flex w-full flex-col gap-3">
             {install ? (
@@ -119,21 +89,18 @@ function Step({
   number,
   title,
   last = false,
-  done = false,
   children,
 }: {
   number: number;
   title: string;
   last?: boolean;
-  /** Already true for this project: the number reads as a check. */
-  done?: boolean;
   children: ReactNode;
 }) {
   return (
     <li className="relative flex gap-4 pb-8 last:pb-0">
       {last ? null : <span aria-hidden className="absolute top-7 bottom-1 left-3 w-px bg-line" />}
       <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-line-strong font-mono text-xs text-fg-muted tabular-nums">
-        {done ? <Check className="size-3.5" aria-label={`Step ${number} done`} /> : number}
+        {number}
       </span>
       <div className="flex min-w-0 flex-1 flex-col items-start gap-3 pt-0.5 *:max-w-full">
         <p className="text-sm font-medium text-fg">{title}</p>
