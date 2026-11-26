@@ -107,6 +107,13 @@ test("no traces: each widget has the console's own empty state", () => {
   assert.match(window.html, /href="[^"]*\?range=30d"/);
   assert.deepEqual(states("get_overview · alerts, no rules"), ["alerts-none"]);
   assert.deepEqual(states("get_overview · attention, too early"), ["attention-early"]);
+  assert.deepEqual(states("get_overview · attention, Agent health collecting"), [
+    "attention-collecting",
+  ]);
+  assert.match(
+    draw("get_overview · attention, Agent health collecting").text,
+    /Agent health unlocks at 50 turns · 36\/50/,
+  );
   assert.match(draw("get_overview · first reading").text, /Calculating the score/);
 });
 
