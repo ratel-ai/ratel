@@ -474,7 +474,7 @@ test("no traces: each widget says so, asks for traces, and none of them looks li
 });
 
 const shapesOf = (html: string) =>
-  [...html.matchAll(/data-dot-shape="([^"]+)"/g)].map((match) => match[1]);
+  [...html.matchAll(/data-veil-shape="([^"]+)"/g)].map((match) => match[1]);
 
 test("the dots move only where something is missing, and not while the page is arranged", async () => {
   const missing = {
@@ -531,7 +531,7 @@ test("each reason for no score keeps its own words, and only a first reading is 
     const html = await health(over);
     const text = visibleText(html);
     assert.match(text, words);
-    assert.match(html, /data-health-score-ring="empty"|data-dot-shape="gauge"/);
+    assert.match(html, /data-health-score-ring="empty"|data-veil-shape="gauge"/);
     assert.doesNotMatch(html, /data-ring-cell="(lit|tip|target)"|data-health-score="/);
     assert.equal(/Calculating/.test(text), "computedAt" in over);
     assert.match(html, /href="[^"]*\/health"/, "Agent health stays a click away");

@@ -1,7 +1,7 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
-import { DotShape } from "@ratel/design-system/dot-shape";
 import { EmptyState } from "@ratel/design-system/states";
+import { VeilShape } from "@ratel/design-system/veil-shape";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -11,9 +11,9 @@ import type { OverviewWindow } from "@/lib/views/home/overview-model";
 
 /**
  * A widget with nothing to draw: a picture of what it draws, or its icon, then why it is empty and
- * what to do. Where what it draws is missing, the picture is dots that dissolve and form again
- * (`DotShape`). Never a skeleton, which says that it loads. In a short widget the picture makes
- * room for the words.
+ * what to do. Where what it draws is missing, the picture is its cells with a veil drifting
+ * through them (`VeilShape`). Never a skeleton, which says that it loads. In a short widget the
+ * picture makes room for the words.
  */
 
 /** What decides how a person gets data into an empty widget. */
@@ -68,7 +68,7 @@ export function WidgetEmpty({
   return (
     <div
       data-widget-empty={name}
-      data-dot-shape-replay={shape ? "" : undefined}
+      data-veil-replay={shape ? "" : undefined}
       className={cn(
         "flex min-h-0 flex-1 flex-col items-center justify-center-safe overflow-y-auto",
         padded && "p-4",
@@ -83,7 +83,7 @@ export function WidgetEmpty({
           <div className="mb-3 min-h-0 flex-1 [container-type:size]">
             <div className="flex size-full items-center justify-center [@container_(height<48px)]:hidden">
               {SHAPES[shape].pictures.map(({ picture, className }) => (
-                <DotShape
+                <VeilShape
                   key={picture}
                   name={picture}
                   startMs={SHAPES[shape].startMs}

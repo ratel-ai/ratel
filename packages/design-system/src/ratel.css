@@ -268,40 +268,111 @@
   }
 }
 
-/* A picture of what is not there yet (components/dot-shape.tsx): it holds, dissolves into noise
- * and forms again. One loop is DOT_SHAPE_MS; it starts and ends formed, so nothing jumps when it
- * starts and when it stops. Opacity only: each layer is composited. */
-@keyframes dot-shape {
-  0%, 8% {
-    opacity: var(--dot-formed);
+/* A picture of what is not there yet (components/veil-shape.tsx): its dots, and a warm glow
+ * drifting through them, after the landing page's veil, quieter. One drift is VEIL_MS; it starts
+ * and ends where it rests, so nothing jumps. Only a transform moves: the compositor draws it. */
+.veil-shape {
+  overflow: hidden;
+  isolation: isolate;
+  background: color-mix(in oklab, var(--color-fg-faint) 35%, transparent);
+  mask-image: var(--veil-mask);
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+}
+
+/* The veil: a warm field of light with dark folds in it. The light and the folds drift apart, so
+ * the picture is lit in a different place each moment and never all at once. */
+.veil-shape-glow,
+.veil-shape-fold {
+  position: absolute;
+  inset: -50%;
+  will-change: transform;
+}
+.veil-shape-glow {
+  background:
+    radial-gradient(
+      40% 28% at 32% 44%,
+      color-mix(in oklab, var(--color-accent-mark) 85%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      30% 42% at 70% 56%,
+      color-mix(in oklab, var(--color-accent-mark) 55%, var(--color-fg-muted)),
+      transparent
+    ),
+    radial-gradient(
+      55% 20% at 50% 72%,
+      color-mix(in oklab, var(--color-accent-mark) 40%, transparent),
+      transparent
+    );
+  transform: translate(-16%, -8%) rotate(0deg) scale(1);
+}
+.veil-shape-fold {
+  background:
+    radial-gradient(
+      22% 46% at 46% 50%,
+      color-mix(in oklab, var(--color-app) 80%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      36% 16% at 62% 30%,
+      color-mix(in oklab, var(--color-app) 65%, transparent),
+      transparent
+    );
+  transform: translate(12%, 6%) rotate(0deg);
+}
+
+/* Scanlines, still: the texture of the veil. */
+.veil-shape-grain {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--color-app) 55%, transparent) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+@keyframes veil-shape {
+  0%,
+  100% {
+    transform: translate(-16%, -8%) rotate(0deg) scale(1);
   }
-  24%, 36% {
-    opacity: var(--dot-noise);
+  30% {
+    transform: translate(14%, 6%) rotate(18deg) scale(1.15);
   }
-  47% {
-    opacity: var(--dot-formed);
-  }
-  64% {
-    opacity: var(--dot-shimmer);
-  }
-  82%, 100% {
-    opacity: var(--dot-formed);
+  62% {
+    transform: translate(-2%, 14%) rotate(-10deg) scale(0.9);
   }
 }
 
-.dot-shape-layer {
-  opacity: var(--dot-formed);
+@keyframes veil-shape-fold {
+  0%,
+  100% {
+    transform: translate(12%, 6%) rotate(0deg);
+  }
+  40% {
+    transform: translate(-14%, -4%) rotate(-24deg);
+  }
+  75% {
+    transform: translate(6%, -12%) rotate(14deg);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-dot-shape-run] .dot-shape-layer {
-    animation: dot-shape 4.4s ease-in-out var(--dot-delay) 3;
+  [data-veil-run] .veil-shape-glow {
+    animation: veil-shape 9s ease-in-out var(--veil-delay) 2;
   }
-  [data-dot-shape-run="paused"] .dot-shape-layer {
+  [data-veil-run] .veil-shape-fold {
+    animation: veil-shape-fold 9s ease-in-out var(--veil-delay) 2;
+  }
+  [data-veil-run="paused"] .veil-shape-glow,
+  [data-veil-run="paused"] .veil-shape-fold {
     animation-play-state: paused;
   }
   /* A part of the page that takes no press, such as a widget while the page is arranged. */
-  [inert] .dot-shape-layer {
+  [inert] .veil-shape-glow,
+  [inert] .veil-shape-fold {
     animation: none;
   }
 }

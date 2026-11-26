@@ -79,7 +79,7 @@ test("one dashboard widget: only it is drawn, with its title", () => {
 test("without a score, the gauge says why", () => {
   const { html, text } = draw("get_overview · no score");
   assert.match(text, /not ready yet 12 of the 50 turns a score needs\. Send more traces/);
-  assert.match(html, /data-dot-shape="gauge"/);
+  assert.match(html, /data-veil-shape="gauge"/);
   assert.doesNotMatch(html, /data-health-score=/);
 });
 
@@ -104,7 +104,7 @@ test("no traces: each widget has the console's own empty state", () => {
   ]);
   assert.match(
     draw("get_overview · no traces yet").html,
-    /data-dot-shape="topology".*data-dot-shape="gauge".*data-dot-shape="issues".*data-dot-shape="bell"/,
+    /data-veil-shape="topology".*data-veil-shape="gauge".*data-veil-shape="issues".*data-veil-shape="bell"/,
   );
   const window = draw("get_overview · no traces in the window");
   assert.match(window.text, /No traces in the last 7 days.*Show 30 days/);

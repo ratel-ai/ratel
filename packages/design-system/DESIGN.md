@@ -22,7 +22,7 @@ Every UI change in the platform, in both editions, follows this document and is 
    are designed too.
 7. **Everything is a URL.** A copied link reopens the same view, panel and window.
 8. **Keyboard first.** ⌘K, `[` for the sidebar, `g` to jump, `j`/`k`, `Enter`, `Esc`.
-9. **Motion only shows where something went,** or, in a `DotShape`, that it is not there yet.
+9. **Motion only shows where something went,** or, in a `VeilShape`, that it is not there yet.
 10. **One way to do each thing.** A page that needs a variant grows the primitive, never forks it.
 
 ## Information architecture
@@ -155,7 +155,7 @@ Enter with `ease-enter`, exit faster with `ease-exit`.
 
 | Where | Use | Primitive |
 |---|---|---|
-| A widget whose data is missing | The widget's own picture in dots, which dissolves and forms three times, then rests formed | `DotShape` |
+| A widget whose data is missing | The widget's own picture in cells, with a warm light and dark folds drifting through it twice (the sign-in page's veil, in CSS), then at rest | `VeilShape` |
 | Empty and first-run states | The 5×5 mark at rest, in `fg-faint` | `EmptyState`, `DotEmblem` |
 | A Micro screen's wait | The 5×5 mark, a band of light crossing it; `size="sm"` beside a sentence that waits | `DotLoader` |
 | A share next to its number | A row of square pixels beside the number | `DotMeter` |
@@ -198,7 +198,7 @@ Built on Base UI where it has the part, styled with the tokens, merged with `cn`
 | `Steps` | An ordered sequence |
 | `CodeBlock`, `CopyButton`, `KeyReveal` | Snippets, API keys shown once |
 | `ShareBar` | A share of a whole as one stacked bar |
-| `DotEmblem`, `DotLoader`, `DotMeter`, `DotShape`, `DotSpark` | The brand marks |
+| `DotEmblem`, `DotLoader`, `DotMeter`, `DotSpark`, `VeilShape` | The brand marks |
 
 ### Overlays: which one
 
@@ -251,7 +251,7 @@ shared time-window control.
 **Empty states.** In place of the data: a 20 px icon, a one-line title, one sentence, one
 primary action, an optional docs link. An empty widget (`home/focused/WidgetEmpty`) is
 never a `Skeleton`: a picture of what it draws or an icon, why it is empty, and what fills it. Where
-data is missing the picture is a `DotShape`. A failed read is red and still.
+data is missing the picture is a `VeilShape`. A failed read is red and still.
 
 **Loading.** `Skeleton` for sections, `Button` with `loading` for actions.
 
