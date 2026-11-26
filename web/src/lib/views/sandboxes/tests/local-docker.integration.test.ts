@@ -218,7 +218,6 @@ async function setup(provider: SandboxProvider, work: string) {
     provider,
     secrets,
     sealingKey: () => ({ ok: true, key: KEY }),
-    enabled: async () => true,
     now: () => new Date(),
     every: () => () => {},
   };
