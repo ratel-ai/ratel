@@ -180,7 +180,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "List eval cases",
       description:
         "Use this tool to see the eval cases of the project. It returns each case with its name, labels, approved version number and draft. Only an approved case counts in an eval run.",
-      keywords: ["evals", "cases", "dataset", "approved", "draft"],
+      keywords: ["evals", "eval cases", "dataset"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped }),
@@ -211,7 +211,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Read an eval case",
       description:
         "Use this tool to read one eval case. It returns the input, the expected output, the scorers and the state of the newest version, and the version that counts in an eval run.",
-      keywords: ["evals", "case", "input", "scorers", "expected output"],
+      keywords: ["evals", "case detail", "expected output"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped, caseId: caseIdParam }),
@@ -245,7 +245,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Create an eval case",
       description:
         "Use this tool to save an input as an eval case, for example a sandbox run with a bad answer. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and answer of that run. A case needs a gating scorer before approval.",
-      keywords: ["evals", "case", "create", "save", "sandbox run", "scorer"],
+      keywords: ["evals", "save as case", "new case"],
       scope: "project",
       mutates: true,
       params: z.object({
@@ -323,7 +323,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Approve an eval case",
       description:
         "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It refuses a draft with no input or no gating scorer.",
-      keywords: ["evals", "case", "approve", "draft"],
+      keywords: ["evals", "approve case"],
       scope: "project",
       mutates: true,
       params: z.object({ ...projectScoped, caseId: caseIdParam }),
@@ -372,7 +372,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Start an eval run",
       description:
         "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Poll evals_get_run until the state is completed.",
-      keywords: ["evals", "run", "experiment", "start", "sandbox", "trials"],
+      keywords: ["evals", "start eval run"],
       scope: "project",
       mutates: true,
       params: z.object({
@@ -426,7 +426,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "List eval runs",
       description:
         "Use this tool to find eval runs of the project, newest first. It returns each run with its state, sandbox version, raw pass, fail and invalid counts, and which run is the pinned baseline.",
-      keywords: ["evals", "runs", "experiments", "list", "baseline"],
+      keywords: ["evals", "eval runs"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped }),
@@ -458,7 +458,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Read an eval run",
       description:
         "Use this tool to read an eval run. A running run is awaited up to 20 seconds. It returns the state and the raw counts, and for each case its input, the output of each trial, the trial results and the scorer results.",
-      keywords: ["evals", "run", "experiment", "results", "outputs", "trials", "counts"],
+      keywords: ["evals", "eval results", "raw counts"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped, runId: runIdParam }),
@@ -491,7 +491,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Read an eval trial",
       description:
         "Use this tool to read one trial of an eval run in full. It returns the output, the tool calls, each scorer result with its reason, and the sandbox run id.",
-      keywords: ["evals", "trial", "output", "tool calls", "scorer", "reason"],
+      keywords: ["evals", "trial detail", "scorer reason"],
       scope: "project",
       mutates: false,
       params: z.object({
@@ -538,7 +538,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Compare two eval runs",
       description:
         "Use this tool to compare an eval run with the pinned baseline, or with baselineRunId. It returns the verdict, the rule that decided it, and the changed cases with the outputs of both runs. It refuses runs whose scorers differ and says why.",
-      keywords: ["evals", "compare", "baseline", "regression", "verdict", "diff"],
+      keywords: ["evals", "regression", "verdict"],
       scope: "project",
       mutates: false,
       params: z.object({
@@ -570,7 +570,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Pin the eval baseline",
       description:
         "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. evals_compare uses the baseline when no baselineRunId is given.",
-      keywords: ["evals", "baseline", "pin", "run"],
+      keywords: ["evals", "pin baseline"],
       scope: "project",
       mutates: true,
       params: z.object({ ...projectScoped, runId: runIdParam }),

@@ -74,7 +74,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       title: "List Ratel sandboxes",
       description:
         "Use this tool to find the agents that are pushed to Ratel sandbox. It returns each sandbox name with its newest versions, their status and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
-      keywords: ["sandbox", "agent", "version", "push", "image", "list"],
+      keywords: ["sandbox", "pushed agents", "sandbox versions"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped }),
@@ -98,7 +98,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       title: "Read a Ratel sandbox version",
       description:
         "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, the declared params with their types and options, the tools with their modes, and the smoke check result.",
-      keywords: ["sandbox", "version", "params", "input", "example", "smoke", "config"],
+      keywords: ["sandbox", "declared params", "input example", "smoke check"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped, versionId: versionIdParam }),
@@ -122,7 +122,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       title: "Run a Ratel sandbox version",
       description:
         "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. Then it returns the run with its input, output and tool calls, or the run id and a hint to poll sandbox_get_run.",
-      keywords: ["sandbox", "run", "execute", "input", "output", "agent", "try"],
+      keywords: ["sandbox", "run agent", "try an input"],
       scope: "project",
       mutates: true,
       params: z.object({
@@ -170,7 +170,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       title: "Read a Ratel sandbox run",
       description:
         "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output, the params, the tool calls, the error of a failed run and the end of the container logs.",
-      keywords: ["sandbox", "run", "result", "output", "logs", "tool calls", "poll"],
+      keywords: ["sandbox", "run result", "container logs"],
       scope: "project",
       mutates: false,
       params: z.object({
