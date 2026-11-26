@@ -30,6 +30,7 @@ export function WidgetEmpty({
   action,
   note,
   padded = true,
+  largeFigure = false,
 }: {
   /** For the tests and the screenshots: which state this is. */
   name: string;
@@ -43,6 +44,8 @@ export function WidgetEmpty({
   note?: ReactNode;
   /** False in a card that has its own padding. */
   padded?: boolean;
+  /** A figure that needs more room to read, such as the map. */
+  largeFigure?: boolean;
 }) {
   return (
     <div
@@ -55,7 +58,10 @@ export function WidgetEmpty({
       {figure ? (
         <div
           aria-hidden
-          className="mb-3 flex min-h-0 w-full shrink basis-28 justify-center overflow-hidden max-lg:min-h-28"
+          className={cn(
+            "mb-3 flex min-h-0 w-full shrink justify-center overflow-hidden",
+            largeFigure ? "basis-40 max-lg:min-h-32" : "basis-28 max-lg:min-h-28",
+          )}
         >
           {figure}
         </div>

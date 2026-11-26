@@ -6,7 +6,14 @@ import {
 
 /** The map before there is anything on it: no traces yet, none in the window, or none that names an agent. */
 export function TopologyEmpty(at: EmptyWindow) {
-  return <WidgetEmpty figure={<GhostMap />} {...copy(at)} action={<TracesAction {...at} />} />;
+  return (
+    <WidgetEmpty
+      figure={<GhostMap />}
+      largeFigure
+      {...copy(at)}
+      action={<TracesAction {...at} />}
+    />
+  );
 }
 
 function copy({ tracesSeen, window }: EmptyWindow) {
@@ -35,9 +42,10 @@ function GhostMap() {
     <svg
       aria-hidden="true"
       viewBox="0 0 320 112"
-      className="h-full max-w-full text-line-strong"
+      className="h-full max-w-full text-fg-faint/75"
       fill="none"
       stroke="currentColor"
+      strokeWidth={1.25}
       strokeDasharray="4 4"
       data-topology-ghost=""
     >
