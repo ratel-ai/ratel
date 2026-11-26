@@ -1,6 +1,13 @@
-import type { MetricQuery, Query } from "@/lib/contracts/query";
+import { type MetricQuery, QUERY_KINDS, type Query, type SqlQuery } from "@/lib/contracts/query";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+
+/** What a widget can show: every kind but `sql`, whose rows no chart draws yet. */
+export type WidgetQuery = Exclude<Query, SqlQuery>;
+export type WidgetKind = WidgetQuery["kind"];
+export const WIDGET_KINDS = QUERY_KINDS.filter((kind): kind is WidgetKind => kind !== "sql");
+export const SQL_WIDGET_PROBLEM =
+  "A query of kind sql cannot be a widget, a panel or a dashboard query yet: no chart draws its rows.";
 
 /** How a metric is drawn. Each other query kind has the one chart of its name. */
 export const METRIC_CHARTS = ["line", "bar", "number", "table"] as const;
@@ -27,7 +34,7 @@ export interface GridPosition {
 export interface WidgetInput {
   /** Shown instead of the query's own name, or empty. */
   title: string;
-  query: Query;
+  query: WidgetQuery;
   chart: WidgetChart;
 }
 

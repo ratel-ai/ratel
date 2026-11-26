@@ -190,6 +190,14 @@ export const otelSpans = pgTable(
     // The MCP transport session (`mcp.session.id`). `attributes` keeps that key
     // only on tool spans, so ingest stores it here. The backfill does not fill it.
     mcpSessionId: text("mcp_session_id"),
+    // RTL-321: the conversation and the customer's end user the span ran for, with
+    // the values `trace_events.session_id` / `end_user_id` get (`SESSION_KEYS`, then
+    // `MCP_SESSION_KEYS`, and `USER_KEYS`, read up the span's ancestors and resource).
+    // Null when the export has none: never the trace id stand-in of `trace_events`.
+    // The end user is the raw value, as on `trace_events`. Rows stored before
+    // migration 0056 are filled from `trace_events` by `backfill:session-user-ids`.
+    sessionId: text("session_id"),
+    endUserId: text("end_user_id"),
     // AOBS-7: the span's events and links, content-free and bounded
     // (`lib/ingest/otlp/span-events.ts`). Null when the span has none, and on rows
     // written before AOBS-7.
@@ -204,6 +212,10 @@ export const otelSpans = pgTable(
     index("otel_spans_project_mcp_server_started_idx")
       .on(t.projectId, t.mcpServer, t.startedAt)
       .where(sql`${t.mcpServer} is not null`),
+    // RTL-321: a session's spans in time order.
+    index("otel_spans_project_session_started_idx")
+      .on(t.projectId, t.sessionId, t.startedAt)
+      .where(sql`${t.sessionId} is not null`),
     index("otel_spans_received_at_idx").on(t.receivedAt, t.id),
     index("otel_spans_project_trace_idx").on(t.projectId, t.traceId),
     index("otel_spans_project_event_idx")

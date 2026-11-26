@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { metricQuery } from "@/lib/contracts/query";
 import { breaches, evaluationIntervalMs, evaluationWindow, nextState } from "./domain";
-import { parseRule } from "./parse-rule";
+import { parseAlertQuery, parseRule } from "./parse-rule";
 
 const ABOVE = { operator: "above", threshold: 10 } as const;
 const BELOW = { operator: "below", threshold: 10 } as const;
@@ -106,4 +106,17 @@ test("a rule from outside is checked like a widget", () => {
     assert.ok(!result.ok);
     assert.match(result.error, error);
   }
+});
+
+test("an alert refuses a query of kind sql: it compares one number", () => {
+  assert.deepEqual(
+    parseAlertQuery(
+      { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 },
+      { customMonitoring: true },
+    ),
+    {
+      ok: false,
+      error: "An alert compares one number: a sql has none.",
+    },
+  );
 });

@@ -19,6 +19,10 @@ export const CORE_FLAGS = [
   // Owner: rstagi. Scorers, dashboards, alerts and Slack delivery. Remove with the stacked
   // flag-removal PR, once on for all users.
   "customMonitoring",
+  // Owner: rstagi. RQL, the read-only query language over trace data, and its MCP tools
+  // (describe_rql_schema, run_rql, kind sql). Remove with the stacked flag-removal PR, once on
+  // for all users.
+  "rql",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

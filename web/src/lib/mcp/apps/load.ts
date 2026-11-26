@@ -49,7 +49,7 @@ export const defaultMcpAppLoadDeps: McpAppLoadDeps = {
   toolIds: () =>
     new Set([
       "whoami",
-      ...assembleOperations({ focusedConsole: true }).map((operation) => operation.id),
+      ...assembleOperations({ focusedConsole: true, rql: true }).map((operation) => operation.id),
     ]),
 };
 

@@ -18,14 +18,14 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status` (the deployment's core flags, by key: `evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole` and `customMonitoring`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's core flags, by key: `evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`, `customMonitoring` and `rql`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
 | `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `telemetry/` | each tool call as an `execute_tool` span with its arguments and result (`trace-tool-call.ts`, owned for one comment; `session.ts`: the client, credential and session ids), sent only to a Ratel project of its own (`export.ts`, owned: off unless `RATEL_SELF_TELEMETRY_MCP_API_KEY` and `RATEL_SELF_TELEMETRY_ENDPOINT` are both set, no default destination; ratel-cloud #482) |
 | `launch-access.ts` | the app's allowlist at the MCP door: a project key passes, a signed-in caller is decided by the edition (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
 | `operations/loop/` | the improvement loop as tools, listed for everyone with app access as upstream (RC-234), with its tasks (`tasks.ts`: task pages, scorers, eval sets, simulations, drafted tests) and fix eval sets (`eval-sets.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `evalGate` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `evalGate`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
-| `operations/monitoring/` | custom monitoring as tools (owned; behind `customMonitoring`, off refuses as forbidden): `scorers.ts` (`list_scorers`, `get_scorer`, `test_scorer`, `change_scorer`), `alerts.ts` (`list_alerts`, `get_alert`, `change_alert`, `list_alert_destinations`, `change_alert_destination`, `list_slack_channels`), `locations.ts` (`get_location_attributes`, `change_location_attributes`), `dashboards.ts` (`describe_monitoring_schema`, `query_monitoring`, `list_dashboards`, `get_dashboard`, `change_dashboard`, `import_dashboard`; `results.ts` caps a result and says it in one line). Each calls the same action as the console's server action (`deps.ts`: the caller in the session's place, and the refusals as MCP errors). No result holds a secret, and a param an operation names in `secretParams` is left out of the call's telemetry. `parity.ts` maps each console action of these modules to its operation, and `parity.test.ts` fails for one without |
+| `operations/monitoring/` | custom monitoring as tools (owned; behind `customMonitoring`, off refuses as forbidden): `scorers.ts` (`list_scorers`, `get_scorer`, `test_scorer`, `change_scorer`), `alerts.ts` (`list_alerts`, `get_alert`, `change_alert`, `list_alert_destinations`, `change_alert_destination`, `list_slack_channels`), `locations.ts` (`get_location_attributes`, `change_location_attributes`), `dashboards.ts` (`describe_monitoring_schema`, `query_monitoring`, `list_dashboards`, `get_dashboard`, `change_dashboard`, `import_dashboard`; `results.ts` caps a result and says it in one line), `rql.ts` (`describe_rql_schema`, `run_rql`; behind `rql`, not `customMonitoring`, see below). Each calls the same action as the console's server action (`deps.ts`: the caller in the session's place, and the refusals as MCP errors). No result holds a secret, and a param an operation names in `secretParams` is left out of the call's telemetry. `parity.ts` maps each console action of these modules to its operation, and `parity.test.ts` fails for one without |
 | `apps/` | MCP Apps (SEP-1865): the `ui://ratel/<view>` resources built by the `@ratel/mcp-apps` package (repository root `mcp-apps/`) and the tools bound to them, behind `mcpApps` (`apps/flag.ts`, owned); with the switch off the server is what it was, pinned by `route-handler.apps.test.ts` and `__fixtures__/flag-off-protocol.json` (owned). See `apps/README.md` |
 | `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]`; `toolStage` also reads an edition tool's own stage |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
@@ -42,6 +42,29 @@ of the dashboard or the call are 3,072 bytes of JSON at most.
 `change_dashboard` (`create`, `add_widget`) saves a panel, and `change_alert` (`create`) watches an
 ungrouped metric. `EXPLORE` in `operations/monitoring/parity.ts` is that list, and the parity test
 fails for an action of the page that is not in it.
+
+## RQL through MCP
+
+RQL (`synthesis/rql`) answers a trace question that no query kind has. Two tools in
+`operations/monitoring/rql.ts` give it to an agent, behind the `rql` flag:
+
+- `describe_rql_schema` gives `describeRqlSchema()`: the tables (`events`, `traces`, `scores`,
+  `sessions`, `users`), their columns, the functions, the operators, the limits, the rules and
+  examples.
+- `run_rql` takes `text`, an optional `rqlVersion` (default: the current one) and `since`/`until`
+  (default: the last 24 hours, clamped to 30 days). It runs kind `sql` of the query object through
+  `runQuery`, the same path as `query_monitoring`, and gives `summary`, `columns`, `rows` and
+  `truncated`. The `table` view of `mcp-apps/` draws it.
+
+`query_monitoring` runs a lone query of kind `sql` too and gives its table; a panel of `queries`
+cannot be one. `describe_monitoring_schema` lists kind `sql` in its catalog only with the flag on.
+
+With `rql` off for the connection (`rqlForCaller`: an API key's project, or any organization of a
+person) the two tools are not listed and the `table` view is not published. Each call checks the
+flag of its project again: off, the two tools and kind `sql` of `query_monitoring` refuse with
+`forbidden` and the reason `rql_off`. An RQL error reaches the agent as the compiler or the runner
+wrote it: its code as `reason`, its message, and its `fix` (`deps.ts`, `queryRefusal`). The console
+has no RQL page yet, so `MCP_ONLY` in `parity.ts` lists the two tools with that reason.
 
 ## Adding an operation
 

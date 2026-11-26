@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true });
+const operations = assembleOperations({ focusedConsole: true, rql: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -220,6 +220,9 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["get_dashboard", false],
   ["change_dashboard", true],
   ["import_dashboard", true],
+  // RQL over trace data (RTL-325), behind the rql flag.
+  ["describe_rql_schema", false],
+  ["run_rql", false],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

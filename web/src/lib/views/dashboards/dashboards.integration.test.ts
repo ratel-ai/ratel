@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { type MeasureId, type MetricQuery, metricQuery, type Query } from "@/lib/contracts/query";
+import { type MeasureId, type MetricQuery, metricQuery } from "@/lib/contracts/query";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { type MetricsDb, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
@@ -23,7 +23,12 @@ import {
   updateDashboard,
 } from "@/lib/views/dashboards/store";
 import { isBroken, isWidget } from "@/lib/views/dashboards/stored-widget";
-import { type DashboardFilters, MAX_WIDGETS, type WidgetInput } from "@/lib/views/dashboards/types";
+import {
+  type DashboardFilters,
+  MAX_WIDGETS,
+  type WidgetInput,
+  type WidgetQuery,
+} from "@/lib/views/dashboards/types";
 import {
   changeQuery,
   fitWidget,
@@ -202,7 +207,7 @@ test("one byte over the filter budget, with the dashboard's filters, is refused 
   const named = await refused({ action: "import", document: document(3_073) });
   assert.ok(named?.startsWith("Widget 1") && named.endsWith(`: ${message}`), String(named));
   // The widget editor and the filter bar ask the same before they send a change.
-  const queryOf = (bytes: number) => widget(bytes).query as Query;
+  const queryOf = (bytes: number) => widget(bytes).query as WidgetQuery;
   assert.equal(filtersProblem([queryOf(3_072)], page), null);
   assert.equal(filtersProblem([queryOf(3_073)], page), message);
   const bar = (agent: string) =>
@@ -236,7 +241,7 @@ test("a stored widget that is not one is a broken entry; the rest loads, and the
       "fine",
       [
         "Flow",
-        'Unknown query kind "pie". The kinds are: metric, flow, step_flow, funnel, clusters, geography.',
+        'Unknown query kind "pie". The kinds are: metric, flow, step_flow, funnel, clusters, geography, sql.',
       ],
       ["Widget 4", "The widget settings are invalid."],
       ["Twice", "Another widget has the same id."],

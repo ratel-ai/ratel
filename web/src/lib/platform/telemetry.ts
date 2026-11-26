@@ -121,6 +121,7 @@ export const SERVER_EVENT_NAMES = [
   "feature.alerts.recovered",
   "feature.alerts.delivery_failed",
   "feature.alerts.skipped",
+  "feature.rql.query_run",
   "dashboard_changed",
 ] as const;
 

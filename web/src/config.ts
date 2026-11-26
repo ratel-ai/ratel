@@ -79,6 +79,7 @@ const FLAG_ENV = {
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
   customMonitoring: "FF_CUSTOM_MONITORING",
+  rql: "FF_RQL",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -159,6 +160,11 @@ const CONFIG_SCHEMA = schema({
     /** Unset: on for the open-source edition, off for the others. */
     migrateOnBoot: optional("DATABASE_MIGRATE_ON_BOOT", flagValue),
     migrationsDir: optional("MIGRATIONS_DIR", trimmed),
+    /**
+     * The database RQL queries run on (a read replica, or a user of its own); unset, `url`. RQL
+     * always has a small pool of its own, so it never takes a connection of the primary pool.
+     */
+    rqlUrl: optional("RQL_DATABASE_URL", trimmed, { sensitive: true }),
   },
   jobs: {
     /** Unset: in process for the open-source edition, external for the others. */
