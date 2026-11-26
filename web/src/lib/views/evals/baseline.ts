@@ -17,7 +17,14 @@ export type PinResult =
 /** One of the two experiments, with what its trials did. */
 export type Compared = { experiment: Experiment; trials: Trial[] };
 export type ComparisonResult =
-  | { ok: true; pin: Baseline; baseline: Compared; candidate: Compared; comparison: Comparison }
+  | {
+      ok: true;
+      /** The pin of the baseline side. Null when the reader chose an experiment that is not pinned. */
+      pin: Baseline | null;
+      baseline: Compared;
+      candidate: Compared;
+      comparison: Comparison;
+    }
   | {
       ok: false;
       refusal: Omit<CompareRefusal, "ok" | "reason"> & {
@@ -47,25 +54,33 @@ export async function pinBaseline(
   return { ok: true, baseline };
 }
 
-/** An experiment against the pinned baseline of its project. */
+/**
+ * An experiment against another one: the experiment that the reader chose, else the pinned baseline
+ * of the project. The verdict and the refusals are the same for both.
+ */
 export async function compareWithBaseline(
   projectId: string,
   experimentId: string,
   deps: BaselineDeps,
+  baselineId: string | null = null,
 ): Promise<ComparisonResult> {
   const candidate = await find(projectId, experimentId, deps);
   if (!candidate) return refused("not_found", "There is no such experiment.");
-  const pin = await deps.baselines.get(projectId);
-  const pinned = pin && (await deps.experiments.get(projectId, pin.experimentId));
-  if (!pin || !pinned) {
-    return refused("no_baseline", "The project has no pinned baseline. Pin an experiment first.");
+  const pinned = await deps.baselines.get(projectId);
+  const otherId = baselineId ?? pinned?.experimentId ?? null;
+  const other = otherId === null ? null : await find(projectId, otherId, deps);
+  if (!other) {
+    return baselineId === null
+      ? refused("no_baseline", "The project has no pinned baseline. Pin an experiment first.")
+      : refused("not_found", "There is no such experiment to compare with.");
   }
+  const pin = pinned?.experimentId === other.id ? pinned : null;
   const [baselineTrials, candidateTrials] = await Promise.all([
-    deps.experiments.trials(pinned.id),
+    deps.experiments.trials(other.id),
     deps.experiments.trials(candidate.id),
   ]);
   const sides = {
-    baseline: { experiment: pinned, trials: baselineTrials },
+    baseline: { experiment: other, trials: baselineTrials },
     candidate: { experiment: candidate, trials: candidateTrials },
   };
   const comparison = compare(sides.baseline, sides.candidate);

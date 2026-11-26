@@ -220,6 +220,39 @@ test("the comparison has the verdict, the rule and the changed cases, with no ca
   assert.equal(await byMember.text(), text);
 });
 
+test("a chosen experiment is the other side, and the pinned baseline is the default", async () => {
+  const t = await setup();
+  const pinned = await t.experiment(["fail", "fail"]);
+  const chosen = await t.experiment(["pass", "pass"]);
+  const next = await t.experiment(["pass", "fail"]);
+  await handlePinByMember(pin(pinned), PROJECT_ID, t.member());
+  const byDefault = await (await handleCompareByKey(next, t.key())).json();
+  assert.deepEqual([byDefault.verdict, byDefault.baseline.experimentId], ["unchanged", pinned]);
+  assert.equal(byDefault.baseline.pinnedBy, "user_1");
+  const response = await handleCompareByKey(next, t.key(), chosen);
+  assert.equal(response.status, 200);
+  const view = await response.json();
+  assert.equal(view.verdict, "regressed");
+  assert.equal(view.baseline.experimentId, chosen);
+  // Only a pinned experiment has a pin.
+  assert.ok(!("pinnedBy" in view.baseline) && !("pinnedAt" in view.baseline));
+  assert.equal(
+    view.url,
+    `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}/compare?baseline=${chosen}`,
+  );
+  const byMember = await handleCompareByMember(PROJECT_ID, next, t.member(), chosen);
+  assert.equal((await byMember.json()).verdict, "regressed");
+  // The pinned experiment chosen by its id is the default comparison.
+  const same = await (await handleCompareByKey(next, t.key(), pinned)).json();
+  assert.equal(same.baseline.pinnedBy, "user_1");
+  // An unknown id, and a chosen experiment with no pin in the project.
+  assert.equal((await handleCompareByKey(next, t.key(), crypto.randomUUID())).status, 404);
+  assert.equal((await handleCompareByKey(next, t.key(), "nope")).status, 404);
+  await handleUnpinByMember(UNPIN, PROJECT_ID, t.member());
+  assert.equal((await handleCompareByKey(next, t.key(), chosen)).status, 200);
+  assert.equal((await handleCompareByKey(next, t.key())).status, 409);
+});
+
 test("other scorers are refused with the reason and the names", async () => {
   const t = await setup();
   const base = await t.experiment(["pass"]);

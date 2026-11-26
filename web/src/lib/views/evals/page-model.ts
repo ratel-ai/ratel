@@ -296,16 +296,26 @@ export function readyVersions(versions: readonly SandboxVersionSummary[]): Ready
 /** One of the two experiments of a comparison. */
 export type ComparedExperiment = {
   id: string;
+  name: string | null;
   sandboxName: string;
+  sandboxVersionId: string;
   commit: string;
   dirty: boolean;
+  labelFilter: string | null;
+  createdAt: string;
 };
 export type ComparedCaseSide = CaseSide & {
   /** Of the trials that have one. Null when none has. */
   costUsd: number | null;
   meanDurationMs: number | null;
-  trials: TrialView[];
+  trials: GridTrial[];
 };
+/** A param with another value on the two sides. Null: the side does not set it. */
+export type ParamChange = { name: string; baseline: string | null; candidate: string | null };
+/** An experiment that the reader can compare with. */
+export type CompareChoice = { id: string; label: string; pinned: boolean };
+/** The longest output text that a comparison diffs. */
+export const DIFF_CHARS = 2_000;
 export type ComparedCaseRow = {
   caseId: string;
   name: string;
@@ -313,15 +323,25 @@ export type ComparedCaseRow = {
   baseline: ComparedCaseSide | null;
   candidate: ComparedCaseSide | null;
 };
-export type ComparePageModel = { projectId: string; experimentId: string } & (
+export type ComparePageModel = {
+  projectId: string;
+  experimentId: string;
+  /** The completed experiments that the reader can compare with, the newest first. */
+  choices: CompareChoice[];
+  /** The experiment that the reader chose. Null: the pinned baseline. */
+  chosenId: string | null;
+} & (
   | {
       ok: true;
       verdict: Verdict;
       rule: string;
       baseline: ComparedExperiment;
       candidate: ComparedExperiment;
-      pinnedBy: string;
-      pinnedAt: string;
+      /** Null: the other side is an experiment that is not pinned. */
+      pin: { by: string; at: string } | null;
+      params: ParamChange[];
+      /** Whether the two sides ran other versions of the sandbox. */
+      versionChanged: boolean;
       changed: ComparedCaseRow[];
       others: ComparedCaseRow[];
     }
@@ -340,36 +360,74 @@ export function comparePageModel(
   result: ComparisonResult,
   /** The identity of the reader, to say "you". */
   reader: string,
+  {
+    outputs = new Map(),
+    choices = [],
+    chosenId = null,
+  }: {
+    /** The outputs of the trials of both sides, cut to `DIFF_CHARS`, by trial id. */
+    outputs?: ReadonlyMap<string, string>;
+    choices?: CompareChoice[];
+    chosenId?: string | null;
+  } = {},
 ): ComparePageModel {
+  const shared = { ...ids, choices, chosenId };
   if (!result.ok) {
     const { pin, ...refusal } = result.refusal;
-    return { ...ids, ok: false, ...refusal, baselineId: pin?.experimentId ?? null };
+    return { ...shared, ok: false, ...refusal, baselineId: pin?.experimentId ?? null };
   }
   const { pin, baseline, candidate, comparison } = result;
   const before = trialsByCase(baseline.trials);
   const after = trialsByCase(candidate.trials);
   const row = (compared: ComparedCase): ComparedCaseRow => ({
     ...compared,
-    baseline: comparedSide(compared.baseline, before),
-    candidate: comparedSide(compared.candidate, after),
+    baseline: comparedSide(compared.baseline, before, outputs),
+    candidate: comparedSide(compared.candidate, after, outputs),
   });
   return {
-    ...ids,
+    ...shared,
     ok: true,
     verdict: comparison.verdict,
     rule: comparison.rule,
     baseline: comparedExperiment(baseline.experiment),
     candidate: comparedExperiment(candidate.experiment),
-    pinnedBy: personOf(pin.pinnedBy, reader),
-    pinnedAt: pin.pinnedAt.toISOString(),
+    pin: pin && { by: personOf(pin.pinnedBy, reader), at: pin.pinnedAt.toISOString() },
+    params: paramChanges(baseline.experiment.params, candidate.experiment.params),
+    versionChanged: baseline.experiment.sandboxVersionId !== candidate.experiment.sandboxVersionId,
     changed: changedCases(comparison).map(row),
     others: otherCases(comparison).map(row),
   };
 }
 
+/** The params with another value on the two sides, by name. A value shows as its JSON text. */
+export function paramChanges(
+  baseline: Record<string, unknown>,
+  candidate: Record<string, unknown>,
+): ParamChange[] {
+  const text = (params: Record<string, unknown>, name: string) =>
+    Object.hasOwn(params, name) ? JSON.stringify(params[name]) : null;
+  return [...new Set([...Object.keys(baseline), ...Object.keys(candidate)])]
+    .sort()
+    .map((name) => ({ name, baseline: text(baseline, name), candidate: text(candidate, name) }))
+    .filter((change) => change.baseline !== change.candidate);
+}
+
+/** The label of an experiment in a list: its name, else its sandbox and commit, and its age. */
+export function compareChoice(
+  experiment: Pick<Experiment, "id" | "name" | "sandboxName" | "gitCommit" | "createdAt">,
+  pinnedId: string | null,
+): CompareChoice {
+  const title =
+    experiment.name ?? `${experiment.sandboxName} · ${experiment.gitCommit.slice(0, 12)}`;
+  const day = experiment.createdAt.toISOString().slice(0, 16).replace("T", " ");
+  const pinned = experiment.id === pinnedId;
+  return { id: experiment.id, label: `${title} · ${day}${pinned ? " · baseline" : ""}`, pinned };
+}
+
 function comparedSide(
   side: CaseSide | null,
   byCase: ReadonlyMap<string, Trial[]>,
+  outputs: ReadonlyMap<string, string>,
 ): ComparedCaseSide | null {
   if (!side) return null;
   const trials = byCase.get(side.versionId) ?? [];
@@ -379,13 +437,25 @@ function comparedSide(
     ...side,
     costUsd: costs.length > 0 ? sum(costs) : null,
     meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
-    trials: trialViews(trials),
+    trials: trialViews(trials).map((trial) => ({
+      ...trial,
+      output: outputs.get(trial.id) ?? null,
+    })),
   };
 }
 
 function comparedExperiment(experiment: Experiment): ComparedExperiment {
-  const { id, sandboxName, gitCommit, gitDirty } = experiment;
-  return { id, sandboxName, commit: gitCommit, dirty: gitDirty };
+  const { id, name, sandboxName, sandboxVersionId, gitCommit, gitDirty, labelFilter } = experiment;
+  return {
+    id,
+    name,
+    sandboxName,
+    sandboxVersionId,
+    commit: gitCommit,
+    dirty: gitDirty,
+    labelFilter,
+    createdAt: experiment.createdAt.toISOString(),
+  };
 }
 
 function trialViews(trials: readonly Trial[] = []): TrialView[] {

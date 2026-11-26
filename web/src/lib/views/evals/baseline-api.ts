@@ -57,8 +57,13 @@ export function handleGetBaselineByKey(deps: BaselineKeyDeps): Promise<Response>
   });
 }
 
-export function handleCompareByKey(experimentId: string, deps: BaselineKeyDeps): Promise<Response> {
-  return forKey(deps, "compare", (subject) => comparison(subject, experimentId, deps));
+/** `baselineId`: the experiment to compare with. Null: the pinned baseline. */
+export function handleCompareByKey(
+  experimentId: string,
+  deps: BaselineKeyDeps,
+  baselineId: string | null = null,
+): Promise<Response> {
+  return forKey(deps, "compare", (subject) => comparison(subject, experimentId, baselineId, deps));
 }
 
 export function handlePinByMember(
@@ -93,9 +98,10 @@ export function handleCompareByMember(
   projectId: string,
   experimentId: string,
   deps: BaselineConsoleDeps,
+  baselineId: string | null = null,
 ): Promise<Response> {
   return forMember(projectId, { feature: "evals", operation: "compare" }, deps, (member) =>
-    comparison(member, experimentId, deps),
+    comparison(member, experimentId, baselineId, deps),
   );
 }
 
@@ -144,10 +150,11 @@ async function unpin(
 async function comparison(
   { projectId }: UsageSubject,
   experimentId: string,
+  baselineId: string | null,
   deps: BaselineApiDeps,
 ): Promise<Response> {
-  const result = await compareWithBaseline(projectId, experimentId, deps.baselines());
-  if (result.ok) return reply(200, comparisonView(projectId, result, deps));
+  const result = await compareWithBaseline(projectId, experimentId, deps.baselines(), baselineId);
+  if (result.ok) return reply(200, comparisonView(projectId, result, baselineId, deps));
   const { reason, message, scorers, pin: pinned } = result.refusal;
   if (reason === "not_found") return notFound();
   return reply(COMPARE_STATUS[reason], {
@@ -161,19 +168,24 @@ async function comparison(
 /** The wire shape (`protocol/evals/v1/comparison.schema.json`). It has no captured text. */
 function comparisonView(
   projectId: string,
-  { pin: pinned, candidate, comparison: made }: Extract<ComparisonResult, { ok: true }>,
+  { pin: pinned, baseline, candidate, comparison: made }: Extract<ComparisonResult, { ok: true }>,
+  baselineId: string | null,
   deps: BaselineApiDeps,
 ) {
+  const page = `${urlOf(candidate.experiment, deps)}/compare`;
   return {
     v: 1 as const,
     verdict: made.verdict,
     rule: made.rule,
-    baseline: baselineView(projectId, pinned, deps),
+    // A chosen experiment that is not pinned has no pin to show.
+    baseline: pinned
+      ? baselineView(projectId, pinned, deps)
+      : { experimentId: baseline.experiment.id, url: urlOf(baseline.experiment, deps) },
     candidate: {
       experimentId: candidate.experiment.id,
       url: urlOf(candidate.experiment, deps),
     },
-    url: `${urlOf(candidate.experiment, deps)}/compare`,
+    url: baselineId ? `${page}?baseline=${baseline.experiment.id}` : page,
     changedCases: changedCases(made),
     otherCases: otherCases(made),
   };

@@ -478,7 +478,7 @@ test("the comparison page: the verdict and its rule, the changed cases, then the
     { ...result, pin: { ...pin, pinnedBy: "key:1" } },
     "user_2",
   );
-  assert.equal(asOther.ok && asOther.pinnedBy, "a project key");
+  assert.equal(asOther.ok && asOther.pin?.by, "a project key");
 });
 
 test("the trials of a case are paired by index, with gaps and with one side", () => {
@@ -519,7 +519,7 @@ test("an open case shows each pair with its scorer reasons, its trace and the si
       counts: { pass: 1, fail: 0, invalid: 0, open: 0 },
       costUsd: null,
       meanDurationMs: null,
-      trials: [{ ...trial, traceId: "d".repeat(32), scorers: [scorer] }],
+      trials: [{ ...trial, traceId: "d".repeat(32), scorers: [scorer], output: null }],
     },
     candidate: null,
   };
@@ -535,6 +535,51 @@ test("an open case shows each pair with its scorer reasons, its trace and the si
     assert.ok(text.includes(part), part);
   }
   assert.match(html, new RegExp(`traces/${"d".repeat(32)}`));
+});
+
+test("a chosen experiment: the setup differences, then both outputs with a word diff", () => {
+  const baseline = compared("a", { worse: "pass", same: "pass" });
+  const candidate = compared("b", { worse: "fail", same: "pass" });
+  baseline.experiment.params = { tone: "friendly", maxWords: 40 };
+  candidate.experiment.params = { tone: "formal", maxWords: 40, offerRefund: false };
+  candidate.experiment.sandboxVersionId = "sv2";
+  candidate.experiment.name = "Formal, no refunds";
+  const comparison = compare(baseline, candidate);
+  assert.ok(comparison.ok);
+  const outputs = new Map([
+    ["a-worse", "Your order A107 is late. I refunded it for you."],
+    ["b-worse", "Dear customer, your order A107 is late."],
+  ]);
+  const choices = [{ id: "a", label: "support-demo · aaaa · 2026-11-25 10:00", pinned: false }];
+  const model = comparePageModel(
+    { projectId: PROJECT_ID, experimentId: "b" },
+    { ok: true, pin: null, baseline, candidate, comparison },
+    "user_1",
+    { outputs, choices, chosenId: "a" },
+  );
+  assert.ok(model.ok);
+  assert.deepEqual(model.params, [
+    { name: "offerRefund", baseline: null, candidate: "false" },
+    { name: "tone", baseline: '"friendly"', candidate: '"formal"' },
+  ]);
+  assert.equal(model.versionChanged, true);
+  const html = render(createElement(CompareView, { model, now: NOW }));
+  const text = visibleText(html);
+  const order = ["Regressed", comparison.rule, "What changed in the setup", "Changed cases"];
+  const at = order.map((part) => text.indexOf(part));
+  assert.ok(!at.includes(-1), text);
+  assert.deepEqual(
+    at,
+    [...at].sort((left, right) => left - right),
+  );
+  for (const part of ["not the pinned baseline", "offerRefund", "default", "Version", "sv2"]) {
+    assert.ok(text.includes(part), part);
+  }
+  // Removed words are marked on the baseline side, added words on the candidate side.
+  assert.match(html, /<mark[^>]*line-through[^>]*>[^<]*refunded/);
+  assert.match(html, /<mark[^>]*>Dear /);
+  assert.ok(text.includes("Your order A107 is late."));
+  assert.ok(html.includes('aria-label="Compare with"'));
 });
 
 test("a refused comparison shows the reason and the scorers that differ", () => {
