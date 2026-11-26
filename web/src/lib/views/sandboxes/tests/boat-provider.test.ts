@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 import { type BoatProviderOptions, createBoatProvider } from "../adapters/boat-provider";
-import { snapshotName } from "../domain/snapshot-name";
+import { snapshotName, snapshotPrefix } from "../domain/snapshot-name";
 import {
   ProviderAtCapacity,
   ProviderRateLimited,
@@ -353,8 +353,7 @@ describe("status and list", () => {
     assert.deepEqual(await provider().listVms(widened), listed, "a caller cannot list another one");
   });
 
-  test("listSnapshots reads every page and lists only the snapshots of the deployment", async () => {
-    server.pageSize = 1;
+  test("listSnapshots asks for the name prefix of the deployment and lists only its snapshots", async () => {
     const ours = [VERSION_A, VERSION_B].map((id) => snapshotName(DEPLOYMENT, id));
     const others = [snapshotName("dep-other", VERSION_A), `rv-${VERSION_A}`, "rc-contract"];
     for (const name of [...others, ...ours]) {
@@ -365,7 +364,9 @@ describe("status and list", () => {
       { snapshotRef: ours[0], versionId: VERSION_A },
       { snapshotRef: ours[1], versionId: VERSION_B },
     ]);
-    assert.equal(calls("GET", /\/saved-snapshots$/).length, 5, "one call for each page");
+    const sent = calls("GET", /\/saved-snapshots$/);
+    assert.equal(sent.length, 1, "the list has no pages");
+    assert.deepEqual([...sent[0].query.entries()], [["namePrefix", snapshotPrefix(DEPLOYMENT)]]);
   });
 
   test("listSnapshots lists nothing from an answer of another shape", async () => {

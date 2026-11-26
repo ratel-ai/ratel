@@ -188,20 +188,17 @@ export async function startFakeBoatServer(): Promise<FakeBoatServer> {
   const onSnapshot = (name: string | undefined, request: RecordedRequest): Answer => {
     const { method, json } = request;
     if (!name && method === "GET") {
-      const all = [...fake.snapshots.values()];
-      const start = Number(request.query.get("cursor") ?? 0);
-      const page = all.slice(start, start + fake.pageSize);
-      const end = start + page.length;
+      // As the service (live, RP-421): the list takes only `name`, `namePrefix` and `org`, and
+      // has no pages.
+      const unknown = [...request.query.keys()].find(
+        (key) => !["name", "namePrefix", "org"].includes(key),
+      );
+      if (unknown) return error(400, "invalid_query");
+      const prefix = request.query.get("namePrefix") ?? "";
+      const all = [...fake.snapshots.values()].filter((s) => s.name.startsWith(prefix));
       return {
         status: 200,
-        body: {
-          ok: true,
-          snapshots: page.map(({ name, status }) => ({ name, status })),
-          pageInfo: {
-            nextCursor: end < all.length ? String(end) : null,
-            hasMore: end < all.length,
-          },
-        },
+        body: { ok: true, snapshots: all.map(({ name, status }) => ({ name, status })) },
       };
     }
     if (!name && method === "POST") {
