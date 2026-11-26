@@ -57,7 +57,6 @@ import {
   overviewDaily,
   overviewSdk,
 } from "@/lib/views/home/load";
-import { DATA_IS_MISSING } from "@/lib/views/home/no-score";
 import {
   buildContextSplit,
   type ContextSplit,
@@ -160,11 +159,10 @@ export interface FocusedAttention extends Attention {
 }
 
 /**
- * `clear`: checked, and nothing needs a person. `not_enough`: too little data for Agent health to
- * look. `early`: there is enough, and Agent health has no whole reading yet.
+ * `clear`: checked, and nothing needs a person. `early`: Agent health has no whole reading yet.
  * `no_data`: nothing arrived in the window. `locked`: the plan hides the issues there are.
  */
-export type AttentionState = "clear" | "not_enough" | "early" | "no_data" | "locked";
+export type AttentionState = "clear" | "early" | "no_data" | "locked";
 
 export interface FocusedOverviewContext {
   split: ContextSplit | null;
@@ -567,8 +565,7 @@ function attentionState(
   if (items.length === 0 && moreIssues > 0) return "locked";
   if (!arrived && (health?.turns ?? 0) === 0) return "no_data";
   const card = healthCard(health);
-  if (card.kind === "score" || card.reason === "no_score") return "clear";
-  return DATA_IS_MISSING.has(card.reason) ? "not_enough" : "early";
+  return card.kind === "state" && card.reason !== "no_score" ? "early" : "clear";
 }
 
 function orNull<T>(value: Read<T>): T | null {

@@ -92,8 +92,8 @@ test("nothing yet is a designed state", () => {
     visibleText(map(graph, true, "before")),
     /No traces in the last 7 days.*Show 30 days/,
   );
-  // The drawing is a picture and not data: hidden from a screen reader, and without a word.
-  assert.match(none, /aria-hidden="true"[^>]*data-veil-shape="topology"/);
+  // The drawing is a picture and not data: hidden from a screen reader, no text, and it is still.
+  assert.match(none, /aria-hidden="true"[^>]*><svg[^>]*data-topology-ghost/);
   assert.doesNotMatch(none, /<text|data-topology-node|animate-/);
 });
 

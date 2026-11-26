@@ -1,4 +1,4 @@
-import { BellOff, BellRing, ChevronRight, CircleCheck } from "lucide-react";
+import { BellOff, BellPlus, BellRing, ChevronRight, CircleCheck } from "lucide-react";
 import Link from "next/link";
 import { EmptyAction, WidgetEmpty } from "@/components/console/home/focused/WidgetEmpty";
 import type { FocusedAlerts } from "@/lib/views/home/focused-load";
@@ -10,7 +10,7 @@ export function AlertsWidget({ alerts }: { alerts: FocusedAlerts }) {
     return rules?.total === 0 ? (
       <WidgetEmpty
         name="alerts-none"
-        shape="alerts"
+        icon={BellPlus}
         title="No alerts yet"
         description="An alert tells you when a number crosses its threshold."
         action={<EmptyAction href={newHref}>Create alert</EmptyAction>}
@@ -59,7 +59,7 @@ function quiet(rules: FocusedAlerts["rules"]) {
   if (rules && rules.noData === rules.on)
     return {
       name: "alerts-no-data",
-      shape: "alerts" as const,
+      icon: BellRing,
       title: "No data to check yet",
       description: "Alerts are on, but their numbers have no data. Send traces to start them.",
     };

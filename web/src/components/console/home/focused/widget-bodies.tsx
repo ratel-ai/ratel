@@ -1,6 +1,6 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { StatRow } from "@ratel/design-system/stat-row";
-import { ArrowRight, CircleCheck, Hourglass, Lock } from "lucide-react";
+import { ArrowRight, CircleCheck, Hourglass, Inbox, Lock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AttentionList } from "@/components/console/home/AttentionList";
@@ -171,20 +171,10 @@ function NothingListed({
       return (
         <WidgetEmpty
           name="attention-no-data"
-          shape="attention"
+          icon={Inbox}
           title="Nothing to check yet"
           description={`${at.tracesSeen === "none" ? "There are no traces yet." : `Nothing arrived in the last ${at.window} days.`} Send traces, and failed runs, issues and fixes show up here.`}
           action={<TracesAction {...at} />}
-        />
-      );
-    case "not_enough":
-      return (
-        <WidgetEmpty
-          name="attention-not-enough"
-          shape="attention"
-          title="Too early to say"
-          description="Nothing is found so far. Agent health needs more traces to look for issues."
-          action={openHealth}
         />
       );
     case "early":
