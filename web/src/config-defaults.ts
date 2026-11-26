@@ -1,5 +1,5 @@
 import type { Config } from "@/config";
-import { SANDBOX_HARD_LIMITS } from "@/lib/contracts/usage-limits";
+import { SANDBOX_DEFAULT_LIMITS } from "@/lib/contracts/usage-limits";
 import { WORKFLOW_THRESHOLDS as WF } from "@/lib/readings/trace-signals/workflows/detect";
 
 /**
@@ -196,7 +196,7 @@ export const CONFIG_DEFAULTS = {
     boatApiUrl: "https://boat.dev/api/v1",
     boatVmType: "small",
     vmIdleSeconds: 300,
-    limits: SANDBOX_HARD_LIMITS,
+    limits: SANDBOX_DEFAULT_LIMITS,
   },
   topics: {
     maxTurns: 20_000,

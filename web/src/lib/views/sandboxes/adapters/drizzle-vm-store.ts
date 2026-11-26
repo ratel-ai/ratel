@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, gt, inArray, lt, ne, or, sql } from "drizzle-orm";
 import type { UsageCheck, UsageRefusal } from "@/lib/contracts/usage-limits";
 import type { getDb } from "@/lib/platform/db/client";
-import type { RunVm, VmClaim, VmStore } from "../ports/vm-store";
+import { projects } from "@/lib/platform/projects/schema";
+import type { RunVm, VmClaim, VmStartCounts, VmStore } from "../ports/vm-store";
 import { sandboxRuns, sandboxVms } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "transaction">;
@@ -114,22 +115,34 @@ async function lockProject(tx: Tx, projectId: string) {
   );
 }
 
-/** A new `starting` VM row when `check` passes with the VM starts of the project of today. */
+/**
+ * A new `starting` VM row when `check` passes with the {@link VmStartCounts}. The lock of the
+ * account makes the counts of all projects right: starts are few, so one at a time is cheap. Each
+ * caller holds the lock of its project first, so the order of the locks is always the same.
+ */
 async function countedStart(
   tx: Tx,
   start: Pick<VmClaim, "projectId" | "versionId" | "now">,
-  check: (startsToday: number) => Promise<UsageCheck>,
+  check: (starts: VmStartCounts) => Promise<UsageCheck>,
 ): Promise<{ ok: true; vm: RunVm } | UsageRefusal> {
-  const [today] = await tx
-    .select({ count: sql<number>`count(*)::int` })
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('sandbox_vms:account', 0))`);
+  const today = sql`${sandboxVms.startedAt} >= date_trunc('day', now(), 'UTC')`;
+  const organization = sql`(select ${projects.organizationId} from ${projects} where ${projects.id} = ${start.projectId})`;
+  const [counts] = await tx
+    .select({
+      project: sql<number>`(count(*) filter (where ${sandboxVms.projectId} = ${start.projectId} and ${today}))::int`,
+      organization: sql<number>`(count(*) filter (where ${today} and ${sandboxVms.projectId} in (select ${projects.id} from ${projects} where ${projects.organizationId} = ${organization})))::int`,
+      accountMinute: sql<number>`(count(*) filter (where ${sandboxVms.startedAt} > now() - interval '1 minute'))::int`,
+      accountHour: sql<number>`(count(*) filter (where ${sandboxVms.startedAt} > now() - interval '1 hour'))::int`,
+      accountDay: sql<number>`(count(*) filter (where ${today}))::int`,
+    })
     .from(sandboxVms)
     .where(
-      and(
-        eq(sandboxVms.projectId, start.projectId),
-        sql`${sandboxVms.startedAt} >= date_trunc('day', now(), 'UTC')`,
-      ),
+      sql`${sandboxVms.startedAt} >= least(date_trunc('day', now(), 'UTC'), now() - interval '1 hour')`,
     );
-  const checked = await check(today?.count ?? 0);
+  const checked = await check(
+    counts ?? { project: 0, organization: 0, accountMinute: 0, accountHour: 0, accountDay: 0 },
+  );
   if (!checked.ok) return checked;
   const [row] = await tx
     .insert(sandboxVms)

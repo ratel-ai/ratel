@@ -1,5 +1,18 @@
 import type { UsageCheck, UsageRefusal } from "@/lib/contracts/usage-limits";
 
+/**
+ * The VM starts before a new one, by scope: the project and its organization this UTC day, and all
+ * projects of this deployment (one provider account) in the last minute, the last hour and this
+ * UTC day. Each start counts from its row, also when its VM did not start.
+ */
+export type VmStartCounts = {
+  project: number;
+  organization: number;
+  accountMinute: number;
+  accountHour: number;
+  accountDay: number;
+};
+
 /** One VM of a version: a run VM, or the prepare or the smoke VM of a build. */
 export type RunVm = {
   id: string;
@@ -26,29 +39,28 @@ export type VmClaim = {
 
 /**
  * The VMs of the projects. Each run VM of a version takes a few runs at the same time while it is
- * warm. Each VM start of each purpose (prepare, smoke, run) has a row, and the rows of a project of
- * a UTC day are its VM starts for `sandbox_vm_starts_per_day` (`vm-starts.ts`). A row counts from
+ * warm. Each VM start of each purpose (prepare, smoke, run) has a row, and the rows are the VM
+ * starts of the budgets of `vm-starts.ts`. A row counts from
  * its insert, also when its VM does not start: the budget counts attempts.
  */
 export interface VmStore {
   /**
    * Gives the run a `ready` VM of its version that has room, else a new `starting` VM when `check`
-   * passes. `check` gets the VM starts of the project of this UTC day. Two claims of a project at
-   * the same time do not see the same numbers.
+   * passes. `check` gets the {@link VmStartCounts}. Two claims at the same time, of any project,
+   * do not see the same numbers.
    */
   claim(
     claim: VmClaim,
-    check: (startsToday: number) => Promise<UsageCheck>,
+    check: (starts: VmStartCounts) => Promise<UsageCheck>,
   ): Promise<{ ok: true; vm: RunVm; isNew: boolean } | UsageRefusal>;
   /**
    * Counts the start of a VM that takes no run (the prepare VM and the smoke VM of a build) when
    * `check` passes.
-   * `check` gets the VM starts of the project of this UTC day, as in `claim`, and the start counts
-   * in them. The row stays `starting` with no reference until `markDeleted`, so no claim gets it.
+   * `check` gets the {@link VmStartCounts}, as in `claim`, and the start counts in them. The row stays `starting` with no reference until `markDeleted`, so no claim gets it.
    */
   claimStart(
     start: Pick<VmClaim, "projectId" | "versionId" | "now">,
-    check: (startsToday: number) => Promise<UsageCheck>,
+    check: (starts: VmStartCounts) => Promise<UsageCheck>,
   ): Promise<{ ok: true; vm: RunVm } | UsageRefusal>;
   markReady(vmId: string, vmRef: string, now: Date): Promise<void>;
   /** The end of a run on the VM. */
