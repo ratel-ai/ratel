@@ -69,6 +69,10 @@ const JOB_SLACK_S = 60;
 /** `timeout` ends with 124 when the time is over. */
 const JOB_TIMED_OUT = "124";
 const CREATE_ATTEMPTS = 3;
+/** The tries of a call after a lost connection, when the call is safe to send again. */
+const NETWORK_ATTEMPTS = 3;
+/** Sending one of these again does no harm. POST is not: a command may already have run. */
+const IDEMPOTENT = new Set(["GET", "PUT", "DELETE"]);
 const EXEC_ATTEMPTS = 4;
 const UPLOAD_URL_TTL_S = 3600;
 /** Docker comes a few seconds after the VM is ready. */
@@ -147,6 +151,9 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
         `/sandboxes/${enc(vmRef)}/files/upload-url`,
         {
           json: { path: request.path, ttlSeconds: UPLOAD_URL_TTL_S },
+          // It only issues a URL, so it is safe to ask again.
+          attempts: NETWORK_ATTEMPTS,
+          retryWhen: (status) => status === 0,
         },
       );
       await api.upload(url, request);
@@ -414,13 +421,17 @@ function createApi(options: BoatProviderOptions) {
     try {
       return await doFetch(url, { method, headers, body });
     } catch (error) {
+      logger.warn({ method, error_code: networkCodeOf(error) }, "sandbox service call lost");
       throw new ProviderUnavailable("The sandbox service did not answer.", { cause: error });
     }
   }
 
   return {
     async call<T = unknown>(method: string, path: string, call: CallOptions = {}): Promise<T> {
-      const attempts = call.attempts ?? 1;
+      // A call that is safe to send again goes again after a lost connection (status 0).
+      const safe = IDEMPOTENT.has(method);
+      const attempts = call.attempts ?? (safe ? NETWORK_ATTEMPTS : 1);
+      const retryWhen = call.retryWhen ?? (safe ? (status: number) => status === 0 : undefined);
       for (let attempt = 1; ; attempt++) {
         let failure: Error;
         let status = 0;
@@ -437,7 +448,7 @@ function createApi(options: BoatProviderOptions) {
           if (!(error instanceof ProviderUnavailable)) throw error;
           failure = error;
         }
-        if (attempt >= attempts || !call.retryWhen?.(status, code)) throw failure;
+        if (attempt >= attempts || !retryWhen?.(status, code)) throw failure;
         await sleep(pollMs);
       }
     },
@@ -552,6 +563,13 @@ async function bytesOf(body: WriteFileRequest["body"]): Promise<Uint8Array> {
 
 function enc(value: string): string {
   return encodeURIComponent(value);
+}
+
+/** The code of a lost connection (`ECONNRESET`, `UND_ERR_SOCKET`…), with no text of the service. */
+function networkCodeOf(error: unknown): string {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+  const code = cause?.code ?? (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z_]{1,40}$/.test(code) ? code : errorType(error);
 }
 
 function errorType(error: unknown): string {

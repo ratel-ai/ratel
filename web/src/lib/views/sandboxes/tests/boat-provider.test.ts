@@ -251,6 +251,54 @@ describe("exec, files and snapshots", () => {
     assert.equal(upload?.headers["content-length"], "23");
   });
 
+  // Live (RP-421): 2 of 5 pushes failed at "writing the image": one call of the service lost its
+  // connection (a network error, no answer). A call that is safe to send again goes again.
+  test("a network error on a call that is safe to send again is sent again", async () => {
+    let dropped = 0;
+    const flaky: typeof fetch = (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const safe = url.includes("/upload-url") || method === "GET" || method === "PUT";
+      if (safe && !url.includes("/upload/") && dropped < 2 && !url.endsWith("/sandboxes")) {
+        dropped++;
+        return Promise.reject(new TypeError("fetch failed"));
+      }
+      return fetch(input, init);
+    };
+    const target = provider({ inlineMaxBytes: 16, fetch: flaky });
+    const { vmRef } = await target.startVm(PREPARE);
+    dropped = 0;
+    const body = (async function* () {
+      yield Buffer.from("0123456789abcdefghijXYZ");
+    })();
+    await target.writeFile(vmRef, { path: "/home/user/image.tar", body, size: 23 });
+    assert.equal(
+      server.sandboxes.get(vmRef)?.files.get("/home/user/image.tar")?.toString(),
+      "0123456789abcdefghijXYZ",
+    );
+    assert.equal(dropped, 2);
+    assert.equal((await target.vmStatus(vmRef)).state, "running");
+  });
+
+  test("a network error on a command is not sent again: a command may have run", async () => {
+    const { target, vmRef } = await started();
+    let sent = 0;
+    const lost: typeof fetch = (input, init) => {
+      if (String(input).endsWith("/commands") && init?.method === "POST") {
+        sent++;
+        return Promise.reject(new TypeError("fetch failed"));
+      }
+      return fetch(input, init);
+    };
+    const again = provider({ inlineMaxBytes: 16, fetch: lost });
+    await assert.rejects(
+      again.exec(vmRef, { command: "echo hi", timeoutS: 30 }),
+      ProviderUnavailable,
+    );
+    assert.equal(sent, 1);
+    void target;
+  });
+
   test("a snapshot is saved and polled until it is ready, and a VM starts from it", async () => {
     server.pollsUntilSaved = 3;
     const { target, vmRef } = await started();
