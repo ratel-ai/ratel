@@ -1,3 +1,5 @@
+import type { snapshotName } from "../domain/snapshot-name";
+
 /**
  * The service that runs virtual machines with Docker. A "prepare" VM loads an image and is saved
  * as a snapshot; a "smoke" VM starts from that snapshot and runs the smoke check of the version; a
@@ -25,6 +27,12 @@ export interface SandboxProvider {
   vmStatus(vmRef: string): Promise<{ state: VmState }>;
   /** The VMs of this deployment that have all these labels. No VM of another deployment. */
   listVms(labels: Readonly<Record<string, string>>): Promise<VmInfo[]>;
+  /**
+   * The saved snapshots of the versions of this deployment: each name is
+   * {@link snapshotName} of this deployment. No snapshot of another deployment, and no snapshot
+   * with an old name (`rv-<version id>`).
+   */
+  listSnapshots(): Promise<SnapshotInfo[]>;
 }
 
 /** The longest time of a VM start, the create, the ready wait and the Docker wait included. */
@@ -72,6 +80,8 @@ export type WriteFileRequest = {
 export type VmState = "starting" | "running" | "stopped" | "gone";
 
 export type VmInfo = { vmRef: string; labels: Record<string, string>; createdAt: Date };
+
+export type SnapshotInfo = { snapshotRef: string; versionId: string };
 
 /** Too many calls or starts. Try again after `retryAfterS` seconds, when known. */
 export class ProviderRateLimited extends Error {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, test } from "node:test";
 import { type BoatProviderOptions, createBoatProvider } from "../adapters/boat-provider";
+import { snapshotName } from "../domain/snapshot-name";
 import {
   ProviderAtCapacity,
   ProviderRateLimited,
@@ -13,6 +14,8 @@ import { error, type FakeBoatServer, startFakeBoatServer } from "./fake-boat-ser
 
 const KEY = "bk_test_secret_4411";
 const DEPLOYMENT = "dep-test";
+const VERSION_A = "0b6c1f0e-5d0a-4c55-9f4e-3d2b1a0f9e8d";
+const VERSION_B = "7a1e4c2b-9d3f-4b6a-8c5e-1f2d3e4a5b6c";
 
 const RUN: StartVmRequest = {
   projectId: "p1",
@@ -348,6 +351,40 @@ describe("status and list", () => {
     );
     const widened = { "ratel-purpose": "run", "ratel-deployment": "dep-other" };
     assert.deepEqual(await provider().listVms(widened), listed, "a caller cannot list another one");
+  });
+
+  test("listSnapshots reads every page and lists only the snapshots of the deployment", async () => {
+    server.pageSize = 1;
+    const ours = [VERSION_A, VERSION_B].map((id) => snapshotName(DEPLOYMENT, id));
+    const others = [snapshotName("dep-other", VERSION_A), `rv-${VERSION_A}`, "rc-contract"];
+    for (const name of [...others, ...ours]) {
+      server.snapshots.set(name, { name, status: "ready", polls: 0, files: new Map() });
+    }
+    const listed = await provider().listSnapshots();
+    assert.deepEqual(listed, [
+      { snapshotRef: ours[0], versionId: VERSION_A },
+      { snapshotRef: ours[1], versionId: VERSION_B },
+    ]);
+    assert.equal(calls("GET", /\/saved-snapshots$/).length, 5, "one call for each page");
+  });
+
+  test("listSnapshots lists nothing from an answer of another shape", async () => {
+    const name = snapshotName(DEPLOYMENT, VERSION_A);
+    for (const body of [
+      { ok: true },
+      { ok: true, snapshots: "no" },
+      { ok: true, snapshots: [{ id: 1 }, null, { name: 7 }, { name }] },
+    ]) {
+      server.intercept = (request) =>
+        request.method === "GET" && request.path.endsWith("/saved-snapshots")
+          ? { status: 200, body }
+          : undefined;
+      const listed = await provider().listSnapshots();
+      assert.deepEqual(
+        listed,
+        Array.isArray(body.snapshots) ? [{ snapshotRef: name, versionId: VERSION_A }] : [],
+      );
+    }
   });
 });
 

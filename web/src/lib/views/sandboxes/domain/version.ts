@@ -1,10 +1,18 @@
 import type { RatelYaml } from "./config";
 import type { SmokeResult } from "./contract";
 
-export const VERSION_STATUSES = ["uploading", "uploaded", "preparing", "ready", "failed"] as const;
+/** `retired`: a ready version whose snapshot the retention deleted (`snapshot-sweep.ts`). It never runs again. */
+export const VERSION_STATUSES = [
+  "uploading",
+  "uploaded",
+  "preparing",
+  "ready",
+  "failed",
+  "retired",
+] as const;
 export type VersionStatus = (typeof VERSION_STATUSES)[number];
 
-/** One pushed version. Only its preparation state changes after the push. */
+/** One pushed version. Only its preparation state and its retirement change after the push. */
 export type SandboxVersion = {
   id: string;
   projectId: string;
@@ -21,7 +29,10 @@ export type SandboxVersion = {
   status: VersionStatus;
   /** Why the preparation failed or did not start. */
   reason: string | null;
-  /** The name of the snapshot that holds the loaded image. Set when the version is ready. */
+  /**
+   * The name of the snapshot that holds the loaded image. Set when the version is ready. A retired
+   * version keeps it until the snapshot is deleted.
+   */
   imageRef: string | null;
   smoke: SmokeResult | null;
   buildLog: string | null;

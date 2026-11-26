@@ -18,6 +18,7 @@ import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { sandboxProvider, sandboxProviderConfigured } from "../adapters/provider-from-env";
 import type { RatelYaml } from "../domain/config";
+import { snapshotName } from "../domain/snapshot-name";
 import { bundleKey, versionView } from "../domain/version";
 import {
   BUILD_STOPPED_MS,
@@ -113,6 +114,7 @@ async function setup(over: Setup = {}) {
     builds,
     bundles,
     provider,
+    deploymentId: "test-deployment",
     secrets,
     vms,
     limits,
@@ -164,7 +166,7 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
   const ready = await t.read();
   assert.equal(ready.status, "ready");
   assert.equal(ready.reason, null);
-  assert.equal(ready.imageRef, `rv-${t.version.id}`);
+  assert.equal(ready.imageRef, snapshotName("test-deployment", t.version.id));
   assert.ok(t.provider.snapshots.has(ready.imageRef ?? ""));
   assert.deepEqual(ready.config, CONFIG);
   assert.equal(ready.smoke?.ok, true);
@@ -188,7 +190,7 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
     "ratel-vm": rows[0]?.id,
   });
   assert.equal(smoke?.purpose, "smoke");
-  assert.equal(smoke?.fromSnapshot, `rv-${t.version.id}`);
+  assert.equal(smoke?.fromSnapshot, snapshotName("test-deployment", t.version.id));
   assert.equal(smoke?.keepSnapshots, false);
   // The policy of a run VM: no inbound, outbound to ratel.yaml and this deployment only.
   assert.deepEqual(smoke?.network, {
@@ -326,7 +328,7 @@ test("with one VM start left today the smoke start is refused, and its snapshot 
   assert.match(failed.reason ?? "", /The limit sandbox_vm_starts_per_day \(1\) is reached/);
   assert.equal(failed.imageRef, null);
   assert.equal(t.provider.starts.length, 1, "no smoke VM starts");
-  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.snapshots.size, 0);
   assert.equal(t.provider.vms.size, 0);
   assert.equal((await t.vmRows()).length, 1);
@@ -380,7 +382,7 @@ test("a smoke VM that does not start fails the version, and its snapshot is dele
   const failed = await t.read();
   assert.match(failed.reason ?? "", /as many machines as it can/);
   assert.equal(failed.imageRef, null);
-  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.vms.size, 0);
   const [row] = await t.vmRows();
   assert.equal(row?.state, "deleted");
@@ -435,7 +437,7 @@ for (const [what, agent, code, reason] of SMOKE_FAILURES) {
     assert.equal(failed.smoke?.logs, "the agent log [redacted]\n");
     assert.deepEqual(versionView(failed).smoke, failed.smoke);
     assert.equal(failed.imageRef, null);
-    assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+    assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
     assert.equal(t.provider.snapshots.size, 0);
     assert.equal(t.provider.starts.length, 2);
     assert.deepEqual(
@@ -487,7 +489,7 @@ test("command mode: a non-zero exit fails the version with stderr as the logs", 
   assert.equal(!failed.smoke?.ok && failed.smoke?.error.code, "run_failed");
   assert.match(failed.reason ?? "", /exited with code 3/);
   assert.equal(failed.smoke?.logs, "TypeError: no input\n");
-  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.snapshots.size, 0);
   assert.equal(t.provider.vms.size, 0);
 });
@@ -761,7 +763,7 @@ test("a deadline after the save deletes the snapshot when the smoke VM start end
   assert.deepEqual(await t.run({ provider, deadlineMs: 20 }), { status: "failed" });
   assert.equal((await t.read()).reason, "The build took too long. Push again.");
   await until(() => t.provider.deletedSnapshots.length > 0);
-  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.snapshots.size, 0);
 });
 
@@ -774,7 +776,7 @@ test("a ready build whose finish throws deletes its snapshot", async () => {
     },
   };
   await assert.rejects(t.run({ builds }), /the database is gone/);
-  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.snapshots.size, 0);
 });
 
@@ -794,7 +796,7 @@ test("a ready build whose version failed meanwhile keeps no snapshot", async () 
   assert.equal(failed.status, "failed");
   assert.equal(failed.reason, STOPPED_REASON);
   assert.equal(failed.imageRef, null);
-  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.snapshots.size, 0);
 });
 

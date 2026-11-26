@@ -35,7 +35,7 @@ export const sandboxes = pgTable(
 
 /**
  * One push of an image. Only the preparation columns (status, reason, snapshot, smoke, log, build
- * times) change after it.
+ * times) change after it, and the retention (status `retired`, then no snapshot).
  */
 export const sandboxVersions = pgTable(
   "sandbox_versions",
@@ -59,7 +59,7 @@ export const sandboxVersions = pgTable(
     bundleBytes: bigint("bundle_bytes", { mode: "number" }).notNull(),
     // The key that pushed. No foreign key: a deleted key must not change a version.
     apiKeyId: uuid("api_key_id"),
-    // "uploading" | "uploaded" | "preparing" | "ready" | "failed"
+    // "uploading" | "uploaded" | "preparing" | "ready" | "failed" | "retired"
     status: text("status").notNull().default("uploading"),
     reason: text("reason"),
     // The name of the snapshot that holds the loaded image.

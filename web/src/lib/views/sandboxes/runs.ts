@@ -102,7 +102,7 @@ export async function startRun(
   const version = await deps.versions.get(projectId, versionId);
   if (!version) return refused("not_found", "There is no such version.");
   if (version.status !== "ready" || !version.imageRef) {
-    return refused("not_ready", `The version is ${version.status}. Run a version that is ready.`);
+    return refused("not_ready", notReadyMessage(version.status));
   }
   if (!deps.provider) return refused("not_configured", NOT_CONFIGURED_REASON);
   const wrong = options.strict ? refusedChoice(version.config, params, tools) : null;
@@ -150,7 +150,13 @@ export async function startRun(
       return deps.limits.check(subject, "sandbox_runs_per_day", { current: today });
     },
   );
-  if (!created.ok) return { reason: "limit_reached", ...created };
+  if (!created.ok) {
+    // The version was retired after the read above.
+    if ("versionStatus" in created) {
+      return refused("not_ready", notReadyMessage(created.versionStatus ?? "gone"));
+    }
+    return { reason: "limit_reached", ...created };
+  }
 
   const now = deps.now();
   const claimed = await deps.vms.claim(
@@ -383,6 +389,14 @@ function infraReason(error: unknown): string {
 
 function logged(run: Pick<SandboxRun, "id" | "projectId">) {
   return { project_id: run.projectId, run_id: run.id };
+}
+
+/** Why a version that is not ready does not run, for the developer. */
+function notReadyMessage(status: string): string {
+  if (status === "retired") {
+    return "The version is retired: its image was deleted, as only the newest versions of a sandbox keep theirs. Run a newer version, or push this code again.";
+  }
+  return `The version is ${status}. Run a version that is ready.`;
 }
 
 function refused(reason: RefusalReason, message: string) {

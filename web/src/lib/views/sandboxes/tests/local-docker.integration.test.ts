@@ -229,6 +229,7 @@ async function setup(provider: SandboxProvider, work: string) {
     builds,
     bundles,
     provider,
+    deploymentId: DEPLOYMENT,
     secrets,
     vms,
     limits: createInMemoryUsageLimits(),

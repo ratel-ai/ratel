@@ -291,6 +291,7 @@ describe("registry root", () => {
         "before:task_scores_enqueue",
         "before:sandbox_builds",
         "before:sandbox_runs",
+        "before:sandbox_snapshots",
         "before:eval_experiments",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",

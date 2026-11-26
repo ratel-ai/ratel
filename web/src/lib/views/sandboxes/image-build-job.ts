@@ -7,6 +7,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { shellQuote } from "./container-run";
 import { secretNamesOf } from "./domain/config";
 import type { SmokeResult } from "./domain/contract";
+import { snapshotName } from "./domain/snapshot-name";
 import { bundleKey, type SandboxVersion } from "./domain/version";
 import type { BuildOutcome, BuildStore } from "./ports/build-store";
 import {
@@ -34,6 +35,8 @@ export type ImageBuildDeps = SecretValuesDeps & {
   builds: BuildStore;
   bundles: BundleStore;
   provider: SandboxProvider | null;
+  /** The id of this deployment: the name of each snapshot carries it (`domain/snapshot-name.ts`). */
+  deploymentId: string;
   /** The count of the prepare and smoke VM starts, with the starts of the run VMs. */
   vms: Pick<VmStore, "claimStart" | "markDeleted">;
   limits: UsageLimitsPort;
@@ -246,7 +249,7 @@ async function prepare(current: Build): Promise<string> {
       log,
     );
     log("> saving the image\n");
-    const { snapshotRef } = await vm.saveSnapshot(`rv-${version.id}`);
+    const { snapshotRef } = await vm.saveSnapshot(snapshotName(deps.deploymentId, version.id));
     return snapshotRef;
   } finally {
     await vm.end();
