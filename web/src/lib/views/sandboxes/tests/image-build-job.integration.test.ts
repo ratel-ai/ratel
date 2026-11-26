@@ -732,9 +732,100 @@ test("a build that the provider never answers fails at its deadline", async () =
   assert.equal((await t.read()).reason, "The build took too long. Push again.");
 });
 
+test("the smoke result keeps the tool calls and the usage of the answer, redacted, and the view shows them", async () => {
+  const toolCalls = [
+    { name: "refund", args: { order: "A1", key: SECRET }, mode: "simulated", result: { ok: true } },
+  ];
+  const usage = { inputTokens: 12, outputTokens: 3, costUsd: 0.001 };
+  const body = JSON.stringify({ output: { reply: "refunded" }, toolCalls, usage });
+  const t = await setup({ agent: { answer: { status: 200, body } } });
+  assert.deepEqual(await t.run(), { status: "ready" });
+  const ready = await t.read();
+  assert.ok(ready.smoke?.ok);
+  assert.deepEqual(ready.smoke.toolCalls, [
+    { ...toolCalls[0], args: { order: "A1", key: "[redacted]" } },
+  ]);
+  assert.deepEqual(ready.smoke.usage, usage);
+  assert.deepEqual(versionView(ready).smoke, ready.smoke);
+});
+
+test("a smoke answer with no tool calls and no usage keeps neither", async () => {
+  const t = await setup();
+  assert.deepEqual(await t.run(), { status: "ready" });
+  const ready = await t.read();
+  assert.ok(ready.smoke?.ok);
+  assert.equal(Object.hasOwn(ready.smoke, "toolCalls"), false);
+  assert.equal(Object.hasOwn(ready.smoke, "usage"), false);
+});
+
+test("a deadline after the save deletes the snapshot when the smoke VM start ends", async () => {
+  const t = await setup();
+  const provider: SandboxProvider = {
+    ...t.provider,
+    startVm: async (request) => {
+      if (request.purpose === "smoke") await new Promise((done) => setTimeout(done, 60));
+      return t.provider.startVm(request);
+    },
+  };
+  assert.deepEqual(await t.run({ provider, deadlineMs: 20 }), { status: "failed" });
+  assert.equal((await t.read()).reason, "The build took too long. Push again.");
+  await until(() => t.provider.deletedSnapshots.length > 0);
+  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.equal(t.provider.snapshots.size, 0);
+});
+
+test("a ready build whose finish throws deletes its snapshot", async () => {
+  const t = await setup();
+  const builds = {
+    ...t.builds,
+    finish: async () => {
+      throw new Error("the database is gone");
+    },
+  };
+  await assert.rejects(t.run({ builds }), /the database is gone/);
+  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.equal(t.provider.snapshots.size, 0);
+});
+
+test("a ready build whose version failed meanwhile keeps no snapshot", async () => {
+  const t = await setup();
+  const builds = {
+    ...t.builds,
+    finish: async (...args: Parameters<typeof t.builds.finish>) => {
+      // The reaper fails the version first: the build lost its heartbeat.
+      const later = new Date(Date.now() + BUILD_STOPPED_MS);
+      assert.equal(await t.builds.failStopped(later, STOPPED_REASON, new Date()), 1);
+      return t.builds.finish(...args);
+    },
+  };
+  assert.deepEqual(await t.run({ builds }), { status: "stopped" });
+  const failed = await t.read();
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.reason, STOPPED_REASON);
+  assert.equal(failed.imageRef, null);
+  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.equal(t.provider.snapshots.size, 0);
+});
+
+test("finish changes only a preparing version, and says so", async () => {
+  const t = await setup();
+  const outcome = { status: "failed" as const, reason: "x", smoke: null, log: "" };
+  assert.equal(await t.builds.finish(t.version.id, outcome, new Date()), false);
+  assert.ok(await t.builds.claim(PROJECT_ID, t.version.id, new Date()));
+  assert.equal(await t.builds.finish(t.version.id, outcome, new Date()), true);
+});
+
 test("a build runs in the lane of long jobs", () => {
   assert.ok((LONG_JOB_KINDS as readonly string[]).includes(SANDBOX_IMAGE_BUILD_JOB));
 });
+
+async function until(done: () => boolean, ms = 2_000) {
+  const end = Date.now() + ms;
+  while (!done()) {
+    if (Date.now() > end) assert.fail("the condition did not come true in time");
+    await new Promise((wait) => setTimeout(wait, 10));
+  }
+}
 
 async function* chunk(body: Buffer) {
   yield body;

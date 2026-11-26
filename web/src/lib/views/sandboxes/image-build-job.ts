@@ -105,12 +105,24 @@ export async function runImageBuild(
   });
   try {
     const outcome = await build(version, provider, deps);
-    try {
-      await deps.builds.finish(versionId, outcome, deps.now());
-    } catch (error) {
-      // A version that is not ready keeps no snapshot.
+    // A version that is not ready keeps no snapshot.
+    const dropUnkept = async () => {
       if (outcome.status === "ready") await dropSnapshot(provider, outcome.imageRef, versionId);
-      throw error;
+    };
+    const finished = await deps.builds
+      .finish(versionId, outcome, deps.now())
+      .catch(async (error: unknown) => {
+        await dropUnkept();
+        throw error;
+      });
+    if (!finished) {
+      // Another process ended the version first, e.g. the reaper after a lost heartbeat.
+      await dropUnkept();
+      logger.warn(
+        { project_id: projectId, version_id: versionId, outcome: outcome.status },
+        "sandbox build ended after its version was no longer preparing",
+      );
+      return { status: "stopped" };
     }
     logger.info(
       { project_id: projectId, version_id: versionId, outcome: outcome.status },

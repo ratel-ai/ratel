@@ -111,7 +111,7 @@ export const sandboxRuns = pgTable(
     status: text("status").notNull().default("queued"),
     // The valid answer of the container (`run-response.schema.json`).
     response: jsonb("response").$type<RunResponse>(),
-    // The contract error code, `infra_error` or `timeout`.
+    // The contract error code, `infra_error`, `provider_refused` or `timeout`.
     errorCode: text("error_code"),
     // Why the run failed.
     reason: text("reason"),

@@ -217,6 +217,20 @@ test("a valid push goes preparing, then ready, with its smoke result through the
   assert.equal(t.vms.vms.size, 0);
 });
 
+test("the version API gives the tool calls and the usage of the smoke answer", async () => {
+  const t = await setup();
+  const toolCalls = [{ name: "refund", args: { order: "A1" }, mode: "simulated", result: "done" }];
+  const usage = { inputTokens: 40, outputTokens: 7 };
+  const body = JSON.stringify({ output: { reply: "refunded" }, toolCalls, usage });
+  t.agent({ answer: { status: 200, body } });
+  const { versionId } = await t.push();
+  assert.deepEqual(await t.prepare(versionId), { status: "ready" });
+  const version = await read(await t.get(versionId));
+  assert.equal(version.smoke.ok, true);
+  assert.deepEqual(version.smoke.toolCalls, toolCalls);
+  assert.deepEqual(version.smoke.usage, usage);
+});
+
 const FAILURES: Array<[string, AgentScript, string]> = [
   ["no health", { health: "never" }, "no_health"],
   ["not JSON", { answer: { status: 200, body: "ok" } }, "not_json"],

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_TIMEOUT_S, runContainer } from "./container-run";
 import type { RatelYaml } from "./domain/config";
-import { type SmokeResult, smokeRequest } from "./domain/contract";
+import { type RunResponse, type SmokeResult, smokeRequest } from "./domain/contract";
 import type { VmSession } from "./vm-session";
 
 /**
@@ -35,10 +35,24 @@ export async function runSmokeCheck(vm: VmSession, input: SmokeCheckInput): Prom
     timeoutS: config.run?.timeoutSeconds ?? DEFAULT_TIMEOUT_S,
   });
   const result: SmokeResult = answer.ok
-    ? { ok: true, output: answer.response.output, durationMs, logs }
+    ? {
+        ok: true,
+        output: answer.response.output,
+        ...callsAndUsage(answer.response),
+        durationMs,
+        logs,
+      }
     : { ok: false, error: answer.error, durationMs, logs };
   log(
     result.ok ? "> the smoke check passed\n" : `> the smoke check failed: ${result.error.code}\n`,
   );
   return result;
+}
+
+/** The tool calls and the usage of an answer, only the ones it has. */
+function callsAndUsage({
+  toolCalls,
+  usage,
+}: RunResponse): Pick<RunResponse, "toolCalls" | "usage"> {
+  return { ...(toolCalls ? { toolCalls } : {}), ...(usage ? { usage } : {}) };
 }

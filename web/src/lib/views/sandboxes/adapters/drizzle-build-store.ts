@@ -36,7 +36,7 @@ export function createDrizzleBuildStore(db: Db): BuildStore {
     },
 
     async finish(versionId, outcome, now) {
-      await db
+      const rows = await db
         .update(sandboxVersions)
         .set({
           status: outcome.status,
@@ -47,7 +47,9 @@ export function createDrizzleBuildStore(db: Db): BuildStore {
             ? { imageRef: outcome.imageRef, reason: null }
             : { reason: outcome.reason }),
         })
-        .where(preparing(versionId));
+        .where(preparing(versionId))
+        .returning({ id: sandboxVersions.id });
+      return rows.length > 0;
     },
 
     async leaveUnbuilt(projectId, versionId, reason) {
