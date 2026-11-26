@@ -131,8 +131,8 @@ async function httpMode(provider: SandboxProvider, vmRef: string, run: Run): Pro
     command: [
       `end=$(( $(date +%s) + ${HEALTH_WAIT_S} ))`,
       "last=0",
-      `while [ "$(date +%s)" -lt "$end" ]; do`,
-      `curl -fsS -o /dev/null --max-time 5 ${base}/ratel/health && exit 0`,
+      // No ";" right after "do": no shell takes it.
+      `while [ "$(date +%s)" -lt "$end" ]; do curl -fsS -o /dev/null --max-time 5 ${base}/ratel/health && exit 0`,
       "last=$?",
       `[ "$(docker inspect -f '{{.State.Running}}' ${name} 2>/dev/null)" = true ] || exit ${STOPPED}`,
       "sleep 1",
