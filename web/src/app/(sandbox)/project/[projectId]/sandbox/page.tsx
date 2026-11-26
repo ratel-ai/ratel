@@ -1,18 +1,23 @@
 import { notFound, redirect } from "next/navigation";
 import { SandboxView } from "@/components/console/sandboxes/SandboxView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { getConfig } from "@/config";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { publicBaseUrl } from "@/lib/platform/public-url";
+import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleRunStore } from "@/lib/views/sandboxes/adapters/drizzle-run-store";
 import { createDrizzleSecretStore } from "@/lib/views/sandboxes/adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "@/lib/views/sandboxes/adapters/drizzle-version-store";
-import { sandboxProviderConfigured } from "@/lib/views/sandboxes/adapters/provider-from-env";
+import {
+  sandboxProviderConfigured,
+  sandboxProviderKind,
+} from "@/lib/views/sandboxes/adapters/provider-from-env";
 import { sandboxesEnabledForProject } from "@/lib/views/sandboxes/gate";
-import { loadSandboxPage } from "@/lib/views/sandboxes/page-model";
+import { configurationProblems, loadSandboxPage } from "@/lib/views/sandboxes/page-model";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ratel sandbox" };
@@ -43,6 +48,11 @@ export default async function SandboxPage({ params }: { params: Promise<{ projec
         secrets: createDrizzleSecretStore(db),
         runs: createDrizzleRunStore(db),
         configured: () => sandboxProviderConfigured(),
+        problems: () =>
+          configurationProblems(
+            sandboxProviderKind(getConfig(), process.env.NODE_ENV),
+            sealedSecretsKey(),
+          ),
       }),
     { attributes: { "project.id": project.id } },
   );

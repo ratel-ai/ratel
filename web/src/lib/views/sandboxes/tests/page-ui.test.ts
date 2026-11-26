@@ -21,6 +21,33 @@ const version = (over: Partial<VersionRow> = {}): VersionRow => ({
   createdAt: NOW,
   buildLog: "> install command 1 (npm install)\n",
   smoke: null,
+  spec: {
+    inputExample: { message: "Where is my order 7?" },
+    params: [
+      {
+        name: "model",
+        type: "enum",
+        default: "small",
+        description: "The model that answers",
+        options: ["small", "large"],
+      },
+      { name: "temperature", type: "number", default: 0.2, description: null, options: [] },
+      {
+        name: "strict",
+        type: "boolean",
+        default: true,
+        description: "Refuse unclear asks",
+        options: [],
+      },
+      { name: "persona", type: "string", default: null, description: null, options: [] },
+    ],
+    tools: [
+      { name: "lookup_order", mode: "live" },
+      { name: "refund_order", mode: "simulated" },
+    ],
+    runMode: "http",
+    timeoutSeconds: 120,
+  },
   ...over,
 });
 const run: RunRow = {
@@ -41,7 +68,7 @@ const run: RunRow = {
       { name: "lookup_order", arguments: { id: "7" }, result: { total: 12 }, source: "real" },
       { name: "refund_order", arguments: { id: "7" }, result: { ok: true }, source: "fake" },
     ],
-    usage: { durationMs: 10 },
+    usage: { durationMs: 2400, costUsd: 0.0132, inputTokens: 812, outputTokens: 64 },
     traceId: "c".repeat(32),
   },
   traceId: "c".repeat(32),
@@ -52,6 +79,7 @@ const run: RunRow = {
 const model = (over: Partial<SandboxPageModel> = {}): SandboxPageModel => ({
   projectId: PROJECT_ID,
   configured: true,
+  problems: [],
   canEdit: true,
   versions: [],
   secrets: [],
@@ -64,7 +92,13 @@ const html = (over: Partial<SandboxPageModel> = {}) =>
   );
 const STATES: Record<string, Partial<SandboxPageModel>> = {
   empty: {},
-  "not configured": { configured: false },
+  "not configured": {
+    configured: false,
+    problems: [
+      { setting: "SANDBOX_PROVIDER", message: "No provider runs sandboxes on this server." },
+      { setting: "SANDBOX_SECRETS_KEY", message: "SANDBOX_SECRETS_KEY is not configured." },
+    ],
+  },
   full: {
     versions: [
       version(),
@@ -117,19 +151,60 @@ test("a version shows its state, its commit, its smoke check and its log", () =>
   }
 });
 
-test("run once shows the output, the tool calls with their source and a link to the trace", () => {
+test("the run shows the output first, then the tool calls with their mode, the numbers and the trace", () => {
   const page = html(STATES.full);
   const text = visibleText(page);
   for (const words of [
     "It is refunded.",
     "lookup_order",
-    "Ran for real",
+    "Live",
     "refund_order",
-    "Faked",
+    "Simulated",
+    "2.4 s",
+    "$0.0132",
+    "812 in · 64 out",
+    "Save as case",
+    "Last runs",
   ]) {
     assert.ok(text.includes(words), words);
   }
+  assert.ok(text.indexOf("It is refunded.") < text.indexOf("Tool calls"), "the output is first");
   assert.ok(page.includes(`href="/project/${PROJECT_ID}/traces/${"c".repeat(32)}"`));
+});
+
+test("the run panel fills the input from the example and has one typed control for each param", () => {
+  const page = html(STATES.full);
+  const text = visibleText(page);
+  assert.ok(page.includes("Where is my order 7?"), "the input example");
+  assert.ok(page.includes('type="number"'), "a number field for temperature");
+  assert.ok(page.includes('role="switch"'), "a switch for strict");
+  for (const words of [
+    "model",
+    "temperature",
+    "strict",
+    "persona",
+    "The model that answers",
+    "Default: small",
+  ]) {
+    assert.ok(text.includes(words), words);
+  }
+  assert.doesNotMatch(text, /Params \(JSON\)/);
+});
+
+test("the version shows its declared input, params, tools with modes and run mode", () => {
+  const text = visibleText(html(STATES.full));
+  assert.match(text, /Declared: http run · 4 parameters · 2 tools/);
+  assert.match(text, /Run mode/);
+});
+
+test("a wrong setting of the server shows in a banner with its name", () => {
+  const text = visibleText(html(STATES["not configured"]));
+  assert.match(text, /SANDBOX_PROVIDER/);
+  assert.match(text, /SANDBOX_SECRETS_KEY\s*:\s*SANDBOX_SECRETS_KEY is not configured\./);
+  const keyOnly = visibleText(
+    html({ problems: [{ setting: "SANDBOX_SECRETS_KEY", message: "It is not set." }] }),
+  );
+  assert.match(keyOnly, /A setting of this server is missing/);
 });
 
 test("a declared secret with no value is marked missing", () => {
@@ -139,7 +214,8 @@ test("a declared secret with no value is marked missing", () => {
 test("with no provider the page says not configured, with the push command", () => {
   const text = visibleText(html(STATES["not configured"]));
   assert.match(text, /not configured/);
-  assert.match(text, /ratel sandbox push/);
+  assert.match(text, /ratel push/);
+  assert.match(text, /ratel\.yaml/);
   assert.doesNotMatch(visibleText(html()), /not configured/);
 });
 
