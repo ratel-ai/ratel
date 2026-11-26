@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { checkUsageLimit } from "@/lib/contracts/usage-limits";
 import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
+import type { VmStartCounts } from "../ports/vm-store";
 import { createSandboxDb, PROJECT_ID } from "./support";
 
 const VERSION_ID = "44444444-4444-4444-8444-444444444444";
@@ -10,8 +11,8 @@ const VERSION_ID = "44444444-4444-4444-8444-444444444444";
 async function setup(max: number) {
   const { db } = await createSandboxDb();
   const vms = createDrizzleVmStore(db);
-  const check = async (startsToday: number) =>
-    checkUsageLimit("sandbox_vm_starts_per_day", max, { current: startsToday });
+  const check = async (starts: VmStartCounts) =>
+    checkUsageLimit("sandbox_vm_starts_per_day", max, { current: starts.project });
   const start = () =>
     vms.claimStart({ projectId: PROJECT_ID, versionId: VERSION_ID, now: new Date() }, check);
   const claim = () => {
