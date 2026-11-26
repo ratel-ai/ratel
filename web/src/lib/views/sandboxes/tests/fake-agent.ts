@@ -19,6 +19,10 @@ export type AgentScript = {
   logs?: string;
   /** True: `docker rm -f` leaves the container. */
   keepsContainer?: boolean;
+  /** True: the image declares a `VOLUME`, so each container gets an anonymous volume. */
+  volumes?: boolean;
+  /** True: the removal of a container leaves its volume. */
+  keepsVolume?: boolean;
 };
 
 type Answer = { status: number; body: string } | { curlExit: number };
@@ -33,10 +37,12 @@ const ok = (stdout = "", exitCode = 0, stderr = ""): ExecResult => ({
 /**
  * Answers the Docker, curl and rm commands of a container in the fake provider: the files that
  * `rm -f` names leave the VM, and the containers that `docker run` or `docker create` makes stay
- * until `docker rm -f`. Docker gives each published port its own host port.
+ * until `docker rm -f`. An anonymous volume of a container goes only with `docker rm -f -v`.
+ * Docker gives each published port its own host port.
  */
 export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
   const containers = new Set<string>();
+  const volumes = new Set<string>();
   /** Each container that was made, with its host port in HTTP mode. */
   const made: Array<{ name: string; hostPort: number | null }> = [];
   /** Each run request that a container got. */
@@ -46,9 +52,12 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
     const requestPath = /(?:@|< )(\/tmp\/\S+request\.json)/.exec(command)?.[1];
     const request = requestPath ? vm.files.get(requestPath)?.toString() : undefined;
     for (const [, targets] of command.matchAll(/rm -f ([^;&|>]+)/g)) {
-      for (const target of (targets ?? "").trim().split(/\s+/)) {
+      const words = (targets ?? "").trim().split(/\s+/);
+      const withVolumes = words.includes("-v") && !script.keepsVolume;
+      for (const target of words.filter((word) => !word.startsWith("-"))) {
         if (target.startsWith("/")) vm.files.delete(target);
         else if (!script.keepsContainer) containers.delete(target);
+        if (withVolumes) volumes.delete(`volume-of-${target}`);
       }
     }
     const name = /--name (\S+)/.exec(command)?.[1] ?? "";
@@ -59,6 +68,7 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
     if (command.startsWith("docker create")) {
       if (script.starts === false) return ok("", 125, "docker: no such image.\n");
       containers.add(name);
+      if (script.volumes) volumes.add(`volume-of-${name}`);
       made.push({ name, hostPort: null });
       requests.push(request === undefined ? undefined : JSON.parse(request));
       const { exitCode, stdout = "", stderr = "" } = script.command ?? { exitCode: 0 };
@@ -67,6 +77,7 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
     if (command.startsWith("docker run -d")) {
       if (script.starts === false) return ok("", 125, "docker: no such image.\n");
       containers.add(name);
+      if (script.volumes) volumes.add(`volume-of-${name}`);
       const hostPort = nextPort++;
       made.push({ name, hostPort });
       return ok(`c0ffee\n127.0.0.1:${hostPort}\n`);
@@ -87,9 +98,10 @@ export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
     if (command.startsWith("docker logs")) return ok(script.logs ?? "");
     if (command.startsWith("docker ps -aq")) {
       const files = [...vm.files.keys()].filter((path) => path.startsWith("/tmp/ratel-smoke-"));
-      return ok([...containers, ...files].map((line) => `${line}\n`).join(""));
+      const listed = command.includes("docker volume ls -q") ? [...volumes] : [];
+      return ok([...containers, ...listed, ...files].map((line) => `${line}\n`).join(""));
     }
     return command.includes("rm -f") ? ok() : undefined;
   };
-  return { containers, made, requests };
+  return { containers, volumes, made, requests };
 }

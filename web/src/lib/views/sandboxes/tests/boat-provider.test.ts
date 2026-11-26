@@ -12,6 +12,7 @@ import {
 import { error, type FakeBoatServer, startFakeBoatServer } from "./fake-boat-server";
 
 const KEY = "bk_test_secret_4411";
+const DEPLOYMENT = "dep-test";
 
 const RUN: StartVmRequest = {
   projectId: "p1",
@@ -49,7 +50,13 @@ beforeEach(() => {
 });
 
 function provider(over: Partial<BoatProviderOptions> = {}): SandboxProvider {
-  return createBoatProvider({ apiKey: KEY, baseUrl: server.url, pollMs: 1, ...over });
+  return createBoatProvider({
+    apiKey: KEY,
+    baseUrl: server.url,
+    deploymentId: DEPLOYMENT,
+    pollMs: 1,
+    ...over,
+  });
 }
 
 const calls = (method: string, path: RegExp) =>
@@ -66,7 +73,12 @@ describe("startVm", () => {
     assert.deepEqual(create.json, {
       type: "small",
       ttlSeconds: 2400,
-      labels: { "ratel-version": "v1", "ratel-project": "p1", "ratel-purpose": "prepare" },
+      labels: {
+        "ratel-version": "v1",
+        "ratel-project": "p1",
+        "ratel-purpose": "prepare",
+        "ratel-deployment": DEPLOYMENT,
+      },
       noEnv: true,
       snapshots: true,
       network: { mode: "open", inbound: "open" },
@@ -191,6 +203,29 @@ describe("exec, files and snapshots", () => {
     assert.equal(calls("GET", /\/commands\/\d+$/).length, 1);
   });
 
+  test("a command longer than the limit of the service runs as a job of the VM, to its own timeout", async () => {
+    const { target, vmRef } = await started();
+    const done = await target.exec(vmRef, { command: "sleep 900", timeoutS: 1200 });
+    assert.deepEqual([done.exitCode, done.timedOut], [0, false]);
+    const over = await target.exec(vmRef, { command: "sleep 1300", timeoutS: 1200 });
+    assert.deepEqual([over.exitCode, over.timedOut], [null, true]);
+    for (const call of calls("POST", /\/commands$/)) {
+      assert.ok(Number(call.json?.timeoutSeconds) <= 240, "each call is a short one");
+    }
+  });
+
+  test("a job gives its exit code, stdout and stdin, never puts stdin on a command line, and removes its files", async () => {
+    const { target, vmRef } = await started();
+    assert.equal((await target.exec(vmRef, { command: "exit 3", timeoutS: 1200 })).exitCode, 3);
+    const stdin = "secret-stdin-value";
+    const piped = await target.exec(vmRef, { command: "cat", timeoutS: 1200, stdin });
+    assert.deepEqual([piped.exitCode, piped.stdout], [0, stdin]);
+    for (const call of calls("POST", /\/commands$/)) {
+      assert.doesNotMatch(String(call.json?.command), /secret-stdin-value/);
+    }
+    assert.deepEqual([...(server.sandboxes.get(vmRef)?.files.keys() ?? [])], []);
+  });
+
   test("a small file goes inline", async () => {
     const { target, vmRef } = await started();
     const body = Buffer.from("A=1\n");
@@ -295,7 +330,24 @@ describe("status and list", () => {
     assert.ok(listed[0]?.createdAt instanceof Date);
     assert.equal(listed[0]?.labels["ratel-run"], "r1");
     const [list] = calls("GET", /\/sandboxes$/);
-    assert.deepEqual(list?.query.getAll("label").sort(), ["ratel-project=p1", "ratel-purpose=run"]);
+    assert.deepEqual(list?.query.getAll("label").sort(), [
+      `ratel-deployment=${DEPLOYMENT}`,
+      "ratel-project=p1",
+      "ratel-purpose=run",
+    ]);
+  });
+
+  test("each VM carries the deployment, and listVms lists only the VMs of the deployment", async () => {
+    const ours = await provider().startVm(RUN);
+    const theirs = await provider({ deploymentId: "dep-other" }).startVm(RUN);
+    assert.equal(server.sandboxes.get(theirs.vmRef)?.labels["ratel-deployment"], "dep-other");
+    const listed = await provider().listVms({ "ratel-purpose": "run" });
+    assert.deepEqual(
+      listed.map((vm) => vm.vmRef),
+      [ours.vmRef],
+    );
+    const widened = { "ratel-purpose": "run", "ratel-deployment": "dep-other" };
+    assert.deepEqual(await provider().listVms(widened), listed, "a caller cannot list another one");
   });
 });
 
@@ -343,6 +395,7 @@ describe("errors", () => {
     const nowhere = createBoatProvider({
       apiKey: KEY,
       baseUrl: "http://127.0.0.1:1/api/v1",
+      deploymentId: DEPLOYMENT,
       pollMs: 1,
     });
     await assert.rejects(nowhere.vmStatus("bx_22222222"), (thrown: unknown) => {

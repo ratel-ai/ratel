@@ -15,7 +15,8 @@ import { envFile } from "./secret-values";
  * run use it. The variables go in a file under /tmp, never on a command line: the service keeps
  * command lines. Docker reads the file when it creates the container, and the file goes at once.
  * Each container has its own name, its own files and its own host port, so runs on one VM do not
- * clash. The container and the files are removed at the end, also after a failure.
+ * clash. The container, its anonymous volumes and the files are removed at the end, also after a
+ * failure.
  */
 export type ContainerRunInput = {
   /** The name of the container. It is unique in the VM. */
@@ -209,11 +210,14 @@ async function ended(
   return { answer, durationMs, logs: logs.stdout };
 }
 
-/** Removes the container and the files. A failure is logged: the caller decides about the VM. */
+/**
+ * Removes the container with its anonymous volumes, and the files. A failure is logged: the caller
+ * decides about the VM.
+ */
 async function clean(provider: SandboxProvider, vmRef: string, run: Run): Promise<boolean> {
   try {
     const removed = await provider.exec(vmRef, {
-      command: `docker rm -f ${run.name} >/dev/null 2>&1; rm -f ${run.files.env} ${run.files.request}; true`,
+      command: `docker rm -f -v ${run.name} >/dev/null 2>&1; rm -f ${run.files.env} ${run.files.request}; true`,
       timeoutS: DOCKER_STEP_S,
     });
     return removed.exitCode === 0;

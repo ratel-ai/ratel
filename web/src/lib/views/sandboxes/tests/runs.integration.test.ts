@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createInMemoryUsageLimits } from "@/lib/contracts/usage-limits.fake";
 import { hashApiKey } from "@/lib/platform/api-keys";
@@ -17,12 +18,14 @@ import {
   ProviderRateLimited,
   ProviderUnavailable,
   type SandboxProvider,
+  type StartVmRequest,
+  VM_START_TIMEOUT_MS,
 } from "../ports/sandbox-provider";
 import { START_STOPPED_MS, sweepRuns } from "../run-sweep";
 import { withRunTokens } from "../run-token";
 import { type RunDeps, type StartRunOptions, startRun } from "../runs";
 import { type AgentScript, scriptAgent } from "./fake-agent";
-import { createFakeProvider } from "./fake-provider";
+import { createFakeProvider, type FakeVm } from "./fake-provider";
 import {
   bundleInfo,
   COMMIT,
@@ -685,6 +688,31 @@ test("the sweep deletes a VM idle longer than the idle time, and not before", as
   assert.equal(t.provider.starts.length, 2, "a new run starts a new VM");
 });
 
+test("the idle sweep does not delete a VM that a run claims after the sweep read it", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const first = await t.ran();
+  t.wait(IDLE_MS + 1000);
+  let claimed: string | undefined;
+  const vms = {
+    ...t.vms,
+    listIdle: async (...args: Parameters<typeof t.vms.listIdle>) => {
+      const idle = await t.vms.listIdle(...args);
+      const started = await t.start();
+      assert.ok(started.ok);
+      claimed = started.run.id;
+      return idle;
+    },
+  };
+  assert.equal((await t.sweep({ vms })).deletedVms, 0);
+  assert.deepEqual(t.provider.deleted, []);
+  await t.settle();
+  const second = await t.read(claimed ?? "");
+  assert.equal(second.status, "completed");
+  assert.equal(second.vmId, first.vmId);
+  assert.equal(t.provider.starts.length, 1);
+});
+
 test("the sweep ends a run past its timeout as timed_out and deletes its VM", async () => {
   const t = await setup({ agent: { answer: "hang" } });
   await t.makeReady();
@@ -732,6 +760,30 @@ test("the sweep deletes a run VM that the database does not know, and no other V
   assert.ok(t.provider.running.has(prepare.vmRef));
 });
 
+test("the sweep does not delete a run VM of another deployment on the same account", async () => {
+  const t = await setup();
+  const request: StartVmRequest = {
+    projectId: PROJECT_ID,
+    purpose: "run",
+    ttlS: 60,
+    labels: {},
+    network: { inbound: "closed", outbound: { mode: "deny" } },
+    keepSnapshots: false,
+  };
+  const foreign: FakeVm = {
+    vmRef: "vm-of-staging",
+    request,
+    // The row of this VM is in the database of the other deployment.
+    labels: { "ratel-purpose": "run", "ratel-vm": randomUUID(), "ratel-deployment": "staging" },
+    state: "running",
+    files: new Map(),
+    createdAt: new Date(),
+  };
+  t.provider.vms.set(foreign.vmRef, foreign);
+  assert.equal((await t.sweep()).deletedVms, 0);
+  assert.deepEqual(t.provider.deleted, []);
+});
+
 test("a run whose process ended before the start is infra_error after a while", async () => {
   const t = await setup();
   await t.makeReady();
@@ -744,6 +796,20 @@ test("a run whose process ended before the start is infra_error after a while", 
   const run = await t.read(started.run.id);
   assert.equal(run.status, "infra_error");
   assert.match(run.reason ?? "", /did not start/);
+});
+
+test("the sweep leaves a VM start and its run alone while the start is in its time budget", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const started = await t.start({ background: () => {} });
+  assert.ok(started.ok);
+  t.wait(6 * 60_000);
+  assert.deepEqual(await t.sweep(), { endedRuns: 0, deletedVms: 0, sandboxRunErrors: 0 });
+  assert.equal((await t.read(started.run.id)).status, "queued");
+  assert.equal((await t.vms.get(started.run.vmId ?? ""))?.state, "starting");
+  t.wait(VM_START_TIMEOUT_MS);
+  assert.equal((await t.sweep()).endedRuns, 1);
+  assert.equal((await t.vms.get(started.run.vmId ?? ""))?.state, "deleted");
 });
 
 test("a run whose VM ends gives infra_error", async () => {

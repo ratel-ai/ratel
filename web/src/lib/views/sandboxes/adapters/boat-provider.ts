@@ -10,6 +10,7 @@ import {
   ProviderUnavailable,
   type SandboxProvider,
   type StartVmRequest,
+  VM_START_TIMEOUT_MS,
   type VmInfo,
   type VmState,
   type WriteFileRequest,
@@ -18,10 +19,13 @@ import {
 /**
  * {@link SandboxProvider} on the v1 HTTP API of boat.dev, with plain `fetch`. Each VM starts with
  * no secret of the account (`noEnv`). No error message names the service, and no message or log
- * holds the API key or a value of a file.
+ * holds the API key or a value of a file. Each VM carries the label of the deployment, and
+ * `listVms` lists only the VMs with it: other deployments can share the account.
  */
 export type BoatProviderOptions = {
   apiKey: string;
+  /** The value of the `ratel-deployment` label (`provider-from-env.ts`). */
+  deploymentId: string;
   /** `https://boat.dev/api/v1` by default. */
   baseUrl?: string;
   /** The machine size, `small` by default. */
@@ -29,7 +33,7 @@ export type BoatProviderOptions = {
   fetch?: typeof fetch;
   /** The wait between two polls. */
   pollMs?: number;
-  /** The limit of a start, Docker included. */
+  /** The limit of the create and the ready wait of a start. The Docker wait comes after it. */
   readyTimeoutMs?: number;
   /** The limit of a snapshot save. */
   snapshotTimeoutMs?: number;
@@ -46,11 +50,19 @@ const STOPPED = new Set(["archiving", "archived", "error"]);
 const AT_CAPACITY = new Set(["limit_reached", "member_limit_reached"]);
 /** A command sent while the VM still starts. Sending it again is safe. */
 const NOT_READY_YET = new Set(["boat_starting", "sandbox_starting"]);
+const DEPLOYMENT_LABEL = "ratel-deployment";
 const SNAPSHOT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const INLINE_MAX_BYTES = 5 * 1024 * 1024;
 /** Fetch waits at most 300 s for the headers of an answer: a longer command runs detached. */
 const SYNC_EXEC_MAX_S = 240;
+/** The service ends a command after this time: a longer command runs as a job of the VM. */
 const MAX_EXEC_S = 600;
+/** One wait for the end of a job. It is a short command. */
+const JOB_WAIT_S = 200;
+/** The time that a job needs beyond its own timeout: the kill and the last wait. */
+const JOB_SLACK_S = 60;
+/** `timeout` ends with 124 when the time is over. */
+const JOB_TIMED_OUT = "124";
 const CREATE_ATTEMPTS = 3;
 const EXEC_ATTEMPTS = 4;
 const UPLOAD_URL_TTL_S = 3600;
@@ -59,6 +71,8 @@ const DOCKER_WAIT = {
   command: "for i in $(seq 1 90); do docker info >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1",
   timeoutS: 120,
 };
+/** The Docker wait ends the start, so the rest of the start has the time before it. */
+const READY_TIMEOUT_MS = VM_START_TIMEOUT_MS - DOCKER_WAIT.timeoutS * 1000;
 
 const logger = getLogger("sandboxes/provider");
 
@@ -69,8 +83,9 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
 
   const provider: SandboxProvider = {
     async startVm(request) {
+      const deadline = Date.now() + (options.readyTimeoutMs ?? READY_TIMEOUT_MS);
       const created = await api.call<{ sandbox: { id: string } }>("POST", "/sandboxes", {
-        json: createBody(request, options.vmType ?? DEFAULT_BOAT_VM_TYPE),
+        json: createBody(request, options.vmType ?? DEFAULT_BOAT_VM_TYPE, options.deploymentId),
         headers: { "idempotency-key": randomUUID() },
         attempts: CREATE_ATTEMPTS,
         retryWhen: (status, code) =>
@@ -78,7 +93,7 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
       });
       const vmRef = created.sandbox.id;
       try {
-        await waitReady(vmRef, options.readyTimeoutMs ?? 10 * 60_000);
+        await waitReady(vmRef, deadline);
         const docker = await provider.exec(vmRef, DOCKER_WAIT);
         if (docker.exitCode !== 0)
           throw new ProviderUnavailable("Docker did not start in the sandbox.");
@@ -174,7 +189,8 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
       const vms: VmInfo[] = [];
       let cursor: string | null = null;
       do {
-        const query: [string, string][] = Object.entries(labels).map(([key, value]) => [
+        const own = { ...labels, [DEPLOYMENT_LABEL]: options.deploymentId };
+        const query: [string, string][] = Object.entries(own).map(([key, value]) => [
           "label",
           `${key}=${value}`,
         ]);
@@ -194,8 +210,7 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
     },
   };
 
-  async function waitReady(vmRef: string, timeoutMs: number): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
+  async function waitReady(vmRef: string, deadline: number): Promise<void> {
     for (;;) {
       const { sandbox } = await api.call<{ sandbox: { state: string } }>(
         "GET",
@@ -210,7 +225,8 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
   }
 
   async function run(vmRef: string, request: ExecRequest): Promise<ExecResult> {
-    const timeoutS = Math.min(Math.max(Math.ceil(request.timeoutS), 1), MAX_EXEC_S);
+    const timeoutS = Math.max(Math.ceil(request.timeoutS), 1);
+    if (timeoutS > MAX_EXEC_S) return runJob(vmRef, request.command, timeoutS);
     const path = `/sandboxes/${enc(vmRef)}/commands`;
     const send = {
       attempts: EXEC_ATTEMPTS,
@@ -247,6 +263,48 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
     }
   }
 
+  /**
+   * Runs a command longer than the service allows as a job of the VM: a short command starts it
+   * in its own session, and short commands wait for its exit code. The command goes in a file, so
+   * no quoting can change it. The job and its files go at the end, also after a failure.
+   */
+  async function runJob(vmRef: string, command: string, timeoutS: number): Promise<ExecResult> {
+    const job = jobFiles(`/tmp/ratel-job-${randomUUID()}`);
+    const script = Buffer.from(command);
+    const short = (line: string, seconds = 30) => run(vmRef, { command: line, timeoutS: seconds });
+    try {
+      await provider.writeFile(vmRef, { path: job.script, body: script, size: script.length });
+      const started = await short(
+        // The exit code goes to its file in one move, so a wait never reads half of it.
+        `setsid nohup sh -c 'timeout -k 10 ${timeoutS} sh ${job.script} > ${job.out} 2> ${job.err}; echo $? > ${job.part} && mv ${job.part} ${job.exit}' > /dev/null 2>&1 < /dev/null &`,
+      );
+      if (started.exitCode !== 0) throw new ProviderUnavailable("The command did not start.");
+      const deadline = Date.now() + (timeoutS + JOB_SLACK_S) * 1000;
+      for (;;) {
+        const waited = await short(
+          `for i in $(seq 1 ${JOB_WAIT_S}); do [ -f ${job.exit} ] && cat ${job.exit} && exit 0; sleep 1; done; exit 1`,
+          JOB_WAIT_S + 30,
+        );
+        const code = waited.exitCode === 0 ? /^\d+$/.exec(waited.stdout.trim())?.[0] : undefined;
+        if (code !== undefined || Date.now() > deadline) {
+          const stdout = (await short(`cat ${job.out}`)).stdout;
+          const stderr = (await short(`cat ${job.err}`)).stdout;
+          if (code === undefined || code === JOB_TIMED_OUT) {
+            return { exitCode: null, stdout, stderr, timedOut: true };
+          }
+          return { exitCode: Number(code), stdout, stderr, timedOut: false };
+        }
+      }
+    } finally {
+      await short(`pkill -KILL -f ${job.script}; rm -f ${job.all}; true`).catch(
+        (failure: unknown) => {
+          // The TTL of the VM still ends the job.
+          logger.warn({ vm_ref: vmRef, error_type: errorType(failure) }, "job not removed");
+        },
+      );
+    }
+  }
+
   return provider;
 }
 
@@ -271,7 +329,7 @@ type CallOptions = {
   retryWhen?: (status: number, code: string) => boolean;
 };
 
-function createBody(request: StartVmRequest, type: string) {
+function createBody(request: StartVmRequest, type: string, deploymentId: string) {
   const { outbound, inbound } = request.network;
   return {
     type,
@@ -280,6 +338,7 @@ function createBody(request: StartVmRequest, type: string) {
       ...request.labels,
       "ratel-project": request.projectId,
       "ratel-purpose": request.purpose,
+      [DEPLOYMENT_LABEL]: deploymentId,
     },
     // No secret of the account goes into a VM.
     noEnv: true,
@@ -291,6 +350,17 @@ function createBody(request: StartVmRequest, type: string) {
     },
     ...(request.fromSnapshot ? { from: request.fromSnapshot } : {}),
   };
+}
+
+function jobFiles(prefix: string) {
+  const files = {
+    script: `${prefix}.sh`,
+    out: `${prefix}.out`,
+    err: `${prefix}.err`,
+    exit: `${prefix}.exit`,
+    part: `${prefix}.exit.part`,
+  };
+  return { ...files, all: Object.values(files).join(" ") };
 }
 
 function stateOf(state: string): VmState {

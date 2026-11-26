@@ -453,6 +453,18 @@ const CONFIG_SCHEMA = schema({
       z.enum(["small", "default", "large", "xlarge"]),
       D.sandboxes.boatVmType,
     ),
+    /**
+     * The label of each VM this deployment starts. The sweep deletes only VMs with this label, so
+     * deployments that share one VM service account do not delete the VMs of each other. Unset: a
+     * hash of the public URL, else of the base URL (`sandboxDeploymentId`).
+     */
+    deploymentId: optional(
+      "SANDBOX_DEPLOYMENT_ID",
+      z
+        .string()
+        .trim()
+        .regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
+    ),
     /** The address at which an instance reaches this deployment; the public URL when unset. */
     callbackUrl: optional("SANDBOX_CALLBACK_URL", trimmed),
     /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */

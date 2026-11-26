@@ -243,7 +243,7 @@ for (const [what, agent, code, reason] of SMOKE_FAILURES) {
     assert.equal(failed.imageRef, null);
     assert.equal(t.provider.snapshots.size, 0);
     assert.equal(t.provider.vms.size, 0, "the VM is deleted");
-    assert.ok(t.commands().some((command) => command.startsWith(`docker rm -f smoke-`)));
+    assert.ok(t.commands().some((command) => command.startsWith(`docker rm -f -v smoke-`)));
     assert.equal(t.agent.containers.size, 0);
   });
 }
@@ -309,6 +309,21 @@ test("a container that stays after the smoke check stops the snapshot", async ()
   assert.match(failed.reason ?? "", /no snapshot/i);
   assert.equal(t.provider.snapshots.size, 0);
   assert.equal(t.provider.vms.size, 0);
+});
+
+test("the anonymous volume of a smoke container goes with the container, and the snapshot is saved", async () => {
+  const t = await setup({ agent: { volumes: true } });
+  assert.deepEqual(await t.run(), { status: "ready" });
+  assert.equal(t.agent.volumes.size, 0);
+});
+
+test("a volume that stays after the smoke check stops the snapshot", async () => {
+  const t = await setup({ agent: { volumes: true, keepsVolume: true } });
+  assert.deepEqual(await t.run(), { status: "failed" });
+  const failed = await t.read();
+  assert.match(failed.reason ?? "", /no snapshot/i);
+  assert.match(failed.buildLog ?? "", /volume-of-smoke-/);
+  assert.equal(t.provider.snapshots.size, 0);
 });
 
 test("an image id other than the pushed digest is in the log", async () => {

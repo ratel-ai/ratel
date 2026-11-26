@@ -43,7 +43,7 @@ export const NOT_CONFIGURED_REASON = "Ratel sandbox is not configured on this de
 export const OFF_REASON = "Ratel sandbox is off for this project.";
 export const STOPPED_REASON = "The build was interrupted. Push again.";
 const LEFTOVERS_REASON =
-  "The VM still holds a container or a file of the smoke check, so no snapshot is saved. Push again.";
+  "The VM still holds a container, a volume or a file of the smoke check, so no snapshot is saved. Push again.";
 const TOO_LONG_REASON = "The build took too long. Push again.";
 const SERVICE_REASON = "The build service did not work. Push again.";
 /** The end of the log is the part that explains a failure. */
@@ -216,7 +216,7 @@ async function prepare(
     });
     onSmoke(smoke);
     if (!smoke.ok) throw new BuildFailed(smoke.error.message);
-    // A snapshot must hold no secret value: no container and no file of the smoke check.
+    // A snapshot must hold no secret value: no container, volume or file of the smoke check.
     const left = await smokeLeftovers(provider, vmRef);
     if (left) {
       log(`> the VM still holds:\n${left}\n`);
