@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { mock, test } from "node:test";
 import { eq } from "drizzle-orm";
 import { resolveConfig } from "@/config";
+import { createInMemoryUsageLimits } from "@/lib/contracts/usage-limits.fake";
 import { LONG_JOB_KINDS, SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { reapStaleRunningJobs, STALE_JOB_MS } from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
@@ -13,6 +14,7 @@ import { sealSecret } from "@/lib/platform/sealed-secrets";
 import { createDrizzleBuildStore } from "../adapters/drizzle-build-store";
 import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
+import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { sandboxProvider, sandboxProviderConfigured } from "../adapters/provider-from-env";
 import type { RatelYaml } from "../domain/config";
@@ -28,11 +30,22 @@ import {
 import {
   ProviderAtCapacity,
   ProviderRateLimited,
+  ProviderRefused,
   type SandboxProvider,
 } from "../ports/sandbox-provider";
+import { sandboxVms } from "../schema";
 import { type AgentScript, scriptAgent } from "./fake-agent";
 import { createFakeProvider } from "./fake-provider";
-import { bundleInfo, COMMIT, CONFIG, createSandboxDb, IMAGE, PROJECT_ID, tarGz } from "./support";
+import {
+  bundleInfo,
+  COMMIT,
+  CONFIG,
+  createSandboxDb,
+  IMAGE,
+  ORGANIZATION_ID,
+  PROJECT_ID,
+  tarGz,
+} from "./support";
 
 const BUNDLE = tarGz([{ name: "manifest.json", body: "[]" }]);
 const KEY = Buffer.alloc(32, 7);
@@ -41,7 +54,13 @@ const ENV_FILE = "/tmp/ratel-smoke-env";
 const REQUEST_FILE = "/tmp/ratel-smoke-request.json";
 const IMAGE_FILE = "/home/user/image.tar";
 
-type Setup = { stored?: Buffer; config?: RatelYaml; secrets?: string[]; agent?: AgentScript };
+type Setup = {
+  stored?: Buffer;
+  config?: RatelYaml;
+  secrets?: string[];
+  agent?: AgentScript;
+  vmStartsPerDay?: number;
+};
 
 async function setup(over: Setup = {}) {
   const { db } = await createSandboxDb();
@@ -72,16 +91,33 @@ async function setup(over: Setup = {}) {
   const provider = createFakeProvider();
   const agent = scriptAgent(provider, over.agent);
   const snapshotFiles: string[][] = [];
+  /** What the VM of each snapshot got before the save: the files written and the commands. */
+  const snapshotFrom: Array<{ vmRef: string; writes: string[]; commands: string[] }> = [];
   const saveSnapshot = provider.saveSnapshot.bind(provider);
   provider.saveSnapshot = async (vmRef, name) => {
     snapshotFiles.push([...(provider.vms.get(vmRef)?.files.keys() ?? [])]);
+    snapshotFrom.push({
+      vmRef,
+      writes: provider.writes
+        .filter((write) => write.vmRef === vmRef)
+        .map((write) => `${write.path} ${write.body.toString("latin1")}`),
+      commands: provider.execs.filter((exec) => exec.vmRef === vmRef).map((exec) => exec.command),
+    });
     return saveSnapshot(vmRef, name);
   };
+  const vms = createDrizzleVmStore(db);
+  const limits = createInMemoryUsageLimits(
+    over.vmStartsPerDay === undefined ? {} : { sandbox_vm_starts_per_day: over.vmStartsPerDay },
+  );
   const deps: ImageBuildDeps = {
     builds,
     bundles,
     provider,
     secrets,
+    vms,
+    limits,
+    organizationIdOf: async () => ORGANIZATION_ID,
+    callbackUrl: () => "https://ratel.example",
     sealingKey: () => ({ ok: true, key: KEY }),
     now: () => new Date(),
     every: () => () => {},
@@ -94,21 +130,37 @@ async function setup(over: Setup = {}) {
     return found;
   };
   const commands = () => provider.execs.map((exec) => exec.command);
-  return { db, deps, version, builds, provider, agent, snapshotFiles, run, read, commands };
+  const vmRows = (): Promise<Array<typeof sandboxVms.$inferSelect>> =>
+    db.select().from(sandboxVms).orderBy(sandboxVms.startedAt);
+  return {
+    db,
+    deps,
+    version,
+    builds,
+    provider,
+    agent,
+    limits,
+    snapshotFiles,
+    snapshotFrom,
+    run,
+    read,
+    commands,
+    vmRows,
+  };
 }
 
 test("a prepare goes preparing, then ready with the smoke result, a snapshot and a log", async () => {
   const t = await setup();
-  let during = "";
+  const during: string[] = [];
   const provider: SandboxProvider = {
     ...t.provider,
     startVm: async (request) => {
-      during = (await t.read()).status;
+      during.push(`${request.purpose} ${(await t.read()).status}`);
       return t.provider.startVm(request);
     },
   };
   assert.deepEqual(await t.run({ provider }), { status: "ready" });
-  assert.equal(during, "preparing");
+  assert.deepEqual(during, ["prepare preparing", "smoke preparing"]);
   const ready = await t.read();
   assert.equal(ready.status, "ready");
   assert.equal(ready.reason, null);
@@ -122,19 +174,37 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
   assert.deepEqual(view.smoke, ready.smoke);
   assert.equal(JSON.stringify(view).includes(ready.imageRef ?? "?"), false);
 
-  const [start] = t.provider.starts;
-  assert.equal(start?.purpose, "prepare");
-  assert.equal(start?.keepSnapshots, true);
-  assert.deepEqual(start?.network, { inbound: "open", outbound: { mode: "open" } });
-  assert.deepEqual(start?.labels, {
+  const [prepare, smoke] = t.provider.starts;
+  assert.equal(t.provider.starts.length, 2);
+  assert.equal(prepare?.purpose, "prepare");
+  assert.equal(prepare?.keepSnapshots, true);
+  assert.equal(prepare?.fromSnapshot, undefined);
+  assert.deepEqual(prepare?.network, { inbound: "open", outbound: { mode: "open" } });
+  const rows = await t.vmRows();
+  assert.deepEqual(prepare?.labels, {
     "ratel-project": PROJECT_ID,
     "ratel-version": t.version.id,
     "ratel-purpose": "prepare",
+    "ratel-vm": rows[0]?.id,
   });
-  assert.deepEqual(
-    t.provider.writes.map((write) => write.path),
-    [IMAGE_FILE, ENV_FILE, REQUEST_FILE],
-  );
+  assert.equal(smoke?.purpose, "smoke");
+  assert.equal(smoke?.fromSnapshot, `rv-${t.version.id}`);
+  assert.equal(smoke?.keepSnapshots, false);
+  // The policy of a run VM: no inbound, outbound to ratel.yaml and this deployment only.
+  assert.deepEqual(smoke?.network, {
+    inbound: "closed",
+    outbound: { mode: "allow", allow: ["ratel.example"] },
+  });
+  assert.deepEqual(smoke?.labels, {
+    "ratel-project": PROJECT_ID,
+    "ratel-version": t.version.id,
+    "ratel-purpose": "smoke",
+    "ratel-vm": rows[1]?.id,
+  });
+  const writes = (vmRef = "") =>
+    t.provider.writes.filter((write) => write.vmRef === vmRef).map((write) => write.path);
+  assert.deepEqual(writes(prepare?.vmRef), [IMAGE_FILE]);
+  assert.deepEqual(writes(smoke?.vmRef), [ENV_FILE, REQUEST_FILE]);
   assert.deepEqual(t.provider.writes[0]?.body, BUNDLE);
   const request = JSON.parse(t.provider.writes[2]?.body.toString() ?? "");
   assert.deepEqual(
@@ -150,44 +220,170 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
   );
   const tag = `ratel-agent:${t.version.id}`;
   const name = `smoke-${t.version.id}`;
-  const commands = t.commands();
-  assert.deepEqual(commands.slice(0, 3), [
+  const commandsOf = (vmRef = "") =>
+    t.provider.execs.filter((exec) => exec.vmRef === vmRef).map((exec) => exec.command);
+  assert.deepEqual(commandsOf(prepare?.vmRef), [
     `docker load -i ${IMAGE_FILE}`,
     "docker image inspect --format '{{.Id}}' 'agent:latest'",
     `docker tag 'agent:latest' ${tag} && rm -f ${IMAGE_FILE}`,
   ]);
+  const commands = commandsOf(smoke?.vmRef);
   assert.equal(
-    commands[3],
+    commands[0],
     `docker run -d --name ${name} -p 127.0.0.1::8080 --env-file ${ENV_FILE} ${tag}; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; docker port ${name} 8080/tcp | head -n 1`,
   );
   assert.match(
-    commands[4] ?? "",
+    commands[1] ?? "",
     /curl -fsS -o \/dev\/null .*http:\/\/127\.0\.0\.1:32768\/ratel\/health/,
   );
   assert.match(
-    commands[5] ?? "",
+    commands[2] ?? "",
     /curl -sS --max-time 120 -X POST -H 'content-type: application\/json' --data-binary @\/tmp\/ratel-smoke-request\.json/,
   );
-  assert.match(commands.at(-1) ?? "", /^docker ps -aq/);
-  assert.deepEqual(t.provider.deleted, [start?.vmRef], "the prepare VM is deleted");
+  assert.deepEqual(
+    t.provider.deleted,
+    [prepare?.vmRef, smoke?.vmRef],
+    "the prepare VM goes after the snapshot, the smoke VM after the check",
+  );
+  assert.equal(t.provider.vms.size, 0);
 });
 
-test("no secret value is on a command line, the env file is deleted, and the snapshot holds no smoke file", async () => {
+test("the snapshot comes from a VM that got no secret; the secret goes only to the smoke VM", async () => {
   const t = await setup({ agent: { logs: `boot\nusing key ${SECRET}\nready\n` } });
-  await t.run();
+  assert.deepEqual(await t.run(), { status: "ready" });
   const ready = await t.read();
-  assert.equal(ready.status, "ready");
-  for (const command of t.commands()) assert.doesNotMatch(command, new RegExp(SECRET));
-  const vmRef = t.provider.starts[0]?.vmRef ?? "";
+  const [prepare, smoke] = t.provider.starts;
+
+  // The regression of RP-391: a snapshot of a VM that got a secret fails this test.
+  assert.equal(t.snapshotFrom.length, 1);
+  const [from] = t.snapshotFrom;
+  assert.equal(from?.vmRef, prepare?.vmRef);
+  assert.deepEqual(
+    from?.writes.map((write) => write.split(" ")[0]),
+    [IMAGE_FILE],
+    "no env file or other file under /tmp",
+  );
+  for (const text of [...(from?.writes ?? []), ...(from?.commands ?? [])]) {
+    assert.doesNotMatch(text, new RegExp(SECRET));
+  }
+  assert.deepEqual(t.snapshotFiles, [[]], "no tarball in the snapshot");
+
+  // The smoke VM starts from the snapshot and gets the secret in the env file only.
+  assert.equal(smoke?.fromSnapshot, ready.imageRef);
   assert.equal(
-    t.provider.fileOf(vmRef, ENV_FILE),
+    t.provider.fileOf(smoke?.vmRef ?? "", ENV_FILE),
     `OPENAI_API_KEY=${SECRET}\nPORT=8080\nRATEL_SECRET_NAMES=OPENAI_API_KEY\n`,
   );
-  const [files] = t.snapshotFiles;
-  assert.deepEqual(files, [], "no tarball, env file or request file in the snapshot");
+  for (const command of t.commands()) assert.doesNotMatch(command, new RegExp(SECRET));
   assert.equal(ready.smoke?.logs, "boot\nusing key [redacted]\nready\n");
   assert.doesNotMatch(JSON.stringify(ready), new RegExp(SECRET));
   assert.equal(t.agent.containers.size, 0);
+});
+
+test("the prepare and the smoke VM starts each count, and each records usage by its VM row", async () => {
+  const t = await setup();
+  assert.deepEqual(await t.run(), { status: "ready" });
+  const rows = await t.vmRows();
+  assert.equal(rows.length, 2, "the prepare VM start and the smoke VM start");
+  for (const row of rows) {
+    assert.equal(row.versionId, t.version.id);
+    assert.equal(row.state, "deleted");
+    assert.equal(row.vmRef, null, "no run claims the VM of a build");
+  }
+  const [prepare, smoke] = t.provider.starts;
+  assert.equal(prepare?.labels["ratel-vm"], rows[0]?.id);
+  assert.equal(smoke?.labels["ratel-vm"], rows[1]?.id);
+  assert.deepEqual(
+    t.limits.records.map(({ kind, reference, organizationId }) => ({
+      kind,
+      reference,
+      organizationId,
+    })),
+    rows.map(({ id }) => ({
+      kind: "sandbox_vm_start",
+      reference: id,
+      organizationId: ORGANIZATION_ID,
+    })),
+  );
+});
+
+test("with no VM start left today the prepare start is refused with the limit name, and no VM starts", async () => {
+  const t = await setup({ vmStartsPerDay: 0 });
+  assert.deepEqual(await t.run(), { status: "failed" });
+  const failed = await t.read();
+  assert.match(failed.reason ?? "", /The limit sandbox_vm_starts_per_day \(0\) is reached/);
+  assert.equal(failed.imageRef, null);
+  assert.equal(t.provider.starts.length, 0, "no startVm call");
+  assert.equal(t.provider.snapshots.size, 0);
+  assert.deepEqual(await t.vmRows(), []);
+  assert.deepEqual(t.limits.records, []);
+});
+
+test("with one VM start left today the smoke start is refused, and its snapshot is deleted", async () => {
+  const t = await setup({ vmStartsPerDay: 1 });
+  assert.deepEqual(await t.run(), { status: "failed" });
+  const failed = await t.read();
+  assert.match(failed.reason ?? "", /The limit sandbox_vm_starts_per_day \(1\) is reached/);
+  assert.equal(failed.imageRef, null);
+  assert.equal(t.provider.starts.length, 1, "no smoke VM starts");
+  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.equal(t.provider.snapshots.size, 0);
+  assert.equal(t.provider.vms.size, 0);
+  assert.equal((await t.vmRows()).length, 1);
+});
+
+test("a prepare VM that does not start keeps its counted start, and records no usage", async () => {
+  const t = await setup();
+  const provider: SandboxProvider = {
+    ...t.provider,
+    startVm: async () => {
+      throw new ProviderAtCapacity("boat: full");
+    },
+  };
+  assert.deepEqual(await t.run({ provider }), { status: "failed" });
+  const [row, ...more] = await t.vmRows();
+  assert.equal(more.length, 0);
+  assert.equal(row?.state, "deleted", "the attempt counts in the budget");
+  assert.deepEqual(t.limits.records, [], "only a started VM is usage");
+});
+
+test("a refusal of the sandbox service fails the version with a reason that names no provider and gives no retry advice", async () => {
+  const cases: Array<[number, string]> = [
+    [402, "The sandbox service refused the request: the Ratel sandbox account is not active."],
+    [403, "The sandbox service refused the request: the Ratel sandbox account lacks a permission."],
+  ];
+  for (const [status, reason] of cases) {
+    const t = await setup();
+    const provider: SandboxProvider = {
+      ...t.provider,
+      startVm: async () => {
+        throw new ProviderRefused(`boat: refused (status ${status})`, status);
+      },
+    };
+    assert.deepEqual(await t.run({ provider }), { status: "failed" });
+    const failed = await t.read();
+    assert.equal(failed.reason, reason);
+    assert.doesNotMatch(`${failed.reason}${failed.buildLog}`, /boat|again/i);
+  }
+});
+
+test("a smoke VM that does not start fails the version, and its snapshot is deleted", async () => {
+  const t = await setup();
+  const provider: SandboxProvider = {
+    ...t.provider,
+    startVm: async (request) => {
+      if (request.purpose === "smoke") throw new ProviderAtCapacity("boat: full");
+      return t.provider.startVm(request);
+    },
+  };
+  assert.deepEqual(await t.run({ provider }), { status: "failed" });
+  const failed = await t.read();
+  assert.match(failed.reason ?? "", /as many machines as it can/);
+  assert.equal(failed.imageRef, null);
+  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
+  assert.equal(t.provider.vms.size, 0);
+  const [row] = await t.vmRows();
+  assert.equal(row?.state, "deleted");
 });
 
 test("a missing secret fails the version before any VM starts", async () => {
@@ -227,7 +423,7 @@ const SMOKE_FAILURES: Array<[string, AgentScript, string, RegExp]> = [
 ];
 
 for (const [what, agent, code, reason] of SMOKE_FAILURES) {
-  test(`a smoke check with ${what} fails the version with ${code}, the logs, and no snapshot`, async () => {
+  test(`a smoke check with ${what} fails the version with ${code}, the logs, and deletes the snapshot`, async () => {
     const t = await setup({ agent: { ...agent, logs: `the agent log ${SECRET}\n` } });
     assert.deepEqual(await t.run(), { status: "failed" });
     const failed = await t.read();
@@ -239,8 +435,14 @@ for (const [what, agent, code, reason] of SMOKE_FAILURES) {
     assert.equal(failed.smoke?.logs, "the agent log [redacted]\n");
     assert.deepEqual(versionView(failed).smoke, failed.smoke);
     assert.equal(failed.imageRef, null);
+    assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
     assert.equal(t.provider.snapshots.size, 0);
-    assert.equal(t.provider.vms.size, 0, "the VM is deleted");
+    assert.equal(t.provider.starts.length, 2);
+    assert.deepEqual(
+      t.provider.deleted,
+      t.provider.starts.map((start) => start.vmRef),
+      "both VMs are deleted",
+    );
     assert.ok(t.commands().some((command) => command.startsWith(`docker rm -f -v smoke-`)));
     assert.equal(t.agent.containers.size, 0);
   });
@@ -270,7 +472,7 @@ test("command mode: the request goes on stdin, and stdout text is the output", a
         `docker create -i --name smoke-${t.version.id} --env-file ${ENV_FILE} ${tag} 'node' 'agent.js' '--it'\\''s' >/dev/null; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; timeout 30 docker start -ai smoke-${t.version.id} < ${REQUEST_FILE}; code=$?; rm -f ${REQUEST_FILE}; exit $code`,
       ),
   );
-  const vmRef = t.provider.starts[0]?.vmRef ?? "";
+  const vmRef = t.provider.starts[1]?.vmRef ?? "";
   assert.equal(t.provider.fileOf(vmRef, ENV_FILE), "PORT=8080\nRATEL_SECRET_NAMES=\n");
 });
 
@@ -285,6 +487,7 @@ test("command mode: a non-zero exit fails the version with stderr as the logs", 
   assert.equal(!failed.smoke?.ok && failed.smoke?.error.code, "run_failed");
   assert.match(failed.reason ?? "", /exited with code 3/);
   assert.equal(failed.smoke?.logs, "TypeError: no input\n");
+  assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
   assert.equal(t.provider.snapshots.size, 0);
   assert.equal(t.provider.vms.size, 0);
 });
@@ -300,28 +503,11 @@ test("command mode: a run over its timeout fails with timeout", async () => {
   assert.equal(!failed.smoke?.ok && failed.smoke?.error.code, "timeout");
 });
 
-test("a container that stays after the smoke check stops the snapshot", async () => {
-  const t = await setup({ agent: { keepsContainer: true } });
-  assert.deepEqual(await t.run(), { status: "failed" });
-  const failed = await t.read();
-  assert.match(failed.reason ?? "", /no snapshot/i);
-  assert.equal(t.provider.snapshots.size, 0);
-  assert.equal(t.provider.vms.size, 0);
-});
-
-test("the anonymous volume of a smoke container goes with the container, and the snapshot is saved", async () => {
-  const t = await setup({ agent: { volumes: true } });
+test("a container or a volume that stays after the smoke check goes with the smoke VM", async () => {
+  const t = await setup({ agent: { keepsContainer: true, volumes: true, keepsVolume: true } });
   assert.deepEqual(await t.run(), { status: "ready" });
-  assert.equal(t.agent.volumes.size, 0);
-});
-
-test("a volume that stays after the smoke check stops the snapshot", async () => {
-  const t = await setup({ agent: { volumes: true, keepsVolume: true } });
-  assert.deepEqual(await t.run(), { status: "failed" });
-  const failed = await t.read();
-  assert.match(failed.reason ?? "", /no snapshot/i);
-  assert.match(failed.buildLog ?? "", /volume-of-smoke-/);
-  assert.equal(t.provider.snapshots.size, 0);
+  assert.equal(t.provider.snapshots.size, 1);
+  assert.equal(t.provider.vms.size, 0);
 });
 
 test("an image id other than the pushed digest is in the log", async () => {
@@ -340,7 +526,7 @@ test("a second job for the same version prepares nothing", async () => {
   await t.run();
   const { imageRef } = await t.read();
   assert.deepEqual(await t.run(), { status: "skipped" });
-  assert.equal(t.provider.starts.length, 1);
+  assert.equal(t.provider.starts.length, 2);
   assert.equal((await t.read()).imageRef, imageRef);
 });
 
@@ -382,6 +568,21 @@ test("a provider error fails the build, and its text is not shown", async () => 
   const failed = await t.read();
   assert.equal(failed.status, "failed");
   assert.doesNotMatch(`${failed.reason}${failed.buildLog}`, /boat|account-123/i);
+});
+
+test("a 404 or 409 refusal of the sandbox service keeps the generic reason of the build", async () => {
+  for (const status of [404, 409]) {
+    const t = await setup();
+    const provider: SandboxProvider = {
+      ...t.provider,
+      startVm: async () => {
+        throw new ProviderRefused(`boat: not there (status ${status})`, status);
+      },
+    };
+    assert.deepEqual(await t.run({ provider }), { status: "failed" });
+    const failed = await t.read();
+    assert.equal(failed.reason, "The build service did not work. Push again.");
+  }
 });
 
 test("a rate limit or a full account gives a reason to push again, with no provider name", async () => {

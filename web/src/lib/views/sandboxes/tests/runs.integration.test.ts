@@ -16,6 +16,7 @@ import { runView, sandboxRunSchema, sandboxRunView } from "../domain/run";
 import {
   ProviderAtCapacity,
   ProviderRateLimited,
+  ProviderRefused,
   ProviderUnavailable,
   type SandboxProvider,
   type StartVmRequest,
@@ -451,6 +452,47 @@ test("a rate limit, a full account or a broken service at the VM start fails the
     assert.deepEqual(t.limits.records, [], "no usage");
     assert.ok((await t.ran()).status === "completed", "the next run starts a new VM");
     assert.equal(t.provider.starts.length, 1);
+  }
+});
+
+test("a refusal of the sandbox service fails the run with provider_refused, no provider name and no retry advice", async () => {
+  const cases: Array<[number, string]> = [
+    [402, "The sandbox service refused the request: the Ratel sandbox account is not active."],
+    [403, "The sandbox service refused the request: the Ratel sandbox account lacks a permission."],
+  ];
+  for (const [status, reason] of cases) {
+    const t = await setup();
+    await t.makeReady();
+    const provider: SandboxProvider = {
+      ...t.provider,
+      startVm: async () => {
+        throw new ProviderRefused(`boat: refused (status ${status})`, status);
+      },
+    };
+    const run = await t.ran({ provider });
+    assert.equal(run.status, "infra_error");
+    assert.equal(run.errorCode, "provider_refused");
+    assert.equal(run.reason, reason);
+    assert.deepEqual(sandboxRunView(run).error, { code: "provider_refused", message: reason });
+    assert.equal(sandboxRunView(run).status, "failed");
+    assert.deepEqual(t.limits.records, [], "no usage");
+  }
+});
+
+test("a 404 or 409 refusal of the sandbox service (a VM that is gone) stays an infra failure, not provider_refused", async () => {
+  for (const status of [404, 409]) {
+    const t = await setup();
+    await t.makeReady();
+    const provider: SandboxProvider = {
+      ...t.provider,
+      exec: async () => {
+        throw new ProviderRefused(`boat: the VM is not there (status ${status})`, status);
+      },
+    };
+    const run = await t.ran({ provider });
+    assert.equal(run.status, "infra_error");
+    assert.equal(run.errorCode, "infra_error");
+    assert.equal(run.reason, "The sandbox did not work. Run again.");
   }
 });
 

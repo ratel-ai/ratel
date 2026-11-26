@@ -1,6 +1,8 @@
 /**
  * The service that runs virtual machines with Docker. A "prepare" VM loads an image and is saved
- * as a snapshot; a "run" VM starts from that snapshot and runs one agent. The developer never sees
+ * as a snapshot; a "smoke" VM starts from that snapshot and runs the smoke check of the version; a
+ * "run" VM starts from that snapshot and runs one agent. Only a VM that got no secret is saved as
+ * a snapshot (`vm-session.ts`). The developer never sees
  * which service it is, so no message of an error of this port names it. One provider serves one
  * deployment: it marks each VM that it starts as a VM of the deployment.
  */
@@ -30,7 +32,7 @@ export const VM_START_TIMEOUT_MS = 12 * 60_000;
 
 export type StartVmRequest = {
   projectId: string;
-  purpose: "prepare" | "run";
+  purpose: "prepare" | "smoke" | "run";
   /** The snapshot to start from. With none, the VM starts from the base image. */
   fromSnapshot?: string;
   /** The service deletes the VM after this time, if Ratel does not. */
@@ -40,7 +42,7 @@ export type StartVmRequest = {
     inbound: "open" | "closed";
     outbound: { mode: "open" } | { mode: "deny" } | { mode: "allow"; allow: readonly string[] };
   };
-  /** False for run VMs: no snapshot of them is kept, so none can be saved. */
+  /** False for smoke and run VMs: no snapshot of them is kept, so none can be saved. */
   keepSnapshots: boolean;
 };
 
@@ -110,6 +112,25 @@ export class ProviderRefused extends Error {
     super(message);
     this.name = "ProviderRefused";
   }
+}
+
+/** Why the service refused the account, by its HTTP status, in words that name no provider. */
+const ACCOUNT_REFUSALS: Readonly<Record<number, string>> = {
+  401: "the Ratel sandbox account key is not valid",
+  402: "the Ratel sandbox account is not active",
+  403: "the Ratel sandbox account lacks a permission",
+};
+
+/**
+ * The reason of a refusal of the account (401, 402, 403) for the developer, or null for another
+ * error. It never names the provider and gives no advice to try again: the same call gets the same
+ * refusal until an operator acts. Another refusal (e.g. a 404 or 409 of a VM that is gone) is an
+ * infrastructure failure for the caller.
+ */
+export function accountRefusedReason(error: unknown): string | null {
+  if (!(error instanceof ProviderRefused)) return null;
+  const why = ACCOUNT_REFUSALS[error.status];
+  return why ? `The sandbox service refused the request: ${why}.` : null;
 }
 
 /** The version cannot build. The message is for the developer. */

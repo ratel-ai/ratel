@@ -10,6 +10,7 @@ import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
 import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { sandboxRunSchema } from "../domain/run";
+import { ProviderRefused } from "../ports/sandbox-provider";
 import type { RunDeps } from "../runs";
 import {
   handleGetSandboxRun,
@@ -177,6 +178,28 @@ test("a run by version id, and a failed run with its error", async () => {
   assert.ok(sandboxRunSchema.safeParse(read.body).success);
   assert.equal(read.body.status, "failed");
   assert.equal(read.body.error.code, "no_health");
+});
+
+test("a refusal of the sandbox service is a failed run with provider_refused and a safe message", async () => {
+  const t = await setup();
+  const versionId = await t.push();
+  const startVm = t.provider.startVm;
+  t.provider.startVm = async () => {
+    throw new ProviderRefused("boat: billing_required (status 402)", 402);
+  };
+  const started = await t.start({ versionId, input: null });
+  assert.equal(started.status, 202);
+  await t.settle();
+  t.provider.startVm = startVm;
+  const read = await t.get(started.body.runId);
+  assert.equal(read.status, 200);
+  assert.ok(sandboxRunSchema.safeParse(read.body).success);
+  assert.equal(read.body.status, "failed");
+  assert.deepEqual(read.body.error, {
+    code: "provider_refused",
+    message: "The sandbox service refused the request: the Ratel sandbox account is not active.",
+  });
+  assert.doesNotMatch(JSON.stringify(read.body), /boat|again/i);
 });
 
 test("a request that is not a start-run request, or that ratel.yaml refuses, is 400 with the reason", async () => {

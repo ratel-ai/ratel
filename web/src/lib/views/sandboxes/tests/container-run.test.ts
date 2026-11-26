@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { runContainer } from "../container-run";
 import type { RatelYaml } from "../domain/config";
+import { startVmSession } from "../vm-session";
 import { scriptAgent } from "./fake-agent";
 import { createFakeProvider } from "./fake-provider";
 import { CONFIG } from "./support";
@@ -16,7 +17,7 @@ for (const config of [CONFIG, COMMAND_CONFIG] as RatelYaml[]) {
   test(`each command of a ${config.run?.mode} run is valid shell syntax`, async () => {
     const provider = createFakeProvider();
     scriptAgent(provider);
-    const { vmRef } = await provider.startVm({
+    const vm = await startVmSession(provider, {
       projectId: "p1",
       purpose: "run",
       ttlS: 60,
@@ -24,7 +25,7 @@ for (const config of [CONFIG, COMMAND_CONFIG] as RatelYaml[]) {
       network: { inbound: "closed", outbound: { mode: "deny" } },
       keepSnapshots: false,
     });
-    await runContainer(provider, vmRef, {
+    await runContainer(vm, {
       name: "run-1",
       filePrefix: "/tmp/ratel-run-1-",
       config,

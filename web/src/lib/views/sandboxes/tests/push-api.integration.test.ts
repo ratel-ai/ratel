@@ -10,8 +10,10 @@ import { sealSecret } from "@/lib/platform/sealed-secrets";
 import { createDrizzleBuildStore } from "../adapters/drizzle-build-store";
 import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
+import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { runImageBuild } from "../image-build-job";
+import { ProviderRefused } from "../ports/sandbox-provider";
 import {
   handleCreateVersion,
   handleFinalizeVersion,
@@ -75,6 +77,10 @@ async function setup() {
         bundles,
         provider: vms,
         secrets,
+        vms: createDrizzleVmStore(db),
+        limits: createInMemoryUsageLimits(),
+        organizationIdOf: async () => ORGANIZATION_ID,
+        callbackUrl: () => "https://ratel.example",
         sealingKey: () => ({ ok: true, key: SEALING }),
         now: () => new Date(),
         every: () => () => {},
@@ -189,7 +195,7 @@ test("a valid push goes preparing, then ready, with its smoke result through the
   };
   assert.deepEqual(await t.prepare(versionId), { status: "ready" });
   const version = await read(await t.get(versionId));
-  assert.deepEqual(statuses, ["preparing"]);
+  assert.deepEqual(statuses, ["preparing", "preparing"], "the prepare VM, then the smoke VM");
   assert.equal(version.status, "ready");
   assert.equal(version.reason, null);
   assert.deepEqual(version.config, CONFIG);
@@ -241,6 +247,22 @@ test("command mode: a non-zero exit gives failed with stderr through the version
   assert.equal(version.status, "failed");
   assert.equal(version.smoke.error.code, "run_failed");
   assert.equal(version.smoke.logs, "no input\n");
+});
+
+test("a refusal of the sandbox service gives failed with a safe reason through the version API", async () => {
+  const t = await setup();
+  const { versionId } = await t.push();
+  t.vms.startVm = async () => {
+    throw new ProviderRefused("boat: billing_required (status 402)", 402);
+  };
+  assert.deepEqual(await t.prepare(versionId), { status: "failed" });
+  const version = await read(await t.get(versionId));
+  assert.equal(version.status, "failed");
+  assert.equal(
+    version.reason,
+    "The sandbox service refused the request: the Ratel sandbox account is not active.",
+  );
+  assert.doesNotMatch(JSON.stringify(version), /boat|again/i);
 });
 
 test("with no public origin the upload address is the origin that the client called", async () => {

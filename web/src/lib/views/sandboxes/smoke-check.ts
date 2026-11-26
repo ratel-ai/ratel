@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 import { DEFAULT_TIMEOUT_S, runContainer } from "./container-run";
 import type { RatelYaml } from "./domain/config";
 import { type SmokeResult, smokeRequest } from "./domain/contract";
-import type { SandboxProvider } from "./ports/sandbox-provider";
+import type { VmSession } from "./vm-session";
 
 /**
- * The smoke check of a version in its prepare VM: one run of `input.example` with every tool
- * simulated, in a container of the loaded image (`container-run.ts`). The check removes its
- * container, its volumes and its files at the end, so no snapshot holds a secret value.
+ * The smoke check of a version: one run of `input.example` with every tool simulated, in a
+ * container of the loaded image (`container-run.ts`). It runs in a smoke VM that starts from the
+ * snapshot of the version and is deleted after the check: the VM gets the secrets, so it never
+ * becomes a snapshot.
  */
 export type SmokeCheckInput = {
   versionId: string;
@@ -20,16 +21,11 @@ export type SmokeCheckInput = {
 
 /** The files of a smoke check start so. */
 const FILE_PREFIX = "/tmp/ratel-smoke-";
-const DOCKER_STEP_S = 120;
 
-export async function runSmokeCheck(
-  provider: SandboxProvider,
-  vmRef: string,
-  input: SmokeCheckInput,
-): Promise<SmokeResult> {
+export async function runSmokeCheck(vm: VmSession, input: SmokeCheckInput): Promise<SmokeResult> {
   const { config, log } = input;
   log("> running the smoke check\n");
-  const { answer, durationMs, logs } = await runContainer(provider, vmRef, {
+  const { answer, durationMs, logs } = await runContainer(vm, {
     name: `smoke-${input.versionId}`,
     filePrefix: FILE_PREFIX,
     config,
@@ -45,13 +41,4 @@ export async function runSmokeCheck(
     result.ok ? "> the smoke check passed\n" : `> the smoke check failed: ${result.error.code}\n`,
   );
   return result;
-}
-
-/** What the VM still holds of a smoke check: a container, a volume or a file. Empty when nothing. */
-export async function smokeLeftovers(provider: SandboxProvider, vmRef: string): Promise<string> {
-  const found = await provider.exec(vmRef, {
-    command: `docker ps -aq; docker volume ls -q; ls -1d ${FILE_PREFIX}* 2>/dev/null; true`,
-    timeoutS: DOCKER_STEP_S,
-  });
-  return found.exitCode === 0 ? found.stdout.trim() : "the check of the VM did not run";
 }

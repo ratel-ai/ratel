@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, lt, ne, or, sql } from "drizzle-orm";
+import type { UsageCheck, UsageRefusal } from "@/lib/contracts/usage-limits";
 import type { getDb } from "@/lib/platform/db/client";
-import type { RunVm, VmStore } from "../ports/vm-store";
+import type { RunVm, VmClaim, VmStore } from "../ports/vm-store";
 import { sandboxRuns, sandboxVms } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "transaction">;
@@ -30,29 +31,17 @@ export function createDrizzleVmStore(db: Db): VmStore {
           await assign(tx, claim.runId, warm.id);
           return { ok: true as const, vm: toVm(warm), isNew: false };
         }
-        const [today] = await tx
-          .select({ count: sql<number>`count(*)::int` })
-          .from(sandboxVms)
-          .where(
-            and(
-              eq(sandboxVms.projectId, claim.projectId),
-              sql`${sandboxVms.startedAt} >= date_trunc('day', now(), 'UTC')`,
-            ),
-          );
-        const checked = await check(today?.count ?? 0);
-        if (!checked.ok) return checked;
-        const [row] = await tx
-          .insert(sandboxVms)
-          .values({
-            projectId: claim.projectId,
-            versionId: claim.versionId,
-            startedAt: claim.now,
-            lastUsedAt: claim.now,
-          })
-          .returning();
-        if (!row) throw new Error("the vm row is missing");
-        await assign(tx, claim.runId, row.id);
-        return { ok: true as const, vm: toVm(row), isNew: true };
+        const started = await countedStart(tx, claim, check);
+        if (!started.ok) return started;
+        await assign(tx, claim.runId, started.vm.id);
+        return { ...started, isNew: true };
+      });
+    },
+
+    claimStart(start, check) {
+      return db.transaction(async (tx) => {
+        await lockProject(tx, start.projectId);
+        return countedStart(tx, start, check);
       });
     },
 
@@ -123,6 +112,36 @@ async function lockProject(tx: Tx, projectId: string) {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`sandbox_vms:${projectId}`}, 0))`,
   );
+}
+
+/** A new `starting` VM row when `check` passes with the VM starts of the project of today. */
+async function countedStart(
+  tx: Tx,
+  start: Pick<VmClaim, "projectId" | "versionId" | "now">,
+  check: (startsToday: number) => Promise<UsageCheck>,
+): Promise<{ ok: true; vm: RunVm } | UsageRefusal> {
+  const [today] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(sandboxVms)
+    .where(
+      and(
+        eq(sandboxVms.projectId, start.projectId),
+        sql`${sandboxVms.startedAt} >= date_trunc('day', now(), 'UTC')`,
+      ),
+    );
+  const checked = await check(today?.count ?? 0);
+  if (!checked.ok) return checked;
+  const [row] = await tx
+    .insert(sandboxVms)
+    .values({
+      projectId: start.projectId,
+      versionId: start.versionId,
+      startedAt: start.now,
+      lastUsedAt: start.now,
+    })
+    .returning();
+  if (!row) throw new Error("the vm row is missing");
+  return { ok: true, vm: toVm(row) };
 }
 
 /**
