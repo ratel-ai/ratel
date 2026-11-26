@@ -1,7 +1,7 @@
 import { featureEnabled } from "@/lib/platform/experimental-features";
 
 /**
- * The rail's check for Dashboards, Explore, Scorers and Alerts: the organizations with `customMonitoring`
+ * The rail's check for Dashboards, Explore and Alerts: the organizations with `customMonitoring`
  * on. A failed decision hides them.
  */
 export async function customMonitoringOrganizationIds(

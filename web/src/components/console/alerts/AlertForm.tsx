@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState, useTransition } from "react";
 import { changeAlertAction } from "@/app/(console)/project/[projectId]/alerts/actions";
+import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { projectSettingsRoot } from "@/lib/console/settings/tabs";
 import { type MetricQuery, metricQuery, parseQuery } from "@/lib/contracts/query";
 import { getMetric } from "@/lib/synthesis/metrics/catalog";
@@ -34,7 +35,6 @@ import {
   type AlertWindow,
   MAX_ALERT_NAME,
 } from "@/lib/views/alerts/types";
-import type { ScorerOption } from "@/lib/views/dashboards/types";
 import { changeQuery, type QueryChange, queryName } from "@/lib/views/dashboards/widget";
 import { slackErrorText } from "@/lib/views/slack/errors";
 import { Choice, MetricFields, MetricFilter } from "../dashboards/MetricFields";
@@ -51,7 +51,6 @@ export function AlertForm({
   projectId,
   rule,
   start,
-  scorers,
   facets,
   destinations,
   slackLost,
@@ -61,13 +60,13 @@ export function AlertForm({
   rule: AlertRule | null;
   /** What a new one measures at first. */
   start: MetricQuery | null;
-  scorers: readonly ScorerOption[] | null;
   facets: TraceFilterBarFacets;
   destinations: readonly AlertDestination[];
   /** Channels of a Slack workspace that is not connected any more are among them. */
   slackLost: boolean;
 }) {
   const router = useRouter();
+  const scorers = useScorers();
   const [query, setQuery] = useState<MetricQuery>(() => startQuery(rule?.query ?? start));
   const [name, setName] = useState(rule?.name ?? "");
   const [operator, setOperator] = useState<AlertOperator>(rule?.operator ?? "above");
@@ -131,7 +130,7 @@ export function AlertForm({
     <form noValidate onSubmit={save} className="flex max-w-3xl flex-col gap-8">
       <Section title="1. Metric">
         <div className="flex flex-col gap-4">
-          <MetricFields query={query} scorers={scorers} onChange={edit} />
+          <MetricFields query={query} onChange={edit} />
           <MetricFilter
             query={query}
             facets={facets}

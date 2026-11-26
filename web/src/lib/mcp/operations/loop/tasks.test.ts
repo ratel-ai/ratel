@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { drizzle } from "drizzle-orm/pglite";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
+import type { getDb } from "@/lib/platform/db/client";
+import * as schema from "@/lib/platform/db/tables";
+import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { emptyChange } from "@/lib/views/eval-gate/change";
 import { fixStats } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
+import { MAX_SCORERS } from "@/lib/views/scorers/config";
+import { countScorers, listTaskScorers } from "@/lib/views/scorers/store";
+import { resetTaskScorer, saveTaskScorer } from "@/lib/views/scorers/task-presets";
 import type { changeTaskEval } from "@/lib/views/task-evals/actions";
 import { draftTaskTest } from "@/lib/views/task-evals/draft-action";
 import { TestDraftError } from "@/lib/views/task-evals/run-to-test";
@@ -14,6 +21,7 @@ import { changeTaskSimulation } from "@/lib/views/task-evals/simulation-actions"
 import type { TaskSimulationDetail } from "@/lib/views/task-evals/simulation-page";
 import type { TestProposal } from "@/lib/views/task-evals/test-proposal";
 import { changeTaskScorer } from "@/lib/views/task-scorers/actions";
+import { scorersFor } from "@/lib/views/task-scorers/store";
 import {
   defaultTaskDeps,
   loopTaskReadOperations,
@@ -175,6 +183,7 @@ function deps(events: Tracked[], over: Partial<TaskOperationDeps> = {}): TaskOpe
     ],
     taskSimulationDetailFor: async () => detail(),
     taskEvalCases: async () => [],
+    scorersOn: async () => false,
     saveScorer: unexpected,
     resetScorer: unexpected,
     enqueueTaskEvalRefresh: unexpected,
@@ -323,7 +332,9 @@ test("change_task_scorer saves through the console's action as the caller, and e
       { taskId: TASK, kind: "max_tool_calls", max: 3, enabled: true },
       events,
       {
-        saveScorer: async (input) => saved.push(input) as never,
+        saveScorer: async (input) => {
+          saved.push(input);
+        },
       },
     ),
   );
@@ -344,14 +355,97 @@ test("change_task_scorer saves through the console's action as the caller, and e
   assert.equal(events[0]!.properties.organization_id, "org-1");
 });
 
+test("change_task_scorer with the real sync: flag off at or over the limit succeeds, flag on refuses before any write", async () => {
+  for (const [live, scorers, ok] of [
+    [false, MAX_SCORERS, true],
+    [false, MAX_SCORERS + 30, true],
+    [true, MAX_SCORERS, false],
+  ] as const) {
+    const client = await createMigratedPGlite();
+    const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
+    try {
+      await client.exec(`
+        insert into organizations (id, name, slug) values ('22222222-2222-4222-8222-222222222222', 'T', 't');
+        insert into projects (id, organization_id, name, slug) values ('${PROJECT}', '22222222-2222-4222-8222-222222222222', 'A', 'a');
+        insert into task_scorers (project_id, task_id, kind, config, enabled, source, updated_by)
+          values ('${PROJECT}', '${TASK}', 'max_tool_calls', '{"max": 5}', true, 'user', 'u1');
+        insert into trace_scorers (project_id, name, kind, config, created_by, updated_by)
+          select '${PROJECT}', 'S' || n, 'check', '{"path":"duration_ms","op":"exists"}', 'u', 'u'
+          from generate_series(1, ${scorers}) n;`);
+      const legacy = async () => {
+        const scorer = (await scorersFor(PROJECT, TASK, db)).find(
+          (candidate) => candidate.kind === "max_tool_calls",
+        );
+        return scorer?.kind === "max_tool_calls" ? scorer.max : null;
+      };
+      const result = await run(
+        "change_task_scorer",
+        { taskId: TASK, kind: "max_tool_calls", max: 3, enabled: true },
+        [],
+        {
+          changeTaskScorer,
+          scorersOn: async () => live,
+          saveScorer: (input, on) => saveTaskScorer(input, on, db),
+          resetScorer: (projectId, taskId, kind, actor, on) =>
+            resetTaskScorer(projectId, taskId, kind, actor, on, db),
+        },
+      );
+      const label = `live ${live}, ${scorers} scorers`;
+      if (ok) {
+        data(result);
+        assert.equal(await legacy(), 3, label);
+      } else {
+        const refused = error(result);
+        assert.equal(refused.error, "conflict", label);
+        assert.match(refused.message, /limit is 100/, label);
+        assert.equal(await legacy(), 5, label);
+      }
+      // The refused sync creates nothing either way.
+      assert.equal(await countScorers(PROJECT, db), scorers, label);
+    } finally {
+      await client.close();
+    }
+  }
+});
+
+test("change_task_scorer with the real sync, flag off under the limit: the converted scorer follows", async () => {
+  const client = await createMigratedPGlite();
+  const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
+  try {
+    await client.exec(`
+      insert into organizations (id, name, slug) values ('22222222-2222-4222-8222-222222222222', 'T', 't');
+      insert into projects (id, organization_id, name, slug) values ('${PROJECT}', '22222222-2222-4222-8222-222222222222', 'A', 'a');`);
+    data(
+      await run(
+        "change_task_scorer",
+        { taskId: TASK, kind: "max_tool_calls", max: 3, enabled: true },
+        [],
+        {
+          changeTaskScorer,
+          scorersOn: async () => false,
+          saveScorer: (input, on) => saveTaskScorer(input, on, db),
+        },
+      ),
+    );
+    assert.deepEqual(
+      (await listTaskScorers(PROJECT, TASK, db)).map((scorer) => scorer.config),
+      [{ preset: "max_tool_calls", max: 3 }],
+    );
+  } finally {
+    await client.close();
+  }
+});
+
 test("change_task_scorer resets, and refuses a scorer without its setting or a save without enabled", async () => {
   const reset: unknown[] = [];
   data(
     await run("change_task_scorer", { taskId: TASK, kind: "judge_criteria", action: "reset" }, [], {
-      resetScorer: async (...args) => reset.push(args) as never,
+      resetScorer: async (...args) => {
+        reset.push(args);
+      },
     }),
   );
-  assert.deepEqual(reset, [[PROJECT, TASK, "judge_criteria"]]);
+  assert.deepEqual(reset, [[PROJECT, TASK, "judge_criteria", ACTOR, false]]);
   const noMax = error(
     await run("change_task_scorer", { taskId: TASK, kind: "max_cost_usd", enabled: true }),
   );
@@ -708,7 +802,9 @@ test("change_task_scorer runs the real action end to end with the console's pars
       [],
       {
         changeTaskScorer,
-        saveScorer: async (input) => saved.push(input) as never,
+        saveScorer: async (input) => {
+          saved.push(input);
+        },
       },
     ),
   );

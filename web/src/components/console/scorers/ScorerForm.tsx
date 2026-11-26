@@ -1,19 +1,16 @@
 "use client";
 
 import { Button } from "@ratel/design-system/button";
-import { buttonVariants } from "@ratel/design-system/button-variants";
 import { Checkbox } from "@ratel/design-system/checkbox";
+import { cn } from "@ratel/design-system/cn";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { Field, Input, Textarea } from "@ratel/design-system/input";
-import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { Select } from "@ratel/design-system/select";
 import { Callout } from "@ratel/design-system/states";
 import { SegmentedControl } from "@ratel/design-system/tabs";
-import { toast } from "@ratel/design-system/toast";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState, useTransition } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState, useTransition } from "react";
 import {
   changeScorerAction,
   countScorerTracesAction,
@@ -36,19 +33,22 @@ import {
   SKIP_LABELS,
   searchOfFilter,
 } from "@/lib/views/scorers/format";
-import { scorersHref, traceHref } from "@/lib/views/scorers/paths";
+import { traceHref } from "@/lib/views/scorers/paths";
 import type { PreviewResult } from "@/lib/views/scorers/preview";
 import {
   ATTRIBUTE_PREFIX,
   CHECK_OPERATORS,
   type CheckOperator,
   type JudgeOutput,
+  PRESET_KINDS,
+  type PresetKind,
   SCORER_KINDS,
   type ScorerDraft,
   type ScorerKind,
   type ScorerScope,
   TRACE_FIELDS,
 } from "@/lib/views/scorers/types";
+import { SCORER_LABELS } from "@/lib/views/task-scorers/labels";
 import { TraceFilterBar } from "../traces/TraceFilterBar";
 import { ScoreValue } from "./parts";
 
@@ -69,6 +69,10 @@ interface FormState {
   value: string;
   prompt: string;
   output: JudgeOutput;
+  preset: PresetKind;
+  /** A preset's limit, or the tool it expects. */
+  max: string;
+  tool: string;
   search: string;
   scope: ScorerScope;
   /** Kept when the scope is `all`, so a switch there and back loses nothing. */
@@ -78,13 +82,16 @@ interface FormState {
 
 type FormErrors = { field?: DraftField; error: string } | null;
 
-/** Create or edit a scorer: what to check, which traces, and a test, on one page. */
-export function ScorerForm({
+/** The scorer form, what to check, which traces and a test, in a Panel of the surface that uses it. */
+export function ScorerFormBody({
   projectId,
   facets,
   tasks,
   initialTask,
   scorer,
+  onSaved,
+  cancel,
+  className,
 }: {
   projectId: string;
   facets: TraceFilterFacets;
@@ -93,9 +100,12 @@ export function ScorerForm({
   initialTask?: string;
   /** Null: a new one. */
   scorer: (ScorerDraft & { id: string }) | null;
+  /** After the action saved it. */
+  onSaved: (saved: { scorerId: string; draft: ScorerDraft }) => void;
+  /** The way out without a save. */
+  cancel: ReactNode;
+  className?: string;
 }) {
-  const router = useRouter();
-  const root = scorersHref(projectId);
   const [state, setState] = useState(() => stateOf(scorer, initialTask));
   const [problem, setProblem] = useState<FormErrors>(null);
   const [saving, startSave] = useTransition();
@@ -122,6 +132,8 @@ export function ScorerForm({
 
   function save(event: FormEvent) {
     event.preventDefault();
+    // In a Panel, the form of the surface behind it is a parent in React's tree.
+    event.stopPropagation();
     const draft = checked(draftOf(state, scorer?.enabled ?? true));
     if (!draft) return;
     startSave(async () => {
@@ -129,13 +141,12 @@ export function ScorerForm({
         scorer
           ? { projectId, action: "update", scorerId: scorer.id, draft }
           : { projectId, action: "create", draft },
-      );
+      ).catch(() => ({ ok: false as const, error: "Could not save the scorer. Try again." }));
       if (!result.ok) {
         setProblem({ error: result.error });
         return;
       }
-      toast({ title: scorer ? "Scorer saved" : "Scorer created", tone: "success" });
-      router.push(`${root}/${result.scorerId}`);
+      onSaved({ scorerId: result.scorerId, draft });
     });
   }
 
@@ -152,156 +163,143 @@ export function ScorerForm({
   }
 
   return (
-    <Page>
-      <PageHeader
-        crumbs={[
-          { label: "Scorers", href: root },
-          ...(scorer ? [{ label: scorer.name, href: `${root}/${scorer.id}` }] : []),
-        ]}
-        title={scorer ? "Edit scorer" : "New scorer"}
-      />
-      <PageBody>
-        <form noValidate onSubmit={save} className="flex max-w-3xl flex-col gap-8">
-          <Section title="1. What to check">
-            <div className="flex flex-col gap-4">
-              <Field label="Name" error={errorOf("name")}>
-                {(control) => (
-                  <Input
-                    {...control}
-                    value={state.name}
-                    maxLength={100}
-                    onChange={(event) => set({ name: event.currentTarget.value })}
-                  />
-                )}
-              </Field>
-              <Choice label="Kind">
-                <SegmentedControl
-                  label="Kind"
-                  value={state.kind}
-                  onValueChange={(kind) => set({ kind })}
-                  options={SCORER_KINDS.map((kind) => ({
-                    value: kind,
-                    label: KIND_LABELS[kind],
-                    disabled: scorer !== null && scorer.kind !== kind,
-                  }))}
-                />
-              </Choice>
-              {state.kind === "check" ? (
-                <CheckFields state={state} set={set} errorOf={errorOf} />
-              ) : (
-                <JudgeFields
-                  state={state}
-                  set={set}
-                  errorOf={errorOf}
-                  fixedOutput={scorer?.kind === "judge"}
-                />
-              )}
-            </div>
-          </Section>
-
-          <Section
-            title="2. Which traces"
-            description="Every new trace, or only the ones of some tasks or that match a filter."
-          >
-            <div className="flex flex-col gap-4">
-              <Choice label="Scope">
-                <SegmentedControl
-                  label="Scope"
-                  value={state.scope}
-                  onValueChange={(scope) => set({ scope })}
-                  options={[
-                    { value: "all", label: "All traces" },
-                    { value: "tasks", label: "Tasks" },
-                  ]}
-                />
-              </Choice>
-              {state.scope === "tasks" ? (
-                <TaskPicker
-                  tasks={tasks}
-                  chosen={state.tasks}
-                  error={errorOf("tasks")}
-                  onChange={(chosen) => set({ tasks: chosen })}
-                />
-              ) : null}
-              <TraceFilterBar
-                tab="rollup"
-                search={state.search}
-                pending={false}
-                facets={facets}
-                searchable={false}
-                onSearchChange={(next) =>
-                  set({ search: typeof next === "function" ? next(state.search) : next })
-                }
+    <form noValidate onSubmit={save} className={cn("flex flex-col gap-8", className)}>
+      <Section title="1. What to check">
+        <div className="flex flex-col gap-4">
+          <Field label="Name" error={errorOf("name")}>
+            {(control) => (
+              <Input
+                {...control}
+                value={state.name}
+                maxLength={100}
+                onChange={(event) => set({ name: event.currentTarget.value })}
               />
-              <p className="text-ui text-fg-muted" aria-live="polite">
-                {matching === null
-                  ? "Counting matching traces…"
-                  : matching === "failed"
-                    ? "The matching traces could not be counted."
-                    : `${formatInteger(matching)} ${matching === 1 ? "trace" : "traces"} of the last 7 days match.`}
-              </p>
-              <Field
-                label="Sample rate (%)"
-                description="100 scores every matching trace."
-                error={errorOf("sampleRate")}
-              >
-                {(control) => (
-                  <Input
-                    {...control}
-                    type="number"
-                    min={1}
-                    max={100}
-                    step={1}
-                    value={state.sampleRate}
-                    className="w-28"
-                    onChange={(event) => set({ sampleRate: event.currentTarget.value })}
-                  />
-                )}
-              </Field>
-            </div>
-          </Section>
+            )}
+          </Field>
+          <Choice label="Kind">
+            <SegmentedControl
+              label="Kind"
+              value={state.kind}
+              onValueChange={(kind) => set({ kind })}
+              options={SCORER_KINDS.map((kind) => ({
+                value: kind,
+                label: KIND_LABELS[kind],
+                disabled: scorer !== null && scorer.kind !== kind,
+              }))}
+            />
+          </Choice>
+          {state.kind === "check" ? (
+            <CheckFields state={state} set={set} errorOf={errorOf} />
+          ) : state.kind === "preset" ? (
+            <PresetFields
+              state={state}
+              set={set}
+              errorOf={errorOf}
+              fixedPreset={scorer?.kind === "preset"}
+            />
+          ) : (
+            <JudgeFields
+              state={state}
+              set={set}
+              errorOf={errorOf}
+              fixedOutput={scorer?.kind === "judge"}
+            />
+          )}
+        </div>
+      </Section>
 
-          <Section
-            title="3. Test"
-            description="Runs on the 5 latest matching traces. Nothing is saved."
-            actions={
-              <Button onClick={test} loading={testing}>
-                Test
-              </Button>
-            }
-          >
-            {testError ? (
-              <Callout tone="danger" title="The test failed">
-                {testError}
-              </Callout>
-            ) : results ? (
-              <TestResults
-                projectId={projectId}
-                results={results}
-                judged={state.kind === "judge"}
-              />
-            ) : null}
-          </Section>
-
-          {problem && !problem.field ? (
-            <Callout tone="danger" title="The scorer was not saved">
-              {problem.error}
-            </Callout>
+      <Section
+        title="2. Which traces"
+        description="Every new trace, or only the ones of some tasks or that match a filter."
+      >
+        <div className="flex flex-col gap-4">
+          <Choice label="Scope">
+            <SegmentedControl
+              label="Scope"
+              value={state.scope}
+              onValueChange={(scope) => set({ scope })}
+              options={[
+                { value: "all", label: "All traces" },
+                { value: "tasks", label: "Tasks" },
+              ]}
+            />
+          </Choice>
+          {state.scope === "tasks" ? (
+            <TaskPicker
+              tasks={tasks}
+              chosen={state.tasks}
+              error={errorOf("tasks")}
+              onChange={(chosen) => set({ tasks: chosen })}
+            />
           ) : null}
-          <div className="flex items-center gap-2">
-            <Button type="submit" variant="primary" loading={saving}>
-              {scorer ? "Save scorer" : "Create scorer"}
-            </Button>
-            <Link
-              href={scorer ? `${root}/${scorer.id}` : root}
-              className={buttonVariants({ variant: "ghost" })}
-            >
-              Cancel
-            </Link>
-          </div>
-        </form>
-      </PageBody>
-    </Page>
+          <TraceFilterBar
+            tab="rollup"
+            search={state.search}
+            pending={false}
+            facets={facets}
+            searchable={false}
+            onSearchChange={(next) =>
+              set({ search: typeof next === "function" ? next(state.search) : next })
+            }
+          />
+          <p className="text-ui text-fg-muted" aria-live="polite">
+            {matching === null
+              ? "Counting matching traces…"
+              : matching === "failed"
+                ? "The matching traces could not be counted."
+                : `${formatInteger(matching)} ${matching === 1 ? "trace" : "traces"} of the last 7 days match.`}
+          </p>
+          <Field
+            label="Sample rate (%)"
+            description="100 scores every matching trace."
+            error={errorOf("sampleRate")}
+          >
+            {(control) => (
+              <Input
+                {...control}
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                value={state.sampleRate}
+                className="w-28"
+                onChange={(event) => set({ sampleRate: event.currentTarget.value })}
+              />
+            )}
+          </Field>
+        </div>
+      </Section>
+
+      <Section
+        title="3. Test"
+        description="Runs on the 5 latest matching traces. Nothing is saved."
+        actions={
+          <Button onClick={test} loading={testing}>
+            Test
+          </Button>
+        }
+      >
+        {testError ? (
+          <Callout tone="danger" title="The test failed">
+            {testError}
+          </Callout>
+        ) : results ? (
+          <TestResults projectId={projectId} results={results} judged={state.kind === "judge"} />
+        ) : null}
+      </Section>
+
+      {problem && !problem.field ? (
+        <Callout tone="danger" title="The scorer was not saved">
+          {problem.error}
+        </Callout>
+      ) : null}
+      <div className="flex items-center gap-2">
+        <Button type="submit" variant="primary" loading={saving}>
+          {scorer ? "Save scorer" : "Create scorer"}
+        </Button>
+        {cancel}
+      </div>
+    </form>
   );
 }
 
@@ -356,6 +354,65 @@ type Controls = {
   set: (change: Partial<FormState>) => void;
   errorOf: (field: DraftField) => string | undefined;
 };
+
+const MAX_UNITS: Partial<Record<PresetKind, string>> = {
+  max_latency_ms: "Most milliseconds",
+  max_cost_usd: "Most USD",
+  max_tool_calls: "Most tool calls",
+  max_self_corrections: "Most self-corrections",
+};
+
+/** A task preset: graded on the run each trace of its tasks belongs to. */
+function PresetFields({ state, set, errorOf, fixedPreset }: Controls & { fixedPreset: boolean }) {
+  const unit = MAX_UNITS[state.preset];
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field
+        label="Preset"
+        description="Graded on the task run of each trace."
+        error={errorOf("preset")}
+      >
+        {({ id }) => (
+          <Select
+            id={id}
+            className="w-full"
+            disabled={fixedPreset}
+            options={PRESET_KINDS.map((preset) => ({
+              value: preset,
+              label: SCORER_LABELS[preset],
+            }))}
+            value={state.preset}
+            onValueChange={(preset) => set({ preset: preset as PresetKind })}
+          />
+        )}
+      </Field>
+      {unit ? (
+        <Field label={unit} error={errorOf("max")}>
+          {(control) => (
+            <Input
+              {...control}
+              type="number"
+              min={0}
+              value={state.max}
+              onChange={(event) => set({ max: event.currentTarget.value })}
+            />
+          )}
+        </Field>
+      ) : state.preset === "expected_tool" ? (
+        <Field label="Tool" error={errorOf("tool")}>
+          {(control) => (
+            <Input
+              {...control}
+              value={state.tool}
+              maxLength={500}
+              onChange={(event) => set({ tool: event.currentTarget.value })}
+            />
+          )}
+        </Field>
+      ) : null}
+    </div>
+  );
+}
 
 function CheckFields({ state, set, errorOf }: Controls) {
   return (
@@ -609,6 +666,9 @@ function stateOf(scorer: ScorerDraft | null, initialTask?: string): FormState {
     value: "",
     prompt: "",
     output: "boolean",
+    preset: "ends_well",
+    max: "",
+    tool: "",
     search: "",
     scope: initialTask ? "tasks" : "all",
     tasks: initialTask ? [initialTask] : [],
@@ -625,6 +685,15 @@ function stateOf(scorer: ScorerDraft | null, initialTask?: string): FormState {
     sampleRate: String(scorer.sampleRate),
   };
   if (scorer.kind === "judge") return { ...common, ...scorer.config };
+  if (scorer.kind === "preset") {
+    const { config } = scorer;
+    return {
+      ...common,
+      preset: config.preset,
+      max: "max" in config ? String(config.max) : "",
+      tool: "tool" in config ? config.tool : "",
+    };
+  }
   const { path, op, value } = scorer.config;
   const attribute = path.startsWith(ATTRIBUTE_PREFIX);
   return {
@@ -650,10 +719,18 @@ function draftOf(state: FormState, enabled: boolean) {
     config:
       state.kind === "check"
         ? { path, op: state.op, ...(state.op === "exists" ? {} : { value: state.value }) }
-        : { prompt: state.prompt, output: state.output },
+        : state.kind === "preset"
+          ? presetConfigOf(state)
+          : { prompt: state.prompt, output: state.output },
     filter: traceFilterFromSearch(state.search),
     tasks: tasksOf(state),
     sampleRate: state.sampleRate.trim() === "" ? Number.NaN : Number(state.sampleRate),
     enabled,
   };
+}
+
+function presetConfigOf({ preset, max, tool }: FormState) {
+  if (preset === "ends_well") return { preset };
+  if (preset === "expected_tool") return { preset, tool };
+  return { preset, max: max.trim() === "" ? Number.NaN : Number(max) };
 }

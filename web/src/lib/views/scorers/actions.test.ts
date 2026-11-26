@@ -101,7 +101,13 @@ test("F445-9: a project has at most 100 scorers", async () => {
   deps.count = async () => 100;
   assert.deepEqual(await changeScorer(create(checkDraft()), deps), {
     ok: false,
-    error: "A project can have 100 scorers.",
+    error: "This project has 100 scorers, and the limit is 100. Delete 1 to create another.",
+  });
+  // Over the limit (legacy excess from the task scorers' conversion): refused too, with the real count.
+  deps.count = async () => 130;
+  assert.deepEqual(await changeScorer(create(checkDraft()), deps), {
+    ok: false,
+    error: "This project has 130 scorers, and the limit is 100. Delete 31 to create another.",
   });
   assert.equal(writes.length, 1);
 });

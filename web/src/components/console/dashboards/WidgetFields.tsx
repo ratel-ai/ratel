@@ -3,6 +3,7 @@
 import { Field, Input } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import { SegmentedControl } from "@ratel/design-system/tabs";
+import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import {
   type Dimension,
   MAX_DIMENSIONS,
@@ -15,7 +16,6 @@ import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import {
   MAX_WIDGET_TITLE,
   METRIC_CHARTS,
-  type ScorerOption,
   type WidgetChart,
   type WidgetInput,
 } from "@/lib/views/dashboards/types";
@@ -49,15 +49,12 @@ export type RefusedField = "query" | "title" | "filter";
 export function WidgetFields({
   widget,
   onChange,
-  scorers,
   facets,
   result,
   refused,
 }: {
   widget: WidgetInput;
   onChange: (change: (current: WidgetInput) => WidgetInput) => void;
-  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
-  scorers: readonly ScorerOption[] | null;
   facets: TraceFilterBarFacets;
   /** The last result read, for the names it offers. */
   result: QueryResult | null;
@@ -65,6 +62,7 @@ export function WidgetFields({
   refused?: { field: RefusedField; message: string } | null;
 }) {
   const { query } = widget;
+  const scorers = useScorers();
   const set = (change: Partial<WidgetInput>) =>
     onChange((current) => fitWidget({ ...current, ...change }));
   const setQuery = (change: (query: Query) => Query) =>
@@ -94,7 +92,6 @@ export function WidgetFields({
         <MetricForm
           query={query}
           chart={widget.chart}
-          scorers={scorers}
           onChange={(change) =>
             setQuery((current) =>
               current.kind === "metric" ? changeQuery(current, change, scorers ?? []) : current,
@@ -118,7 +115,6 @@ export function WidgetFields({
       {query.kind === "geography" ? (
         <GeographyFields
           query={query}
-          scorers={scorers}
           onMeasure={(change) =>
             setQuery((current) =>
               current.kind === "geography"
@@ -130,12 +126,7 @@ export function WidgetFields({
         />
       ) : null}
       {query.kind === "funnel" ? (
-        <FunnelFields
-          query={query}
-          facets={facets}
-          scorers={scorers ?? []}
-          onChange={(next) => set({ query: next })}
-        />
+        <FunnelFields query={query} facets={facets} onChange={(next) => set({ query: next })} />
       ) : null}
       {refusal("query")}
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
@@ -185,12 +176,10 @@ export function WidgetFields({
 function MetricForm({
   query,
   chart,
-  scorers,
   onChange,
 }: {
   query: MetricQuery;
   chart: WidgetChart;
-  scorers: readonly ScorerOption[] | null;
   onChange: (change: QueryChange) => void;
 }) {
   const metric = queryMetric(query);
@@ -207,7 +196,7 @@ function MetricForm({
     });
 
   return (
-    <MetricFields query={query} scorers={scorers} onChange={onChange}>
+    <MetricFields query={query} onChange={onChange}>
       {Array.from({ length: choices }, (_, index) => (
         <Field
           // biome-ignore lint/suspicious/noArrayIndexKey: a choice is its position.

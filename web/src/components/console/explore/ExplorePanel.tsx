@@ -13,10 +13,11 @@ import {
 import { WidgetBody } from "@/components/console/dashboards/WidgetBody";
 import { WidgetFields } from "@/components/console/dashboards/WidgetFields";
 import { WidgetLinkItems } from "@/components/console/dashboards/WidgetLinkItems";
+import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import type { DashboardRange } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
-import type { DashboardFilters, ScorerOption, WidgetInput } from "@/lib/views/dashboards/types";
+import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
 import { isFilterable, widgetName } from "@/lib/views/dashboards/widget";
 import { STARTING_POINTS } from "@/lib/views/explore/starts";
 import type { RefusedChange } from "./use-explore-panels";
@@ -28,7 +29,6 @@ export function ExplorePanel({
   widget,
   refused,
   served,
-  scorers,
   facets,
   range,
   filters,
@@ -45,7 +45,6 @@ export function ExplorePanel({
   refused: RefusedChange | null;
   /** What the page came with, so that the first numbers need no request. */
   served: ServedResults;
-  scorers: readonly ScorerOption[] | null;
   facets: TraceFilterBarFacets;
   range: DashboardRange;
   filters: DashboardFilters;
@@ -58,7 +57,7 @@ export function ExplorePanel({
 }) {
   const { preview, pending } = useWidgetPreview(projectId, widget, range, filters, served);
   const name = widgetName(widget);
-  const complete = parseWidget(widget, { customMonitoring: scorers !== null }).ok;
+  const complete = parseWidget(widget, { customMonitoring: useScorers() !== null }).ok;
 
   async function copyQuery() {
     try {
@@ -131,7 +130,6 @@ export function ExplorePanel({
       <WidgetFields
         widget={widget}
         onChange={onChange}
-        scorers={scorers}
         facets={facets}
         result={preview?.ok ? preview.result : null}
         refused={refused}

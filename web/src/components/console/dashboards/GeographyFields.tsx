@@ -4,7 +4,6 @@ import { Field } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import type { GeographyQuery } from "@/lib/contracts/query";
 import { COUNTRY_CODES, placeName } from "@/lib/ingest/geo/codes";
-import type { ScorerOption } from "@/lib/views/dashboards/types";
 import type { QueryChange } from "@/lib/views/dashboards/widget";
 import { MetricFields } from "./MetricFields";
 
@@ -20,17 +19,15 @@ const COUNTRIES = [
 /** What a map measures, and of which place. */
 export function GeographyFields({
   query,
-  scorers,
   onMeasure,
   onChange,
 }: {
   query: GeographyQuery;
-  scorers: readonly ScorerOption[] | null;
   onMeasure: (change: QueryChange) => void;
   onChange: (query: GeographyQuery) => void;
 }) {
   return (
-    <MetricFields query={query} scorers={scorers} filterableOnly onChange={onMeasure}>
+    <MetricFields query={query} filterableOnly onChange={onMeasure}>
       <Field label="Place" className="min-w-40 flex-1">
         {(control) => (
           <Select

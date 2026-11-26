@@ -8,9 +8,9 @@ import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { shownFilters } from "@/lib/views/dashboards/filters";
 import { resolveWidgetRange } from "@/lib/views/dashboards/range";
-import { scorerOptions } from "@/lib/views/dashboards/scorer-options";
 import * as store from "@/lib/views/dashboards/store";
 import { decodePanels, PANELS_PARAM } from "@/lib/views/explore/state";
+import { loadScorerPicker } from "@/lib/views/scorers/picker";
 import { createScorer } from "@/lib/views/scorers/store";
 import { checkDraft } from "@/lib/views/scorers/test-support";
 import { dashboardReadOperations, dashboardWriteOperations, EXAMPLES } from "./dashboards";
@@ -205,7 +205,7 @@ test("an import through MCP equals the web app's", async () => {
       enabled: async () => true,
       isRestricted: async () => false,
       features: async () => ({ customMonitoring: true }),
-      scorers: (projectId) => scorerOptions(projectId, m.db),
+      scorers: async (projectId) => (await loadScorerPicker(projectId, new Date(), m.db)).scorers,
       store: {
         ...store,
         createDashboard: (input) => store.createDashboard(input, m.db),

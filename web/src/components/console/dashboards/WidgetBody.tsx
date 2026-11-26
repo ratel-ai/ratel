@@ -5,6 +5,7 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { EmptyState } from "@ratel/design-system/states";
 import { ChartColumn, CircleAlert, Funnel, Waypoints } from "lucide-react";
 import Link from "next/link";
+import { StillCalculating } from "@/components/console/scorers/StillCalculating";
 import type { MetricQuery } from "@/lib/contracts/query";
 import { getMetric, type MetricSource } from "@/lib/synthesis/metrics/catalog";
 import type { MetricResult, QueryResult } from "@/lib/synthesis/metrics/query";
@@ -33,7 +34,7 @@ import {
   queryFilter,
   widgetName,
 } from "@/lib/views/dashboards/widget";
-import { scorersHref } from "@/lib/views/scorers/paths";
+import { scorerHref } from "@/lib/views/scorers/paths";
 import { ClustersBody } from "./ClustersBody";
 import { FlowChart } from "./FlowChart";
 import { FunnelChart } from "./FunnelChart";
@@ -236,6 +237,9 @@ function MetricBody({
   const [{ measure, aggregation }] = query.measures;
   const metric = getMetric(measure);
   if (!metric) return null;
+  // A scorer scores only new traces, so a chosen one without results may be new.
+  if (isEmptyResult(result) && metric.source === "scores" && query.filters.scorer)
+    return <StillCalculating />;
   if (isEmptyResult(result))
     return (
       <EmptyState
@@ -281,7 +285,7 @@ function MetricBody({
                 <Link
                   href={
                     by === "scorer"
-                      ? `${scorersHref(projectId)}/${value}`
+                      ? scorerHref(projectId, value)
                       : widgetTracesHref(
                           projectId,
                           withClause<TraceFilter>(filters, dashboardFilters),

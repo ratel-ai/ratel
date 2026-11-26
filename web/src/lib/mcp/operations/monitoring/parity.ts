@@ -66,6 +66,7 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "app/(console)/project/[projectId]/scorers/actions.ts#changeScorerAction": "change_scorer",
   "app/(console)/project/[projectId]/scorers/actions.ts#testScorerAction": "test_scorer",
   "app/(console)/project/[projectId]/scorers/actions.ts#countScorerTracesAction": "test_scorer",
+  "app/(console)/project/[projectId]/scorers/actions.ts#scorerFormAction": "get_scorer",
   "app/(console)/project/[projectId]/alerts/actions.ts#changeAlertAction": "change_alert",
   "app/(console)/project/[projectId]/alerts/actions.ts#changeDestinationAction":
     "change_alert_destination",
