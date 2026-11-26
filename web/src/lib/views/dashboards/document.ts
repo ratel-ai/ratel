@@ -11,11 +11,11 @@ import {
   MAX_DASHBOARD_NAME,
   MAX_WIDGET_TITLE,
   MAX_WIDGETS,
-  type ScorerOption,
   WIDGET_CHARTS,
   type Widget,
 } from "@/lib/views/dashboards/types";
 import { queryName, scorersOfMetric } from "@/lib/views/dashboards/widget";
+import type { PickerScorer } from "@/lib/views/scorers/picker";
 
 /**
  * A dashboard as one JSON document: what moves between projects, and what an agent can write. It
@@ -79,7 +79,7 @@ export type ImportedDashboard = Pick<Dashboard, "name" | "filters" | "range"> & 
 
 export function exportDashboard(
   { name, filters, range, widgets }: Pick<Dashboard, "name" | "filters" | "range" | "widgets">,
-  scorers: readonly Pick<ScorerOption, "id" | "name">[],
+  scorers: readonly Pick<PickerScorer, "id" | "name">[],
 ): DashboardDocument {
   return {
     type: DOCUMENT_TYPE,
@@ -96,7 +96,7 @@ export function exportDashboard(
 
 function portable(
   query: Query,
-  scorers: readonly Pick<ScorerOption, "id" | "name">[],
+  scorers: readonly Pick<PickerScorer, "id" | "name">[],
   missingScorer: string | undefined,
 ): PortableQuery {
   const named = (id: string) => ({
@@ -128,7 +128,13 @@ function portable(
 /** A document from outside, under the rules of the widget editor. A missing scorer is no refusal. */
 export function importDashboard(
   raw: unknown,
-  { scorers, features }: { scorers: readonly ScorerOption[]; features: MetricFeatures },
+  {
+    scorers,
+    features,
+  }: {
+    scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[];
+    features: MetricFeatures;
+  },
 ): { ok: true; dashboard: ImportedDashboard } | { ok: false; error: string } {
   const parsed = importSchema.safeParse(raw, {
     error: ({ code, path, keys }) => {
@@ -173,7 +179,7 @@ function refusalOf({ issues }: z.ZodError, raw: unknown): string {
 
 function importWidget(
   raw: unknown,
-  scorers: readonly ScorerOption[],
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
   features: MetricFeatures,
 ): { ok: true; widget: Omit<Widget, "id"> } | { ok: false; error: string } {
   const { layout: rawLayout, ...rest } = record(raw);
@@ -222,13 +228,15 @@ function withScorersAs(
 function resolved(
   widget: Omit<Widget, "id" | "layout">,
   names: readonly string[],
-  scorers: readonly ScorerOption[],
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
 ): Omit<Widget, "id" | "layout"> {
   if (names.length === 0) return widget;
   const { query } = widget;
   const missing: string[] = [];
   let next = 0;
-  const found = (readable: readonly ScorerOption[]): { id: string } | null => {
+  const found = (
+    readable: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
+  ): { id: string } | null => {
     const name = names[next++];
     const scorer = readable.find((candidate) => candidate.name.trim() === name);
     if (!scorer) missing.push(name);

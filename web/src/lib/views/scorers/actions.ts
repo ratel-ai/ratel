@@ -1,5 +1,6 @@
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { MAX_SCORERS, MAX_TASKS, parseScorerDraft, parseTaskId } from "./config";
+import { limitText } from "./format";
 import type { PreviewResult } from "./preview";
 import type { Scorer, ScorerDraft, ScorerKind } from "./types";
 
@@ -65,8 +66,9 @@ export async function changeScorer(
   let scorerId: string;
   let kind: ScorerKind;
   if (change.action === "create") {
-    if ((await deps.count(projectId)) >= MAX_SCORERS)
-      return { ok: false, error: `A project can have ${MAX_SCORERS} scorers.` };
+    // Over the limit too: a project may hold more after the task scorers' conversion.
+    const limit = limitText(await deps.count(projectId), MAX_SCORERS);
+    if (limit.full) return { ok: false, error: limit.text };
     scorerId = await deps.create(projectId, change.draft, actor);
     kind = change.draft.kind;
   } else {

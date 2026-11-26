@@ -123,7 +123,7 @@ const NOT_FOUND = /(does not exist|no longer exists)\.$/;
 const FORBIDDEN =
   /^(You cannot|Sign in to|Only (?:an )?organization admin|A support session)| are off for this project\.$/;
 const CONFLICT =
-  /^A (project|dashboard) can have \d+ (alerts|destinations|dashboards|scorers|widgets)\.$|^A scorer (covers up to|keeps its)|Confirm the change first\.$|is already a destination\.$|cannot store secrets/;
+  /^A (project|dashboard) can have \d+ (alerts|destinations|dashboards|scorers|widgets)\.$|^This project has \d+ scorers, and the limit is \d+\.|^A scorer (covers up to|keeps its)|Confirm the change first\.$|is already a destination\.$|cannot store secrets/;
 
 /**
  * An action's refusal as the tool's error. What is neither absent, nor a right, nor a state is the

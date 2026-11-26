@@ -37,7 +37,6 @@ import {
 import { gridPositionSchema, inReadingOrder } from "@/lib/views/dashboards/layout";
 import { type DashboardRange, dashboardHref, dashboardsHref } from "@/lib/views/dashboards/links";
 import { exactly } from "@/lib/views/dashboards/range";
-import { scorerOptions } from "@/lib/views/dashboards/scorer-options";
 import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
 import {
@@ -51,6 +50,7 @@ import {
 import { chartProblem, widgetName } from "@/lib/views/dashboards/widget";
 import { explorePanelsHref } from "@/lib/views/explore/links";
 import { MAX_PANELS } from "@/lib/views/explore/types";
+import { scorerNames } from "@/lib/views/scorers/picker";
 
 const FEATURES = { customMonitoring: true } as const;
 const QUERY_WINDOW = { defaultDays: 7, maxDays: MAX_METRIC_WINDOW_DAYS } as const;
@@ -292,7 +292,7 @@ export function dashboardReadOperations(
         if (!dashboard) throw notFound("dashboard");
         const window = dashboardWindow(dashboard, params, deps.now());
         const [scorers, results] = await Promise.all([
-          scorerOptions(projectId, deps.db()),
+          scorerNames(projectId, deps.db()),
           params.numbers
             ? loadWidgets(
                 projectId,
@@ -582,7 +582,7 @@ async function run(
         },
       }),
       features: async () => FEATURES,
-      scorers: (projectId) => scorerOptions(projectId, db),
+      scorers: (projectId) => scorerNames(projectId, db),
       store: {
         createDashboard: (input) => store.createDashboard(input, db),
         updateDashboard: (input) => store.updateDashboard(input, db),

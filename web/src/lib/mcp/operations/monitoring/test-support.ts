@@ -11,6 +11,7 @@ import { runQuery } from "@/lib/synthesis/metrics/query";
 import type { SealedDestination } from "@/lib/views/alerts/destinations";
 // What these modules own is read through what they register.
 import "@/lib/views/dashboards/data";
+import { scorePresetTraces } from "@/lib/views/scorers/preset";
 import { countLastWeek, previewScorer } from "@/lib/views/scorers/preview";
 import { countMatchingTraces, latestMatchingTraces } from "@/lib/views/scorers/traces";
 import type { MonitoringDeps } from "./deps";
@@ -89,6 +90,8 @@ export async function monitoring(
     count: (...[p, t, s]: Parameters<typeof countMatchingTraces>) =>
       countMatchingTraces(p, t, s, db),
     judge: async () => [],
+    preset: (...[p, c, t, k]: Parameters<typeof scorePresetTraces>) =>
+      scorePresetTraces(p, c, t, k, db),
   };
   const deps: MonitoringDeps = {
     enabled: async () => set.on,

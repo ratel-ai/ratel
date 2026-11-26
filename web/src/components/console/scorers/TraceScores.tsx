@@ -1,7 +1,7 @@
 import { Section } from "@ratel/design-system/section";
 import Link from "next/link";
 import { formatPercent } from "@/lib/synthesis/traces/v2/format";
-import { scorersHref } from "@/lib/views/scorers/paths";
+import { scorerHref } from "@/lib/views/scorers/paths";
 import type { ScoreOfTrace } from "@/lib/views/scorers/store";
 import { ScoreValue } from "./parts";
 
@@ -23,7 +23,7 @@ export function TraceScores({
             className="flex items-center gap-3 rounded-md border border-line px-2.5 py-1.5 text-ui"
           >
             <Link
-              href={`${scorersHref(projectId)}/${score.scorerId}`}
+              href={scorerHref(projectId, score.scorerId)}
               className="text-fg-muted hover:underline"
             >
               {score.scorerName}

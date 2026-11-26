@@ -17,7 +17,7 @@ import { type TraceFilterBarFacets, withRangePreset } from "@/lib/synthesis/trac
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
 import { barChange, barSearch, DASHBOARD_FILTER_FIELDS } from "@/lib/views/dashboards/filters";
 import { type DashboardRange, EXACT_RANGE } from "@/lib/views/dashboards/links";
-import type { DashboardFilters, ScorerOption, WidgetInput } from "@/lib/views/dashboards/types";
+import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
 import { STARTING_POINTS } from "@/lib/views/explore/starts";
 import { withoutPanels } from "@/lib/views/explore/state";
 import { MAX_PANELS } from "@/lib/views/explore/types";
@@ -32,7 +32,6 @@ export function ExploreView({
   problem,
   filters,
   facets,
-  scorers,
   dashboards,
   range,
   timeWindow,
@@ -44,7 +43,6 @@ export function ExploreView({
   problem: string | null;
   filters: DashboardFilters;
   facets: TraceFilterBarFacets;
-  scorers: readonly ScorerOption[] | null;
   dashboards: readonly DashboardOption[];
   /** What the panels read. */
   range: DashboardRange;
@@ -183,7 +181,6 @@ export function ExploreView({
                 widget={widget}
                 refused={explore.refused?.panelId === id ? explore.refused : null}
                 served={servedResults}
-                scorers={scorers}
                 facets={facets}
                 range={range}
                 filters={filters}

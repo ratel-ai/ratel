@@ -80,7 +80,6 @@ function html(props: Partial<ComponentProps<typeof DashboardView>> = {}): string
       widgets: WIDGETS.map((widget) => ({ widget, result: null })),
       facets: { model: [], tool: [], service: [], environment: [] },
       timeWindow: { preset: "7d", from: at, to: at, today: "2026-11-24" },
-      scorers: [],
       alerts: false,
       draft: null,
       ...props,

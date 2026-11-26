@@ -1,17 +1,14 @@
-import { notFound } from "next/navigation";
-import { ScorerForm } from "@/components/console/scorers/ScorerForm";
+import { redirect } from "next/navigation";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { parseProjectUuid } from "@/lib/console/scope/cookie";
-import { getTraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
-import { getScorer } from "@/lib/views/scorers/store";
+import { scorerHref } from "@/lib/views/scorers/paths";
 import { resolveScorersPage } from "../../context";
-import { loadTaskOptions } from "../../tasks";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Edit scorer" };
 
-const WEEK_MS = 7 * 86_400_000;
-
+/**
+ * A scorer is edited in a Panel on its own page, so an old edit link opens that page. The flag and
+ * the database are checked first, as on every Scorers page: off, not found; no database, the notice.
+ */
 export default async function EditScorerPage({
   params,
 }: {
@@ -25,14 +22,5 @@ export default async function EditScorerPage({
         Scorers need a database. Set DATABASE_URL to connect one.
       </DatabaseUnavailable>
     );
-  const { projectId } = page;
-  const id = parseProjectUuid(scorerId);
-  const scorer = id ? await getScorer(projectId, id) : null;
-  if (!scorer) notFound();
-  const [facets, tasks] = await Promise.all([
-    getTraceFilterFacets(projectId, { since: new Date(Date.now() - WEEK_MS) }),
-    loadTaskOptions(projectId, scorer.tasks ?? []),
-  ]);
-  const { createdAt: _created, updatedAt: _updated, projectId: _project, ...draft } = scorer;
-  return <ScorerForm projectId={projectId} facets={facets} tasks={tasks} scorer={draft} />;
+  redirect(scorerHref(page.projectId, scorerId));
 }

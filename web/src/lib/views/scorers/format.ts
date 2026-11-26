@@ -1,7 +1,10 @@
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+import { formatSeconds, formatUsd } from "@/lib/views/task-scorers/format";
+import { SCORER_LABELS } from "@/lib/views/task-scorers/labels";
 import {
   ATTRIBUTE_PREFIX,
   type CheckOperator,
+  type PresetConfig,
   type ScorerDefinition,
   type ScorerKind,
   type SkipReason,
@@ -9,7 +12,11 @@ import {
   type TraceScore,
 } from "./types";
 
-export const KIND_LABELS: Record<ScorerKind, string> = { check: "Check", judge: "Judged" };
+export const KIND_LABELS: Record<ScorerKind, string> = {
+  check: "Check",
+  judge: "Judged",
+  preset: "Task preset",
+};
 
 export const FIELD_LABELS: Record<TraceField, string> = {
   duration_ms: "Duration (ms)",
@@ -45,11 +52,14 @@ export const SKIP_LABELS: Record<SkipReason, string> = {
   budget_spent: "Today's model budget is spent",
   no_answer: "The model gave no answer",
   call_failed: "The call to the model failed",
+  no_run: "The trace is in no closed run of the task",
+  not_measured: "The run does not have this measurement",
 };
 
 /** What a scorer checks, in one line. */
 export function definitionSummary(definition: ScorerDefinition): string {
   if (definition.kind === "judge") return definition.config.prompt;
+  if (definition.kind === "preset") return presetSummary(definition.config);
   const { path, op, value } = definition.config;
   const subject = path.startsWith(ATTRIBUTE_PREFIX)
     ? path.slice(ATTRIBUTE_PREFIX.length)
@@ -57,6 +67,18 @@ export function definitionSummary(definition: ScorerDefinition): string {
   return [subject, OPERATOR_LABELS[op], value === undefined ? "" : String(value)]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * The scorers of a project against the limit, in words. A project can be over the limit (legacy
+ * excess from the task scorers' conversion): it keeps every scorer, and no create is allowed.
+ */
+export function limitText(count: number, limit: number): { full: boolean; text: string } {
+  if (count < limit) return { full: false, text: `${count} of ${limit} scorers.` };
+  return {
+    full: true,
+    text: `This project has ${count} scorers, and the limit is ${limit}. Delete ${count - limit + 1} to create another.`,
+  };
 }
 
 /** A result in words: "Pass", "Fail", or "4 of 5". */
@@ -72,7 +94,24 @@ export function formatAverage(value: number): string {
 
 /** True when a scorer's results are pass or fail; false for a 1 to 5 number. */
 export function hasVerdict(definition: ScorerDefinition): boolean {
-  return definition.kind === "check" || definition.config.output === "boolean";
+  return definition.kind !== "judge" || definition.config.output === "boolean";
+}
+
+/** A preset in words: "Run time at most 2.0 s". */
+export function presetSummary(config: PresetConfig): string {
+  const label = SCORER_LABELS[config.preset];
+  switch (config.preset) {
+    case "ends_well":
+      return label;
+    case "expected_tool":
+      return `${label}: ${config.tool}`;
+    case "max_latency_ms":
+      return `${label} at most ${formatSeconds(config.max)}`;
+    case "max_cost_usd":
+      return `${label} at most ${formatUsd(config.max)}`;
+    default:
+      return `${label} at most ${config.max}`;
+  }
 }
 
 /** The query string `TraceFilterBar` edits, for a stored filter (`traceFilterFromSearch` reads it back). */

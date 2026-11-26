@@ -1,4 +1,5 @@
 import { ExploreView } from "@/components/console/explore/ExploreView";
+import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import type { TimeWindow } from "@/components/console/traces/TracesHeader";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
@@ -61,24 +62,25 @@ export default async function ScopedExplorePage({
     }),
   ]);
   return (
-    <ExploreView
-      projectId={projectId}
-      served={panels.map((widget, index) => ({
-        widget,
-        // One that is not complete has not been read.
-        result: parseWidget(widget, features).ok ? results[index] : undefined,
-      }))}
-      problem={problem}
-      filters={filters}
-      facets={facets}
-      scorers={scorers}
-      dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
-      range={{ preset: range.preset, from: range.from, to: range.to }}
-      timeWindow={{
-        preset: range.preset === EXACT_RANGE ? "custom" : (range.preset as TimeWindow["preset"]),
-        ...days,
-        today: now.toISOString().slice(0, 10),
-      }}
-    />
+    <ScorerPickerProvider projectId={projectId} data={scorers}>
+      <ExploreView
+        projectId={projectId}
+        served={panels.map((widget, index) => ({
+          widget,
+          // One that is not complete has not been read.
+          result: parseWidget(widget, features).ok ? results[index] : undefined,
+        }))}
+        problem={problem}
+        filters={filters}
+        facets={facets}
+        dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
+        range={{ preset: range.preset, from: range.from, to: range.to }}
+        timeWindow={{
+          preset: range.preset === EXACT_RANGE ? "custom" : (range.preset as TimeWindow["preset"]),
+          ...days,
+          today: now.toISOString().slice(0, 10),
+        }}
+      />
+    </ScorerPickerProvider>
   );
 }

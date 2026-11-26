@@ -17,11 +17,12 @@ import { changeScorerAction } from "@/app/(console)/project/[projectId]/scorers/
 import { formatInteger, formatPercent, MISSING, shortId } from "@/lib/synthesis/traces/v2/format";
 import { addScorerHref, dashboardsHref } from "@/lib/views/dashboards/links";
 import { KIND_LABELS } from "@/lib/views/scorers/format";
-import { scorersHref, traceHref } from "@/lib/views/scorers/paths";
+import { traceHref } from "@/lib/views/scorers/paths";
 import type { TraceScore } from "@/lib/views/scorers/types";
 import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 import { RelativeTime } from "../traces/cells";
 import { EnabledSwitch, type ScorerItem, ScoreValue, summaryValue, tasksLabel } from "./parts";
+import { ScorerPanel } from "./ScorerPanel";
 import { ScoreTrend, type TrendDay } from "./ScoreTrend";
 
 export interface LatestRow extends TraceScore {
@@ -48,7 +49,7 @@ export function ScorerDetail({
   now: string;
 }) {
   const router = useRouter();
-  const root = scorersHref(projectId);
+  const [editing, setEditing] = useState(false);
   const columns: Column<LatestRow>[] = [
     {
       id: "trace",
@@ -88,20 +89,20 @@ export function ScorerDetail({
   return (
     <Page>
       <PageHeader
-        crumbs={[{ label: "Scorers", href: root }]}
+        crumbs={[{ label: "Dashboards", href: dashboardsHref(projectId) }]}
         title={scorer.name}
         description={scorer.summary}
         actions={
           <>
             <EnabledSwitch projectId={projectId} scorer={scorer} label="On" />
             <AddToDashboard projectId={projectId} scorerId={scorer.id} dashboards={dashboards} />
-            <Link
-              href={`${root}/${scorer.id}/edit`}
-              className={buttonVariants({ variant: "secondary" })}
-            >
-              Edit
-            </Link>
+            <Button onClick={() => setEditing(true)}>Edit</Button>
             <DeleteScorer projectId={projectId} scorer={scorer} />
+            <ScorerPanel
+              target={editing ? { scorerId: scorer.id } : null}
+              onClose={() => setEditing(false)}
+              onSaved={() => router.refresh()}
+            />
           </>
         }
       />
@@ -223,7 +224,7 @@ function DeleteScorer({
       return;
     }
     toast({ title: `Deleted ${scorer.name}` });
-    router.push(scorersHref(projectId));
+    router.push(dashboardsHref(projectId));
   }
 
   return (
