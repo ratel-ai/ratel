@@ -6,8 +6,11 @@ export interface BuildStore {
   /** `uploaded` to `preparing`. Null when the version has another status. */
   claim(projectId: string, versionId: string, now: Date): Promise<SandboxVersion | null>;
   heartbeat(versionId: string, now: Date): Promise<void>;
-  /** Ends a build. It changes a version that is `preparing` only. */
-  finish(versionId: string, outcome: BuildOutcome, now: Date): Promise<void>;
+  /**
+   * Ends a build. It changes a version that is `preparing` only. False when the version was not
+   * `preparing` (e.g. `failStopped` failed it), so nothing changed.
+   */
+  finish(versionId: string, outcome: BuildOutcome, now: Date): Promise<boolean>;
   /** Keeps an `uploaded` version unbuilt, with the reason. */
   leaveUnbuilt(projectId: string, versionId: string, reason: string): Promise<void>;
   /** The running build jobs whose build sent a heartbeat after `since`. */

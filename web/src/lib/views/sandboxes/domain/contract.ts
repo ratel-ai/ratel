@@ -20,9 +20,15 @@ export type ContractErrorCode =
 
 export type ContractError = { code: ContractErrorCode; message: string };
 
-/** `version.schema.json#/$defs/smoke`. */
+/**
+ * `version.schema.json#/$defs/smoke`. A passed check also keeps the `toolCalls` and the `usage` of
+ * the answer, when it has them: two optional fields that the schema does not name.
+ */
 export type SmokeResult =
-  | { ok: true; output: unknown; durationMs: number; logs: string }
+  | ({ ok: true; output: unknown; durationMs: number; logs: string } & Pick<
+      RunResponse,
+      "toolCalls" | "usage"
+    >)
   | { ok: false; error: ContractError; durationMs: number; logs: string };
 
 /** The answer of a container: a valid run response, or the contract error. */
