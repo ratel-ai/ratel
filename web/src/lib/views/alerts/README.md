@@ -44,6 +44,9 @@ Rules:
 - A fire and a recovery are one message each. `no_data` sends nothing and keeps `firing`, so an
   alert that loses its data neither fires twice nor loses its recovery.
 - A rule is evaluated each tick (60 seconds), about every 5 minutes for a window of a day.
+- The messages of a project whose flag is off stay pending, with a log, and a tick leaves them out
+  of its next reads: they never hold up another project's. A message still pending after a day
+  expires unsent (`failed`, with a log): a message that late says nothing of now.
 - A message is tried 4 times at most (the first and 3 more), one per tick. `sent_to` keeps a retry
   from repeating it where it arrived. A process that dies between a send and its record can repeat
   that message: the claim ends after 2 minutes.

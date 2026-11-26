@@ -44,7 +44,7 @@ export function alertsStep(deps: AlertsStepDeps = defaultDeps): DrainStep {
           reason: "malformed_query",
         });
       }
-      const { sent, retrying, failures } = await deps.deliver();
+      const { sent, retrying, expired, failures } = await deps.deliver();
       for (const { projectId, ruleId, attempts } of failures) {
         await deps.track("feature.alerts.delivery_failed", projectId, {
           project_id: projectId,
@@ -59,6 +59,7 @@ export function alertsStep(deps: AlertsStepDeps = defaultDeps): DrainStep {
         alertChanges: changes.length,
         alertMessagesSent: sent,
         alertMessagesRetrying: retrying,
+        alertMessagesExpired: expired,
         alertMessagesFailed: failures.length,
       };
     },
