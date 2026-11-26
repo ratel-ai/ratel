@@ -1128,7 +1128,7 @@
         "!web/src/lib/mcp/connect/connect-ui.test.ts",
         "!web/src/lib/mcp/connect/snippets.ts",
         "!web/src/lib/mcp/connect/snippets.test.ts",
-        "web/src/components/console/org/McpExample.tsx",
+        "web/src/components/console/mcp-setup/McpExample.tsx",
         "web/src/app/(console)/org/\\[orgSlug\\]/mcp/loading.tsx",
         "web/src/lib/synthesis/experiments/comparison-cache.ts",
         "web/src/lib/synthesis/experiments/comparison-cache.test.ts",
@@ -1443,7 +1443,7 @@
     },
     {
       "includes": [
-        "web/src/components/console/org/McpExample.tsx",
+        "web/src/components/console/mcp-setup/McpExample.tsx",
         "web/src/components/console/home/**"
       ],
       "linter": {

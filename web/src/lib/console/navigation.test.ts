@@ -54,6 +54,7 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "improvements", href: `/project/${P1}/improvement` },
       { id: "ship", href: `/project/${P1}/ship` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
+      { id: "mcp-setup", href: `/project/${P1}/mcp-setup` },
       { id: "settings", href: `/project/${P1}/settings` },
     ],
   );
@@ -163,6 +164,7 @@ test("outside a project, the organization rail lists its projects page", () => {
       "improvements",
       "ship",
       "catalog",
+      "mcp-setup",
       "settings",
     ],
   );
@@ -179,7 +181,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 10);
+  assert.equal(withProject.length, 11);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -204,6 +206,7 @@ test("the OSS composition adds no destination", () => {
       "improvements",
       "ship",
       "catalog",
+      "mcp-setup",
       "settings",
     ],
   );
@@ -243,6 +246,7 @@ test("an edition's project group sits between the core pages and Settings, under
       "group:apis:project-models/embeddings:APIs",
       "group:apis:project-models/tool-picker:",
       "settings:catalog:",
+      "settings:mcp-setup:",
       "settings:settings:",
     ],
   );
@@ -297,6 +301,7 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
       "group:ship:ship:Ship",
       "settings:catalog:",
       "settings:group-apis:",
+      "settings:mcp-setup:",
       "settings:settings:",
     ],
   );
@@ -341,7 +346,7 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
   const project = consoleNav({ projectId: P1, additions: [], projectGroups: cloud.projectNav });
   assert.deepEqual(
     project.filter(({ section }) => section === "settings").map(({ id }) => id),
-    ["catalog", "group-apis", "settings"],
+    ["catalog", "group-apis", "mcp-setup", "settings"],
   );
   const row = project.find(({ id }) => id === "group-apis");
   assert.equal(row?.icon, "apis");
@@ -398,6 +403,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "group:improve:improvements",
       "group:ship:ship",
       "settings:catalog",
+      "settings:mcp-setup",
       "settings:settings",
       "edition:edition:/admin",
     ],
@@ -468,8 +474,8 @@ test("Dashboards, Explore, Scorers and Alerts are Monitor items only with custom
       ],
     );
     assert.equal(on.find(({ id }) => id === "overview")?.children, undefined);
-    // DESIGN.md's budget: at most 10 items, and 14 with customMonitoring.
-    assert.ok(off.length <= 10);
+    // DESIGN.md's budget: at most 11 items, and 15 with customMonitoring.
+    assert.ok(off.length <= 11);
     assert.equal(on.length, off.length + 4);
     // Everything else on the rail is as it was.
     const pages = ["dashboards", "explore", "scorers", "alerts"];
@@ -587,6 +593,7 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Tools|/project/${P1}/catalogs/tools`,
       `Project|Skills|/project/${P1}/catalogs/skills`,
       `Project|Test a search|/project/${P1}/playground`,
+      `Project|MCP|/project/${P1}/mcp-setup`,
       `Project|Settings|/project/${P1}/settings`,
       `Pages|Admin|/admin`,
       `Overview|Usage and spend|/project/${P1}/dashboards`,
@@ -647,7 +654,9 @@ test("the command menu finds a page by its keywords, not only its name", () => {
   assert.equal(first("experiments"), "Experiments");
   assert.equal(first("sdk events"), "SDK events");
   assert.equal(first("retries"), "Self-corrections");
-  assert.equal(first("cursor"), "Integrations");
+  // Inside a project its own MCP page comes first; the organization's Integrations stays reachable.
+  assert.equal(first("cursor"), "MCP");
+  assert.equal(first("model context protocol"), "MCP");
   assert.deepEqual(searchCommands(entries, "zzz"), []);
 });
 
@@ -707,6 +716,7 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "improvements:",
       "ship:l",
       "catalog:c",
+      "mcp-setup:",
       "settings:s",
       "edition:/admin:",
     ],
@@ -752,6 +762,7 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
       "ship|group:ship|Ship",
       "project-models/x|group:apis|APIs",
       "catalog|settings|",
+      "mcp-setup|settings|",
       "settings|settings|",
     ],
   );
@@ -817,6 +828,7 @@ test("focusedConsole on: Self-corrections is an insight and Agent health has no 
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
       "catalog|settings|",
+      "mcp-setup|settings|",
       "settings|settings|",
     ],
   );
@@ -845,4 +857,43 @@ test("the command menu finds Self-corrections by its keywords, flag off and on",
       assert.equal(searchCommands(entries, word)[0]?.href, href, word);
     }
   }
+});
+
+test("MCP sits right above Settings in every project rail and lights on its page only", () => {
+  const cloud = createComposition("cloud", { eeComposition: createComposition("oss") });
+  for (const focusedConsole of [false, true]) {
+    for (const customMonitoring of [false, true]) {
+      for (const projectGroups of [[], cloud.projectNav]) {
+        const items = consoleNav({
+          projectId: P1,
+          additions: [],
+          projectGroups,
+          focusedConsole,
+          customMonitoring,
+        });
+        assert.deepEqual(
+          items.slice(-2).map(({ id, section }) => `${id}|${section}`),
+          ["mcp-setup|settings", "settings|settings"],
+        );
+      }
+    }
+  }
+  const items = consoleNav({ projectId: P1, additions: [] });
+  const mcp = items.find(({ id }) => id === "mcp-setup");
+  assert.equal(mcp?.label, "MCP");
+  assert.equal(mcp?.icon, "integrations", "the glyph of the organization's Integrations page");
+  assert.equal(mcp?.href, `/project/${P1}/mcp-setup`);
+  assert.equal(activeNavItemId(`/project/${P1}/mcp-setup`, items), "mcp-setup");
+  assert.notEqual(
+    activeNavItemId(`/project/${P1}/mcp`, items),
+    "mcp-setup",
+    "the MCP servers page is another page",
+  );
+  // The organization rail is as it was: Integrations, no project MCP item.
+  assert.deepEqual(
+    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }).map(
+      ({ id }) => id,
+    ),
+    ["projects", "integrations", "org-settings"],
+  );
 });

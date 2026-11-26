@@ -27,7 +27,7 @@ Every UI change in the platform, in both editions, follows this document and is 
 
 ## Information architecture
 
-At most 10 project items, and 14 with `customMonitoring` (the edition's own come on top), under stage
+At most 11 project items, and 15 with `customMonitoring` (the edition's own come on top), under stage
 headings; the rail scrolls when they do not fit. Nothing "Soon"; one home per concept and per
 editable field; items the edition lacks are not rendered; moved pages redirect.
 
@@ -39,6 +39,7 @@ editable field; items the edition lacks are not rendered; moved pages redirect.
 | Catalog | What can my agent use? | Tools, Skills, Test |
 | Intents | What do people want, and what next? | All intents, Flows, Map |
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
+| MCP | How do I connect an agent to Ratel? | The organization's MCP connection guide, the key choice on this project |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
 
 With `customMonitoring` on, Monitor has four more items, in this order: Overview, Dashboards, Explore, Agent health,

@@ -53,6 +53,7 @@ export function McpConnect({
   organizationId,
   organizationSlug,
   projects,
+  initialProjectId,
   keyPrefixesByProject,
   restricted,
   browserSignIn = false,
@@ -61,6 +62,8 @@ export function McpConnect({
   organizationId: string;
   organizationSlug: string;
   projects: readonly McpProject[];
+  /** The project the key choice starts on, when it is one of `projects`; else the first. */
+  initialProjectId?: string;
   /** Live key prefixes per project id; never the secrets. */
   keyPrefixesByProject: Readonly<Record<string, readonly string[]>>;
   /** Inside an admin support session no key is minted. */
@@ -69,7 +72,9 @@ export function McpConnect({
   browserSignIn?: boolean;
 }) {
   const [client, setClient] = useState<McpClient>("claude-code");
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
+  const [projectId, setProjectId] = useState(
+    projects.find((candidate) => candidate.id === initialProjectId)?.id ?? projects[0]?.id ?? "",
+  );
   // Held for this page view only, never stored or fetched again.
   const [mintedKey, setMintedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

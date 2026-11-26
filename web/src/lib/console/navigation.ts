@@ -354,6 +354,21 @@ export function consoleNav({
             ),
           ),
         {
+          id: "mcp-setup",
+          label: "MCP",
+          href: `${root}/mcp-setup`,
+          icon: "integrations",
+          keywords: [
+            "mcp",
+            "connect",
+            "claude",
+            "cursor",
+            "model context protocol",
+            "integrations",
+          ],
+          section: "settings",
+        },
+        {
           id: "settings",
           label: "Settings",
           href: `${root}/settings`,
@@ -403,7 +418,7 @@ export function consoleNav({
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
  * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore, Scorers and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
- * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
+ * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows, MCP and Settings close the rail, unlabelled.
  */
 function stageRailNav(
   root: string,
@@ -507,6 +522,7 @@ function stageRailNav(
     ...classic.filter((item) => item.section?.startsWith("group:")),
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
+    pick("mcp-setup"),
     pick("settings"),
   ];
 }
