@@ -52,6 +52,12 @@ export const DEFAULT_PORT = 8080;
 export const DEFAULT_TIMEOUT_S = 300;
 /** The total wait for `GET /ratel/health`. */
 export const HEALTH_WAIT_S = 60;
+/**
+ * The wait for the image in the VM. A VM from a saved snapshot is ready before Docker has loaded
+ * its images (about 2 s later, and no Docker command waits for them): a `docker run` before that
+ * tries a registry pull and fails.
+ */
+export const IMAGE_WAIT_S = 60;
 /** The time that a command needs beyond its own timeout. */
 const SLACK_S = 30;
 const DOCKER_STEP_S = 120;
@@ -86,7 +92,12 @@ export async function runContainer(vm: VmSession, input: ContainerRunInput): Pro
     await vm.writeSecretFile({ path: files.env, body: envBody, size: envBody.length });
     const requestBody = Buffer.from(JSON.stringify(input.request));
     await vm.writeFile({ path: files.request, body: requestBody, size: requestBody.length });
-    ran = config.run?.mode === "command" ? await commandMode(vm, run) : await httpMode(vm, run);
+    if (!(await imageInVm(vm, run.tag))) {
+      const message = `The image ${run.tag} is not in the VM after ${IMAGE_WAIT_S} s.`;
+      ran = { answer: fail("no_health", message), durationMs: 0, logs: "" };
+    } else {
+      ran = config.run?.mode === "command" ? await commandMode(vm, run) : await httpMode(vm, run);
+    }
   } finally {
     cleaned = await clean(vm, run);
   }
@@ -113,7 +124,7 @@ async function httpMode(vm: VmSession, run: Run): Promise<Ran> {
     timeoutS: DOCKER_STEP_S,
   });
   if (started.exitCode !== 0) {
-    const why = started.stderr.trim().split("\n").at(-1) ?? "";
+    const why = dockerError(started.stderr);
     const answer = fail("no_health", `The container did not start. ${why}`.trim());
     return await ended(vm, run, answer, 0);
   }
@@ -179,6 +190,28 @@ async function commandMode(vm: VmSession, run: Run): Promise<Ran> {
     return { answer: timedOut(timeoutS, "The command"), durationMs, logs };
   }
   return { answer: judgeCommandAnswer(ran.exitCode, ran.stdout), durationMs, logs };
+}
+
+/** Waits until Docker has the image. False when it is not there at the end of the wait. */
+async function imageInVm(vm: VmSession, tag: string): Promise<boolean> {
+  const waited = await vm.exec({
+    command: `for i in $(seq 1 ${IMAGE_WAIT_S}); do docker image inspect ${tag} >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1`,
+    timeoutS: IMAGE_WAIT_S + SLACK_S,
+  });
+  return waited.exitCode === 0;
+}
+
+/**
+ * The error of a Docker command: its `docker:` line, else its last line that is not the help
+ * hint. Docker ends each failure with "Run 'docker run --help' for more information".
+ */
+function dockerError(stderr: string): string {
+  const lines = stderr
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !/^Run 'docker [a-z]+ --help'/.test(line));
+  const found = lines.find((line) => line.startsWith("docker:")) ?? lines.at(-1) ?? "";
+  return found.replace(/^docker:\s*/, "");
 }
 
 function healthFailure(exitCode: number | null, port: number): ContainerAnswer {
