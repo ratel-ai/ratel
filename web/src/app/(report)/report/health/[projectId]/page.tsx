@@ -5,7 +5,7 @@ import { ReportToolbar } from "@/components/console/health/report/ReportToolbar"
 import { buildHealthReport } from "@/components/console/health/report/report-model";
 import "@/components/console/health/report/health-report.css";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { afterOutsideSupportSession } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
@@ -32,7 +32,7 @@ export default async function HealthReportPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<{ days?: string; print?: string }>;
 }) {
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
   const [{ projectId }, { days, print }] = await Promise.all([params, searchParams]);
   const { project, organization, user } = await requireProjectScope(projectId);
 

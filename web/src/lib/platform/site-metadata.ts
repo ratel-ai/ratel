@@ -2,14 +2,18 @@ import type { Metadata } from "next";
 import type { LinkPreview } from "@/lib/contracts/composition";
 
 /**
- * The root layout's metadata (upstream's `app/layout.tsx` `generateMetadata`): the title template,
- * the description and icon, and the link preview a shared URL unfurls into, with the canonical
- * origin as `metadataBase`.
+ * The root layout's metadata (upstream's `app/layout.tsx` `metadata`): the title template, the
+ * description and icon, and the link preview a shared URL unfurls into.
+ *
+ * Static on purpose: nothing here reads the deployment. Its host is runtime config
+ * (`APP_PUBLIC_URL`, `BASE_URL`), unset when the image is built. Reading it here would either bake
+ * the build's answer into every page or, behind `connection()`, make every route's metadata
+ * dynamic, which Cache Components rejects on routes whose content can otherwise prerender. So
+ * there is no `metadataBase` and no `og:url`: there are no relative OpenGraph images to resolve,
+ * and a link preview takes the URL that was shared.
  */
 export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
-  const base = metadataBase(preview.origin);
   return {
-    ...(base ? { metadataBase: base.url } : {}),
     title: { default: appName, template: `%s · ${appName}` },
     description: preview.description,
     // The mark on its tile: `ratel-mark.png` of @ratel/brand, served from `public/`.
@@ -17,7 +21,6 @@ export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
     openGraph: {
       title: preview.title,
       description: preview.description,
-      ...(base ? { url: base.text } : {}),
       siteName: preview.siteName,
       type: "website",
     },
@@ -29,24 +32,9 @@ export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
   };
 }
 
-/**
- * The origin as a URL. One written without a scheme (`ratel.example.com`) is read as https; one
- * that still does not parse leaves the preview without an origin rather than failing every page.
- */
-function metadataBase(origin: string): { url: URL; text: string } | null {
-  const text = origin.includes("://") ? origin : `https://${origin}`;
-  try {
-    const url = new URL(text);
-    return url.protocol === "http:" || url.protocol === "https:" ? { url, text } : null;
-  } catch {
-    return null;
-  }
-}
-
-/** The preview without an edition: this deployment's name and origin. */
-export function defaultLinkPreview(appName: string, baseUrl: string): LinkPreview {
+/** The preview without an edition: this deployment's name. */
+export function defaultLinkPreview(appName: string): LinkPreview {
   return {
-    origin: baseUrl,
     siteName: appName,
     title: appName,
     description: `${appName} breaks down how your agent spends its input token budget across skills, tools, history, memory, and user input, then tells you what to reclaim.`,

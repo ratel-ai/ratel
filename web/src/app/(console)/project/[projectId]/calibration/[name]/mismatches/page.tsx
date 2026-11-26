@@ -3,7 +3,7 @@ import { ComparisonBrowser } from "@/components/console/calibration/ComparisonBr
 import { DateRangeControl } from "@/components/console/calibration/DateRangeControl";
 import { BackLink } from "@/components/console/traces/compare/BackLink";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { createCalibrationQueries } from "@/lib/synthesis/experiments/calibration-queries";
@@ -27,7 +27,7 @@ export default async function CalibrationMismatchesPage({
   params: Promise<{ projectId: string; name: string }>;
   searchParams: Promise<TraceListSearchParams>;
 }) {
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
 
   const [{ projectId, name: nameSegment }, query] = await Promise.all([params, searchParams]);
 

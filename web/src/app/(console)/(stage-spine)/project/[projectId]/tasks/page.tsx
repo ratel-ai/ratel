@@ -1,6 +1,6 @@
 import { TasksNoDatabase, TasksView } from "@/components/console/tasks/TasksView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { loadPageProgress } from "@/lib/views/freshness/page";
@@ -16,7 +16,7 @@ export const metadata = { title: "Tasks" };
  * comes from the console scope.
  */
 export default async function TasksPage({ params }: { params: Promise<{ projectId: string }> }) {
-  if (!isDbConfigured()) return <TasksNoDatabase />;
+  if (!(await dbConfigured())) return <TasksNoDatabase />;
   const { projectId } = await params;
   const { project, organization, user } = await requireProjectScope(projectId);
   const [inputs, fixes, evalGate, scorersOn, progress] = await Promise.all([

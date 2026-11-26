@@ -7,7 +7,7 @@ import { ExperimentIssuesPanel } from "@/components/console/calibration/Experime
 import { ExperimentLifecyclePanels } from "@/components/console/calibration/ExperimentLifecyclePanels";
 import { BackLink } from "@/components/console/traces/compare/BackLink";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -70,7 +70,7 @@ export default async function ExperimentDetailContent({
 }) {
   const copy = SURFACE_COPY[surface];
 
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <p className="rounded-lg border border-coral/40 bg-coral/10 p-3 font-mono text-xs text-cream-dim">
         {copy.unavailable}

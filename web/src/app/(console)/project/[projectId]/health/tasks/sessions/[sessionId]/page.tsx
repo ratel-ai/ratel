@@ -1,7 +1,7 @@
 import { SessionView } from "@/components/console/tasks/SessionView";
 import { TasksNoDatabase } from "@/components/console/tasks/TasksView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -29,7 +29,7 @@ export default async function TaskSessionPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const [{ projectId, sessionId }, query] = await Promise.all([params, searchParams]);
-  if (!isDbConfigured()) return <TasksNoDatabase />;
+  if (!(await dbConfigured())) return <TasksNoDatabase />;
   const { project } = await requireProjectScope(projectId);
   const distinctId = `project:${project.id}`;
   const [turns, names] = await Promise.all([

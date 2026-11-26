@@ -9,7 +9,7 @@ import { entryHref, projectRoot } from "@/lib/console/navigation";
 import { LAST_PROJECT_COOKIE } from "@/lib/console/scope/cookie";
 import { resolveLastProjectId } from "@/lib/console/scope/landing";
 import { getConsoleScope } from "@/lib/console/shell-data";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getSessionContext } from "@/lib/platform/session";
 
 // The composition is selected at boot, so the console must not be prerendered:
@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const RootPage = (await composition.ui?.())?.RootPage;
   if (RootPage) return <RootPage />;
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <ConsoleFrame>
         <DatabaseUnavailable title="Ratel">

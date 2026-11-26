@@ -9,7 +9,7 @@ import {
 } from "@/components/console/self-corrections/SelfCorrectionsView";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { parseWindowDays, windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
@@ -50,7 +50,7 @@ export async function SelfCorrectionsRoute({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { projectId } = await params;
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <Page>
         <PageHeader title="Self-corrections" description={SELF_CORRECTIONS_DESCRIPTION} />

@@ -2,7 +2,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { McpSetupGuide } from "@/components/console/mcp-setup/McpSetupGuide";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 export const metadata = { title: "MCP" };
 
@@ -16,7 +16,7 @@ export default async function ProjectMcpSetupPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="MCP">
         The MCP server becomes available once setup finishes.

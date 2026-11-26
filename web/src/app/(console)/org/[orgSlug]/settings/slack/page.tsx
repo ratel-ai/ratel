@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { SlackAppSettings } from "@/components/console/slack/SlackAppSettings";
 import { APP_NAME } from "@/lib/platform/app-config";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { slackManifestUrl, slackRedirectUrl } from "@/lib/views/slack/app";
 import { slackAppAdmin } from "@/lib/views/slack/app-actions";
@@ -18,7 +18,7 @@ export default async function OrganizationSlackPage({
 }: {
   params: Promise<{ orgSlug: string }>;
 }) {
-  if (!isDbConfigured())
+  if (!(await dbConfigured()))
     return (
       <DatabaseUnavailable title="Settings">
         Slack becomes available once setup finishes.

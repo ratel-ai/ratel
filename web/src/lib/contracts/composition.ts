@@ -92,12 +92,10 @@ export type EditionCommandAction = {
 };
 
 /**
- * How a shared link to the app previews (OpenGraph, Twitter card): the canonical origin and the
- * words a chat or social card shows.
+ * How a shared link to the app previews (OpenGraph, Twitter card): the words a chat or social card
+ * shows. No origin: the root metadata is static, and a preview takes the URL that was shared.
  */
 export type LinkPreview = {
-  /** The public origin, e.g. `https://app.example.com`: the base for metadata URLs. */
-  origin: string;
   siteName: string;
   title: string;
   description: string;
@@ -108,13 +106,16 @@ export type LinkPreview = {
  * component replaces what the open-source console shows in its place, which is the default.
  */
 export type EditionUi = {
-  /** Wraps the whole app, in the root layout. */
+  /**
+   * Wraps the whole app inside the root layout's request boundary: it renders per request, after
+   * `connection()`, so it may read the environment and the request (a publishable key, a cookie).
+   */
   RootProvider: ComponentType<{ children: ReactNode }>;
   /**
-   * The link preview, read per request by the root layout. Absent, it names this deployment
-   * (`APP_NAME`, `BASE_URL`).
+   * The link preview of the root layout's static metadata: constant words, never read from the
+   * request or the environment. Absent, it names this deployment (`APP_NAME`).
    */
-  linkPreview?: () => LinkPreview;
+  linkPreview?: LinkPreview;
   /** Menu items above the docs in the account menu. */
   AccountMenuItems: ComponentType;
   /**

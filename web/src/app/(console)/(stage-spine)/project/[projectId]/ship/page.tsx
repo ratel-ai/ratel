@@ -7,7 +7,7 @@ import Link from "next/link";
 import { type OpenedShipment, ShipmentsTable } from "@/components/console/lineage/ShipmentsTable";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
@@ -33,7 +33,7 @@ export default async function ShipPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Ship">
         Shipped changes appear once setup finishes.

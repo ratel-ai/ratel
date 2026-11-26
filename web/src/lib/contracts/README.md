@@ -15,6 +15,11 @@ and what that kind asks; never the time window), with `parseQuery` and the `MEAS
 `check.ts` is what a check reads and how it compares, for check scorers and funnel steps. `views/dashboards/json-schemas.ts` derives the JSON Schemas under
 `docs/schemas`.
 
+`request-read.ts` is `requestRead()`, the mark of a request-time read (Next's `connection()`): the
+open-source session and the database gate (`platform/db/request.ts`) wait on it, so under Cache
+Components nothing they answer is prerendered into the build. Outside Next (a unit test, a script)
+it resolves at once; every other refusal Next raises still throws.
+
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`,
 `customMonitoring`) and the optional
@@ -142,9 +147,11 @@ project id and showing its own loading state; any other key is a 404. `ProjectPa
 what the route shows while such a page loads, so the project Overview's skeleton never flashes
 first. Its rail entries come from `composition.projectNav`. The open-source edition has none of them.
 
-`linkPreview` gives the root layout the canonical origin and the words a shared link unfurls into
-(`metadataBase`, OpenGraph, Twitter card); without it they name this deployment (`APP_NAME`,
-`BASE_URL`). `OnboardingArt` replaces the first-run screen's backdrop and card emblem; without it
+`linkPreview` gives the root layout's static metadata the words a shared link unfurls into
+(OpenGraph, Twitter card): a constant, with no host, because the metadata never reads the request
+or the deployment; without it they name this deployment (`APP_NAME`). `RootProvider` renders inside
+the root layout's request boundary, after `connection()`, so it may read the environment and the
+request. `OnboardingArt` replaces the first-run screen's backdrop and card emblem; without it
 the static dot field and the badger mark stay. `accountNote` is a line under the name and email at
 the top of the account menu (Cloud's "Local session (auth bypassed)").
 

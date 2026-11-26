@@ -5,7 +5,7 @@ import {
   type FlowAgent,
 } from "@/components/console/agents/AgentDetailView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { afterOutsideSupportSession } from "@/lib/platform/support-session";
@@ -51,7 +51,7 @@ export default async function AgentPage({
 }) {
   const { projectId, agent: segment } = await params;
   if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Agent">
         Agents become available once setup finishes.

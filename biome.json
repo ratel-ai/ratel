@@ -1479,6 +1479,38 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "web/src/app/**/*.tsx",
+        "web/src/components/**/*.tsx",
+        "web/src/app/(console)/project/\\[projectId\\]/feature-page.ts",
+        "web/src/app/(console)/project/\\[projectId\\]/dashboards/context.ts",
+        "web/src/app/(console)/project/\\[projectId\\]/improvement/fixes/data.ts",
+        "web/src/app/(console)/project/\\[projectId\\]/intents/data.ts",
+        "web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/context.ts",
+        "web/src/lib/console/shell-data.ts",
+        "web/src/lib/views/freshness/page.ts",
+        "web/src/lib/views/health/shared-page-load.ts",
+        "!**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/lib/platform/db/client": {
+                    "importNames": ["isDbConfigured"],
+                    "message": "A render path awaits dbConfigured() from @/lib/platform/db/request: under Cache Components a bare isDbConfigured() is answered at build, where there is no database."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "javascript": {

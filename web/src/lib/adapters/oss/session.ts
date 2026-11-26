@@ -1,4 +1,5 @@
 import { type Config, getConfig } from "@/config";
+import { requestRead } from "@/lib/contracts/request-read";
 import type { Organization, Session, SessionPort, SessionUser } from "@/lib/contracts/session";
 
 /**
@@ -38,17 +39,33 @@ function localSession(): Session {
   };
 }
 
-export const ossSession: SessionPort = {
-  async resolveSession() {
-    return localSession();
-  },
-  async getOrganization(id) {
-    return id === LOCAL_ORGANIZATION_ID ? localOrganization() : null;
-  },
-  async countMembers() {
-    return 1;
-  },
-  async actingAs() {
-    return null;
-  },
-};
+export interface OssSessionDeps {
+  /** `requestRead()`: resolves once there is a request, never in a prerender. */
+  connection: () => Promise<void>;
+}
+
+/**
+ * The session waits for a request, as a signed-in edition's does by reading its cookie. Under Cache
+ * Components a render path is prerendered at build up to its first request read: a session that
+ * answers at once would bake the build's organization name (`RATEL_ORG_NAME`, set on the running
+ * image) into the page, and would let a page that should stop at its session prerender past it.
+ */
+export function createOssSession(deps: OssSessionDeps = { connection: requestRead }): SessionPort {
+  return {
+    async resolveSession() {
+      await deps.connection();
+      return localSession();
+    },
+    async getOrganization(id) {
+      return id === LOCAL_ORGANIZATION_ID ? localOrganization() : null;
+    },
+    async countMembers() {
+      return 1;
+    },
+    async actingAs() {
+      return null;
+    },
+  };
+}
+
+export const ossSession: SessionPort = createOssSession();

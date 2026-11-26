@@ -1,4 +1,4 @@
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -20,7 +20,7 @@ export async function loadPageProgress(
   projectId: string,
   section: AnalysisSection,
 ): Promise<SectionProgress | null> {
-  if (!isDbConfigured()) return null;
+  if (!(await dbConfigured())) return null;
   try {
     return await withStatementTimeout(
       (db) => loadSectionProgress(db, projectId, sectionJobKinds(section)),

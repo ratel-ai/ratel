@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { SettingsFrame } from "@/components/console/settings/SettingsFrame";
 import { projectTabs } from "@/lib/console/settings/project-tabs";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 /**
  * Project settings share one header and its URL tabs, so a tab switch keeps
@@ -15,7 +15,7 @@ export default async function ProjectSettingsLayout({
   children: ReactNode;
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) return children;
+  if (!(await dbConfigured())) return children;
   const { projectId } = await params;
   return (
     <SettingsFrame label="Project settings" tabs={await projectTabs(projectId)}>

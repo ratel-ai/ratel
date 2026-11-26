@@ -1,7 +1,7 @@
 import { GeneralSettings } from "@/components/console/settings/GeneralSettings";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { composition } from "@/lib/composition";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 export const metadata = { title: "Project settings" };
 
@@ -10,7 +10,7 @@ export default async function ProjectSettingsPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Settings">
         Settings become available once setup finishes.

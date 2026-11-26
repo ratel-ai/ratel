@@ -11,7 +11,7 @@ import { TaskGone } from "@/components/console/tasks/TaskGone";
 import { TasksNoDatabase } from "@/components/console/tasks/TasksView";
 import { TaskView } from "@/components/console/tasks/TaskView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
@@ -31,7 +31,7 @@ export default async function TaskPage({
 }: {
   params: Promise<{ projectId: string; taskId: string }>;
 }) {
-  if (!isDbConfigured()) return <TasksNoDatabase />;
+  if (!(await dbConfigured())) return <TasksNoDatabase />;
   const { projectId, taskId } = await params;
   const { project, organization, user } = await requireProjectScope(projectId);
   const [inputs, fixes] = await Promise.all([

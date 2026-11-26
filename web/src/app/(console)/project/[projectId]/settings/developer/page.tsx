@@ -1,7 +1,7 @@
 import { DeveloperSettings } from "@/components/console/settings/DeveloperSettings";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import type { SearchParamsRecord } from "@/lib/console/settings/tabs";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 export const metadata = { title: "Developer" };
 
@@ -17,7 +17,7 @@ export default async function DeveloperSettingsPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<SearchParamsRecord>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Settings">
         SDK events become available once setup finishes.

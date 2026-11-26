@@ -8,7 +8,7 @@ import { TOUR_STATUS_COOKIE } from "@/lib/console/onboarding/tour-cookie";
 import { shouldOfferTour } from "@/lib/console/onboarding/tour-state";
 import { readTourStatus } from "@/lib/console/onboarding/tour-status";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 
 export const metadata = { title: "Project home" };
@@ -28,7 +28,7 @@ export default async function ProjectHomePage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Overview">
         Project data becomes available once setup finishes.

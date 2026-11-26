@@ -7,7 +7,7 @@ import { loadTraceViewProps } from "@/app/(console)/project/[projectId]/traces/[
 import { SessionChatView } from "@/components/console/session-chat/SessionChatView";
 import { SessionTraceView } from "@/components/console/session-chat/SessionTraceView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { firstParam } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
@@ -58,7 +58,7 @@ export default async function SessionReplayPage({
   }>;
 }) {
   const { projectId, sessionId } = await params;
-  if (!isDbConfigured()) notFound();
+  if (!(await dbConfigured())) notFound();
   const { project, organization } = await requireProjectScope(projectId);
   // RC-413: titled by the first ask.
   const header = (asks: readonly (string | null)[]) => ({

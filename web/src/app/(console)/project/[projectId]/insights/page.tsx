@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { projectRoot } from "@/lib/console/navigation";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { insightsRedirectTarget } from "@/lib/readings/trace-signals/view";
 
 /**
@@ -11,7 +11,7 @@ import { insightsRedirectTarget } from "@/lib/readings/trace-signals/view";
  * this edition, so no flag decides where it lands.
  */
 async function agentHealthRedirect(projectId: string): Promise<string | null> {
-  if (!isDbConfigured()) return null;
+  if (!(await dbConfigured())) return null;
   const scope = await findProjectScope(projectId);
   if (!scope) return null;
   return insightsRedirectTarget(scope.project.id, true);

@@ -1,6 +1,6 @@
 import { IntegrationsPage } from "@/components/console/org/IntegrationsPage";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 export const metadata = { title: "Integrations" };
 
@@ -18,7 +18,7 @@ export default async function OrganizationMcpPage({
 }: {
   params: Promise<{ orgSlug: string }>;
 }) {
-  if (!isDbConfigured()) {
+  if (!(await dbConfigured())) {
     return (
       <DatabaseUnavailable title="Integrations">
         The MCP server becomes available once setup finishes.

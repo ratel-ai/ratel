@@ -1,11 +1,11 @@
 import { findProjectScope, type ProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 
 /** The reader's project, or null where no database is connected. The project layout already guarded the id. */
 export async function dashboardsScope(projectId: string): Promise<ProjectScope | null> {
-  return isDbConfigured() ? findProjectScope(projectId) : null;
+  return (await dbConfigured()) ? findProjectScope(projectId) : null;
 }
 
 /** Whether the project's organization has `customMonitoring`. */

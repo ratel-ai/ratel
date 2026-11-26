@@ -6,7 +6,7 @@ import { composition } from "@/lib/composition/ports";
 import { LAST_PROJECT_COOKIE } from "@/lib/console/scope/cookie";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { lastProjectDiffers, openProject } from "@/lib/console/scope/remember-project";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 
 /**
  * Fails closed: a project of an organization the reader does not belong to is a 404, never a
@@ -26,7 +26,7 @@ export default async function ProjectLayout({
   children: ReactNode;
   params: Promise<{ projectId: string }>;
 }) {
-  if (!isDbConfigured()) return children;
+  if (!(await dbConfigured())) return children;
 
   const { projectId } = await params;
   const { rememberProject } = composition.session;

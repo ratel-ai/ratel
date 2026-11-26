@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { composition } from "@/lib/composition";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { dbConfigured } from "@/lib/platform/db/request";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import {
@@ -18,7 +18,7 @@ const logger = getLogger("health/share-page");
  * reported, then answered the same way, so an outage never says whether a token exists.
  */
 export const sharedHealthFor = cache(async (token: string): Promise<SharedHealth | null> => {
-  if (!isDbConfigured()) return null;
+  if (!(await dbConfigured())) return null;
   const share = (await composition.ui?.())?.HealthShare;
   if (!share) return null;
   try {
