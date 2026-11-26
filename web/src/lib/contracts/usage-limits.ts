@@ -13,13 +13,15 @@ export const SANDBOX_HARD_LIMITS = {
   sandbox_versions_per_day: 100,
   // A gzip of `docker save`.
   sandbox_bundle_bytes: 2 * 1024 ** 3,
+  // A run VM is warm for a few minutes and many runs reuse it.
+  sandbox_vm_starts_per_day: 500,
 };
 
 export type UsageLimitName = keyof typeof SANDBOX_HARD_LIMITS;
 export type UsageLimitValues = Readonly<Record<UsageLimitName, number>>;
 
 /** What a project consumes. */
-export type UsageKind = "sandbox_run" | "sandbox_version";
+export type UsageKind = "sandbox_run" | "sandbox_version" | "sandbox_vm_start";
 
 /** A budget that Ratel pays from, for each organization and UTC day. */
 export type DailyBudgetName = "eval_judge";

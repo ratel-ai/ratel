@@ -195,6 +195,7 @@ export const CONFIG_DEFAULTS = {
   sandboxes: {
     boatApiUrl: "https://boat.dev/api/v1",
     boatVmType: "small",
+    vmIdleSeconds: 300,
     limits: SANDBOX_HARD_LIMITS,
   },
   topics: {

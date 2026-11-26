@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createVersionSchema, ratelYamlSchema, secretNameSchema } from "../domain/config";
-import { runResultSchema } from "../domain/run";
-import { errorSchema, runResponseSchema } from "../domain/smoke";
+import { errorSchema, runResponseSchema } from "../domain/contract";
+import { runRequestSchema, sandboxRunSchema, startRunRequestSchema } from "../domain/run";
 
 // Copies of the conformance vectors of protocol/sandbox/v1 (ratel-sdk).
 const VECTORS = join(import.meta.dirname, "vectors");
@@ -13,7 +13,9 @@ const SCHEMAS = {
   "create-version.request": createVersionSchema,
   "run-response": runResponseSchema,
   error: errorSchema,
-  "run-result": runResultSchema,
+  "run-request": runRequestSchema,
+  "start-run.request": startRunRequestSchema,
+  "sandbox-run": sandboxRunSchema,
 };
 
 for (const kind of ["valid", "invalid"] as const) {

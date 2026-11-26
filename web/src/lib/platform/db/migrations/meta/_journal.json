@@ -400,6 +400,20 @@
       "when": 1795692210126,
       "tag": "0056_sandbox_version_config_only",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1795694026197,
+      "tag": "0057_sandbox_run_vms",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1795694051749,
+      "tag": "0058_sandbox_runs_drop_instances",
+      "breakpoints": true
     }
   ]
 }

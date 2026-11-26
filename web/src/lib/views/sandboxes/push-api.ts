@@ -157,12 +157,15 @@ function view(req: Request, version: SandboxVersion, deps: PushApiDeps) {
   return versionView(version, `${originOf(req, deps)}/project/${version.projectId}/sandbox`);
 }
 
+function originOf(req: Request, deps: PushApiDeps): string {
+  return requestOrigin(req, deps.publicOrigin());
+}
+
 /**
  * The configured public origin, else the origin that the client called. Behind a proxy that is the
  * forwarded host. The client sends its key only to the origin of its own base URL.
  */
-function originOf(req: Request, deps: PushApiDeps): string {
-  const configured = deps.publicOrigin();
+export function requestOrigin(req: Request, configured: string | null): string {
   if (configured) return configured.replace(/\/+$/, "");
   const url = new URL(req.url);
   const first = (name: string) => req.headers.get(name)?.split(",")[0]?.trim() || null;

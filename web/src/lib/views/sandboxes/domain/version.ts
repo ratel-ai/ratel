@@ -1,5 +1,5 @@
 import type { RatelYaml } from "./config";
-import type { SmokeResult } from "./smoke";
+import type { SmokeResult } from "./contract";
 
 export const VERSION_STATUSES = ["uploading", "uploaded", "preparing", "ready", "failed"] as const;
 export type VersionStatus = (typeof VERSION_STATUSES)[number];

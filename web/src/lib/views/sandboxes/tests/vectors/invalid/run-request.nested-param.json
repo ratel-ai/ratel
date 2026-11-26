@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "runId": "r",
+  "input": 1,
+  "params": {
+    "history": [
+      {
+        "role": "user"
+      }
+    ]
+  },
+  "tools": {},
+  "fixtures": []
+}

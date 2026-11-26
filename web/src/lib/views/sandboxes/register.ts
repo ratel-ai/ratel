@@ -1,3 +1,4 @@
+import { getConfig } from "@/config";
 import type { Registration } from "@/lib/contracts/registry";
 import { SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { enqueueJob } from "@/lib/jobs/queries";
@@ -19,7 +20,8 @@ const UNQUEUED_MS = 2 * 60_000;
 /**
  * What Ratel sandboxes contribute to the background machinery: the image preparation, which the reaper
  * spares while it sends heartbeats (it can outlast the stale-job window), and the sweeps that end
- * an interrupted build, queue a build that was never queued, and end runs and their instances.
+ * an interrupted build, queue a build that was never queued, end the runs that their process left,
+ * and delete the run VMs that are idle or unknown.
  */
 export const sandboxesRegistration: Registration = {
   jobs: {
@@ -63,6 +65,7 @@ export const sandboxesRegistration: Registration = {
       run: () =>
         sweepRuns({
           ...runDeps(),
+          idleMs: getConfig().sandboxes.vmIdleSeconds * 1000,
           organizationIdOf: async (projectId) =>
             (await getOrganizationByProjectId(projectId))?.id ?? null,
         }),

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { judgeCommandAnswer, judgeHttpAnswer, redact, smokeRequest, tailOf } from "../domain/smoke";
+import {
+  judgeCommandAnswer,
+  judgeHttpAnswer,
+  redact,
+  smokeRequest,
+  tailOf,
+} from "../domain/contract";
 
 test("the smoke request runs the example with the default params and every tool simulated", () => {
   const request = smokeRequest(
@@ -29,9 +35,18 @@ test("the smoke request runs the example with the default params and every tool 
 test("an HTTP answer: 200 with a run response is ok, each other answer has its contract code", () => {
   assert.deepEqual(judgeHttpAnswer(200, '{"output":{"reply":"done"}}'), {
     ok: true,
-    output: { reply: "done" },
+    response: { output: { reply: "done" } },
   });
-  assert.deepEqual(judgeHttpAnswer(200, '{"output":null}'), { ok: true, output: null });
+  assert.deepEqual(judgeHttpAnswer(200, '{"output":null}'), {
+    ok: true,
+    response: { output: null },
+  });
+  const full = {
+    output: "hi",
+    toolCalls: [{ name: "refund_order", args: { id: "7" }, mode: "recorded", result: 1 }],
+    usage: { inputTokens: 3, outputTokens: 1, costUsd: 0.01 },
+  };
+  assert.deepEqual(judgeHttpAnswer(200, JSON.stringify(full)), { ok: true, response: full });
   const code = (status: number, body: string) => {
     const answer = judgeHttpAnswer(status, body);
     return answer.ok ? "ok" : answer.error.code;
@@ -48,9 +63,10 @@ test("an HTTP answer: 200 with a run response is ok, each other answer has its c
 });
 
 test("a command answer: a JSON object with output is a run response, other text is the output", () => {
-  assert.deepEqual(judgeCommandAnswer(0, '{"output":"hi"}\n'), { ok: true, output: "hi" });
-  assert.deepEqual(judgeCommandAnswer(0, "plain text\n"), { ok: true, output: "plain text" });
-  assert.deepEqual(judgeCommandAnswer(0, '{"reply":1}'), { ok: true, output: '{"reply":1}' });
+  const output = (value: unknown) => ({ ok: true, response: { output: value } });
+  assert.deepEqual(judgeCommandAnswer(0, '{"output":"hi"}\n'), output("hi"));
+  assert.deepEqual(judgeCommandAnswer(0, "plain text\n"), output("plain text"));
+  assert.deepEqual(judgeCommandAnswer(0, '{"reply":1}'), output('{"reply":1}'));
   const bad = judgeCommandAnswer(0, '{"output":1,"usage":{"inputTokens":-1}}');
   assert.equal(!bad.ok && bad.error.code, "invalid_response");
   const failed = judgeCommandAnswer(3, "");

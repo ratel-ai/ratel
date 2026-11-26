@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type ConsoleAccessDeps, forMember, refuse, reply } from "./console-access";
+import { toolModeSchema } from "./domain/contract";
 import { runView } from "./domain/run";
 import { getRun, type RunDeps, type StartRunResult, startRun } from "./runs";
 
@@ -17,7 +18,8 @@ export type RunsApiDeps = ConsoleAccessDeps & {
 const bodySchema = z.object({
   versionId: z.uuid(),
   input: z.unknown(),
-  params: z.record(z.string(), z.unknown()).optional(),
+  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  tools: z.record(z.string(), z.object({ mode: toolModeSchema })).optional(),
 });
 const STATUS: Record<Exclude<StartRunResult, { ok: true }>["reason"], number> = {
   not_found: 404,
@@ -25,6 +27,7 @@ const STATUS: Record<Exclude<StartRunResult, { ok: true }>["reason"], number> = 
   not_configured: 503,
   missing_secrets: 409,
   input_too_large: 413,
+  invalid: 400,
   limit_reached: 429,
 };
 
@@ -36,7 +39,7 @@ export function handleStartRun(
   const work = async (member: Parameters<Parameters<typeof forMember>[3]>[0]) => {
     const body = bodySchema.safeParse(await request.json().catch(() => null));
     if (!body.success) return refuse(400, "invalid", "Give a version and an input.");
-    const { versionId, input, params } = body.data;
+    const { versionId, input, params, tools } = body.data;
     const { organizationId, externalId } = member;
     const result = await startRun(
       versionId,
@@ -46,6 +49,8 @@ export function handleStartRun(
         organizationId,
         requestedBy: externalId,
         ...(params ? { params } : {}),
+        ...(tools ? { tools } : {}),
+        strict: true,
       },
       deps.runDeps(),
     );

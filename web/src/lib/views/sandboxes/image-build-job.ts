@@ -3,8 +3,9 @@ import { z } from "zod";
 import type { BundleStore } from "@/lib/contracts/bundle-store";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getLogger } from "@/lib/platform/logger";
+import { shellQuote } from "./container-run";
 import { secretNamesOf } from "./domain/config";
-import type { SmokeResult } from "./domain/smoke";
+import type { SmokeResult } from "./domain/contract";
 import { bundleKey, type SandboxVersion } from "./domain/version";
 import type { BuildOutcome, BuildStore } from "./ports/build-store";
 import {
@@ -15,7 +16,7 @@ import {
   type SandboxProvider,
 } from "./ports/sandbox-provider";
 import { openSecretValues, type SecretValuesDeps } from "./secret-values";
-import { runSmokeCheck, shellQuote, smokeLeftovers } from "./smoke-check";
+import { runSmokeCheck, smokeLeftovers } from "./smoke-check";
 
 /**
  * The `sandbox_image_build` job: one pushed image becomes a ready version. It loads the image in a

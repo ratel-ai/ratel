@@ -1,0 +1,14 @@
+{
+  "runId": "r_1",
+  "versionId": "v_1",
+  "status": "completed",
+  "output": 1,
+  "toolCalls": [
+    {
+      "name": "x",
+      "args": {},
+      "result": 1,
+      "mode": "real"
+    }
+  ]
+}

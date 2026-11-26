@@ -160,11 +160,11 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
   ]);
   assert.equal(
     commands[3],
-    `docker run -d --name ${name} -p 127.0.0.1:8080:8080 --env-file ${ENV_FILE} ${tag}; code=$?; rm -f ${ENV_FILE}; exit $code`,
+    `docker run -d --name ${name} -p 127.0.0.1::8080 --env-file ${ENV_FILE} ${tag}; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; docker port ${name} 8080/tcp | head -n 1`,
   );
   assert.match(
     commands[4] ?? "",
-    /curl -fsS -o \/dev\/null .*http:\/\/127\.0\.0\.1:8080\/ratel\/health/,
+    /curl -fsS -o \/dev\/null .*http:\/\/127\.0\.0\.1:32768\/ratel\/health/,
   );
   assert.match(
     commands[5] ?? "",
@@ -269,7 +269,7 @@ test("command mode: the request goes on stdin, and stdout text is the output", a
     t
       .commands()
       .includes(
-        `timeout 30 docker run -i --rm --name smoke-${t.version.id} --env-file ${ENV_FILE} ${tag} 'node' 'agent.js' '--it'\\''s' < ${REQUEST_FILE}; code=$?; rm -f ${ENV_FILE} ${REQUEST_FILE}; exit $code`,
+        `docker create -i --name smoke-${t.version.id} --env-file ${ENV_FILE} ${tag} 'node' 'agent.js' '--it'\\''s' >/dev/null; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; timeout 30 docker start -ai smoke-${t.version.id} < ${REQUEST_FILE}; code=$?; rm -f ${REQUEST_FILE}; exit $code`,
       ),
   );
   const vmRef = t.provider.starts[0]?.vmRef ?? "";

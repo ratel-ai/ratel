@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
-import type { RunStatus, SandboxRun } from "../domain/run";
+import { type RunStatus, resultOf, type SandboxRun } from "../domain/run";
 import type { RunStore } from "../ports/run-store";
-import { sandboxInstances, sandboxRuns } from "../schema";
+import { sandboxRuns } from "../schema";
 
-type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "transaction">;
+type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "delete" | "transaction">;
 
 const ACTIVE = ["queued", "running"];
 
@@ -18,22 +18,32 @@ export function createDrizzleRunStore(db: Db): RunStore {
         );
         const [present] = await tx
           .select({
-            instances: sql<number>`count(*) filter (where ${hasInstance()})::int`,
+            active: sql<number>`count(*) filter (where ${sandboxRuns.status} in ('queued', 'running'))::int`,
             today: sql<number>`count(*) filter (where ${sandboxRuns.createdAt} >= date_trunc('day', now(), 'UTC'))::int`,
           })
           .from(sandboxRuns)
           .where(
             and(
               eq(sandboxRuns.projectId, run.projectId),
-              sql`(${sandboxRuns.createdAt} >= date_trunc('day', now(), 'UTC') or ${hasInstance()})`,
+              sql`(${sandboxRuns.createdAt} >= date_trunc('day', now(), 'UTC') or ${sandboxRuns.status} in ('queued', 'running'))`,
             ),
           );
-        const checked = await check(present ?? { instances: 0, today: 0 });
+        const checked = await check(present ?? { active: 0, today: 0 });
         if (!checked.ok) return checked;
-        const [row] = await tx.insert(sandboxRuns).values(run).returning();
+        const { request, ...columns } = run;
+        const [row] = await tx
+          .insert(sandboxRuns)
+          .values({ ...columns, runInput: request })
+          .returning();
         if (!row) throw new Error("the run row is missing");
         return { ok: true as const, run: toRun(row) };
       });
+    },
+
+    async discard(runId) {
+      await db
+        .delete(sandboxRuns)
+        .where(and(eq(sandboxRuns.id, runId), eq(sandboxRuns.status, "queued")));
     },
 
     async get(projectId, runId) {
@@ -62,48 +72,41 @@ export function createDrizzleRunStore(db: Db): RunStore {
       return row ?? null;
     },
 
-    markStarted({ id, projectId }, instanceRef, now) {
-      return db.transaction(async (tx) => {
-        await tx
-          .insert(sandboxInstances)
-          .values({ runId: id, projectId, instanceRef, startedAt: now });
-        const [row] = await tx
-          .update(sandboxRuns)
-          .set({
-            instanceRef,
-            startedAt: now,
-            // The result can come first: an ended run keeps its status.
-            status: sql`case when ${sandboxRuns.status} = 'queued' then 'running' else ${sandboxRuns.status} end`,
-          })
-          .where(eq(sandboxRuns.id, id))
-          .returning({ status: sandboxRuns.status });
-        return row ? (row.status as RunStatus) : null;
-      });
+    async markStarted(runId, instanceRef, now) {
+      const [started] = await db
+        .update(sandboxRuns)
+        .set({ instanceRef, startedAt: now, status: "running" })
+        .where(and(eq(sandboxRuns.id, runId), eq(sandboxRuns.status, "queued")))
+        .returning({ status: sandboxRuns.status });
+      if (started) return "running";
+      // The sweep can end a run first: an ended run keeps its status.
+      const [row] = await db
+        .select({ status: sandboxRuns.status })
+        .from(sandboxRuns)
+        .where(eq(sandboxRuns.id, runId));
+      return row ? (row.status as RunStatus) : null;
     },
 
     async finish(runId, outcome, now) {
+      const ended =
+        outcome.status === "completed"
+          ? {
+              response: outcome.response,
+              logs: outcome.logs,
+              durationMs: outcome.durationMs,
+            }
+          : {
+              errorCode: outcome.errorCode,
+              reason: outcome.message,
+              ...(outcome.logs === undefined ? {} : { logs: outcome.logs }),
+              ...(outcome.durationMs === undefined ? {} : { durationMs: outcome.durationMs }),
+            };
       const rows = await db
         .update(sandboxRuns)
-        .set({
-          status: outcome.status,
-          finishedAt: now,
-          ...("result" in outcome
-            ? { result: outcome.result, traceId: outcome.result.traceId }
-            : { reason: outcome.reason }),
-        })
+        .set({ status: outcome.status, finishedAt: now, ...ended })
         .where(and(eq(sandboxRuns.id, runId), inArray(sandboxRuns.status, ACTIVE)))
         .returning({ id: sandboxRuns.id });
       return rows.length > 0;
-    },
-
-    async markInstanceStopped(runId, now) {
-      await db.transaction(async (tx) => {
-        await tx
-          .update(sandboxRuns)
-          .set({ instanceStoppedAt: now })
-          .where(eq(sandboxRuns.id, runId));
-        await tx.delete(sandboxInstances).where(eq(sandboxInstances.runId, runId));
-      });
     },
 
     async markUsageRecorded(runId, now) {
@@ -115,8 +118,8 @@ export function createDrizzleRunStore(db: Db): RunStore {
         id: sandboxRuns.id,
         projectId: sandboxRuns.projectId,
         status: sandboxRuns.status,
+        vmId: sandboxRuns.vmId,
         instanceRef: sandboxRuns.instanceRef,
-        instanceStoppedAt: sandboxRuns.instanceStoppedAt,
         usageRecordedAt: sandboxRuns.usageRecordedAt,
         timeoutS: sandboxRuns.timeoutS,
         createdAt: sandboxRuns.createdAt,
@@ -133,35 +136,17 @@ export function createDrizzleRunStore(db: Db): RunStore {
           .limit(limit);
       const [ended, active] = await Promise.all([
         open(
-          sql`${sandboxRuns.status} not in ('queued', 'running') and ${sandboxRuns.instanceRef} is not null and (${sandboxRuns.instanceStoppedAt} is null or ${sandboxRuns.usageRecordedAt} is null)`,
+          sql`${sandboxRuns.status} not in ('queued', 'running') and ${sandboxRuns.startedAt} is not null and ${sandboxRuns.usageRecordedAt} is null`,
         ),
         open(sql`${sandboxRuns.status} in ('queued', 'running')`),
       ]);
       return [...ended, ...active].map((row) => ({ ...row, status: row.status as RunStatus }));
     },
-
-    async listOrphans(limit) {
-      return db
-        .select({
-          id: sandboxInstances.runId,
-          projectId: sandboxInstances.projectId,
-          instanceRef: sandboxInstances.instanceRef,
-        })
-        .from(sandboxInstances)
-        .leftJoin(sandboxRuns, eq(sandboxRuns.id, sandboxInstances.runId))
-        .where(isNull(sandboxRuns.id))
-        .orderBy(asc(sandboxInstances.startedAt))
-        .limit(limit);
-    },
   };
 }
 
-/** A run that has, or is about to have, an instance. */
-function hasInstance() {
-  return sql`(${sandboxRuns.status} in ('queued', 'running') or (${sandboxRuns.instanceRef} is not null and ${sandboxRuns.instanceStoppedAt} is null))`;
-}
-
 function toRun(row: typeof sandboxRuns.$inferSelect): SandboxRun {
-  const { tokenHash: _tokenHash, usageRecordedAt: _usage, ...run } = row;
-  return { ...run, status: run.status as RunStatus };
+  const { tokenHash: _token, usageRecordedAt: _usage, runInput, ...run } = row;
+  const stored = { ...run, request: runInput, status: run.status as RunStatus };
+  return { ...stored, result: resultOf(stored) };
 }

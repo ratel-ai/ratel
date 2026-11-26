@@ -484,7 +484,14 @@ const CONFIG_SCHEMA = schema({
         atMost(HARD.sandbox_bundle_bytes),
         D.sandboxes.limits.sandbox_bundle_bytes,
       ),
+      sandbox_vm_starts_per_day: setting(
+        "SANDBOX_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_vm_starts_per_day,
+      ),
     },
+    /** A run VM with no run for this time is deleted. */
+    vmIdleSeconds: setting("SANDBOX_VM_IDLE_SECONDS", positiveCount, D.sandboxes.vmIdleSeconds),
   },
   topics: {
     maxTurns: setting("TOPICS_MAX_TURNS", positiveCount, D.topics.maxTurns),

@@ -76,6 +76,23 @@ export function createDrizzleVersionStore(db: Db): VersionStore {
       return rows.map((row) => toVersion(row.version, row.name));
     },
 
+    async newestReady(projectId, name) {
+      const [row] = await db
+        .select({ version: sandboxVersions, name: sandboxes.name })
+        .from(sandboxVersions)
+        .innerJoin(sandboxes, eq(sandboxes.id, sandboxVersions.sandboxId))
+        .where(
+          and(
+            eq(sandboxVersions.projectId, projectId),
+            eq(sandboxes.name, name),
+            eq(sandboxVersions.status, "ready"),
+          ),
+        )
+        .orderBy(desc(sandboxVersions.createdAt))
+        .limit(1);
+      return row ? toVersion(row.version, row.name) : null;
+    },
+
     async markUploaded(projectId, versionId) {
       const rows = await db
         .update(sandboxVersions)

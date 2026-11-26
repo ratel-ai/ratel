@@ -1,7 +1,7 @@
 import { secretNamesOf } from "./domain/config";
+import type { SmokeResult } from "./domain/contract";
 import type { SandboxRun } from "./domain/run";
 import { runView } from "./domain/run";
-import type { SmokeResult } from "./domain/smoke";
 import type { SandboxVersion, VersionStatus } from "./domain/version";
 import type { RunStore } from "./ports/run-store";
 import type { SecretStore } from "./ports/secret-store";

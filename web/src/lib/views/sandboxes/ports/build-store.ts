@@ -1,4 +1,4 @@
-import type { SmokeResult } from "../domain/smoke";
+import type { SmokeResult } from "../domain/contract";
 import type { SandboxVersion } from "../domain/version";
 
 /** The preparation state of versions, for the build job. */

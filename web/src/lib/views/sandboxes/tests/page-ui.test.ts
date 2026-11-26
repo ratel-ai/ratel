@@ -28,6 +28,8 @@ const run: RunRow = {
   versionId: version().id,
   status: "completed",
   reason: null,
+  errorCode: null,
+  logs: "",
   input: { message: "refund it" },
   params: {},
   result: {

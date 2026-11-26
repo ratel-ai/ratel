@@ -16,7 +16,7 @@ export type SandboxVersionSummary = Pick<
   "id" | "projectId" | "sandboxId" | "name" | "git" | "status" | "createdAt"
 > & { tools: ReadonlyArray<{ name: string; sideEffect: boolean }> };
 
-/** Starts one run of a ready version in a new instance. */
+/** Starts one run of a ready version in a new container of a warm VM. It answers before the run ends. */
 export function startRun(
   versionId: string,
   input: unknown,
