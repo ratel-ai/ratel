@@ -11,7 +11,6 @@ import {
   GEO_REGION_KEY,
   type GeoLookups,
   locateSpans,
-  MAX_GEO_LOOKUPS,
 } from "@/lib/ingest/geo/locate";
 import { mmdbFixture } from "@/lib/ingest/geo/mmdb-fixture";
 import { parseGeoAttributes } from "@/lib/ingest/geo/parse-attributes";
@@ -188,7 +187,7 @@ test("an address or a coordinate cannot be read from an attribute that spans sto
   for (const change of [{ country: " " }, { extra: "x" }]) assert.ok(!parse(change).ok);
 });
 
-test("F445-11: many distinct places never block the process, and a batch looks up a bounded number", async () => {
+test("F445-11: many distinct places never block the process, and each is located", async () => {
   let calls = 0;
   const slow: GeoLookups = {
     address: null,
@@ -225,8 +224,7 @@ test("F445-11: many distinct places never block the process, and a batch looks u
   beating = false;
   longest = Math.max(longest, performance.now() - last);
   assert.ok(longest < 100, `the event loop waited ${Math.round(longest)} ms`);
-  assert.equal(calls, MAX_GEO_LOOKUPS);
-  assert.equal(spans[MAX_GEO_LOOKUPS - 1].attributes[GEO_COUNTRY_KEY], "IT");
-  assert.equal(spans[MAX_GEO_LOOKUPS].attributes[GEO_COUNTRY_KEY], undefined);
+  assert.equal(calls, 2_000);
+  assert.ok(spans.slice(0, 2_000).every(({ attributes }) => attributes[GEO_COUNTRY_KEY] === "IT"));
   assert.equal(spans[2_000].attributes[GEO_COUNTRY_KEY], "FR", "codes need no lookup");
 });
