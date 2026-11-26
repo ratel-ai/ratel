@@ -3654,7 +3654,7 @@
   {
     "name": "sandbox_list",
     "title": "List Ratel sandboxes",
-    "description": "Use this tool to find the agents that are pushed to Ratel sandbox. It returns each sandbox name with its newest versions, their status and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+    "description": "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name, its newest versions with their status, and the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3681,7 +3681,7 @@
   {
     "name": "sandbox_get_version",
     "title": "Read a Ratel sandbox version",
-    "description": "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, the declared params with their types and options, the tools with their modes, and the smoke check result.",
+    "description": "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, and the tools with their modes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3717,7 +3717,7 @@
   {
     "name": "sandbox_run",
     "title": "Run a Ratel sandbox version",
-    "description": "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. Then it returns the run with its input, output and tool calls, or the run id and a hint to poll sandbox_get_run.",
+    "description": "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds for the result. If the run is not complete then, call sandbox_get_run with the run id.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3847,7 +3847,7 @@
   {
     "name": "evals_get_case",
     "title": "Read an eval case",
-    "description": "Use this tool to read one eval case. It returns the input, the expected output, the scorers and the state of the newest version, and the version that counts in an eval run.",
+    "description": "Use this tool to read one eval case. It returns the input, the expected output, the scorers and the state of the newest version. It also returns the version that counts in an eval run.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4076,7 +4076,7 @@
   {
     "name": "evals_start_run",
     "title": "Start an eval run",
-    "description": "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Poll evals_get_run until the state is completed.",
+    "description": "Use this tool to run every approved eval case against a sandbox version. This tool changes data: it starts VM runs. It returns the eval run id at once. Call evals_get_run until the state is completed.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4148,7 +4148,7 @@
   {
     "name": "evals_list_runs",
     "title": "List eval runs",
-    "description": "Use this tool to find eval runs of the project, newest first. It returns each run with its state, sandbox version, raw pass, fail and invalid counts, and which run is the pinned baseline.",
+    "description": "Use this tool to find the eval runs of the project, newest first. It returns each run with its state, sandbox version and raw counts. It also says which run is the pinned baseline.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4175,7 +4175,7 @@
   {
     "name": "evals_get_run",
     "title": "Read an eval run",
-    "description": "Use this tool to read an eval run. A running run is awaited up to 20 seconds. It returns the state and the raw counts, and for each case its input, the output of each trial, the trial results and the scorer results.",
+    "description": "Use this tool to read an eval run. If the run is running, this tool waits up to 20 seconds. It returns the state and the raw counts. For each case, it returns the input, the output of each trial and the results.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
