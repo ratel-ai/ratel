@@ -2,7 +2,7 @@
  * The app's canonical public origin — always from the configuration, never a
  * hardcoded host. `app.publicUrl` (APP_PUBLIC_URL) is the explicit knob (set in `.env` locally
  * and on the ECS task's env in AWS, where it resolves to `https://<domain>`,
- * e.g. https://cloud.ratel.sh). It falls back to localhost so a bare `next dev`
+ * e.g. https://ratel.example.com). It falls back to localhost so a bare `next dev`
  * still produces working links.
  *
  * Server-only: reads the server's configuration, so call it in Server Components /
@@ -16,7 +16,7 @@ import { isLocalEnvironment } from "@/lib/platform/environment";
 const DEFAULT_LOCAL = "http://localhost:3000";
 
 /**
- * The origin with any trailing slash stripped, e.g. `https://cloud.ratel.sh`.
+ * The origin with any trailing slash stripped, e.g. `https://ratel.example.com`.
  * Outside a local environment an unset `APP_PUBLIC_URL` throws instead of
  * falling back: a deployed invitation pointing at localhost fails silently,
  * a page that errors does not.

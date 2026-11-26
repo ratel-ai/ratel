@@ -411,6 +411,11 @@ test("get_sdk_setup hands out the page's snippets with the key read from the env
   );
   assert.match(snippets[0]?.code ?? "", /"support-bot"/);
   assert.match(snippets[1]?.code ?? "", /\$RATEL_API_KEY/);
+  // An agent following these never leans on the cloud SDK's default address.
+  for (const snippet of snippets) {
+    assert.ok(snippet.code.includes(data.endpoint as string), `${snippet.lang} names the endpoint`);
+  }
+  assert.match(snippets[0]?.code ?? "", /endpoint: "https:\/\/cloud\.example\.test\/v1\/traces"/);
   assert.ok(!/rtl_[A-Za-z0-9]/.test(JSON.stringify(data)), "no key is ever inlined");
   assert.equal(data.contentCapture, undefined);
 });

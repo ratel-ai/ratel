@@ -84,7 +84,9 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 exist: `ingest` only queues ingest batches and never migrates, `persist` only persists them.
 
 `BASE_URL` is where the console's SDK snippets point: this deployment's origin. The console adds
-`/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
+`/api/v1` when it builds API and ingest URLs. Every snippet passes that address to the Cloud SDK
+explicitly rather than leaning on the SDK's hosted default
+([`snippet-endpoints.test.ts`](src/lib/console/onboarding/snippet-endpoints.test.ts) checks). It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
 
 `RATEL_EXPERIMENTAL_FEATURES=1` (`experimentalFeatures`) turns on the experimental features left in the open-source

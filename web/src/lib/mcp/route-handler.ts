@@ -413,7 +413,8 @@ function logResourceReads(
 /**
  * The origin views link to: the one this request reached (mcpOrigin). A
  * deployment without APP_PUBLIC_URL has none to give, and the views fall back
- * to cloud.ratel.sh rather than the request failing.
+ * to the hosted console (mcp-apps/shell/links.ts CONSOLE_ORIGIN) rather than
+ * the request failing.
  */
 function viewConsoleOrigin(request: Request): string | undefined {
   try {

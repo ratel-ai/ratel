@@ -84,7 +84,7 @@ One prompt per view, in a new chat with the server on:
   `{ ok, data, truncated?, … }` envelope) and their config from their binding:
   `useRatelView().binding.config`.
 - A link to a console page (`/projects/…`) opens on this app's console (the
-  origin the server writes into the view, else cloud.ratel.sh) through the
+  origin the server writes into the view, else app.ratel.sh) through the
   host; `?peek=` links stay in the view.
 - Fonts: the console's Geist comes from next/font, which a view cannot load.
   The build inlines Geist and Geist Mono from the `geist` package, cut to the
