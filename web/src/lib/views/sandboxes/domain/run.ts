@@ -154,6 +154,9 @@ export type SandboxRun = {
   finishedAt: Date | null;
 };
 
+/** The start of `requestedBy` of a run that a trial of an eval started: `eval_trial:<trial id>`. */
+export const EVAL_TRIAL_PREFIX = "eval_trial:";
+
 /** The request, the input and the params, as JSON. The container reads it from a file. */
 export const MAX_REQUEST_BYTES = 1024 * 1024;
 

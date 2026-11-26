@@ -42,7 +42,12 @@ export interface RunStore {
   discard(runId: string): Promise<void>;
   get(projectId: string, runId: string): Promise<SandboxRun | null>;
   /** The newest first. */
-  list(projectId: string, limit: number): Promise<SandboxRun[]>;
+  /** The newest first. `excludeEvalTrials`: only the runs that a person or a key started. */
+  list(
+    projectId: string,
+    limit: number,
+    options?: { excludeEvalTrials?: boolean },
+  ): Promise<SandboxRun[]>;
   /** The run of a token, while the run is `queued` or `running`. */
   findByTokenHash(tokenHash: string): Promise<{ id: string; projectId: string } | null>;
   /**

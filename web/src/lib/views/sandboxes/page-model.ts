@@ -76,7 +76,8 @@ export async function loadSandboxPage(
   const [versions, secrets, runs] = await Promise.all([
     deps.versions.list(projectId, VERSIONS),
     deps.secrets.list(projectId),
-    deps.runs.list(projectId, RUNS),
+    // The runs that a person tried. The runs of eval trials are on their experiment.
+    deps.runs.list(projectId, RUNS, { excludeEvalTrials: true }),
   ]);
   return {
     projectId,

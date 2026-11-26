@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notLike, type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
-import { type RunStatus, resultOf, type SandboxRun } from "../domain/run";
+import { EVAL_TRIAL_PREFIX, type RunStatus, resultOf, type SandboxRun } from "../domain/run";
 import type { RunStore } from "../ports/run-store";
 import { sandboxRuns } from "../schema";
 
@@ -54,11 +54,18 @@ export function createDrizzleRunStore(db: Db): RunStore {
       return row ? toRun(row) : null;
     },
 
-    async list(projectId, limit) {
+    async list(projectId, limit, options = {}) {
       const rows = await db
         .select()
         .from(sandboxRuns)
-        .where(eq(sandboxRuns.projectId, projectId))
+        .where(
+          and(
+            eq(sandboxRuns.projectId, projectId),
+            options.excludeEvalTrials
+              ? notLike(sandboxRuns.requestedBy, `${EVAL_TRIAL_PREFIX}%`)
+              : undefined,
+          ),
+        )
         .orderBy(desc(sandboxRuns.createdAt))
         .limit(limit);
       return rows.map(toRun);

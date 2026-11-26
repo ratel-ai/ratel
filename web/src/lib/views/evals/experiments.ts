@@ -7,6 +7,7 @@ import type {
   StartRunOptions,
   StartRunResult,
 } from "@/lib/views/sandboxes";
+import { EVAL_TRIAL_PREFIX } from "@/lib/views/sandboxes/domain/run";
 import { refusedParam } from "@/lib/views/sandboxes/run-form";
 import { type CaseVersion, runInputOf } from "./domain/case";
 import {
@@ -270,7 +271,7 @@ async function startTrial(
       {
         projectId,
         organizationId,
-        requestedBy: `eval_trial:${trial.id}`,
+        requestedBy: `${EVAL_TRIAL_PREFIX}${trial.id}`,
         params: experiment.params,
         fixtures: version.toolFixtures,
       },
