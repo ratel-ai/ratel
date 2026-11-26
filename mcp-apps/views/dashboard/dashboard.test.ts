@@ -23,6 +23,8 @@ const SAYS: Readonly<Record<string, RegExp>> = {
   funnel: /Refunded/,
   clusters: /Where is my order/,
   geography: /1,060 of 1,234 traces have a location/,
+  // The rows of RQL text: a table of its columns, in the order of a row.
+  sql: /model[\s\S]*calls[\s\S]*cost[\s\S]*claude-sonnet-5-5[\s\S]*228[\s\S]*1\.525/,
 };
 
 test("the dashboard view renders a widget of each kind a widget can hold", () => {

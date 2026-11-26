@@ -33,6 +33,7 @@ const RULE = {
   state: alertRules.state,
   firing: alertRules.firing,
   lastValue: alertRules.lastValue,
+  lastError: alertRules.lastError,
   stateChangedAt: alertRules.stateChangedAt,
   destinationIds: sql<string[]>`array(
     select d.destination_id::text from alert_rule_destinations d

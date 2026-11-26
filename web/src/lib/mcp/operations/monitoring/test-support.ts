@@ -13,6 +13,7 @@ import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
 import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
 import { createRqlGate } from "@/lib/synthesis/rql/run";
 import type { SealedDestination } from "@/lib/views/alerts/destinations";
+import { loadWidget } from "@/lib/views/dashboards/data";
 // What these modules own is read through what they register.
 import "@/lib/views/dashboards/data";
 import { scorePresetTraces } from "@/lib/views/scorers/preset";
@@ -103,7 +104,11 @@ export async function monitoring(
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),
     runQuery: (projectId, query, scope) => runQuery(projectId, query, scope, db),
-    loadWidget: (projectId, widget, scope) => runQuery(projectId, widget.query, scope, db),
+    loadWidget: (projectId, widget, scope) =>
+      // Kind sql through the console's own read: it drops the page's filter and keeps a refusal.
+      widget.query.kind === "sql"
+        ? loadWidget(projectId, widget, scope, db as never)
+        : runQuery(projectId, widget.query, scope, db),
     canSeal: () => true,
     secretKey: SECRET_KEY,
     slack: {
@@ -158,8 +163,8 @@ export function insertTrace(client: PGlite, traceId: string, durationMs = 100, f
 }
 
 /**
- * Kind `sql` on this database: the RQL runner over the one PGlite connection, with the seam's own
- * flag check passed. The tools check the flag of the caller (`set.rql`) before the seam.
+ * Kind `sql` on this database: the RQL runner over the one PGlite connection. The seam has no flag
+ * check: the tools check `customMonitoring` of the caller (`set.on`) before it.
  */
 function runRqlOn(client: PGlite) {
   const pool: RqlPool = {

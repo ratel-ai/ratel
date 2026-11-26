@@ -39,6 +39,8 @@ export const alertRules = pgTable(
     state: text("state").$type<AlertState>().notNull().default("no_data"),
     firing: boolean("firing").notNull().default(false),
     lastValue: doublePrecision("last_value"),
+    /** Why the last evaluation failed: an RQL rule's compile or run error. Null after one that read. */
+    lastError: text("last_error"),
     stateChangedAt: timestamp("state_changed_at", { withTimezone: true }),
     // Null: due now.
     lastEvaluatedAt: timestamp("last_evaluated_at", { withTimezone: true }),

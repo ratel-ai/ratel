@@ -227,6 +227,31 @@ export const KINDS: Readonly<Record<string, ViewWidget>> = {
     },
     [0, 32, 12, 10],
   ),
+  sql: item(
+    "sql",
+    "LLM calls by model",
+    "sql",
+    {
+      version: 1,
+      kind: "sql",
+      text: "select model, count(*) as calls, sum(cost_usd) as cost from events where type = 'llm_call' group by model",
+      rqlVersion: 1,
+    },
+    {
+      kind: "sql",
+      columns: [
+        { name: "model", type: "text" },
+        { name: "calls", type: "integer" },
+        { name: "cost", type: "number" },
+      ],
+      rows: [
+        ["claude-sonnet-5-5", 228, 1.525],
+        ["claude-haiku-5-5", 64, 0.0812],
+      ],
+      truncated: false,
+    },
+    [0, 42, 12, 6],
+  ),
 };
 
 /** What a host shows in place of a widget's numbers. */

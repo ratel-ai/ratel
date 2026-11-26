@@ -14,7 +14,7 @@ Dashboards and alerts both call it. Kind `sql` (RQL text) runs here too, through
 | `step-flow-columns.ts` | the step paths folded into columns, links, a bucket per column, Ended and Later; pure, safe for the browser, so a widget unfolds with the query's own arithmetic |
 | `funnel.ts` | the funnel kind, pure: how many steps a trace passed. `views/scorers/funnel` reads the traces and fills `metricSeams.funnel`, because it needs the check engine and the scorer results |
 | `clusters.ts` | the shape of the clusters kind's answer; `views/dashboards/clusters` fills `metricSeams.clusters` |
-| `query.ts` (kind `sql`) | `SqlResult`: the columns with their RQL types, the rows as arrays, `truncated`. `synthesis/rql/query` fills `metricSeams.sql` on import and checks the RQL version |
+| `query.ts` (kind `sql`) | `SqlResult`: the columns with their RQL types, the rows as arrays, `truncated`. `synthesis/rql/query` fills `metricSeams.sql` on import, and checks the RQL version |
 | `geography.ts` | the geography kind: a measure by country, or by region of one country, from the codes on `otel_trace_summaries` |
 | `trace-fixture.ts` | test data: spans as ingest stores them, with their summaries |
 
@@ -53,9 +53,8 @@ Dashboards and alerts both call it. Kind `sql` (RQL text) runs here too, through
 - `trace_scores` belongs to a higher layer. `views/scorers/metrics` fills `metricSeams.scores`; a
   caller that can read a scorer entry imports that module.
 - A query the contract does not allow throws `QueryError`. A refusal of RQL (kind `sql`) carries
-  `detail: { code, fix }` and the message as RQL wrote them: a compile error, a run error,
-  `rql_version` (a version newer than the server's) and `rql_filter` (a filter of the
-  scope: the text says what it keeps).
+  `detail: { code, fix }` and the message as RQL wrote them: a compile error, a run error and `rql_version` (a version newer than the server's). The
+  filter of the scope keeps the rows whose trace matches (`synthesis/rql`).
 - Kind `sql` reads the window of the scope as the window of the query: a time condition in the text
   narrows it. It reads through the RQL pool, never the `db` argument, and ignores `scope.by`.
 

@@ -14,9 +14,10 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 |---|---|
 | `types.ts` | the rule, the states and the limits; safe for the browser |
 | `domain.ts` | `nextState`, `breaches`, the evaluation window and interval; pure |
-| `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's |
+| `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's. Kind `sql` is compiled at save and must give one row with one number (`sqlAlertProblem`) |
+| `sql-value.ts` | `measureSqlValue`: the value of an RQL rule over its window on the read-only RQL path, or the error that marks it failing |
 | `store.ts` | the reads and writes of rules and their history; `pruneAlertEvents`: the retention; `listAlertingRules`: the rules that alert now, for the Overview |
-| `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each |
+| `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each. An RQL rule reads its value before its transaction; a refusal sets `last_error` (failing: no state change, no message) and the next read clears it |
 | `deliver.ts` | `deliverAlerts`: claims and sends the pending messages |
 | `notifier.ts` | the `AlertNotifier` port, with `memoryNotifier` for tests |
 | `actions.ts` | `changeAlert`: one change by a person, after membership, the flag and a support-session check |
@@ -27,7 +28,7 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 | `slack-message.ts` | the fire, recovery and test messages |
 | `webhook-post.ts` | one POST with a deadline and no redirect, on `node:https`: a `fetch` span carries the URL |
 | `format.ts`, `links.ts` | how an alert reads, and the pages' addresses; safe for the browser |
-| `preview.ts` | `loadAlertPreview`: the last 7 days for the form's chart |
+| `preview.ts` | `loadAlertPreview`: the last 7 days for the form's chart; for RQL text, its value now or its error |
 | `register.ts` | the `alerts_evaluate` before-step of the drain: evaluate, then deliver; the `alert_events_prune` after-step |
 
 Rules:

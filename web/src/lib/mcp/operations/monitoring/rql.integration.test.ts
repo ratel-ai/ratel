@@ -226,7 +226,7 @@ test("query_monitoring refuses kind sql with customMonitoring off, and in panels
   });
   assert.ok(!panels.ok);
   assert.equal(panels.error, "invalid_params");
-  assert.match(panels.message, /kind sql cannot be a widget, a panel/);
+  assert.match(panels.message, /kind sql cannot be a panel/);
 });
 
 test("describe_monitoring_schema lists kind sql, and refuses with customMonitoring off", async () => {

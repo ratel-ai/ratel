@@ -11,13 +11,16 @@ import {
   type MeasureId,
   type MetricQuery,
   metricQuery,
+  QUERY_VERSION,
   type Query,
+  type SqlQuery,
   type StepFlowNode,
   type StepFlowQuery,
   stepFlowQuery,
 } from "@/lib/contracts/query";
 import { placeName } from "@/lib/ingest/geo/codes";
 import { getMetric, type MetricDefinition } from "@/lib/synthesis/metrics/catalog";
+import { RQL_VERSION } from "@/lib/synthesis/rql/domain/version";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   METRIC_CHARTS,
@@ -41,6 +44,7 @@ export const CHART_LABELS: Readonly<Record<WidgetChart, string>> = {
   funnel: "Funnel",
   clusters: "Clusters",
   geography: "Map",
+  sql: "Table or chart",
 };
 
 export const KIND_LABELS: Readonly<Record<WidgetKind, string>> = {
@@ -50,7 +54,15 @@ export const KIND_LABELS: Readonly<Record<WidgetKind, string>> = {
   funnel: "Funnel",
   clusters: "Clusters",
   geography: "Map",
+  sql: "SQL",
 };
+
+export const SQL_CHART_PROBLEM =
+  'A query of kind sql is drawn as chart "sql": a table, or a chart when its rows have one time column.';
+
+/** What a new widget of kind sql starts from. */
+export const NEW_SQL_TEXT =
+  "select time_bucket('1 hour', started_at) as hour, count(*) as traces\nfrom traces\ngroup by hour\norder by hour";
 
 const NODE_LABELS: Readonly<Record<StepFlowNode, string>> = {
   tool: "Tools",
@@ -80,6 +92,7 @@ const DIMENSION_LABELS: Readonly<Record<Dimension, string>> = {
 
 /** Why a chart does not fit the grouping, or null. */
 export function chartProblem({ chart, query }: Pick<WidgetInput, "chart" | "query">) {
+  if (query.kind === "sql") return chart === "sql" ? null : SQL_CHART_PROBLEM;
   if (query.kind !== "metric")
     return chart === query.kind ? null : `A ${query.kind} is drawn as a ${query.kind}.`;
   if (!isMetricChart(chart)) return `A metric cannot be drawn as a ${chart}.`;
@@ -203,7 +216,14 @@ export function widgetOfKind(kind: WidgetKind, from: WidgetInput): WidgetInput {
         }),
         chart: "geography",
       };
+    case "sql":
+      return { ...from, query: sqlWidgetQuery(NEW_SQL_TEXT), chart: "sql" };
   }
+}
+
+/** A query of kind sql in the RQL version of this build. */
+export function sqlWidgetQuery(text: string): SqlQuery {
+  return { version: QUERY_VERSION, kind: "sql", text, rqlVersion: RQL_VERSION };
 }
 
 /** What a new funnel starts from: the fewest steps it may have. */
@@ -219,7 +239,7 @@ export function queryMetric(query: Query): MetricDefinition | null {
 
 /** A query's own trace filter, without its scorer. */
 export function queryFilter(query: WidgetQuery): TraceFilter {
-  if (query.kind === "clusters") return {};
+  if (query.kind === "clusters" || query.kind === "sql") return {};
   if (!measuresOne(query)) return query.filters;
   const { scorer: _, ...filter } = query.filters;
   return filter;
@@ -236,14 +256,15 @@ export function measuresOne(query: Query): query is MetricQuery | GeographyQuery
 
 /** The query with another trace filter; its scorer stays. */
 export function withFilter<Q extends WidgetQuery>(query: Q, filter: TraceFilter): Q {
-  if (query.kind === "clusters") return query;
+  if (query.kind === "clusters" || query.kind === "sql") return query;
   const scorer = queryScorerId(query);
   return { ...query, filters: { ...filter, ...(scorer ? { scorer: { id: scorer } } : {}) } };
 }
 
 /** Whether the dashboard's filters narrow it. */
 export function isFilterable(query: WidgetQuery): boolean {
-  if (query.kind === "clusters") return false;
+  // RQL text has no filter of its own to take the page's: the page's filter applies when it runs.
+  if (query.kind === "clusters" || query.kind === "sql") return false;
   return !measuresOne(query) || queryMetric(query)?.filterable === true;
 }
 

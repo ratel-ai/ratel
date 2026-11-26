@@ -79,7 +79,9 @@ export function ExplorePanel({
         </h2>
         {Object.keys(filters).length > 0 &&
         !isFilterable(widget.query) &&
-        widget.query.kind !== "clusters" ? (
+        widget.query.kind !== "clusters" &&
+        // The page's filter applies to RQL text when it runs.
+        widget.query.kind !== "sql" ? (
           <p className="shrink-0 text-xs text-fg-subtle">Not filtered</p>
         ) : null}
         <Menu>

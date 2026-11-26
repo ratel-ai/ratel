@@ -1,4 +1,4 @@
-import { isEmptyFilter, type SqlQuery } from "@/lib/contracts/query";
+import type { SqlQuery } from "@/lib/contracts/query";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { metricSeams, QueryError, type SqlResult } from "@/lib/synthesis/metrics/query";
 import { compileRql, RQL_VERSION } from "./compile";
@@ -8,9 +8,10 @@ import { type RqlRunDeps, runRql } from "./run";
  * Kind `sql` of the query object: `runQuery` sends it here through `metricSeams.sql`, which this
  * file fills on import. It has no flag check: each caller of `runQuery` is behind
  * `customMonitoring` already (`query_monitoring`, `run_rql`, the dashboards, Explore and the alerts).
- * The text is compiled at every run, so a saved query is checked again at load against the
- * RQL of today. The window of the scope is the window of the query; a time condition in the text
- * narrows it. Every refusal is a `QueryError` with the code, the message and the fix of RQL.
+ * The text is compiled at every run, so a saved query is checked again at load against the RQL of
+ * today. The window of the scope is the window of the query; a time
+ * condition in the text narrows it. The filter of the scope keeps the rows whose trace matches
+ * (`domain/page-filter.ts`). Every refusal is a `QueryError` with the code, the message and the fix of RQL.
  */
 
 export interface SqlQueryDeps {
@@ -41,14 +42,11 @@ async function runSqlQuery(
       `The query is written in RQL version ${query.rqlVersion}, and this server knows version ${rqlVersion} at most.`,
       { code: "rql_version", fix: `Write the query in RQL version ${rqlVersion}.` },
     );
-  if (scope.filter && !isEmptyFilter(scope.filter))
-    throw new QueryError("A query of kind sql takes no filter of the page or dashboard.", {
-      code: "rql_filter",
-      fix: "Write the condition in the WHERE of the query, and remove the other filter.",
-    });
   const compiled = compileRql(query.text, {
     now: scope.until,
     window: { from: scope.since, to: scope.until },
+    // The page's filter keeps the rows whose trace matches, as it does for the other kinds.
+    ...(scope.filter ? { filter: scope.filter } : {}),
   });
   if (!compiled.ok) {
     const { code, message, fix } = compiled.error;

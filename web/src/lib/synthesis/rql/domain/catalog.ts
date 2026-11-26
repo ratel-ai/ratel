@@ -4,7 +4,7 @@
  * names. A change of a name or of a meaning is a new `RQL_VERSION`.
  */
 
-export const RQL_VERSION = 1;
+export { RQL_VERSION } from "./version";
 
 export const RQL_TABLE_NAMES = ["events", "traces", "scores", "sessions", "users"] as const;
 export type RqlTableName = (typeof RQL_TABLE_NAMES)[number];

@@ -32,7 +32,7 @@ import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { rangeProblem, resolveWidgetRange } from "@/lib/views/dashboards/range";
 import type { WidgetInput } from "@/lib/views/dashboards/types";
-import { queryFilter } from "@/lib/views/dashboards/widget";
+import { queryFilter, sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 import { exploreHref, explorePanelHref, exploreTracesHref } from "@/lib/views/explore/links";
 import { START_PANEL, STARTING_POINTS } from "@/lib/views/explore/starts";
 import {
@@ -110,6 +110,7 @@ test("a bad, an old or a forged value is refused with a reason", () => {
     [raw([]), /damaged/],
     [raw(Array(5).fill({ chart: "bar", query })), /damaged/],
     [raw([{ chart: "bar", query: { ...query, kind: "spans" } }]), /Unknown query kind/],
+    [raw([{ chart: "bar", query: sqlWidgetQuery("select count(*) from traces") }]), /chart "sql"/],
     [raw([{ chart: "table", query }]), /needs a group-by/],
     [`2.${"A".repeat(MAX_STATE_CHARS)}`, /too long/],
   ] as const) {

@@ -303,6 +303,7 @@ function rawCompiled(sql: string): RqlCompiled {
     table: "traces",
     window: { from: NOW.toISOString(), to: NOW.toISOString() },
     limit: 10,
+    oneRow: false,
   };
 }
 
