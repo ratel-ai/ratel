@@ -118,7 +118,7 @@ the console: the Intents map's drawings bring about 150 KB. The view is 733 KB:
 the map's shapes are about 210 KB of it.
 
 The overview view draws the dashboard widgets that are on an Overview with the same bodies, and the
-same table for clusters. It is 778 KB for that reason, now the largest one.
+same table for clusters. It is 787 KB for that reason, now the largest one.
 
 `shell/shims/zod.ts` and `node-crypto.ts` stand in for `zod` and `node:crypto` in every view: the
 console's modules declare schemas as they load, and a view parses nothing.

@@ -379,6 +379,13 @@
       "when": 1795620006000,
       "tag": "0053_slack_app",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795659636500,
+      "tag": "0054_alert_events_retention",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, count, eq } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { lockProjectScope } from "@/lib/platform/db/project-lock";
 import { projects } from "@/lib/platform/projects/schema";
 import { openSecret, sealSecret } from "@/lib/platform/secret-box";
 import {
@@ -13,6 +14,9 @@ import type { AlertsDb } from "@/lib/views/alerts/store";
 import type { AlertDestination } from "@/lib/views/alerts/types";
 
 export const MAX_DESTINATIONS = 20;
+
+/** Why a destination was not created. */
+export type DestinationRefusal = "limit" | "taken";
 const LAST = 4;
 
 const ROW = {
@@ -45,7 +49,7 @@ export async function listDestinations(
 
 export async function countDestinations(
   projectId: string,
-  db: AlertsDb = getDb(),
+  db: Pick<AlertsDb, "select"> = getDb(),
 ): Promise<number> {
   const [row] = await db
     .select({ n: count() })
@@ -54,25 +58,30 @@ export async function countDestinations(
   return row.n;
 }
 
-/** The URL is sealed for this row before it is written. */
+/**
+ * The URL is sealed for this row before it is written. "limit" when the project has
+ * `MAX_DESTINATIONS` already: the count and the insert are one transaction under the project's lock.
+ */
 export async function createDestination(
   input: { projectId: string; name: string; url: URL; actor: string; key?: string },
   db: AlertsDb = getDb(),
-): Promise<string> {
+): Promise<string | "limit"> {
   const id = randomUUID();
-  await db.insert(alertDestinations).values({
-    id,
-    projectId: input.projectId,
-    name: input.name,
-    kind: "webhook",
-    sealedUrl: sealSecret(input.url.href, bindingOf(id), input.key),
-    lastFour: input.url.href.slice(-LAST),
-    createdBy: input.actor,
+  return withinLimit(db, input.projectId, async (tx) => {
+    await tx.insert(alertDestinations).values({
+      id,
+      projectId: input.projectId,
+      name: input.name,
+      kind: "webhook",
+      sealedUrl: sealSecret(input.url.href, bindingOf(id), input.key),
+      lastFour: input.url.href.slice(-LAST),
+      createdBy: input.actor,
+    });
+    return id;
   });
-  return id;
 }
 
-/** Null when the project has the channel already. */
+/** "taken" when the project has the channel already, "limit" as for `createDestination`. */
 export async function createChannelDestination(
   input: {
     projectId: string;
@@ -83,14 +92,29 @@ export async function createChannelDestination(
     actor: string;
   },
   db: AlertsDb = getDb(),
-): Promise<string | null> {
+): Promise<string | DestinationRefusal> {
   const { actor, ...values } = input;
-  const [row] = await db
-    .insert(alertDestinations)
-    .values({ ...values, id: randomUUID(), kind: "slack_channel", createdBy: actor })
-    .onConflictDoNothing()
-    .returning({ id: alertDestinations.id });
-  return row?.id ?? null;
+  return withinLimit(db, input.projectId, async (tx) => {
+    const [row] = await tx
+      .insert(alertDestinations)
+      .values({ ...values, id: randomUUID(), kind: "slack_channel", createdBy: actor })
+      .onConflictDoNothing()
+      .returning({ id: alertDestinations.id });
+    return row?.id ?? "taken";
+  });
+}
+
+/** `create` under the project's lock, while the project has fewer than `MAX_DESTINATIONS`. */
+async function withinLimit<T>(
+  db: AlertsDb,
+  projectId: string,
+  create: (tx: Pick<AlertsDb, "insert">) => Promise<T>,
+): Promise<T | "limit"> {
+  return db.transaction(async (tx) => {
+    await lockProjectScope(tx, "alert_destinations", projectId);
+    if ((await countDestinations(projectId, tx)) >= MAX_DESTINATIONS) return "limit";
+    return create(tx);
+  });
 }
 
 /** Keeps why the app could not post to a channel; null: it could. */

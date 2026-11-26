@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/ratel-ai/ratel/compare/v0.4.0...v0.5.0) (2026-11-25)
+
+
+### Features
+
+* **ingest:** queue accepted batches, persist them from a fair per-project queue ([#469](https://github.com/ratel-ai/ratel/issues/469)) ([b0f1cd5](https://github.com/ratel-ai/ratel/commit/b0f1cd5ea9723a956d2e8ada2025159562a17886))
+* **web:** custom scorers and dashboards behind customMonitoring ([#445](https://github.com/ratel-ai/ratel/issues/445)) ([e640c78](https://github.com/ratel-ai/ratel/commit/e640c78f961d8ab097d90380873af147cb97196c))
+* **web:** MCP operations and MCP App views for custom monitoring ([#452](https://github.com/ratel-ai/ratel/issues/452)) ([0637b44](https://github.com/ratel-ai/ratel/commit/0637b44d29c48cde881753b66c12d4901ca2c672))
+* **web:** metric alerts behind customMonitoring ([#446](https://github.com/ratel-ai/ratel/issues/446)) ([8c707d1](https://github.com/ratel-ai/ratel/commit/8c707d1f96c948a281e578ae61faa0dc5fee4bd4))
+* **web:** Slack delivery for metric alerts ([#447](https://github.com/ratel-ai/ratel/issues/447)) ([c507564](https://github.com/ratel-ai/ratel/commit/c507564ee9bd1c00953f515bfa59ca5d3cc4fe5c))
+
 ## [0.4.0](https://github.com/ratel-ai/ratel/compare/v0.3.1...v0.4.0) (2026-11-25)
 
 

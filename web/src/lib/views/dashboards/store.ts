@@ -1,15 +1,17 @@
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { lockProjectScope } from "@/lib/platform/db/project-lock";
 import { dashboards } from "@/lib/views/dashboards/schema";
 import { readWidgets, writeWidgets } from "@/lib/views/dashboards/stored-widget";
-import type {
-  Dashboard,
-  DashboardDefaults,
-  DashboardEditor,
-  DashboardFilters,
-  DashboardSummary,
-  DashboardWidget,
-  Widget,
+import {
+  type Dashboard,
+  type DashboardDefaults,
+  type DashboardEditor,
+  type DashboardFilters,
+  type DashboardSummary,
+  type DashboardWidget,
+  MAX_DASHBOARDS,
+  type Widget,
 } from "@/lib/views/dashboards/types";
 
 export type DashboardsDb = Pick<
@@ -45,7 +47,7 @@ export async function listDashboards(
 
 export async function countDashboards(
   projectId: string,
-  db: DashboardsDb = getDb(),
+  db: Pick<DashboardsDb, "select"> = getDb(),
 ): Promise<number> {
   const [row] = await db
     .select({ count: count() })
@@ -80,13 +82,21 @@ export async function getDashboards(
   return rows.map(readDashboard);
 }
 
+/**
+ * Null when the project has `MAX_DASHBOARDS` already. The count and the insert are one transaction
+ * under the project's lock, so creates at the same time never pass the limit.
+ */
 export async function createDashboard(
   input: { projectId: string; name: string; widgets: Widget[] } & Partial<DashboardDefaults> &
     DashboardEditor,
   db: DashboardsDb = getDb(),
-): Promise<Dashboard> {
-  const [row] = await db.insert(dashboards).values(input).returning(COLUMNS);
-  return readDashboard(row);
+): Promise<Dashboard | null> {
+  return db.transaction(async (tx) => {
+    await lockProjectScope(tx, "dashboards", input.projectId);
+    if ((await countDashboards(input.projectId, tx)) >= MAX_DASHBOARDS) return null;
+    const [row] = await tx.insert(dashboards).values(input).returning(COLUMNS);
+    return readDashboard(row);
+  });
 }
 
 /** Its name or what it opens with. False when the project has no such dashboard, as for every change below. */

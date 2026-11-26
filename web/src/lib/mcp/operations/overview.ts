@@ -622,6 +622,7 @@ function pageData(data: FocusedOverviewData) {
     range: data.rangeParam,
     lastEventAt: data.lastEventAt?.toISOString() ?? null,
     hasTelemetry: data.hasTelemetry,
+    traces: data.tracesSeen,
   };
 }
 
@@ -752,7 +753,13 @@ function healthView({ windowDays, href, card }: FocusedHealth) {
             points: lost,
           })),
         }
-      : { score: null, why: card.line, ...(card.failed ? { failed: true } : {}) }),
+      : {
+          score: null,
+          why: card.line,
+          reason: card.reason,
+          ...(card.progress ? { progress: card.progress } : {}),
+          ...(card.reason === "failed" ? { failed: true } : {}),
+        }),
   };
 }
 
@@ -760,6 +767,7 @@ function attentionView(attention: FocusedAttention, root: string) {
   return {
     rows: attention.items.map((item) => attentionRow(item, root)),
     moreIssues: attention.moreIssues,
+    ...(attention.items.length === 0 && !attention.partial ? { state: attention.state } : {}),
     href: attention.healthHref,
     ...(attention.partial ? { partial: true } : {}),
   };
@@ -767,7 +775,7 @@ function attentionView(attention: FocusedAttention, root: string) {
 
 function alertsView(alerts: FocusedAlerts | "failed") {
   if (alerts === "failed") return { failed: true };
-  return { count: alerts.items.length, rows: alerts.items, href: alerts.href };
+  return { count: alerts.items.length, rows: alerts.items, href: alerts.href, rules: alerts.rules };
 }
 
 function attentionRow(item: AttentionItem, root: string) {

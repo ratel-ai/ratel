@@ -297,7 +297,7 @@ test("a channel without access is saved with the invite; a lost connection saves
     { ok: false, error: "Slack is disconnected: connect again." },
   );
   assert.equal((await add({}, "ops")).ok, false);
-  assert.equal((await add({ createChannel: async () => null })).ok, false);
+  assert.equal((await add({ createChannel: async () => "taken" as const })).ok, false);
   assert.equal(created.length, 2);
 });
 
@@ -341,7 +341,6 @@ function actionDeps(
     enabled: async () => true,
     isRestricted: async () => false,
     canSeal: () => true,
-    count: async () => 0,
     create: async (input) => {
       onCreate(input);
       return ID;

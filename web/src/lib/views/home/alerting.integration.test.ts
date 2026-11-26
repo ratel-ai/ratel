@@ -67,6 +67,8 @@ test("one alerting rule is one row, with its value, condition, age and link", as
       },
     ],
     href: `/project/${PROJECT}/alerts`,
+    newHref: `/project/${PROJECT}/alerts/new`,
+    rules: null,
   });
   const text = drawn(alerts)
     .replace(/<[^>]*>/g, " ")
@@ -83,7 +85,13 @@ test("a recovered rule gives none; nor does one in no data, paused, malformed or
   await rule({ query: { bad: true } });
   await rule({ projectId: OTHER });
   const { alerts } = await load(true);
-  assert.deepEqual(alerts, { items: [], href: `/project/${PROJECT}/alerts` });
+  assert.deepEqual(alerts, {
+    items: [],
+    href: `/project/${PROJECT}/alerts`,
+    newHref: `/project/${PROJECT}/alerts/new`,
+    // Another project's rule is not counted.
+    rules: { total: 4, on: 3, noData: 1 },
+  });
   assert.match(drawn(alerts), /No alert fires now/);
 });
 
@@ -133,6 +141,7 @@ test("an agent reads the rows that the page shows", async () => {
     count: 1,
     rows: data.alerts.items,
     href: data.alerts.href,
+    rules: null,
   });
 });
 

@@ -6,7 +6,7 @@ widgets on a grid. A widget is one query object
 
 | File | Holds |
 |---|---|
-| `types.ts` | the widget and dashboard types, and their limits |
+| `types.ts` | the widget and dashboard types, and their limits. `createDashboard` counts the project's dashboards with its insert, under the project's advisory lock, so creates at the same time never pass 100 (`concurrency.test.ts`) |
 | `schema.ts` | `dashboards` (migration 0047): the widgets are a jsonb list, each with its place |
 | `parse-widget.ts` | `parseWidget`: the shape of a widget from outside, its query's contract, the project's switches, then the chart's rules |
 | `widget.ts` | `chartProblem`, `changeQuery` and `fitWidget` (the nearest allowed query and widget, for the editor), and the labels; safe for the browser |

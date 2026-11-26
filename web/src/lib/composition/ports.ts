@@ -25,6 +25,10 @@ export type NavItem = {
 /** The rail's glyph keys; the console maps each to an icon. Declared here so an edition's nav can name one. */
 export type NavIconName =
   | "overview"
+  | "dashboards"
+  | "explore"
+  | "scorers"
+  | "alerts"
   | "health"
   | "tasks"
   | "intents"

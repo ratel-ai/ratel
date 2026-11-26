@@ -29,7 +29,7 @@ identical.
 | `apps/` | MCP Apps (SEP-1865): the `ui://ratel/<view>` resources built by the `@ratel/mcp-apps` package (repository root `mcp-apps/`) and the tools bound to them, behind `mcpApps` (`apps/flag.ts`, owned); with the switch off the server is what it was, pinned by `route-handler.apps.test.ts` and `__fixtures__/flag-off-protocol.json` (owned). See `apps/README.md` |
 | `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]`; `toolStage` also reads an edition tool's own stage |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
-| `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real, `connect-ui.test.ts` the connect panel with and without browser sign-in (owned snippets, see below) |
+| `connect/snippets.ts` | the MCP connection guide's (Integrations, and a project's MCP page) copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real, `connect-ui.test.ts` the connect panel with and without browser sign-in (owned snippets, see below) |
 
 ## Explore through MCP
 

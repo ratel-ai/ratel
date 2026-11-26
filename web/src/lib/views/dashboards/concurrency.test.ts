@@ -5,13 +5,18 @@ import { Client, Pool } from "pg";
 import { metricQuery } from "@/lib/contracts/query";
 import { runMigrations } from "@/lib/platform/db/migrate";
 import * as schema from "@/lib/platform/db/tables";
+import { changeDashboard, type DashboardActionDeps } from "@/lib/views/dashboards/actions";
 import { compacted, freePosition } from "@/lib/views/dashboards/layout";
 import {
   changeWidgets,
+  countDashboards,
   createDashboard,
   type DashboardsDb,
+  deleteDashboard,
   getDashboard,
+  updateDashboard,
 } from "@/lib/views/dashboards/store";
+import { MAX_DASHBOARDS } from "@/lib/views/dashboards/types";
 
 /**
  * Two transactions that overlap need two connections, which PGlite does not have. With
@@ -20,6 +25,7 @@ import {
 const server = process.env.TEST_POSTGRES_URL;
 const DATABASE = `ratel_dashboards_${process.pid}`;
 const PROJECT = "11111111-1111-4111-8111-111111111111";
+const FULL = "44444444-4444-4444-8444-444444444444";
 const BY = { updatedBy: "u", updatedByName: "Ada" };
 
 let pool: Pool;
@@ -32,8 +38,8 @@ before(async () => {
   await runMigrations({ url: url.href, sslMode: "disable" });
   pool = new Pool({ connectionString: url.href });
   await pool.query(
-    `insert into projects (id, organization_id, name, slug) values ($1, $1, 'Agent', 'agent')`,
-    [PROJECT],
+    `insert into projects (id, organization_id, name, slug) values ($1, $1, 'Agent', 'agent'), ($2, $2, 'Full', 'full')`,
+    [PROJECT, FULL],
   );
 });
 
@@ -45,10 +51,12 @@ after(async () => {
 
 test("two overlapping transactions lose no widget", { skip: !server }, async () => {
   const db = drizzle(pool, { schema }) as unknown as DashboardsDb;
-  const { id } = await createDashboard(
+  const made = await createDashboard(
     { projectId: PROJECT, name: "Board", widgets: [widget("a", 0), widget("b", 6)], ...BY },
     db,
   );
+  assert.ok(made);
+  const { id } = made;
   // Both start while a third connection holds the row, so each is open before the other ends.
   const holder = await pool.connect();
   await holder.query("begin");
@@ -85,6 +93,49 @@ test("two overlapping transactions lose no widget", { skip: !server }, async () 
   assert.deepEqual(stored.map((item) => item.id).sort(), ["a", "b", "new"]);
   assert.deepEqual(stored.find((item) => item.id === "a")?.layout, { x: 0, y: 0, w: 12, h: 8 });
 });
+
+test("creates at the same time never pass the limit of dashboards", { skip: !server }, async () => {
+  const db = drizzle(pool, { schema }) as unknown as DashboardsDb;
+  await pool.query(
+    `insert into dashboards (project_id, name, widgets, updated_by, updated_by_name)
+     select $1, 'd' || g, '[]'::jsonb, 'u', 'Ada' from generate_series(1, $2) g`,
+    [FULL, MAX_DASHBOARDS - 1],
+  );
+  const results = await Promise.all(
+    Array.from({ length: 10 }, () =>
+      changeDashboard({ projectId: FULL, action: "create", name: "Board" }, actionDeps(db)),
+    ),
+  );
+  assert.equal(results.filter(({ ok }) => ok).length, 1);
+  assert.deepEqual(
+    [...new Set(results.flatMap((r) => (r.ok ? [] : [r.error])))],
+    [`A project can have ${MAX_DASHBOARDS} dashboards.`],
+  );
+  assert.equal(await countDashboards(FULL, db), MAX_DASHBOARDS);
+});
+
+function actionDeps(db: DashboardsDb): DashboardActionDeps {
+  return {
+    getSession: async () => ({
+      user: { id: "u", externalId: "u", name: "Ada", username: null, email: null },
+    }),
+    findProjectScope: async (projectId) => ({
+      project: { id: projectId },
+      organization: { id: projectId },
+    }),
+    enabled: async () => true,
+    features: async () => ({ customMonitoring: false }),
+    scorers: async () => [],
+    isRestricted: async () => false,
+    store: {
+      createDashboard: (input) => createDashboard(input, db),
+      updateDashboard: (input) => updateDashboard(input, db),
+      deleteDashboard: (projectId, id) => deleteDashboard(projectId, id, db),
+      changeWidgets: (input) => changeWidgets(input, db),
+    },
+    observe: async () => {},
+  } as DashboardActionDeps;
+}
 
 function widget(id: string, x: number) {
   return {

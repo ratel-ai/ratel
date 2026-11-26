@@ -4,7 +4,11 @@ import {
   type AlertSubject,
   authorizeAlerts,
 } from "@/lib/views/alerts/actions";
-import { MAX_DESTINATIONS, type SealedDestination } from "@/lib/views/alerts/destinations";
+import {
+  type DestinationRefusal,
+  MAX_DESTINATIONS,
+  type SealedDestination,
+} from "@/lib/views/alerts/destinations";
 import { slackTestMessage } from "@/lib/views/alerts/slack-message";
 import { parseSlackWebhook } from "@/lib/views/alerts/slack-url";
 import { MAX_DESTINATION_NAME } from "@/lib/views/alerts/types";
@@ -26,11 +30,16 @@ export type DestinationActionResult =
 export interface DestinationActionDeps extends AlertAccessDeps {
   /** Whether this deployment can keep secrets. */
   canSeal(): boolean;
-  count(projectId: string): Promise<number>;
-  create(input: { projectId: string; name: string; url: URL; actor: string }): Promise<string>;
+  /** "limit" when the project has `MAX_DESTINATIONS`, counted with the insert. */
+  create(input: {
+    projectId: string;
+    name: string;
+    url: URL;
+    actor: string;
+  }): Promise<string | "limit">;
   /** Whether the app can post to a channel of the organization's workspace. */
   channelAccess(organizationId: string, channelId: string): Promise<ChannelAccess>;
-  /** Null when the project has the channel already. */
+  /** "taken" when the project has the channel already, "limit" as for `create`. */
   createChannel(input: {
     projectId: string;
     name: string;
@@ -38,7 +47,7 @@ export interface DestinationActionDeps extends AlertAccessDeps {
     channelId: string;
     accessError: string | null;
     actor: string;
-  }): Promise<string | null>;
+  }): Promise<string | DestinationRefusal>;
   remove(projectId: string, id: string): Promise<boolean>;
   sealed(projectId: string, id: string): Promise<SealedDestination | null>;
   post(destination: SealedDestination, message: { text: string }): Promise<PostResult>;
@@ -55,6 +64,10 @@ export interface DestinationActionDeps extends AlertAccessDeps {
 
 const INVALID = { ok: false, error: "The destination is invalid." } as const;
 const MISSING = { ok: false, error: "This destination no longer exists." } as const;
+const FULL = {
+  ok: false,
+  error: `A project can have ${MAX_DESTINATIONS} destinations.`,
+} as const;
 
 /** Add, test or remove a Slack destination. No result ever holds a secret. */
 export async function changeDestination(
@@ -115,9 +128,8 @@ async function add(
       ok: false,
       error: "This deployment cannot store secrets. Set RATEL_SECRET_KEY and restart it.",
     };
-  if ((await deps.count(projectId)) >= MAX_DESTINATIONS)
-    return { ok: false, error: `A project can have ${MAX_DESTINATIONS} destinations.` };
-  return { ok: true, destinationId: await deps.create({ projectId, name, url, actor }) };
+  const created = await deps.create({ projectId, name, url, actor });
+  return created === "limit" ? FULL : { ok: true, destinationId: created };
 }
 
 /** A channel without access is saved too, with what to do: people invite the app next. */
@@ -128,8 +140,6 @@ async function addChannel(
 ): Promise<DestinationActionResult> {
   const channelId = parseChannelId(input.channelId);
   if (!channelId) return { ok: false, error: "Pick a channel, or enter a channel ID." };
-  if ((await deps.count(projectId)) >= MAX_DESTINATIONS)
-    return { ok: false, error: `A project can have ${MAX_DESTINATIONS} destinations.` };
   const access = await deps.channelAccess(organizationId, channelId);
   const accessError = access.ok ? null : access.code;
   if (accessError !== null && !isChannelError(accessError))
@@ -144,7 +154,9 @@ async function addChannel(
     accessError,
     actor,
   });
-  if (!destinationId) return { ok: false, error: "This channel is already a destination." };
+  if (destinationId === "limit") return FULL;
+  if (destinationId === "taken")
+    return { ok: false, error: "This channel is already a destination." };
   return accessError === null
     ? { ok: true, destinationId }
     : { ok: true, destinationId, warning: slackErrorText(accessError) };
