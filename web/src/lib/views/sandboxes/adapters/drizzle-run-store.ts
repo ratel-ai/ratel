@@ -124,6 +124,8 @@ export function createDrizzleRunStore(db: Db): RunStore {
         timeoutS: sandboxRuns.timeoutS,
         createdAt: sandboxRuns.createdAt,
         startedAt: sandboxRuns.startedAt,
+        finishedAt: sandboxRuns.finishedAt,
+        durationMs: sandboxRuns.durationMs,
       };
       // The two conditions of sandbox_runs_open_idx, each with its own limit: the active runs of
       // all projects must not hide the ended ones, and the other way round.

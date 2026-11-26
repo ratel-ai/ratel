@@ -563,6 +563,49 @@ test("usage of a run is recorded one time, also after a failed record", async ()
   );
 });
 
+test("a run records its usage with the VM seconds of the run when it ends", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const run = await t.ran();
+  assert.equal(run.status, "completed");
+  assert.equal(typeof run.durationMs, "number");
+  const record = t.limits.records.find(({ kind }) => kind === "sandbox_run");
+  assert.deepEqual(
+    [record?.reference, record?.seconds],
+    [run.id, Math.ceil((run.durationMs ?? 0) / 1000)],
+  );
+});
+
+test("a run that the sweep ends records the seconds from its start to its end", async () => {
+  const t = await setup({ agent: { answer: "hang" } });
+  await t.makeReady();
+  const started = await t.start();
+  assert.ok(started.ok);
+  for (let i = 0; i < 50 && !t.agent.requests.length; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  const run = await t.read(started.run.id);
+  assert.equal(run.status, "running");
+  assert.deepEqual(
+    t.limits.records.filter(({ kind }) => kind === "sandbox_run"),
+    [],
+    "no record while the run is active",
+  );
+  t.wait(run.timeoutS * 1000 + 5 * 60_000);
+  await t.sweep();
+  await t.sweep();
+  const ended = await t.read(run.id);
+  assert.equal(ended.status, "timed_out");
+  const seconds = ((ended.finishedAt?.getTime() ?? 0) - (ended.startedAt?.getTime() ?? 0)) / 1000;
+  assert.deepEqual(
+    t.limits.records
+      .filter(({ kind }) => kind === "sandbox_run")
+      .map(({ reference, seconds }) => [reference, seconds]),
+    [[run.id, Math.ceil(seconds)]],
+  );
+  assert.ok(seconds >= run.timeoutS);
+});
+
 test("a start that cannot run is refused with the reason", async () => {
   const t = await setup();
   const reasonOf = async (more?: Partial<RunDeps>, input?: unknown) => {

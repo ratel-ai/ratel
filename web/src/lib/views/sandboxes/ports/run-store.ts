@@ -16,7 +16,16 @@ export type NewRun = {
 /** A run that still has work for the sweep. */
 export type OpenRun = Pick<
   SandboxRun,
-  "id" | "projectId" | "status" | "vmId" | "instanceRef" | "timeoutS" | "createdAt" | "startedAt"
+  | "id"
+  | "projectId"
+  | "status"
+  | "vmId"
+  | "instanceRef"
+  | "timeoutS"
+  | "createdAt"
+  | "startedAt"
+  | "finishedAt"
+  | "durationMs"
 > & { usageRecordedAt: Date | null };
 
 export interface RunStore {

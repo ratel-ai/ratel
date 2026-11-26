@@ -54,6 +54,8 @@ export type UsageRecord = {
   amount?: number;
   /** What was consumed (a run id, a version id). One kind and reference counts one time. */
   reference: string;
+  /** The VM seconds that a run used, rounded up. Only a `sandbox_run` has it. */
+  seconds?: number;
 };
 
 export type UsageLimitsPort = {

@@ -188,18 +188,22 @@ export async function getRun(
   return deps.runs.get(projectId, runId);
 }
 
-/** Records the usage of a started run, one time. The sweep tries again after a failure. */
+/**
+ * Records the usage of a run that started and ended, one time, with its VM seconds. The sweep
+ * tries again after a failure.
+ */
 export async function recordUsage(
-  runId: string,
+  run: RunTime,
   subject: UsageSubject,
   deps: Pick<RunDeps, "runs" | "limits" | "now">,
 ): Promise<void> {
   try {
-    await deps.limits.record(subject, { kind: "sandbox_run", reference: runId });
-    await deps.runs.markUsageRecorded(runId, deps.now());
+    const seconds = runSeconds(run);
+    await deps.limits.record(subject, { kind: "sandbox_run", reference: run.id, seconds });
+    await deps.runs.markUsageRecorded(run.id, deps.now());
   } catch (error) {
     logger.error(
-      { project_id: subject.projectId, run_id: runId, err: error },
+      { project_id: subject.projectId, run_id: run.id, err: error },
       "usage not recorded",
     );
   }
@@ -225,6 +229,9 @@ export async function deleteVm(
     return false;
   }
 }
+
+/** What the VM seconds of a run come from. */
+type RunTime = Pick<SandboxRun, "id" | "durationMs" | "startedAt" | "finishedAt">;
 
 type Launch = {
   run: SandboxRun;
@@ -256,16 +263,20 @@ async function executeRun(launch: Launch, provider: SandboxProvider, deps: RunDe
       );
     }
     if (!vmRef) throw new Error("a ready VM has no reference");
-    const status = await deps.runs.markStarted(run.id, vmRef, deps.now());
+    const startedAt = deps.now();
+    const status = await deps.runs.markStarted(run.id, vmRef, startedAt);
     if (status !== "running") return;
-    await recordUsage(run.id, subject, deps);
     const ran = await withFeatureSpan(
       "sandboxes",
       "run_container",
       () => runIn(launch, vmRef ?? "", provider, deps),
       { attributes },
     );
-    await deps.runs.finish(run.id, outcomeOf(ran), deps.now());
+    const finishedAt = deps.now();
+    if (await deps.runs.finish(run.id, outcomeOf(ran), finishedAt)) {
+      const time = { id: run.id, durationMs: ran.durationMs, startedAt, finishedAt };
+      await recordUsage(time, subject, deps);
+    }
     logger.info(
       { ...logged(run), outcome: ran.answer.ok ? "completed" : ran.answer.error.code },
       "sandbox run finished",
@@ -348,6 +359,12 @@ function runIn(
     request: run.request,
     timeoutS: run.timeoutS,
   });
+}
+
+/** The time of the container when it is known, else the time from the start to the end. */
+function runSeconds({ durationMs, startedAt, finishedAt }: RunTime): number {
+  const ms = durationMs ?? (finishedAt?.getTime() ?? 0) - (startedAt?.getTime() ?? 0);
+  return Math.max(0, Math.ceil(ms / 1000));
 }
 
 function outcomeOf({ answer, logs, durationMs }: ContainerRun): RunOutcome {

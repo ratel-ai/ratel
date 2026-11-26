@@ -57,10 +57,11 @@ export async function sweepRuns(
 async function sweepRun(run: OpenRun, deps: SweepDeps) {
   const active = run.status === "queued" || run.status === "running";
   const over = active ? await endIfOver(run, deps) : { ended: false, deleted: false };
-  if (run.startedAt && !run.usageRecordedAt) {
+  // An active run records its usage when it ends: a later sweep reads its end.
+  if (!active && run.startedAt && !run.usageRecordedAt) {
     const organizationId = await deps.organizationIdOf(run.projectId);
     if (organizationId) {
-      await recordUsage(run.id, { organizationId, projectId: run.projectId }, deps);
+      await recordUsage(run, { organizationId, projectId: run.projectId }, deps);
     }
   }
   return over;
