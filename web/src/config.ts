@@ -441,6 +441,11 @@ const CONFIG_SCHEMA = schema({
   sandboxes: {
     /** Seals sandbox secrets: 32 random bytes in base64 (`lib/platform/sealed-secrets.ts`). */
     secretsKey: optional("SANDBOX_SECRETS_KEY", configured, { sensitive: true }),
+    /**
+     * The VM service: `boat`, or `local-docker` (the local Docker daemon, for development and proof
+     * only: refused in production and in the Cloud composition). Unset: `boat` when its key is set.
+     */
+    provider: optional("SANDBOX_PROVIDER", z.preprocess(lower, z.enum(["boat", "local-docker"]))),
     /** The API key of the VM service. With none, Ratel sandbox shows "not configured". */
     boatApiKey: optional("BOAT_API_KEY", configured, { sensitive: true }),
     /** The base URL of the API of the VM service. */

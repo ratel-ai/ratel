@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { drizzle } from "drizzle-orm/pglite";
@@ -59,3 +60,11 @@ export const CONFIG = {
 } satisfies RatelYaml;
 export const IMAGE = { digest: `sha256:${"c".repeat(64)}`, platform: "linux/amd64" };
 export const COMMIT = "b".repeat(40);
+
+export const DOCKER_SKIP = "Docker is not available";
+
+/** Whether the local Docker daemon answers. A test that needs it skips with {@link DOCKER_SKIP}. */
+export function dockerAnswers(): boolean {
+  const info = spawnSync("docker", ["info", "--format", "{{.ID}}"], { timeout: 15_000 });
+  return info.status === 0;
+}
