@@ -134,7 +134,7 @@ export type SandboxRun = {
   status: RunStatus;
   /** The valid answer of the container. */
   response: RunResponse | null;
-  /** The contract error code, `infra_error` or `timeout`. Null when the run completed. */
+  /** The contract error code, `infra_error`, `provider_refused` or `timeout`. Null when the run completed. */
   errorCode: string | null;
   /** Why the run failed. */
   reason: string | null;

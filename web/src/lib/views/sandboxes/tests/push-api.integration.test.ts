@@ -15,6 +15,7 @@ import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { sandboxesEnabledForProject, sandboxesOffForAll } from "../gate";
 import { runImageBuild } from "../image-build-job";
+import { ProviderRefused } from "../ports/sandbox-provider";
 import {
   handleCreateVersion,
   handleFinalizeVersion,
@@ -256,6 +257,22 @@ test("command mode: a non-zero exit gives failed with stderr through the version
   assert.equal(version.status, "failed");
   assert.equal(version.smoke.error.code, "run_failed");
   assert.equal(version.smoke.logs, "no input\n");
+});
+
+test("a refusal of the sandbox service gives failed with a safe reason through the version API", async () => {
+  const t = await setup();
+  const { versionId } = await t.push();
+  t.vms.startVm = async () => {
+    throw new ProviderRefused("boat: billing_required (status 402)", 402);
+  };
+  assert.deepEqual(await t.prepare(versionId), { status: "failed" });
+  const version = await read(await t.get(versionId));
+  assert.equal(version.status, "failed");
+  assert.equal(
+    version.reason,
+    "The sandbox service refused the request: the Ratel sandbox account is not active.",
+  );
+  assert.doesNotMatch(JSON.stringify(version), /boat|again/i);
 });
 
 test("with no public origin the upload address is the origin that the client called", async () => {

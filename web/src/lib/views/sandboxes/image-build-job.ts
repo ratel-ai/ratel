@@ -10,16 +10,19 @@ import type { SmokeResult } from "./domain/contract";
 import { bundleKey, type SandboxVersion } from "./domain/version";
 import type { BuildOutcome, BuildStore } from "./ports/build-store";
 import {
+  accountRefusedReason,
   BuildFailed,
   ProviderAtCapacity,
   ProviderRateLimited,
   ProviderUnavailable,
   type SandboxProvider,
+  type StartVmRequest,
 } from "./ports/sandbox-provider";
 import type { VmStore } from "./ports/vm-store";
 import { openSecretValues, type SecretValuesDeps } from "./secret-values";
 import { runSmokeCheck } from "./smoke-check";
 import { agentVmNetwork, startVmSession, type VmSession } from "./vm-session";
+import { recordVmStart, vmStartCheck } from "./vm-starts";
 
 /**
  * The `sandbox_image_build` job: one pushed image becomes a ready version. A prepare VM, which
@@ -31,7 +34,7 @@ export type ImageBuildDeps = SecretValuesDeps & {
   builds: BuildStore;
   bundles: BundleStore;
   provider: SandboxProvider | null;
-  /** The count of the smoke VM starts, with the starts of the run VMs. */
+  /** The count of the prepare and smoke VM starts, with the starts of the run VMs. */
   vms: Pick<VmStore, "claimStart" | "markDeleted">;
   limits: UsageLimitsPort;
   organizationIdOf: (projectId: string) => Promise<string | null>;
@@ -191,18 +194,13 @@ async function prepareAndCheck(current: Build, secrets: Record<string, string>):
 
 /**
  * Loads the pushed image tarball into a new prepare VM, tags it, removes the tarball and saves the
- * VM as a snapshot. The VM gets no secret. It is deleted at the end, also after a failure.
+ * VM as a snapshot. The VM gets no secret. Its start counts as a VM start of the project. It is
+ * deleted at the end, also after a failure.
  */
-async function prepare({ version, provider, deps, deadlineMs, log }: Build): Promise<string> {
-  const vm = await startVmSession(provider, {
-    projectId: version.projectId,
+async function prepare(current: Build): Promise<string> {
+  const { version, deps, log } = current;
+  const vm = await startCountedVm(current, {
     purpose: "prepare",
-    ttlS: Math.ceil(deadlineMs / 1000) + VM_GRACE_S,
-    labels: {
-      "ratel-project": version.projectId,
-      "ratel-version": version.id,
-      "ratel-purpose": "prepare",
-    },
     // Inbound is open: a large file goes through an upload URL, and that URL does not work on a
     // VM with inbound closed. Outbound is open: the upload URL goes through a tunnel that the
     // `allow` and `deny` modes block.
@@ -243,10 +241,7 @@ async function prepare({ version, provider, deps, deadlineMs, log }: Build): Pro
     const { snapshotRef } = await vm.saveSnapshot(`rv-${version.id}`);
     return snapshotRef;
   } finally {
-    await vm.delete().catch((error: unknown) => {
-      // The TTL of the VM still ends it.
-      logger.warn({ version_id: version.id, err: error }, "prepare vm not deleted");
-    });
+    await vm.end();
   }
 }
 
@@ -257,46 +252,19 @@ async function prepare({ version, provider, deps, deadlineMs, log }: Build): Pro
  * failure: it got the secrets, so it never becomes a snapshot.
  */
 async function smokeCheck(
-  { version, provider, deps, deadlineMs, log }: Build,
+  current: Build,
   snapshotRef: string,
   secrets: Record<string, string>,
 ): Promise<SmokeResult> {
-  const { projectId } = version;
-  const organizationId = await deps.organizationIdOf(projectId);
-  if (!organizationId) throw new Error("the project has no organization");
-  const subject = { organizationId, projectId };
-  const claimed = await deps.vms.claimStart(
-    { projectId, versionId: version.id, now: deps.now() },
-    (startsToday) =>
-      deps.limits.check(subject, "sandbox_vm_starts_per_day", { current: startsToday }),
-  );
-  if (!claimed.ok) throw new BuildFailed(claimed.message);
-  const row = claimed.vm;
-  let vm: VmSession | null = null;
+  const { version, deps, log } = current;
+  log("> starting the smoke VM from the snapshot\n");
+  const vm = await startCountedVm(current, {
+    purpose: "smoke",
+    fromSnapshot: snapshotRef,
+    network: agentVmNetwork(version.config, deps.callbackUrl()),
+    keepSnapshots: false,
+  });
   try {
-    log("> starting the smoke VM from the snapshot\n");
-    vm = await startVmSession(provider, {
-      projectId,
-      purpose: "smoke",
-      fromSnapshot: snapshotRef,
-      ttlS: Math.ceil(deadlineMs / 1000) + VM_GRACE_S,
-      labels: {
-        "ratel-project": projectId,
-        "ratel-version": version.id,
-        "ratel-purpose": "smoke",
-        "ratel-vm": row.id,
-      },
-      network: agentVmNetwork(version.config, deps.callbackUrl()),
-      keepSnapshots: false,
-    });
-    await deps.limits
-      .record(subject, { kind: "sandbox_vm_start", reference: row.id })
-      .catch((error: unknown) => {
-        logger.error(
-          { version_id: version.id, vm_id: row.id, err: error },
-          "vm start not recorded",
-        );
-      });
     return await runSmokeCheck(vm, {
       versionId: version.id,
       config: version.config,
@@ -305,14 +273,62 @@ async function smokeCheck(
       log,
     });
   } finally {
-    await vm?.delete().catch((error: unknown) => {
-      // The TTL of the VM still ends it.
-      logger.warn({ version_id: version.id, err: error }, "smoke vm not deleted");
-    });
-    await deps.vms.markDeleted(row.id, deps.now()).catch((error: unknown) => {
-      logger.warn({ version_id: version.id, vm_id: row.id, err: error }, "smoke vm not marked");
-    });
+    await vm.end();
   }
+}
+
+/**
+ * Starts a VM of the build as a counted VM start of the project (`vm-starts.ts`). The start takes
+ * a unit of the daily budget before the provider gets a call: a refusal fails the build with the
+ * name of the limit. The usage records the start only when the VM started. `end` deletes the VM
+ * and marks its row deleted; the row still counts in the budget of today. The row stays `starting`
+ * with no reference until then, so no run claims the VM.
+ */
+async function startCountedVm(
+  { version, provider, deps, deadlineMs }: Build,
+  request: Pick<StartVmRequest, "purpose" | "fromSnapshot" | "network" | "keepSnapshots">,
+): Promise<VmSession & { end: () => Promise<void> }> {
+  const { projectId } = version;
+  const { purpose } = request;
+  const organizationId = await deps.organizationIdOf(projectId);
+  if (!organizationId) throw new Error("the project has no organization");
+  const subject = { organizationId, projectId };
+  const claimed = await deps.vms.claimStart(
+    { projectId, versionId: version.id, now: deps.now() },
+    vmStartCheck(deps.limits, subject),
+  );
+  if (!claimed.ok) throw new BuildFailed(claimed.message);
+  const row = claimed.vm;
+  const markDeleted = () =>
+    deps.vms.markDeleted(row.id, deps.now()).catch((error: unknown) => {
+      logger.warn({ version_id: version.id, vm_id: row.id, purpose, err: error }, "vm not marked");
+    });
+  let vm: VmSession;
+  try {
+    vm = await startVmSession(provider, {
+      ...request,
+      projectId,
+      ttlS: Math.ceil(deadlineMs / 1000) + VM_GRACE_S,
+      labels: {
+        "ratel-project": projectId,
+        "ratel-version": version.id,
+        "ratel-purpose": purpose,
+        "ratel-vm": row.id,
+      },
+    });
+  } catch (error) {
+    await markDeleted();
+    throw error;
+  }
+  await recordVmStart(deps.limits, subject, row.id, purpose);
+  const end = async () => {
+    await vm.delete().catch((error: unknown) => {
+      // The TTL of the VM still ends it.
+      logger.warn({ version_id: version.id, purpose, err: error }, "vm not deleted");
+    });
+    await markDeleted();
+  };
+  return Object.assign(vm, { end });
 }
 
 /** Deletes the snapshot of a version that is not ready. A failure is logged. */
@@ -346,7 +362,7 @@ function reasonOf(error: unknown): string | null {
   if (error instanceof ProviderUnavailable) {
     return "The sandbox service did not answer. Push again later.";
   }
-  return null;
+  return accountRefusedReason(error);
 }
 
 /** Runs one step of a build and logs its output. A failed step fails the build with its output. */

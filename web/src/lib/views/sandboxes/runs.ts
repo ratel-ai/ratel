@@ -20,6 +20,7 @@ import type { SandboxVersion } from "./domain/version";
 import { imageTag, NOT_CONFIGURED_REASON } from "./image-build-job";
 import type { RunOutcome, RunStore } from "./ports/run-store";
 import {
+  accountRefusedReason,
   ProviderAtCapacity,
   ProviderRateLimited,
   ProviderUnavailable,
@@ -30,6 +31,7 @@ import type { VersionStore } from "./ports/version-store";
 import type { RunVm, VmStore } from "./ports/vm-store";
 import { openSecretValues } from "./secret-values";
 import { agentVmNetwork, attachVmSession, startVmSession } from "./vm-session";
+import { recordVmStart, vmStartCheck } from "./vm-starts";
 
 /**
  * Starts runs and reads them. A run gets a warm VM of its version, or a new one, and a new
@@ -160,8 +162,7 @@ export async function startRun(
       startedAfter: new Date(now.getTime() - VM_CLAIM_MAX_AGE_S * 1000),
       now,
     },
-    (startsToday) =>
-      deps.limits.check(subject, "sandbox_vm_starts_per_day", { current: startsToday }),
+    vmStartCheck(deps.limits, subject),
   );
   if (!claimed.ok) {
     await deps.runs.discard(runId);
@@ -246,7 +247,8 @@ type Launch = {
 
 /**
  * The long part of a run: the VM (a new one when the claim made it), a new container, the request
- * and the answer. A provider failure deletes the VM and ends the run `infra_error`. It never throws.
+ * and the answer. A provider failure deletes the VM and ends the run `infra_error`, with the code
+ * `provider_refused` when the provider refused the account (401, 402, 403). It never throws.
  */
 async function executeRun(launch: Launch, provider: SandboxProvider, deps: RunDeps): Promise<void> {
   const { run, vm, subject } = launch;
@@ -287,12 +289,9 @@ async function executeRun(launch: Launch, provider: SandboxProvider, deps: RunDe
   } catch (error) {
     logger.error({ ...logged(run), err: error }, "sandbox run broke");
     await deleteVm(vm, vmRef, deps);
+    const errorCode = accountRefusedReason(error) ? "provider_refused" : "infra_error";
     await deps.runs
-      .finish(
-        run.id,
-        { status: "infra_error", errorCode: "infra_error", message: infraReason(error) },
-        deps.now(),
-      )
+      .finish(run.id, { status: "infra_error", errorCode, message: infraReason(error) }, deps.now())
       .catch((failure: unknown) => logger.error({ ...logged(run), err: failure }, "run not ended"));
   } finally {
     await deps.vms
@@ -326,11 +325,7 @@ async function startVm(launch: Launch, provider: SandboxProvider, deps: RunDeps)
     await deleteVm(vm, vmRef, deps);
     throw error;
   }
-  try {
-    await deps.limits.record(subject, { kind: "sandbox_vm_start", reference: vm.id });
-  } catch (error) {
-    logger.error({ ...logged(run), vm_id: vm.id, err: error }, "vm start not recorded");
-  }
+  await recordVmStart(deps.limits, subject, vm.id, "run");
   return vmRef;
 }
 
@@ -383,7 +378,7 @@ function infraReason(error: unknown): string {
   if (error instanceof ProviderUnavailable) {
     return "The sandbox service did not answer. Run again later.";
   }
-  return "The sandbox did not work. Run again.";
+  return accountRefusedReason(error) ?? "The sandbox did not work. Run again.";
 }
 
 function logged(run: Pick<SandboxRun, "id" | "projectId">) {

@@ -1,6 +1,6 @@
 import type { UsageCheck, UsageRefusal } from "@/lib/contracts/usage-limits";
 
-/** One run VM of a version. */
+/** One VM of a version: a run VM, or the prepare or the smoke VM of a build. */
 export type RunVm = {
   id: string;
   projectId: string;
@@ -24,7 +24,12 @@ export type VmClaim = {
   now: Date;
 };
 
-/** The run VMs. Each VM of a version takes a few runs at the same time while it is warm. */
+/**
+ * The VMs of the projects. Each run VM of a version takes a few runs at the same time while it is
+ * warm. Each VM start of each purpose (prepare, smoke, run) has a row, and the rows of a project of
+ * a UTC day are its VM starts for `sandbox_vm_starts_per_day` (`vm-starts.ts`). A row counts from
+ * its insert, also when its VM does not start: the budget counts attempts.
+ */
 export interface VmStore {
   /**
    * Gives the run a `ready` VM of its version that has room, else a new `starting` VM when `check`
@@ -36,7 +41,8 @@ export interface VmStore {
     check: (startsToday: number) => Promise<UsageCheck>,
   ): Promise<{ ok: true; vm: RunVm; isNew: boolean } | UsageRefusal>;
   /**
-   * Counts the start of a VM that takes no run (the smoke check of a version) when `check` passes.
+   * Counts the start of a VM that takes no run (the prepare VM and the smoke VM of a build) when
+   * `check` passes.
    * `check` gets the VM starts of the project of this UTC day, as in `claim`, and the start counts
    * in them. The row stays `starting` with no reference until `markDeleted`, so no claim gets it.
    */

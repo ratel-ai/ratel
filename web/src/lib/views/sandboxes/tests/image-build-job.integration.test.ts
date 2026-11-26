@@ -31,6 +31,7 @@ import {
 import {
   ProviderAtCapacity,
   ProviderRateLimited,
+  ProviderRefused,
   type SandboxProvider,
 } from "../ports/sandbox-provider";
 import { sandboxVms } from "../schema";
@@ -131,7 +132,8 @@ async function setup(over: Setup = {}) {
     return found;
   };
   const commands = () => provider.execs.map((exec) => exec.command);
-  const vmRows = (): Promise<Array<typeof sandboxVms.$inferSelect>> => db.select().from(sandboxVms);
+  const vmRows = (): Promise<Array<typeof sandboxVms.$inferSelect>> =>
+    db.select().from(sandboxVms).orderBy(sandboxVms.startedAt);
   return {
     db,
     deps,
@@ -180,10 +182,12 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
   assert.equal(prepare?.keepSnapshots, true);
   assert.equal(prepare?.fromSnapshot, undefined);
   assert.deepEqual(prepare?.network, { inbound: "open", outbound: { mode: "open" } });
+  const rows = await t.vmRows();
   assert.deepEqual(prepare?.labels, {
     "ratel-project": PROJECT_ID,
     "ratel-version": t.version.id,
     "ratel-purpose": "prepare",
+    "ratel-vm": rows[0]?.id,
   });
   assert.equal(smoke?.purpose, "smoke");
   assert.equal(smoke?.fromSnapshot, `rv-${t.version.id}`);
@@ -193,12 +197,11 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
     inbound: "closed",
     outbound: { mode: "allow", allow: ["ratel.example"] },
   });
-  const [row] = await t.vmRows();
   assert.deepEqual(smoke?.labels, {
     "ratel-project": PROJECT_ID,
     "ratel-version": t.version.id,
     "ratel-purpose": "smoke",
-    "ratel-vm": row?.id,
+    "ratel-vm": rows[1]?.id,
   });
   const writes = (vmRef = "") =>
     t.provider.writes.filter((write) => write.vmRef === vmRef).map((write) => write.path);
@@ -279,36 +282,91 @@ test("the snapshot comes from a VM that got no secret; the secret goes only to t
   assert.equal(t.agent.containers.size, 0);
 });
 
-test("the smoke VM start counts as a VM start of the project", async () => {
+test("the prepare and the smoke VM starts each count, and each records usage by its VM row", async () => {
   const t = await setup();
   assert.deepEqual(await t.run(), { status: "ready" });
   const rows = await t.vmRows();
-  assert.equal(rows.length, 1, "the prepare VM start is not counted here (RP-392)");
-  const [row] = rows;
-  assert.equal(row?.versionId, t.version.id);
-  assert.equal(row?.state, "deleted");
-  assert.equal(row?.vmRef, null, "no run claims the VM of a smoke check");
+  assert.equal(rows.length, 2, "the prepare VM start and the smoke VM start");
+  for (const row of rows) {
+    assert.equal(row.versionId, t.version.id);
+    assert.equal(row.state, "deleted");
+    assert.equal(row.vmRef, null, "no run claims the VM of a build");
+  }
+  const [prepare, smoke] = t.provider.starts;
+  assert.equal(prepare?.labels["ratel-vm"], rows[0]?.id);
+  assert.equal(smoke?.labels["ratel-vm"], rows[1]?.id);
   assert.deepEqual(
     t.limits.records.map(({ kind, reference, organizationId }) => ({
       kind,
       reference,
       organizationId,
     })),
-    [{ kind: "sandbox_vm_start", reference: row?.id, organizationId: ORGANIZATION_ID }],
+    rows.map(({ id }) => ({
+      kind: "sandbox_vm_start",
+      reference: id,
+      organizationId: ORGANIZATION_ID,
+    })),
   );
 });
 
-test("with no VM start left today the version fails, and its snapshot is deleted", async () => {
+test("with no VM start left today the prepare start is refused with the limit name, and no VM starts", async () => {
   const t = await setup({ vmStartsPerDay: 0 });
   assert.deepEqual(await t.run(), { status: "failed" });
   const failed = await t.read();
-  assert.match(failed.reason ?? "", /sandbox_vm_starts_per_day/);
+  assert.match(failed.reason ?? "", /The limit sandbox_vm_starts_per_day \(0\) is reached/);
+  assert.equal(failed.imageRef, null);
+  assert.equal(t.provider.starts.length, 0, "no startVm call");
+  assert.equal(t.provider.snapshots.size, 0);
+  assert.deepEqual(await t.vmRows(), []);
+  assert.deepEqual(t.limits.records, []);
+});
+
+test("with one VM start left today the smoke start is refused, and its snapshot is deleted", async () => {
+  const t = await setup({ vmStartsPerDay: 1 });
+  assert.deepEqual(await t.run(), { status: "failed" });
+  const failed = await t.read();
+  assert.match(failed.reason ?? "", /The limit sandbox_vm_starts_per_day \(1\) is reached/);
   assert.equal(failed.imageRef, null);
   assert.equal(t.provider.starts.length, 1, "no smoke VM starts");
   assert.deepEqual(t.provider.deletedSnapshots, [`rv-${t.version.id}`]);
   assert.equal(t.provider.snapshots.size, 0);
   assert.equal(t.provider.vms.size, 0);
-  assert.deepEqual(await t.vmRows(), []);
+  assert.equal((await t.vmRows()).length, 1);
+});
+
+test("a prepare VM that does not start keeps its counted start, and records no usage", async () => {
+  const t = await setup();
+  const provider: SandboxProvider = {
+    ...t.provider,
+    startVm: async () => {
+      throw new ProviderAtCapacity("boat: full");
+    },
+  };
+  assert.deepEqual(await t.run({ provider }), { status: "failed" });
+  const [row, ...more] = await t.vmRows();
+  assert.equal(more.length, 0);
+  assert.equal(row?.state, "deleted", "the attempt counts in the budget");
+  assert.deepEqual(t.limits.records, [], "only a started VM is usage");
+});
+
+test("a refusal of the sandbox service fails the version with a reason that names no provider and gives no retry advice", async () => {
+  const cases: Array<[number, string]> = [
+    [402, "The sandbox service refused the request: the Ratel sandbox account is not active."],
+    [403, "The sandbox service refused the request: the Ratel sandbox account lacks a permission."],
+  ];
+  for (const [status, reason] of cases) {
+    const t = await setup();
+    const provider: SandboxProvider = {
+      ...t.provider,
+      startVm: async () => {
+        throw new ProviderRefused(`boat: refused (status ${status})`, status);
+      },
+    };
+    assert.deepEqual(await t.run({ provider }), { status: "failed" });
+    const failed = await t.read();
+    assert.equal(failed.reason, reason);
+    assert.doesNotMatch(`${failed.reason}${failed.buildLog}`, /boat|again/i);
+  }
 });
 
 test("a smoke VM that does not start fails the version, and its snapshot is deleted", async () => {
@@ -512,6 +570,21 @@ test("a provider error fails the build, and its text is not shown", async () => 
   const failed = await t.read();
   assert.equal(failed.status, "failed");
   assert.doesNotMatch(`${failed.reason}${failed.buildLog}`, /boat|account-123/i);
+});
+
+test("a 404 or 409 refusal of the sandbox service keeps the generic reason of the build", async () => {
+  for (const status of [404, 409]) {
+    const t = await setup();
+    const provider: SandboxProvider = {
+      ...t.provider,
+      startVm: async () => {
+        throw new ProviderRefused(`boat: not there (status ${status})`, status);
+      },
+    };
+    assert.deepEqual(await t.run({ provider }), { status: "failed" });
+    const failed = await t.read();
+    assert.equal(failed.reason, "The build service did not work. Push again.");
+  }
 });
 
 test("a rate limit or a full account gives a reason to push again, with no provider name", async () => {

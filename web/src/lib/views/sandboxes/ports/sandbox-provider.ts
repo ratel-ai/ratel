@@ -114,5 +114,24 @@ export class ProviderRefused extends Error {
   }
 }
 
+/** Why the service refused the account, by its HTTP status, in words that name no provider. */
+const ACCOUNT_REFUSALS: Readonly<Record<number, string>> = {
+  401: "the Ratel sandbox account key is not valid",
+  402: "the Ratel sandbox account is not active",
+  403: "the Ratel sandbox account lacks a permission",
+};
+
+/**
+ * The reason of a refusal of the account (401, 402, 403) for the developer, or null for another
+ * error. It never names the provider and gives no advice to try again: the same call gets the same
+ * refusal until an operator acts. Another refusal (e.g. a 404 or 409 of a VM that is gone) is an
+ * infrastructure failure for the caller.
+ */
+export function accountRefusedReason(error: unknown): string | null {
+  if (!(error instanceof ProviderRefused)) return null;
+  const why = ACCOUNT_REFUSALS[error.status];
+  return why ? `The sandbox service refused the request: ${why}.` : null;
+}
+
 /** The version cannot build. The message is for the developer. */
 export class BuildFailed extends Error {}
