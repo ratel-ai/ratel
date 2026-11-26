@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /** The wire shapes of `protocol/sandbox/v1` in ratel-sdk that this module reads. */
 
-export const RESERVED_SECRET_PREFIXES = ["RATEL_", "MODAL_", "AWS_"] as const;
+export const RESERVED_SECRET_PREFIXES = ["RATEL_", "BOAT_", "AWS_"] as const;
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/);
 const toolName = z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/);

@@ -29,7 +29,7 @@ import { bundleInfo, COMMIT, createSandboxDb, MANIFEST, PROJECT_ID, tarGz } from
 
 const BUNDLE = tarGz([{ name: "src/agent.ts", body: "x" }]);
 
-async function setup(over: { install?: string[]; stored?: Buffer } = {}) {
+async function setup(over: { stored?: Buffer } = {}) {
   const { db } = await createSandboxDb();
   const versions = createDrizzleVersionStore(db);
   const builds = createDrizzleBuildStore(db);
@@ -38,7 +38,7 @@ async function setup(over: { install?: string[]; stored?: Buffer } = {}) {
     {
       projectId: PROJECT_ID,
       apiKeyId: null,
-      manifest: { ...MANIFEST, install: over.install ?? MANIFEST.install },
+      manifest: MANIFEST,
       git: { commit: COMMIT, dirty: false },
       bundle: bundleInfo(BUNDLE),
     },
@@ -68,23 +68,39 @@ async function setup(over: { install?: string[]; stored?: Buffer } = {}) {
   return { db, deps, version, builds, provider, run, read };
 }
 
-test("a build goes building, then ready with an image reference and a log", async () => {
+test("a build goes building, then ready with a snapshot of the loaded image and a log", async () => {
   const t = await setup();
   let during = "";
   const provider: SandboxProvider = {
     ...t.provider,
-    buildImage: async (request) => {
+    startVm: async (request) => {
       during = (await t.read()).status;
-      return t.provider.buildImage(request);
+      return t.provider.startVm(request);
     },
   };
   assert.deepEqual(await t.run({ provider }), { status: "ready" });
   assert.equal(during, "building");
   const built = await t.read();
   assert.equal(built.status, "ready");
-  assert.match(built.imageRef ?? "", /^im-/);
-  assert.match(built.buildLog ?? "", /install command 1 \(npm install\)/);
+  assert.equal(built.imageRef, `rv-${t.version.id}`);
+  assert.ok(t.provider.snapshots.has(built.imageRef ?? ""));
+  assert.match(built.buildLog ?? "", /Loaded image: agent:latest/);
   assert.equal(JSON.stringify(versionView(built)).includes(built.imageRef ?? "?"), false);
+
+  const [start] = t.provider.starts;
+  assert.equal(start?.purpose, "prepare");
+  assert.equal(start?.keepSnapshots, true);
+  assert.deepEqual(
+    t.provider.writes.map((write) => write.path),
+    ["/home/user/image.tar"],
+  );
+  assert.deepEqual(t.provider.writes[0]?.body, BUNDLE);
+  const commands = t.provider.execs.map((exec) => exec.command);
+  assert.deepEqual(commands, [
+    "docker load -i /home/user/image.tar",
+    `docker tag 'agent:latest' ratel-agent:${t.version.id} && rm -f /home/user/image.tar`,
+  ]);
+  assert.deepEqual(t.provider.deleted, [start?.vmRef], "the prepare VM is deleted");
 });
 
 test("a second job for the same version builds nothing", async () => {
@@ -92,18 +108,24 @@ test("a second job for the same version builds nothing", async () => {
   await t.run();
   const { imageRef } = await t.read();
   assert.deepEqual(await t.run(), { status: "skipped" });
-  assert.equal(t.provider.builds.length, 1);
+  assert.equal(t.provider.starts.length, 1);
   assert.equal((await t.read()).imageRef, imageRef);
 });
 
-test("a failed install gives failed with a reason and a log", async () => {
-  const t = await setup({ install: ["exit 3"] });
+test("a failed load gives failed with the end of its output, and the VM is deleted", async () => {
+  const t = await setup();
+  t.provider.onExec = (_vm, { command }) =>
+    command.startsWith("docker load")
+      ? { exitCode: 1, stdout: "", stderr: "no luck: not a tarball\n", timedOut: false }
+      : undefined;
   await t.run();
   const failed = await t.read();
   assert.equal(failed.status, "failed");
-  assert.match(failed.reason ?? "", /install command 1 \(exit 3\) failed/);
+  assert.match(failed.reason ?? "", /loading the image failed with exit code 1\.\nno luck/);
   assert.match(failed.buildLog ?? "", /no luck/);
   assert.equal(failed.imageRef, null);
+  assert.equal(t.provider.vms.size, 0);
+  assert.equal(t.provider.snapshots.size, 0);
 });
 
 test("a wrong bundle hash fails the build", async () => {
@@ -118,23 +140,25 @@ test("a provider error fails the build, and its text is not shown", async () => 
   const t = await setup();
   const provider: SandboxProvider = {
     ...t.provider,
-    buildImage: async () => {
-      throw new Error("modal.com refused account-123");
+    startVm: async () => {
+      throw new Error("boat.dev refused account-123");
     },
   };
   await t.run({ provider });
   const failed = await t.read();
   assert.equal(failed.status, "failed");
-  assert.doesNotMatch(`${failed.reason}${failed.buildLog}`, /modal|account-123/i);
+  assert.doesNotMatch(`${failed.reason}${failed.buildLog}`, /boat|account-123/i);
 });
 
 test("a long log keeps its end", async () => {
   const t = await setup();
   const provider: SandboxProvider = {
     ...t.provider,
-    buildImage: async ({ log }) => {
-      for (let i = 0; i < 20_000; i++) log(`line ${i} \0 filler\n`);
-      return { imageRef: "im-1" };
+    exec: async (vmRef, request) => {
+      const result = await t.provider.exec(vmRef, request);
+      if (!request.command.startsWith("docker load")) return result;
+      const lines = Array.from({ length: 20_000 }, (_, i) => `line ${i} \0 filler\n`);
+      return { ...result, stdout: `${lines.join("")}${result.stdout}` };
     },
   };
   await t.run({ provider });
@@ -142,6 +166,7 @@ test("a long log keeps its end", async () => {
   assert.ok(log.length < 70_000);
   assert.match(log, /^\[the start of the log is cut\]/);
   assert.match(log, /line 19999/);
+  assert.equal((await t.read()).status, "ready");
 });
 
 test("with no provider the version stays unbuilt with the reason, and no call goes out", async () => {
@@ -165,7 +190,7 @@ test("with the flag off the version stays unbuilt", async () => {
   const t = await setup();
   assert.deepEqual(await t.run({ enabled: async () => false }), { status: "unbuilt" });
   assert.equal((await t.read()).reason, OFF_REASON);
-  assert.equal(t.provider.builds.length, 0);
+  assert.equal(t.provider.starts.length, 0);
 });
 
 test("a build of 12 minutes is not reaped, and a build with no heartbeat is", async () => {
@@ -191,7 +216,7 @@ test("a build of 12 minutes is not reaped, and a build with no heartbeat is", as
   let beat = () => {};
   const provider: SandboxProvider = {
     ...t.provider,
-    buildImage: async (request) => {
+    startVm: async (request) => {
       while (clock < start + 12 * 60_000) {
         clock += HEARTBEAT_MS;
         beat();
@@ -200,7 +225,7 @@ test("a build of 12 minutes is not reaped, and a build with no heartbeat is", as
         const since = new Date(clock - BUILD_STOPPED_MS);
         assert.equal(await t.builds.failStopped(since, STOPPED_REASON, new Date(clock)), 0);
       }
-      return t.provider.buildImage(request);
+      return t.provider.startVm(request);
     },
   };
   const result = await t.run({
@@ -242,7 +267,7 @@ test("a build that the provider never answers fails at its deadline", async () =
   const t = await setup();
   const provider: SandboxProvider = {
     ...createFakeProvider(),
-    buildImage: () => new Promise(() => {}),
+    startVm: () => new Promise(() => {}),
   };
   const result = await t.run({ provider, deadlineMs: 20 });
   assert.deepEqual(result, { status: "failed" });
@@ -257,7 +282,7 @@ async function* chunk(body: Buffer) {
   yield body;
 }
 
-test("the bundle opens when the provider reads it, and closes when the build breaks", async () => {
+test("the bundle opens after the VM starts, and closes when the write breaks", async () => {
   const t = await setup();
   const body = Readable.from([BUNDLE, BUNDLE]);
   let opened = 0;
@@ -270,14 +295,18 @@ test("the bundle opens when the provider reads it, and closes when the build bre
   };
   const before: number[] = [];
   const provider: SandboxProvider = {
-    ...createFakeProvider(),
-    async buildImage(request) {
+    ...t.provider,
+    async startVm(request) {
       before.push(opened);
-      for await (const _ of request.bundle.body) throw new Error("lost");
-      return { imageRef: "im-x" };
+      return t.provider.startVm(request);
+    },
+    async writeFile(_vmRef, request) {
+      if (request.body instanceof Uint8Array) return;
+      for await (const _ of request.body) throw new Error("lost");
     },
   };
   assert.deepEqual(await t.run({ bundles, provider }), { status: "failed" });
   assert.deepEqual(before, [0]);
   assert.equal(body.destroyed, true);
+  assert.equal(t.provider.vms.size, 0);
 });

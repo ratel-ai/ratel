@@ -127,7 +127,7 @@ test("with no provider the page says not configured, with the push command", () 
 test("no text of the page names the provider", () => {
   for (const [name, state] of Object.entries(STATES)) {
     assert.match(visibleText(html(state)), /Ratel sandbox/, name);
-    assert.doesNotMatch(html(state), /modal/i, name);
+    assert.doesNotMatch(html(state), /boat/i, name);
   }
 });
 

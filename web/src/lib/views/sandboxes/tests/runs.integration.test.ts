@@ -65,20 +65,8 @@ async function setup(limitOverrides: Parameters<typeof createInMemoryUsageLimits
     const builds = createDrizzleBuildStore(db);
     await versions.markUploaded(PROJECT_ID, versionId);
     await builds.claim(PROJECT_ID, versionId, new Date());
-    const { imageRef } = await provider.buildImage({
-      versionId,
-      projectId: PROJECT_ID,
-      base: MANIFEST.base,
-      install: [],
-      entry: MANIFEST.entry,
-      bundle: {
-        ...bundleInfo(bundle),
-        body: (async function* () {
-          yield bundle;
-        })(),
-      },
-      log: () => {},
-    });
+    const imageRef = `rv-${versionId}`;
+    provider.snapshots.set(imageRef, new Map());
     await builds.finish(versionId, { status: "ready", imageRef, log: "" }, new Date());
   };
   let clock = Date.now();
@@ -109,7 +97,15 @@ async function setup(limitOverrides: Parameters<typeof createInMemoryUsageLimits
     assert.ok(result.ok);
     return result.run;
   };
-  const envOf = (index = 0) => provider.starts[index]?.env ?? {};
+  /** The variables of the index-th run VM, from the file that the start wrote. */
+  const envOf = (index = 0) => envIn(provider.starts[index]?.vmRef ?? "");
+  const envIn = (vmRef: string) =>
+    Object.fromEntries(
+      (provider.fileOf(vmRef, "/tmp/run.env") ?? "")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+    ) as Record<string, string>;
   const resultDeps: ResultApiDeps = {
     ...deps,
     offForAll: () => false,
@@ -157,6 +153,7 @@ async function setup(limitOverrides: Parameters<typeof createInMemoryUsageLimits
     start,
     started,
     envOf,
+    envIn,
     post,
     sweep,
     read,
@@ -182,9 +179,9 @@ test("a run goes queued, running, completed, and stores the output and the tool 
   let during = "";
   const provider: SandboxProvider = {
     ...t.provider,
-    startInstance: async (request) => {
-      during = (await t.read(request.runId)).status;
-      return t.provider.startInstance(request);
+    startVm: async (request) => {
+      during = (await t.read(request.labels["ratel-run"] ?? "")).status;
+      return t.provider.startVm(request);
     },
   };
   const run = await t.started({ provider });
@@ -204,6 +201,18 @@ test("the instance gets the input, the address, a token and only the declared se
   await t.makeReady();
   const run = await t.started();
   const env = t.envOf();
+  const [start] = t.provider.starts;
+  assert.equal(start?.purpose, "run");
+  assert.equal(start?.fromSnapshot, `rv-${t.versionId}`);
+  assert.equal(start?.keepSnapshots, false);
+  assert.equal(start?.network.inbound, "closed");
+  const commands = t.provider.execs.map((exec) => exec.command).join("\n");
+  assert.match(
+    commands,
+    new RegExp(`docker run -d --env-file /tmp/run.env ratel-agent:${t.versionId}`),
+  );
+  assert.ok(!commands.includes(SECRET), "no secret value is on a command line");
+  assert.ok(!commands.includes(env.RATEL_RUN_TOKEN ?? "?"));
   assert.equal(env.OPENAI_API_KEY, `${SECRET}-OPENAI_API_KEY`);
   assert.equal(env.NOT_DECLARED, undefined);
   assert.equal(env.RATEL_URL, "https://ratel.example");
@@ -229,9 +238,9 @@ test("each run starts a new instance, and the instance is stopped after the resu
   assert.notEqual(first.instanceRef, second.instanceRef);
   assert.equal(t.provider.starts.length, 2);
   await t.post(first.id, t.envOf(0).RATEL_RUN_TOKEN ?? "");
-  assert.deepEqual(t.provider.stops, [first.instanceRef]);
+  assert.deepEqual(t.provider.deleted, [first.instanceRef]);
   await t.post(second.id, t.envOf(1).RATEL_RUN_TOKEN ?? "");
-  assert.deepEqual(t.provider.stops, [first.instanceRef, second.instanceRef]);
+  assert.deepEqual(t.provider.deleted, [first.instanceRef, second.instanceRef]);
   assert.equal(t.provider.running.size, 0);
   assert.ok((await t.read(second.id)).instanceStoppedAt);
   assert.deepEqual(await t.sweep(), { endedRuns: 0, stoppedInstances: 0, sandboxRunErrors: 0 });
@@ -253,13 +262,13 @@ test("a run with no result after the timeout is timed_out and its instance is st
   await t.makeReady();
   const run = await t.started();
   assert.equal(run.timeoutS, 1800);
-  assert.equal(t.provider.starts[0]?.timeoutS, 1860);
+  assert.equal(t.provider.starts[0]?.ttlS, 1860);
   t.wait(29 * 60_000);
   assert.equal((await t.sweep()).endedRuns, 0);
   t.wait(60_000);
   assert.deepEqual(await t.sweep(), { endedRuns: 1, stoppedInstances: 1, sandboxRunErrors: 0 });
   assert.equal((await t.read(run.id)).status, "timed_out");
-  assert.deepEqual(t.provider.stops, [run.instanceRef]);
+  assert.deepEqual(t.provider.deleted, [run.instanceRef]);
   assert.equal(t.provider.running.size, 0);
   assert.equal(await t.post(run.id, t.envOf().RATEL_RUN_TOKEN ?? ""), 401, "too late");
 });
@@ -268,7 +277,7 @@ test("an instance that ends with no result gives infra_error", async () => {
   const t = await setup();
   await t.makeReady();
   const run = await t.started();
-  t.provider.exit(run.instanceRef ?? "", 1);
+  t.provider.exit(run.instanceRef ?? "");
   await t.sweep();
   assert.equal((await t.read(run.id)).status, "infra_error");
 });
@@ -278,14 +287,14 @@ test("a provider error at start gives infra_error, not failed, and records no us
   await t.makeReady();
   const provider: SandboxProvider = {
     ...t.provider,
-    startInstance: async () => {
-      throw new Error("modal said no");
+    startVm: async () => {
+      throw new Error("boat said no");
     },
   };
   const result = await t.start({ provider });
   assert.ok(result.ok);
   assert.equal(result.run.status, "infra_error");
-  assert.doesNotMatch(result.run.reason ?? "", /modal/i);
+  assert.doesNotMatch(result.run.reason ?? "", /boat/i);
   assert.deepEqual(t.limits.records, []);
 });
 
@@ -309,7 +318,7 @@ test("an instance that did not stop is stopped by the next sweep", async () => {
   const run = await t.started();
   const broken: SandboxProvider = {
     ...t.provider,
-    stopInstance: async () => {
+    deleteVm: async () => {
       throw new Error("no answer");
     },
   };
@@ -325,10 +334,13 @@ test("a result that comes before the start returns still stops the instance", as
   await t.makeReady();
   const provider: SandboxProvider = {
     ...t.provider,
-    startInstance: async (request) => {
-      const instance = await t.provider.startInstance(request);
-      await t.post(request.runId, request.env.RATEL_RUN_TOKEN ?? "");
-      return instance;
+    exec: async (vmRef, request) => {
+      const result = await t.provider.exec(vmRef, request);
+      if (request.command.startsWith("docker run")) {
+        const run = t.provider.vms.get(vmRef)?.labels["ratel-run"] ?? "";
+        await t.post(run, t.envIn(vmRef).RATEL_RUN_TOKEN ?? "");
+      }
+      return result;
     },
   };
   const run = await t.started({ provider });
@@ -348,7 +360,7 @@ test("the run token cannot post a result for another run", async () => {
   assert.equal(await t.post(first.id, "rtl_run_other"), 401);
   assert.equal(await t.post(first.id, token), 202);
   assert.equal(await t.post(first.id, token), 401, "a token works for one result");
-  assert.equal(t.provider.stops.length, 1);
+  assert.equal(t.provider.deleted.length, 1);
 });
 
 test("the run token reads no API: only trace ingest of its project knows it, while the run lives", async () => {
@@ -517,7 +529,7 @@ test("an instance whose start is not stored is stopped", async () => {
   };
   await assert.rejects(t.start({ runs }), /database lost/);
   assert.equal(t.provider.starts.length, 1);
-  assert.equal(t.provider.stops.length, 1);
+  assert.equal(t.provider.deleted.length, 1);
   assert.equal(t.provider.running.size, 0);
 });
 
@@ -544,7 +556,7 @@ test("the instances of a deleted project are stopped by the sweep", async () => 
 
   const broken: SandboxProvider = {
     ...t.provider,
-    stopInstance: async () => {
+    deleteVm: async () => {
       throw new Error("no answer");
     },
   };
@@ -561,13 +573,13 @@ test("an instance that starts after the delete of its project is stopped", async
   let deleted = false;
   const provider: SandboxProvider = {
     ...t.provider,
-    startInstance: async (request) => {
-      const made = await t.provider.startInstance(request);
+    startVm: async (request) => {
+      const made = await t.provider.startVm(request);
       await t.client.exec(`delete from projects where id = '${PROJECT_ID}'`);
       deleted = true;
       return made;
     },
-    stopInstance: async () => {
+    deleteVm: async () => {
       throw new Error("no answer");
     },
   };
@@ -588,10 +600,10 @@ test("active runs of other projects do not hide an ended run from the sweep", as
   const broken = async () => {
     throw new Error("no answer");
   };
-  const provider = { ...t.provider, stopInstance: broken };
+  const provider = { ...t.provider, deleteVm: broken };
   await t.post(run.id, t.envOf().RATEL_RUN_TOKEN ?? "", undefined, { provider });
   assert.equal(t.provider.running.size, 1);
-  const busy = { ...t.provider, status: async () => ({ state: "running" as const }) };
+  const busy = { ...t.provider, vmStatus: async () => ({ state: "running" as const }) };
   await sweepRuns({ ...t.deps, provider: busy, organizationIdOf: async () => ORGANIZATION_ID });
   assert.equal(t.provider.running.size, 0);
 });

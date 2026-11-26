@@ -13,7 +13,7 @@ import {
   type ToolFixture,
 } from "./domain/run";
 import type { SandboxVersion } from "./domain/version";
-import { NOT_CONFIGURED_REASON } from "./image-build-job";
+import { imageTag, NOT_CONFIGURED_REASON } from "./image-build-job";
 import type { RunStore } from "./ports/run-store";
 import type { SandboxProvider } from "./ports/sandbox-provider";
 import type { SecretStore } from "./ports/secret-store";
@@ -56,6 +56,8 @@ type RefusalReason =
 /** The provider ends an instance a little after the run's own timeout, if the sweep does not. */
 const INSTANCE_GRACE_S = 60;
 const START_REASON = "The instance did not start. Run it again.";
+const ENV_PATH = "/tmp/run.env";
+const CONTAINER_START_S = 120;
 
 const logger = getLogger("sandboxes/runs");
 
@@ -160,7 +162,7 @@ export async function stopInstanceOf(
   const { instanceRef } = run;
   if (!instanceRef || !provider) return false;
   try {
-    await withFeatureSpan("sandboxes", "stop_instance", () => provider.stopInstance(instanceRef), {
+    await withFeatureSpan("sandboxes", "stop_instance", () => provider.deleteVm(instanceRef), {
       attributes: { "project.id": run.projectId, "sandbox.run_id": run.id },
     });
     await deps.runs.markInstanceStopped(run.id, deps.now());
@@ -182,19 +184,12 @@ async function launch(
   const attributes = { "project.id": projectId, "sandbox.run_id": id };
   let instanceRef: string;
   try {
-    ({ instanceRef } = await withFeatureSpan(
+    instanceRef = await withFeatureSpan(
       "sandboxes",
       "start_instance",
-      () =>
-        provider.startInstance({
-          runId: id,
-          projectId,
-          imageRef,
-          env,
-          timeoutS: timeoutS + INSTANCE_GRACE_S,
-        }),
+      () => startContainer(run, imageRef, provider, env, timeoutS + INSTANCE_GRACE_S),
       { attributes },
-    ));
+    );
   } catch (error) {
     logger.error({ project_id: projectId, run_id: id, err: error }, "instance not started");
     await deps.runs.finish(id, { status: "infra_error", reason: START_REASON }, deps.now());
@@ -210,6 +205,60 @@ async function launch(
   }
   logger.info({ project_id: projectId, run_id: id }, "sandbox run started");
   if (status !== "running") await stopInstanceOf({ id, projectId, instanceRef }, deps);
+}
+
+/**
+ * Starts a run VM from the snapshot of the version and the agent's container in it. The VM is the
+ * instance of the run. The variables go in a file, never on a command line: the service keeps
+ * command lines. A VM whose container does not start is deleted.
+ */
+async function startContainer(
+  run: SandboxRun,
+  imageRef: string,
+  provider: SandboxProvider,
+  env: Record<string, string>,
+  ttlS: number,
+): Promise<string> {
+  const { vmRef } = await provider.startVm({
+    projectId: run.projectId,
+    purpose: "run",
+    fromSnapshot: imageRef,
+    ttlS,
+    labels: { "ratel-run": run.id },
+    // Outbound is open: the agent calls its model and posts its result to RATEL_URL. No caller
+    // needs to reach the VM, so inbound is closed. The variables file is small, so it goes
+    // inline: an upload URL does not work on a closed VM.
+    network: { inbound: "closed", outbound: { mode: "open" } },
+    keepSnapshots: false,
+  });
+  try {
+    const body = Buffer.from(envFile(env));
+    await provider.writeFile(vmRef, { path: ENV_PATH, body, size: body.length });
+    const started = await provider.exec(vmRef, {
+      command: `docker run -d --env-file ${ENV_PATH} ${imageTag(run.versionId)}; code=$?; rm -f ${ENV_PATH}; exit $code`,
+      timeoutS: CONTAINER_START_S,
+    });
+    if (started.exitCode !== 0) {
+      throw new Error(`the container did not start (exit code ${started.exitCode})`);
+    }
+    return vmRef;
+  } catch (error) {
+    await provider.deleteVm(vmRef).catch((failure: unknown) => {
+      // The TTL of the VM still ends it.
+      logger.warn({ project_id: run.projectId, run_id: run.id, err: failure }, "vm not deleted");
+    });
+    throw error;
+  }
+}
+
+/** The variables in the `--env-file` form of Docker: one `NAME=value` a line. */
+function envFile(env: Record<string, string>): string {
+  const lines = Object.entries(env).map(([name, value]) => {
+    // The form has no way to hold a line break. The message names the variable, not its value.
+    if (/[\r\n]/.test(value)) throw new Error(`the variable ${name} holds a line break`);
+    return `${name}=${value}\n`;
+  });
+  return lines.join("");
 }
 
 /** The clear values of the secrets that the manifest names, and no other secret. */

@@ -115,7 +115,7 @@ test("a second set replaces the value", async () => {
 
 test("a reserved prefix and a name that is not one are refused", async () => {
   const t = await setup();
-  for (const name of ["RATEL_URL", "MODAL_TOKEN_ID", "AWS_REGION", "lower", "A-B", "1A", ""]) {
+  for (const name of ["RATEL_URL", "BOAT_API_KEY", "AWS_REGION", "lower", "A-B", "1A", ""]) {
     assert.equal((await t.set(name)).status, 400, name);
   }
   assert.match((await t.set("RATEL_URL")).body.message, /reserved/);

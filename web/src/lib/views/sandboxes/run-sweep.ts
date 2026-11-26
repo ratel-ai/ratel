@@ -79,12 +79,8 @@ async function endIfOver(run: OpenRun, deps: SweepDeps): Promise<boolean> {
     return true;
   }
   if (!deps.provider || !run.instanceRef) return false;
-  const status = await deps.provider.status(run.instanceRef);
-  if (status.state === "running") return false;
-  await deps.runs.finish(
-    run.id,
-    status.reason === "timeout" ? timedOut : { status: "infra_error", reason: NO_RESULT_REASON },
-    now,
-  );
+  const { state } = await deps.provider.vmStatus(run.instanceRef);
+  if (state === "running" || state === "starting") return false;
+  await deps.runs.finish(run.id, { status: "infra_error", reason: NO_RESULT_REASON }, now);
   return true;
 }

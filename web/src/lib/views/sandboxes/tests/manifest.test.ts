@@ -27,7 +27,7 @@ for (const kind of ["valid", "invalid"] as const) {
 }
 
 test("the refusal of a reserved secret name has no name of a provider", () => {
-  for (const name of ["RATEL_URL", "MODAL_TOKEN_ID", "AWS_REGION"]) {
+  for (const name of ["RATEL_URL", "BOAT_API_KEY", "AWS_REGION"]) {
     const refusal = secretNameSchema.safeParse(name);
     assert.ok(!refusal.success);
     assert.equal(

@@ -1,3 +1,4 @@
+import { createHash, type Hash } from "node:crypto";
 import { z } from "zod";
 import type { BundleStore } from "@/lib/contracts/bundle-store";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
@@ -31,6 +32,12 @@ const TOO_LONG_REASON = "The build took too long. Push again.";
 const SERVICE_REASON = "The build service did not work. Push again.";
 /** The end of the log is the part that explains a failure. */
 const MAX_LOG_CHARS = 64_000;
+/** The end of a failed step's output that goes in the reason. */
+const MAX_REASON_OUTPUT_CHARS = 2_000;
+const IMAGE_PATH = "/home/user/image.tar";
+const STEP_TIMEOUT_S = 600;
+/** A prepare VM lives a little longer than the deadline of its build, if the job does not delete it. */
+const PREPARE_GRACE_S = 300;
 
 const payloadSchema = z.object({ versionId: z.uuid() });
 const logger = getLogger("sandboxes/image-build");
@@ -73,25 +80,13 @@ async function build(
   provider: SandboxProvider,
   { bundles, deadlineMs = BUILD_DEADLINE_MS }: ImageBuildDeps,
 ): Promise<BuildOutcome> {
-  const { id, projectId, manifest, bundle } = version;
+  const { id, projectId } = version;
   const log = createLog();
   try {
     const { imageRef } = await withFeatureSpan(
       "sandboxes",
       "build_image",
-      () =>
-        within(
-          deadlineMs,
-          provider.buildImage({
-            versionId: id,
-            projectId,
-            base: manifest.base,
-            install: manifest.install,
-            entry: manifest.entry,
-            bundle: { ...bundle, body: bodyOf(version, bundles) },
-            log: log.add,
-          }),
-        ),
+      () => within(deadlineMs, prepare(version, provider, bundles, deadlineMs, log.add)),
       { attributes: { "project.id": projectId, "sandbox.version_id": id } },
     );
     return { status: "ready", imageRef, log: log.text() };
@@ -102,6 +97,88 @@ async function build(
     logger.error({ project_id: projectId, version_id: id, err: error }, "sandbox build broke");
     return { status: "failed", reason: SERVICE_REASON, log: log.text() };
   }
+}
+
+/**
+ * Loads the pushed image tarball into a prepare VM, tags it and saves the VM as a snapshot: the
+ * snapshot is the image reference. The VM is deleted at the end.
+ */
+async function prepare(
+  version: SandboxVersion,
+  provider: SandboxProvider,
+  bundles: BundleStore,
+  deadlineMs: number,
+  log: (text: string) => void,
+): Promise<{ imageRef: string }> {
+  const { vmRef } = await provider.startVm({
+    projectId: version.projectId,
+    purpose: "prepare",
+    ttlS: Math.ceil(deadlineMs / 1000) + PREPARE_GRACE_S,
+    labels: { "ratel-version": version.id },
+    network: { inbound: "open", outbound: { mode: "open" } },
+    keepSnapshots: true,
+  });
+  try {
+    log("> writing the image\n");
+    const body = await bundles.open(bundleKey(version));
+    if (!body) throw new BuildFailed("The bundle is not there. Push again.");
+    const hash = createHash("sha256");
+    await provider.writeFile(vmRef, {
+      path: IMAGE_PATH,
+      body: hashing(body, hash),
+      size: version.bundle.bytes,
+    });
+    if (hash.digest("hex") !== version.bundle.sha256) {
+      throw new BuildFailed("checking the bundle failed: it is not the pushed bundle. Push again.");
+    }
+    const loaded = await step(
+      provider,
+      vmRef,
+      "loading the image",
+      `docker load -i ${IMAGE_PATH}`,
+      log,
+    );
+    const image = /^Loaded image(?: ID)?: (\S+)$/m.exec(loaded)?.[1];
+    if (!image) throw new BuildFailed("loading the image failed: the tarball holds no image.");
+    const tag = imageTag(version.id);
+    await step(
+      provider,
+      vmRef,
+      "tagging the image",
+      `docker tag ${shellQuote(image)} ${tag} && rm -f ${IMAGE_PATH}`,
+      log,
+    );
+    log("> saving the image\n");
+    const { snapshotRef } = await provider.saveSnapshot(vmRef, `rv-${version.id}`);
+    return { imageRef: snapshotRef };
+  } finally {
+    await provider.deleteVm(vmRef).catch((error: unknown) => {
+      // The TTL of the VM still ends it.
+      logger.warn({ version_id: version.id, err: error }, "prepare vm not deleted");
+    });
+  }
+}
+
+/** Runs one step of a build and logs its output. A failed step fails the build with its output. */
+async function step(
+  provider: SandboxProvider,
+  vmRef: string,
+  label: string,
+  command: string,
+  log: (text: string) => void,
+): Promise<string> {
+  log(`> ${label}\n`);
+  const result = await provider.exec(vmRef, { command, timeoutS: STEP_TIMEOUT_S });
+  const output = `${result.stdout}${result.stderr}`;
+  log(output);
+  if (result.exitCode === 0) return output;
+  const why = result.timedOut ? "took too long" : `failed with exit code ${result.exitCode}`;
+  throw new BuildFailed(`${label} ${why}.\n${output.slice(-MAX_REASON_OUTPUT_CHARS)}`.trimEnd());
+}
+
+/** The Docker tag of the image of a version in its VM. */
+export function imageTag(versionId: string): string {
+  return `ratel-agent:${versionId}`;
 }
 
 async function within<T>(ms: number, work: Promise<T>): Promise<T> {
@@ -116,11 +193,15 @@ async function within<T>(ms: number, work: Promise<T>): Promise<T> {
   }
 }
 
-/** Opens the bundle when the provider reads it, so no connection waits for the base image. */
-async function* bodyOf(version: SandboxVersion, bundles: BundleStore) {
-  const body = await bundles.open(bundleKey(version));
-  if (!body) throw new BuildFailed("The bundle is not there. Push again.");
-  yield* body;
+async function* hashing(body: AsyncIterable<Uint8Array>, hash: Hash) {
+  for await (const chunk of body) {
+    hash.update(chunk);
+    yield chunk;
+  }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
 function createLog() {

@@ -242,7 +242,7 @@ test("with no provider a push is refused with the reason, and the reason does no
   const body = await read(refused);
   assert.equal(body.error, "not_configured");
   assert.match(body.message, /not configured/);
-  assert.doesNotMatch(body.message, /modal/i);
+  assert.doesNotMatch(body.message, /boat/i);
 });
 
 test("a body that is not a push is refused", async () => {
