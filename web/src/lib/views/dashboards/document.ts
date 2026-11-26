@@ -13,6 +13,7 @@ import {
   MAX_WIDGETS,
   WIDGET_CHARTS,
   type Widget,
+  type WidgetQuery,
 } from "@/lib/views/dashboards/types";
 import { queryName, scorersOfMetric } from "@/lib/views/dashboards/widget";
 import type { PickerScorer } from "@/lib/views/scorers/picker";
@@ -242,7 +243,7 @@ function resolved(
     if (!scorer) missing.push(name);
     return scorer ? { id: scorer.id } : null;
   };
-  const read = (): Query => {
+  const read = (): WidgetQuery => {
     switch (query.kind) {
       case "metric":
       case "geography": {

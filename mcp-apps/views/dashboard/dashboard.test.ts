@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { QUERY_KINDS } from "@/lib/contracts/query";
+import { WIDGET_KINDS } from "@/lib/views/dashboards/types";
 import { readToolResult } from "../../shell/state";
 import type { ViewFixture } from "../../shell/types";
 import fixtures, { KINDS } from "./fixtures";
@@ -25,10 +25,10 @@ const SAYS: Readonly<Record<string, RegExp>> = {
   geography: /1,060 of 1,234 traces have a location/,
 };
 
-test("the dashboard view renders a widget of each kind", () => {
+test("the dashboard view renders a widget of each kind a widget can hold", () => {
   assert.deepEqual(
     [...new Set(Object.values(KINDS).map(({ widget }) => widget?.query.kind))].sort(),
-    [...QUERY_KINDS].sort(),
+    [...WIDGET_KINDS].sort(),
   );
   const html = render(fixtures.get_dashboard);
   for (const [id, says] of Object.entries(SAYS)) {

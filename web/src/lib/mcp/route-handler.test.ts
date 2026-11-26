@@ -38,6 +38,8 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     globalLimiter: createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 }),
     trackServerEvent: (async () => undefined) as never,
     launchAccess: async () => true,
+    // The pinned surface is without the RQL tools: route-handler.rql.test.ts has them.
+    customMonitoring: async () => false,
     ...overrides,
   };
 }

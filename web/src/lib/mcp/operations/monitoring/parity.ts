@@ -94,6 +94,16 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "app/(console)/org/[orgSlug]/settings/slack/actions.ts#changeSlackAppAction": CLIENT_SECRET,
 };
 
+/**
+ * Operations that no console action has yet, and why. `parity.test.ts` checks that each one is an
+ * operation. When the console gets the page, its actions go in `ACTION_FILES` and `PARITY`, and the
+ * entry here goes.
+ */
+export const MCP_ONLY: Readonly<Record<string, string>> = {
+  describe_rql_schema: "the console has no RQL page yet",
+  run_rql: "the console has no RQL page yet",
+};
+
 /** Each change a module's action takes (its `action: "…"`), and the operation's own `action`, or the operation it is alone. */
 export const CHANGES: Readonly<
   Record<

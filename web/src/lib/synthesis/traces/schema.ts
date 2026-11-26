@@ -68,6 +68,10 @@ export const otelTraceSummaries = pgTable(
     // spans ingest marked (`lib/ingest/geo`); no address and no coordinate is ever stored.
     geoCountry: text("geo_country"),
     geoRegion: text("geo_region"),
+    // RTL-321: the trace's session and end user, the first non-null `otel_spans`
+    // value in canonical order (the root first). Null when no span has one.
+    sessionId: text("session_id"),
+    endUserId: text("end_user_id"),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -80,6 +84,13 @@ export const otelTraceSummaries = pgTable(
     primaryKey({ columns: [t.projectId, t.traceId] }),
     // The KPI/daily range scan.
     index("otel_trace_summaries_project_started_idx").on(t.projectId, t.startedAt),
+    // RTL-321: a session's and an end user's traces in time order.
+    index("otel_trace_summaries_project_session_started_idx")
+      .on(t.projectId, t.sessionId, t.startedAt)
+      .where(sql`${t.sessionId} is not null`),
+    index("otel_trace_summaries_project_end_user_started_idx")
+      .on(t.projectId, t.endUserId, t.startedAt)
+      .where(sql`${t.endUserId} is not null`),
     // The retention sweep's bounded batch.
     index("otel_trace_summaries_spans_max_received_idx").on(t.spansMaxReceivedAt),
     // The scorers' sweep: a project's summaries in the order they were written.
