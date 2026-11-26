@@ -26,8 +26,6 @@ export default async function ComparePage({
   searchParams: Promise<{ baseline?: string | string[] }>;
 }) {
   const { projectId, experimentId } = await params;
-  const asked = (await searchParams).baseline;
-  const chosenId = typeof asked === "string" && UUID.test(asked) ? asked : null;
   // Next renders a page next to its layout: the layout's 404 does not stop this data.
   if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
@@ -40,6 +38,8 @@ export default async function ComparePage({
   const session = await getSessionContext();
   if (!session) redirect("/");
   const { project } = await getProjectScope(projectId);
+  const asked = (await searchParams).baseline;
+  const chosenId = typeof asked === "string" && UUID.test(asked) ? asked : null;
   const loaded = await withFeatureSpan(
     "evals",
     "load_comparison",
