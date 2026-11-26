@@ -56,7 +56,7 @@ const run: RunRow = {
   status: "completed",
   reason: null,
   errorCode: null,
-  logs: "",
+  logs: "agent booted\nrefund_order simulated\n",
   input: { message: "refund it" },
   params: {},
   result: {
@@ -173,7 +173,15 @@ test("the run shows the output first, then the tool calls with their mode, the n
   ]) {
     assert.ok(text.includes(words), words);
   }
-  assert.ok(text.indexOf("It is refunded.") < text.indexOf("Tool calls"), "the output is first");
+  // The required order: output, tool calls, logs, duration, cost, trace link.
+  const order = ["It is refunded.", "Tool calls", "Logs", "Duration", "Cost", "Open the trace"];
+  const at = order.map((words) => text.indexOf(words));
+  assert.ok(!at.includes(-1), `every part is there: ${at}`);
+  assert.deepEqual(
+    at,
+    [...at].sort((left, right) => left - right),
+    "the parts are in order",
+  );
   assert.ok(page.includes(`href="/project/${PROJECT_ID}/traces/${"c".repeat(32)}"`));
 });
 

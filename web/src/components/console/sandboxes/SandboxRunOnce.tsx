@@ -271,7 +271,7 @@ function VersionFacts({ version }: { version: VersionRow }) {
   );
 }
 
-/** The output first, then the tool calls, the logs and the numbers of the run. */
+/** The output first, then the tool calls, the logs, the duration, the cost and the trace link. */
 function RunResult({
   projectId,
   run,
@@ -291,19 +291,11 @@ function RunResult({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Badge tone={status.tone}>{status.label}</Badge>
         <span className="text-xs text-fg-subtle">{formatRelativeTime(run.createdAt, now)}</span>
-        <span className="ml-auto flex items-center gap-3">
-          {run.traceId ? (
-            <Link
-              href={`/project/${projectId}/traces/${run.traceId}`}
-              className="text-ui text-accent-fg underline-offset-2 hover:underline"
-            >
-              Open the trace
-            </Link>
-          ) : null}
-          {canSave && result?.status === "completed" ? (
+        {canSave && result?.status === "completed" ? (
+          <span className="ml-auto">
             <SaveAsCase projectId={projectId} run={run} />
-          ) : null}
-        </span>
+          </span>
+        ) : null}
       </div>
       {run.reason && !result?.error ? <p className="text-ui text-fg-muted">{run.reason}</p> : null}
       {result?.error ? (
@@ -317,27 +309,7 @@ function RunResult({
       {!result && (run.status === "queued" || run.status === "running") ? (
         <p className="text-ui text-fg-muted">The agent is running. The output shows here.</p>
       ) : null}
-      {usage ? (
-        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
-          <Fact label="Duration" value={`${formatSeconds(usage.durationMs)}`} />
-          <Fact
-            label="Cost"
-            value={usage.costUsd === undefined ? "Not reported" : formatUsd(usage.costUsd)}
-          />
-          {usage.inputTokens !== undefined || usage.outputTokens !== undefined ? (
-            <Fact
-              label="Tokens"
-              value={`${usage.inputTokens ?? 0} in · ${usage.outputTokens ?? 0} out`}
-            />
-          ) : null}
-        </dl>
-      ) : null}
       {result ? <ToolCalls calls={result.toolCalls} /> : null}
-      <Disclosure title="Input and params">
-        <pre className="max-h-60 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
-          {JSON.stringify({ input: run.input, params: run.params }, null, 2)}
-        </pre>
-      </Disclosure>
       {run.logs ? (
         <Disclosure title="Logs">
           <pre className="max-h-80 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
@@ -345,6 +317,38 @@ function RunResult({
           </pre>
         </Disclosure>
       ) : null}
+      {usage || run.traceId ? (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-line pt-3 text-xs">
+          {usage ? (
+            <dl className="flex flex-wrap gap-x-6 gap-y-1">
+              <Fact label="Duration" value={`${formatSeconds(usage.durationMs)}`} />
+              <Fact
+                label="Cost"
+                value={usage.costUsd === undefined ? "Not reported" : formatUsd(usage.costUsd)}
+              />
+              {usage.inputTokens !== undefined || usage.outputTokens !== undefined ? (
+                <Fact
+                  label="Tokens"
+                  value={`${usage.inputTokens ?? 0} in · ${usage.outputTokens ?? 0} out`}
+                />
+              ) : null}
+            </dl>
+          ) : null}
+          {run.traceId ? (
+            <Link
+              href={`/project/${projectId}/traces/${run.traceId}`}
+              className="ml-auto text-ui text-accent-fg underline-offset-2 hover:underline"
+            >
+              Open the trace
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
+      <Disclosure title="Input and params">
+        <pre className="max-h-60 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
+          {JSON.stringify({ input: run.input, params: run.params }, null, 2)}
+        </pre>
+      </Disclosure>
     </div>
   );
 }
