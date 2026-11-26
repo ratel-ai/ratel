@@ -1,6 +1,7 @@
 # `lib/synthesis/rql`
 
-The RQL compiler ([ADR-0011](../../../../../docs/adr/0011-rql-query-language.md)): RQL text to
+RQL (Ratel Query Language) is Ratel's read-only query language over trace data. The RQL compiler
+([ADR-0011](../../../../../docs/adr/0011-rql-query-language.md)): RQL text to
 Postgres SQL over the `rql` views with bound parameters, or to an error with a fix. The compiler
 has no database access. The runner (`run.ts`) runs a compiled query on the read-only path.
 `query.ts` makes RQL kind `sql` of the query object. The module has no background work and no

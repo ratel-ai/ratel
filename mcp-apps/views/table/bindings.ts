@@ -9,7 +9,7 @@ export const tableBindings: McpAppBinding[] = [{ tool: "run_rql" }];
 
 const view: ViewBindings = {
   title: "Table",
-  description: "The rows of an RQL query: one column for each value the query selects.",
+  description: "The rows of an RQL (Ratel Query Language) query: one column for each value the query selects.",
   bindings: tableBindings,
 };
 

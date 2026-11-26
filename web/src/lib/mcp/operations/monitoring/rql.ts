@@ -41,7 +41,7 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
       domain: "observability",
       title: "Describe the RQL schema",
       description:
-        "Gives RQL, the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users), their columns, the functions, the operators, the limits, the rules and example queries. Call it before run_rql.",
+        "Gives RQL (Ratel Query Language), the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users), their columns, the functions, the operators, the limits, the rules and example queries. Call it before run_rql.",
       keywords: ["rql schema", "rql tables", "query language"],
       scope: "project",
       mutates: false,
@@ -59,7 +59,7 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
       domain: "observability",
       title: "Run an RQL query",
       description:
-        "Runs one RQL SELECT over the trace data of the project and gives a table: the columns, the rows and a cut mark. describe_rql_schema gives the tables and the rules. An error gives a code, a message and a fix.",
+        "Runs one RQL (Ratel Query Language) SELECT over the trace data of the project and gives a table: the columns, the rows and a cut mark. describe_rql_schema gives the tables and the rules. An error gives a code, a message and a fix.",
       keywords: ["rql", "run rql", "sql over traces", "ad hoc query"],
       scope: "project",
       mutates: false,

@@ -45,7 +45,7 @@ fails for an action of the page that is not in it.
 
 ## RQL through MCP
 
-RQL (`synthesis/rql`) answers a trace question that no query kind has. Two tools in
+RQL (Ratel Query Language, `synthesis/rql`) answers a trace question that no query kind has. Two tools in
 `operations/monitoring/rql.ts` give it to an agent, behind the `customMonitoring` flag:
 
 - `describe_rql_schema` gives `describeRqlSchema()`: the tables (`events`, `traces`, `scores`,

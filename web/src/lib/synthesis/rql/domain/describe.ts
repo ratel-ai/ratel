@@ -28,6 +28,7 @@ export interface RqlSchemaDescription {
 }
 
 const RULES = [
+  "RQL (Ratel Query Language) is a read-only query language over the trace data of one project.",
   "Send one SELECT from one table: select <columns> from <table> [where] [group by] [having] [order by] [limit].",
   `Every query reads a window of time: by default the last ${RQL_LIMITS.defaultWindowHours} hours, at most ${RQL_LIMITS.maxWindowDays} days. The caller of the tool gives the window, not the query. A time filter in WHERE narrows it.`,
   "For events, traces and scores the window applies to each row. For sessions and users the window applies to their traces, before the totals.",

@@ -1,8 +1,8 @@
-# 11. RQL: a neutral read-only query language, behind two walls
+# 11. RQL (Ratel Query Language): a neutral read-only query language, behind two walls
 
 ## Status
 
-Accepted. The compiler, the views, the role, the runner (`web/src/lib/synthesis/rql`) and the MCP
+Accepted. RQL is the Ratel Query Language, Ratel's read-only query language over trace data. The compiler, the views, the role, the runner (`web/src/lib/synthesis/rql`) and the MCP
 tools `describe_rql_schema` and `run_rql` are in place, behind `customMonitoring`
 (`FF_CUSTOM_MONITORING`, off by default), the flag of custom monitoring: RQL has no flag of its own.
 
