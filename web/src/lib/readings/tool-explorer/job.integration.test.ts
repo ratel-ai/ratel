@@ -325,7 +325,8 @@ test("a signal run queues the explorer, whose run stores edges and sets for both
     ],
     "across the session the report call joins the ask",
   );
-  const groups = (run?.summary as { intentGroups?: { intentIds: string[] }[] }).intentGroups ?? [];
+  assert.ok(run);
+  const groups = (run.summary as { intentGroups?: { intentIds: string[] }[] }).intentGroups ?? [];
   assert.equal(groups.length, 2, "two asks with no words in common are two groups");
 
   const completed = tracked.find((t) => t.event === "tool_explorer_run_completed");

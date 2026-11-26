@@ -15,7 +15,7 @@ import type { LineageStage } from "@/lib/views/lineage/types";
  * project exactly as for a core tool. `assembleOperations` lists each right after the core tool
  * it names in `after`.
  *
- * A bad edition tool throws here, and `instrumentation.node.ts` assembles the tool list at boot,
+ * A bad edition tool throws here, and `instrumentation-node.ts` assembles the tool list at boot,
  * so it stops startup rather than surfacing as a tool that answers wrongly. The rules are the
  * ones `contract.test.ts` and `naming.test.ts` hold the core's tools to.
  */

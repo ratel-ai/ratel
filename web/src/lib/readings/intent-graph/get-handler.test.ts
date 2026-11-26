@@ -216,7 +216,9 @@ test("source=cloud answers with the merged graph Ratel built, and records the pu
   assert.equal(body.rev, 9);
   assert.deepEqual(asked, ["cloud"]);
   assert.deepEqual(touchedKeys, ["cloud"]);
-  assert.equal((events[0]?.properties as Record<string, unknown>).graph_key, "cloud");
+  const [event] = events;
+  assert.ok(event);
+  assert.equal((event.properties as Record<string, unknown>).graph_key, "cloud");
 });
 
 test("a runtime asking for its own key gets its own graph, never a Ratel-built one", async () => {
@@ -238,7 +240,9 @@ test("a watching cloud graph is served like any other: a runtime goes live by pu
   assert.equal(body.graphKey, "cloud");
   assert.equal(body.rev, 9);
   assert.equal(body.graph.rev, 9);
-  assert.equal((events[0]?.properties as Record<string, unknown>).rev, 9);
+  const [event] = events;
+  assert.ok(event);
+  assert.equal((event.properties as Record<string, unknown>).rev, 9);
 
   const perSource = await handleIntentGraphGet(request("cloud/worker-a"), deps);
   assert.equal(((await perSource.json()) as { rev: number }).rev, 9);

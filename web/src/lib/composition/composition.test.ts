@@ -7,6 +7,8 @@ const { createComposition } = await import("@/lib/composition");
 const { drainSteps, jobHandlers, liveJobIds } = await import("@/lib/composition/registry");
 const { allowsInward, scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
 
+const Nothing = () => null;
+
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
 const cloudPorts: CompositionPorts = {
   session: {
@@ -140,9 +142,9 @@ describe("createComposition", () => {
 
   it("hands the edition's UI loader over, and the open-source edition has none", async () => {
     const ui = {
-      RootProvider: () => null,
-      AccountMenuItems: () => null,
-      OrganizationBillingPage: () => null,
+      RootProvider: Nothing,
+      AccountMenuItems: Nothing,
+      OrganizationBillingPage: Nothing,
       hiddenOrganizationNav: async () => ["billing"],
     };
     const cloud = createComposition("cloud", {

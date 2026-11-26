@@ -5,7 +5,7 @@ import { after, before, test } from "node:test";
 import { trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { resolveConfig } from "@/config";
-import { registerNodeInstrumentation as register } from "@/instrumentation.node";
+import { registerNodeInstrumentation as register } from "@/instrumentation-node";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 
 const registerNodeInstrumentation = (
@@ -13,7 +13,7 @@ const registerNodeInstrumentation = (
   statics: StaticTelemetryEnvironment,
 ) => register(resolveConfig({ env }), statics);
 
-// What boot registers for the platform's own telemetry (`instrumentation.node.ts`), against a
+// What boot registers for the platform's own telemetry (`instrumentation-node.ts`), against a
 // collector on this machine. The registration is once per process, so the unset cases run first.
 
 const received: { path: string; body: string }[] = [];
