@@ -30,6 +30,8 @@ that shows Agent health in full (optional, named by the locks), and a plan's nam
 it used with a reference, or reads a daily budget, and never sees a plan or a price. It holds the
 hard limits. `usage-limits.contract.ts` is the test every adapter passes and
 `usage-limits.fake.ts` the in-memory adapter for tests. The composition port is optional.
+`sandbox-limits.ts` gives the configured limits of the deployment (`SANDBOX_*`), from which an
+edition's adapter starts.
 
 `sandbox-version-holds.ts` is the sandbox versions that another module still needs (the version
 of a pinned eval baseline or of a running eval experiment), so the snapshot sweep of sandboxes

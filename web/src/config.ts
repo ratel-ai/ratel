@@ -474,7 +474,10 @@ const CONFIG_SCHEMA = schema({
     callbackUrl: optional("SANDBOX_CALLBACK_URL", trimmed),
     /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */
     bundleDir: optional("SANDBOX_BUNDLE_DIR", trimmed),
-    /** Each project's limits. A value above the hard limit counts as the hard limit. */
+    /**
+     * Each project's limits, and the VM start budgets of an organization and of the provider account.
+     * A value above the hard limit counts as the hard limit.
+     */
     limits: {
       sandbox_concurrent_instances: setting(
         "SANDBOX_CONCURRENT_INSTANCES",
@@ -505,6 +508,26 @@ const CONFIG_SCHEMA = schema({
         "SANDBOX_VM_STARTS_PER_DAY",
         atMost(HARD.sandbox_vm_starts_per_day),
         D.sandboxes.limits.sandbox_vm_starts_per_day,
+      ),
+      sandbox_org_vm_starts_per_day: setting(
+        "SANDBOX_ORG_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_org_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_org_vm_starts_per_day,
+      ),
+      sandbox_account_vm_starts_per_minute: setting(
+        "SANDBOX_ACCOUNT_VM_STARTS_PER_MINUTE",
+        atMost(HARD.sandbox_account_vm_starts_per_minute),
+        D.sandboxes.limits.sandbox_account_vm_starts_per_minute,
+      ),
+      sandbox_account_vm_starts_per_hour: setting(
+        "SANDBOX_ACCOUNT_VM_STARTS_PER_HOUR",
+        atMost(HARD.sandbox_account_vm_starts_per_hour),
+        D.sandboxes.limits.sandbox_account_vm_starts_per_hour,
+      ),
+      sandbox_account_vm_starts_per_day: setting(
+        "SANDBOX_ACCOUNT_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_account_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_account_vm_starts_per_day,
       ),
     },
     /** A run VM with no run for this time is deleted. */
