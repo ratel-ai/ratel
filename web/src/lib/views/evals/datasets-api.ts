@@ -9,7 +9,7 @@ import {
 import { storable } from "@/lib/platform/storable";
 import { inputText } from "./dataset-pages";
 import { type ResolveRefusal, resolveDataset } from "./datasets";
-import { caseContentSchema } from "./domain/case";
+import { caseContentSchema, inputProblem } from "./domain/case";
 import { type Dataset, datasetDetailsSchema, datasetQuerySchema } from "./domain/dataset";
 import { caseFromTurn } from "./domain/from-turn";
 import type { DatasetStore, NewRow } from "./ports/dataset-store";
@@ -33,7 +33,8 @@ export const PREVIEW_ROWS = 10;
 const MAX_BODY_CHARS = 200_000;
 const MAX_TEXT_CHARS = 20_000;
 
-const STATUS: Record<ResolveRefusal, number> = {
+/** The status of each refusal of a query that a person resolves now. */
+export const RESOLVE_STATUS: Record<ResolveRefusal, number> = {
   not_a_query: 400,
   no_content_access: 403,
   query_failed: 422,
@@ -42,12 +43,18 @@ const STATUS: Record<ResolveRefusal, number> = {
 };
 
 const turnIdsSchema = z.array(z.uuid()).min(1).max(MAX_TURNS);
+/** A case that the person saved from a Playground run: its input, with no trace turn. */
+const savedCaseSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  content: caseContentSchema,
+});
 const createSchema = datasetDetailsSchema
   .extend({
     query: datasetQuerySchema.default({ kind: "fixed" }),
     turnIds: turnIdsSchema.optional(),
+    case: savedCaseSchema.optional(),
   })
-  .refine(({ query, turnIds }) => !turnIds || query.kind === "fixed", {
+  .refine(({ query, turnIds, case: saved }) => (!turnIds && !saved) || query.kind === "fixed", {
     path: ["turnIds"],
     message: "a query dataset holds no row: a run resolves it",
   });
@@ -66,6 +73,7 @@ const typedRowSchema = z.object({
 const addSchema = z.union([
   z.object({ turnIds: turnIdsSchema }),
   z.object({ row: typedRowSchema }),
+  z.object({ case: savedCaseSchema }),
 ]);
 const previewSchema = z.object({ query: datasetQuerySchema });
 
@@ -77,8 +85,15 @@ export function handleCreateDataset(
   return write(projectId, "create_dataset", deps, async (member) => {
     const body = createSchema.safeParse(await readJson(request));
     if (!body.success) return invalid(body.error);
-    const { turnIds, query, ...details } = body.data;
-    const rows = turnIds ? await rowsOfTurns(member.projectId, turnIds, deps) : null;
+    const { turnIds, case: saved, query, ...details } = body.data;
+    if (saved && inputProblem(saved.content)) {
+      return refuse(422, "no_input", inputProblem(saved.content) ?? "");
+    }
+    const rows = turnIds
+      ? await rowsOfTurns(member.projectId, turnIds, deps.source())
+      : saved
+        ? { ok: true as const, rows: [savedRow(saved)] }
+        : null;
     if (rows && !rows.ok) return rows.response;
     const datasets = deps.datasets();
     const made = await datasets.create({
@@ -107,11 +122,15 @@ export function handleAddDatasetRows(
     if (!body.success) return invalid(body.error);
     if (!isId(datasetId)) return datasetNotFound();
     let rows: NewRow[];
-    if ("row" in body.data) {
+    if ("case" in body.data) {
+      const problem = inputProblem(body.data.case.content);
+      if (problem) return refuse(422, "no_input", problem);
+      rows = [savedRow(body.data.case)];
+    } else if ("row" in body.data) {
       const { name, input, expectedOutput } = body.data.row;
       rows = [{ kind: "values", name, row: { values: { input }, expectedOutput } }];
     } else {
-      const fromTurns = await rowsOfTurns(member.projectId, body.data.turnIds, deps);
+      const fromTurns = await rowsOfTurns(member.projectId, body.data.turnIds, deps.source());
       if (!fromTurns.ok) return fromTurns.response;
       rows = fromTurns.rows;
     }
@@ -156,7 +175,8 @@ export function handlePreviewDataset(
     const resolved = await resolveDataset(member.projectId, query, deps.source(), {
       take: PREVIEW_ROWS,
     });
-    if (!resolved.ok) return refuse(STATUS[resolved.reason], resolved.reason, resolved.message);
+    if (!resolved.ok)
+      return refuse(RESOLVE_STATUS[resolved.reason], resolved.reason, resolved.message);
     return reply(200, {
       limit: "limit" in query ? query.limit : null,
       found: resolved.found,
@@ -170,12 +190,11 @@ export function handlePreviewDataset(
 }
 
 /** A row for each turn, in order, each turn one time. Refused when one turn cannot give a row. */
-async function rowsOfTurns(
+export async function rowsOfTurns(
   projectId: string,
   turnIds: readonly string[],
-  deps: DatasetsApiDeps,
+  source: TraceSource,
 ): Promise<{ ok: true; rows: NewRow[] } | { ok: false; response: Response }> {
-  const source = deps.source();
   if (!(await source.readContent(projectId))) {
     return {
       ok: false,
@@ -210,6 +229,10 @@ async function rowsOfTurns(
     });
   }
   return { ok: true, rows };
+}
+
+function savedRow({ name, content }: z.output<typeof savedCaseSchema>): NewRow {
+  return { kind: "trace", name, turnId: null, content, sourceOutput: null };
 }
 
 function write(

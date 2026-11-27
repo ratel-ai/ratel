@@ -17,6 +17,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { storable } from "@/lib/platform/storable";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "@/lib/views/evals/adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import { createTaskLinks } from "@/lib/views/evals/adapters/task-links";
@@ -155,6 +156,7 @@ const defaultDeps: EvalsOperationDeps = {
     saveOptions(projectId, source, task, {
       taskLinks: createTaskLinks(),
       evals: createDrizzleEvalStore(getDb()),
+      datasets: createDrizzleDatasetStore(getDb()),
     }),
   turnCase: async (projectId, turnId) => {
     const turn = await loadTurnContent(projectId, turnId);

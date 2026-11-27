@@ -69,3 +69,24 @@ export async function oneRun(
   const experiment = await experiments.get(projectId, experimentId);
   return experiment ? { experiment, trials: await experiments.trials(experiment.id) } : null;
 }
+
+/**
+ * A run with its trials and the pinned baseline of its eval (of the suite runs from before: the
+ * suite pin). Null when the project has no such run.
+ */
+export async function runWithBaseline(
+  projectId: string,
+  experimentId: string,
+  stores: Pick<HistoryStores, "experiments" | "baselines">,
+): Promise<{ run: Compared; baseline: Compared | null } | null> {
+  const run = await oneRun(projectId, experimentId, stores);
+  if (!run) return null;
+  const pin = await stores.baselines.get(projectId, run.experiment.evalId);
+  const baseline =
+    pin && pin.experimentId !== run.experiment.id
+      ? await oneRun(projectId, pin.experimentId, stores)
+      : pin
+        ? run
+        : null;
+  return { run, baseline };
+}

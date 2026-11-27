@@ -6,6 +6,7 @@ import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
 import { DatasetsList } from "@/components/console/evals/DatasetsList";
 import { DatasetView } from "@/components/console/evals/DatasetView";
+import { EvalPageView } from "@/components/console/evals/EvalPageView";
 import { EvalsOverview } from "@/components/console/evals/EvalsOverview";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
 import {
@@ -14,7 +15,6 @@ import {
   type NewEvalOptions,
 } from "@/components/console/evals/NewEvalDialog";
 import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
-import { SuiteView } from "@/components/console/evals/SuiteView";
 import { TrialPanel } from "@/components/console/evals/TrialPanel";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
@@ -30,10 +30,8 @@ import {
   type CaseVersionView,
   experimentPageModel,
   PREVIEW_CHARS,
-  readyVersions,
 } from "../page-model";
-import { suitePageModel } from "../suite-page";
-import { POLITE, run } from "./runs";
+import { run } from "./runs";
 import { content, NO_REFUND } from "./support";
 
 const NOW = "2026-11-25T10:00:00.000Z";
@@ -318,61 +316,6 @@ test("a trial of the side panel shows its scorers with reasons, and a link to it
   assert.match(html, new RegExp(`traces/${"c".repeat(32)}`));
 });
 
-test("the suite table: a row for each eval, scorer columns, the delta, the invalid count and the verdict line", () => {
-  const version = (id: string, status: "ready" | "failed") => ({
-    id,
-    projectId: PROJECT_ID,
-    sandboxId: "s",
-    name: "support-demo",
-    git: { commit: "b".repeat(40), dirty: false },
-    status,
-    createdAt: new Date(),
-    tools: [],
-    params: [],
-  });
-  const versions = readyVersions([version("1", "failed"), version("2", "ready")]);
-  assert.deepEqual(
-    versions.map(({ id }) => id),
-    ["2"],
-  );
-  const BASE = run("base", { refunds: { cases: { a: ["fail", "pass"] } } });
-  const NEXT = run("next", {
-    refunds: { cases: { a: ["pass", "invalid"] } },
-    status: { scorers: [NO_REFUND, POLITE], cases: { s: ["pass"] } },
-  });
-  const model = suitePageModel({
-    projectId: PROJECT_ID,
-    evals: [suiteEval("refunds"), suiteEval("status")],
-    cases: [],
-    runs: [],
-    run: NEXT,
-    baseline: BASE,
-  });
-  const view = (canEdit: boolean) =>
-    visibleText(
-      render(
-        createElement(SuiteView, {
-          model,
-          canEdit,
-          versions,
-          experiments: [],
-          baseline: "other",
-          now: NOW,
-        }),
-      ),
-    );
-  const text = view(true);
-  for (const header of ["Eval", "Score", "No refund", "Polite", "Δ baseline", "Invalid"]) {
-    assert.ok(text.includes(header), header);
-  }
-  assert.match(text, /Improved/);
-  assert.doesNotMatch(text, /Improved\s*Improved:/, "the badge says the verdict one time");
-  assert.match(text, /\+50 pts/);
-  assert.match(text, /New eval/);
-  assert.match(text, /Run suite/);
-  assert.doesNotMatch(view(false), /Run suite|New eval/);
-});
-
 test("the trials of a case are paired by index, with gaps and with one side", () => {
   const trial = (id: string, index: number) => ({ id, index });
   const ids = (pairs: ReturnType<typeof pairedTrials<{ id: string; index: number }>>) =>
@@ -388,7 +331,7 @@ test("the trials of a case are paired by index, with gaps and with one side", ()
   assert.deepEqual(ids(pairedTrials([trial("b0", 0)], null)), [[0, "b0", undefined]]);
 });
 
-test("a completed run can be pinned, and opens its deltas when another one is the baseline", () => {
+test("a completed run can be pinned as the baseline of its eval, and unpinned", () => {
   const { experiment, trials } = run("b", { refunds: { cases: { one: ["pass"] } } });
   const text = (baseline: "this" | "other" | "none", canEdit = true) =>
     visibleText(
@@ -402,37 +345,10 @@ test("a completed run can be pinned, and opens its deltas when another one is th
       ),
     );
   assert.match(text("none"), /Pin as baseline/);
-  assert.doesNotMatch(text("none"), /Deltas against the baseline/);
-  assert.match(text("other"), /Pin as baseline\s*Deltas against the baseline/);
+  assert.match(text("other"), /Pin as baseline/);
   assert.match(text("this"), /Unpin baseline/);
   assert.doesNotMatch(text("other", false), /Pin as baseline/);
 });
-
-function suiteEval(id: string) {
-  return {
-    id,
-    projectId: PROJECT_ID,
-    name: id,
-    taskId: null,
-    createdAt: new Date(0),
-    versions: [
-      {
-        datasetId: id,
-        sandboxVersionId: null,
-        matrix: {},
-        sandboxName: null,
-        params: {},
-        trials: 3,
-        scorers: [NO_REFUND],
-        id: `${id}-v1`,
-        evalId: id,
-        number: 1,
-        createdBy: "u",
-        createdAt: new Date(0),
-      },
-    ],
-  };
-}
 
 test("the Datasets page lists each dataset with its kind, cases or query, and its evals", () => {
   const rows = datasetsPageModel(PROJECT_ID, [
@@ -636,4 +552,120 @@ test("the New eval dialog shows Production agent as a runtime that comes later",
   ]) {
     assert.match(text, new RegExp(word));
   }
+});
+
+test("a matrix run shows its variants side by side, with the param values in the header", () => {
+  const { experiment, trials } = run("m", { refunds: { cases: { one: ["pass", "fail"] } } });
+  const matrix: Experiment = {
+    ...experiment,
+    evalId: "e1",
+    variants: [
+      { index: 0, params: { model: "small", style: "plain" } },
+      { index: 1, params: { model: "small", style: "shout" } },
+    ],
+  };
+  const split = trials.map((trial, at) => ({ ...trial, variant: at % 2 }));
+  const html = render(
+    createElement(ExperimentView, {
+      model: experimentPageModel(matrix, split),
+      baseline: "none",
+      canEdit: true,
+      now: NOW,
+    }),
+  );
+  const text = visibleText(html);
+  assert.match(text, /Variants side by side/);
+  assert.match(text, /style=plain/);
+  assert.match(text, /style=shout/);
+  assert.doesNotMatch(text, /model=small/);
+  assert.match(text, /Matrix \(2 variants\)/);
+  assert.match(html, /\/evals\/experiments\/m\/trials\//);
+});
+
+test("the eval page shows its definition, the scorer chart and the runs with their columns", () => {
+  const html = render(
+    createElement(EvalPageView, {
+      model: {
+        projectId: PROJECT_ID,
+        evalId: "e1",
+        name: "Orders",
+        taskId: null,
+        definition: {
+          dataset: {
+            name: "Order asks",
+            kindLabel: "Fixed",
+            href: `/project/${PROJECT_ID}/datasets/d1`,
+          },
+          runtime: "support-demo · newest ready version",
+          scorers: ["No refund"],
+          trials: 3,
+          params: [],
+          matrix: "matrix (2)",
+        },
+        chart: {
+          runs: 2,
+          series: [
+            {
+              id: "mean",
+              name: "Score (mean)",
+              slot: 0,
+              points: [
+                { experimentId: "r1", href: "/r1", at: "2026-11-24T10:00:00.000Z", score: 0.5 },
+                { experimentId: "r2", href: "/r2", at: "2026-11-25T09:00:00.000Z", score: 1 },
+              ],
+            },
+          ],
+        },
+        runs: [
+          {
+            experimentId: "r2",
+            href: "/r2",
+            title: "Fixed prompt",
+            at: "2026-11-25T09:00:00.000Z",
+            running: false,
+            dataset: { name: "Order asks", rows: 4, href: "/d1" },
+            runtime: { sandbox: "support-demo", version: "66666666", commit: "aaaaaaaaaaaa" },
+            scorers: 1,
+            params: "matrix (2)",
+            score: 1,
+            delta: 0.5,
+            deltaNote: null,
+            invalid: 1,
+            isBaseline: false,
+            changed: ["pinned 66666666"],
+          },
+        ],
+        baselineId: "r1",
+      },
+      options: {
+        defaults: { datasetId: "d1", versionId: "latest", params: {}, matrix: {}, trials: 3 },
+        versions: [],
+        datasets: [],
+        turns: [],
+        scorers: [],
+        evalScorers: ["No refund"],
+      },
+      canEdit: true,
+      now: NOW,
+    }),
+  );
+  const text = visibleText(html);
+  for (const word of [
+    "Edit",
+    "New run",
+    "Order asks",
+    "support-demo · newest ready version",
+    "No refund",
+    "Fixed prompt",
+    "4 frozen rows",
+    "aaaaaaaaaaaa",
+    "matrix \\(2\\)",
+    "100%",
+    "\\+50 pts",
+    "Changed: pinned 66666666",
+    "Pin as baseline",
+  ]) {
+    assert.match(text, new RegExp(word));
+  }
+  assert.match(html, /aria-label="Mean and pass rate of each scorer by run"/);
 });

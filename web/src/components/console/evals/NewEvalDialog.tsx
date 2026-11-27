@@ -470,15 +470,18 @@ function DatasetPicker({
   );
 }
 
-function ParamsFields({
+/** What the param fields edit: the defaults, and the values of the matrix. */
+type ParamState = Pick<EvalDraft, "params" | "matrix" | "matrixOn">;
+
+export function ParamsFields({
   params,
   draft,
   set,
   matrix,
 }: {
   params: readonly ParamSpec[];
-  draft: EvalDraft;
-  set: (over: Partial<EvalDraft>) => void;
+  draft: ParamState;
+  set: (over: Partial<ParamState>) => void;
   matrix: ReturnType<typeof matrixOf> | null;
 }) {
   return (
@@ -552,7 +555,7 @@ function ParamsFields({
   );
 }
 
-function ScorerPicker({
+export function ScorerPicker({
   scorers,
   chosen,
   onChange,

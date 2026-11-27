@@ -44,7 +44,7 @@ export default async function ExperimentPage({
       if (!found) return null;
       const [trials, baseline, versions, outputs] = await Promise.all([
         store.trials(found.id),
-        createDrizzleBaselineStore(db).get(project.id),
+        createDrizzleBaselineStore(db).get(project.id, found.evalId),
         store.caseVersions(found.caseVersions.map(({ versionId }) => versionId)),
         // One more character than the grid shows, so a cut output gets its "…".
         store.outputPreviews(found.id, PREVIEW_CHARS + 1),

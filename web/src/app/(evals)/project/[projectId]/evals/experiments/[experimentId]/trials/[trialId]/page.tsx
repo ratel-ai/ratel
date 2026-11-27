@@ -3,12 +3,14 @@ import { TrialView } from "@/components/console/evals/TrialView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
+import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
+import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
-import { loadRuns } from "@/lib/views/evals/page-loads";
-import { trialPageModel } from "@/lib/views/evals/suite-page";
+import { runWithBaseline } from "@/lib/views/evals/history-load";
 import { pairedTrial } from "@/lib/views/evals/suite-view";
+import { trialPageModel } from "@/lib/views/evals/trial-page";
 import { loadTrialViews } from "@/lib/views/evals/trial-views";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +41,13 @@ export default async function TrialPage({
     "evals",
     "load_trial",
     async () => {
-      const { run, baseline } = await loadRuns(project.id, experimentId);
-      if (run?.experiment.id !== experimentId) return null;
+      const db = getDb();
+      const found = await runWithBaseline(project.id, experimentId, {
+        experiments: createDrizzleExperimentStore(db),
+        baselines: createDrizzleBaselineStore(db),
+      });
+      if (!found) return null;
+      const { run, baseline } = found;
       const paired = pairedTrial(run, baseline, trialId);
       if (!paired) return null;
       const tracesHref = `/project/${project.id}/traces`;
@@ -51,7 +58,12 @@ export default async function TrialPage({
           : null,
       ]);
       return {
-        model: trialPageModel(project.id, paired, run.experiment.id),
+        model: trialPageModel(
+          project.id,
+          paired,
+          run.experiment.id,
+          run.experiment.evalVersions[0]?.name ?? null,
+        ),
         views,
         baselineViews,
       };

@@ -246,3 +246,39 @@ test("a preview resolves a query now, at most ten rows, and says why it cannot",
   assert.equal(failed.status, 422);
   assert.equal(failed.body.error, "query_failed");
 });
+
+test("a Playground run is saved as a row with its input, into a dataset that exists or a new one", async () => {
+  const { datasets, deps } = await setup();
+  const saved = {
+    name: "Where is order 7",
+    content: {
+      input: { message: "Where is my order 7?" },
+      expectedOutput: "Order 7 ships tomorrow.",
+    },
+  };
+  const made = await answer(
+    handleCreateDataset(request({ name: "From the Playground", case: saved }), PROJECT_ID, deps()),
+  );
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  assert.equal(made.body.rows, 1);
+  const id = made.body.dataset.datasetId;
+  const added = await answer(
+    handleAddDatasetRows(request({ case: saved }), PROJECT_ID, id, deps()),
+  );
+  assert.equal(added.status, 201);
+  const rows = await datasets.rows(PROJECT_ID, id);
+  assert.equal(rows.length, 2);
+  const version = rows[0] && currentVersion(rows[0]);
+  assert.deepEqual(version?.input, { message: "Where is my order 7?" });
+  assert.equal(version?.expectedOutput, "Order 7 ships tomorrow.");
+  assert.equal(version?.sourceTurnId, null);
+  const empty = await answer(
+    handleAddDatasetRows(
+      request({ case: { name: "x", content: { input: null } } }),
+      PROJECT_ID,
+      id,
+      deps(),
+    ),
+  );
+  assert.equal(empty.status, 422);
+});

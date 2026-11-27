@@ -20,6 +20,7 @@ import {
 import { evalContentSchema, evalDetailsSchema } from "./domain/eval";
 import { caseFromTurn, type TurnContent } from "./domain/from-turn";
 import type { CaseStore } from "./ports/case-store";
+import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import type { TaskLinks } from "./ports/task-links";
 import { saveOptions } from "./save-target";
@@ -32,6 +33,7 @@ import { saveOptions } from "./save-target";
 export type CasesApiDeps = MemberAccessDeps & {
   cases: () => CaseStore;
   evals: () => EvalStore;
+  datasets: () => Pick<DatasetStore, "list">;
   taskLinks: () => TaskLinks;
   /** Whether the project lets the product read captured text. */
   readContent: (projectId: string) => Promise<boolean>;
@@ -134,6 +136,7 @@ export function handleSaveOptions(
     const options = await saveOptions(member.projectId, source, task ?? null, {
       taskLinks: deps.taskLinks(),
       evals: deps.evals(),
+      datasets: deps.datasets(),
     });
     return reply(200, options);
   });

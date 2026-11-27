@@ -6,6 +6,10 @@ import {
   evalRequestOf,
   LATEST,
   matrixOf,
+  type RunDefaults,
+  type RunDraft,
+  runDraftOf,
+  runRequestOf,
   scorerGroups,
   searchScorers,
 } from "../eval-dialog";
@@ -298,4 +302,83 @@ test("an x label is a day over a long span, and a day with its UTC time over a s
   const at = Date.UTC(2026, 10, 27, 14, 5);
   assert.equal(timeLabel(at, 3 * 24 * 60 * 60_000), "27 Nov");
   assert.equal(timeLabel(at, 60_000), "27 Nov 14:05");
+});
+
+const DEFAULTS: RunDefaults = {
+  datasetId: "d1",
+  versionId: LATEST,
+  params: { temperature: 0.2 },
+  matrix: {},
+  trials: 3,
+};
+
+test("New run starts from the defaults, and an unchanged draft runs the eval as it is", () => {
+  const draft = runDraftOf(DEFAULTS, PARAMS);
+  assert.deepEqual(draft.params, { model: "small", temperature: "0.2", verbose: false });
+  assert.equal(draft.matrixOn, false);
+  assert.deepEqual(runRequestOf(draft, DEFAULTS, PARAMS), { ok: true, request: {} });
+  const withMatrix = runDraftOf({ ...DEFAULTS, matrix: { model: ["small", "large"] } }, PARAMS);
+  assert.equal(withMatrix.matrixOn, true);
+  assert.deepEqual(withMatrix.matrix, { model: "small, large" });
+  assert.deepEqual(
+    runRequestOf(withMatrix, { ...DEFAULTS, matrix: { model: ["small", "large"] } }, PARAMS),
+    { ok: true, request: {} },
+  );
+});
+
+test("New run sends only the changes for this run", () => {
+  const draft: RunDraft = {
+    ...runDraftOf(DEFAULTS, PARAMS),
+    name: " Large model ",
+    datasetId: "d2",
+    addRows: { mode: "auto", limit: "10" },
+    scorers: [{ source: "predefined", id: "is_safe", name: "Answer is safe", settings: [] }],
+    versionId: "66666666-6666-4666-8666-666666666666",
+    params: { model: "large", temperature: "0.2", verbose: false },
+    trials: "1",
+  };
+  const made = runRequestOf(draft, DEFAULTS, PARAMS);
+  assert.ok(made.ok);
+  if (!made.ok) return;
+  assert.deepEqual(made.request, {
+    name: "Large model",
+    datasetId: "d2",
+    addRows: { query: { kind: "auto", limit: 10 } },
+    scorers: [
+      {
+        id: "predefined-is_safe",
+        name: "Answer is safe",
+        gating: true,
+        ref: { source: "predefined", key: "is_safe", settings: {} },
+      },
+    ],
+    sandboxVersion: "66666666-6666-4666-8666-666666666666",
+    params: { model: "large" },
+    trials: 1,
+  });
+  const off = runRequestOf(
+    {
+      ...runDraftOf({ ...DEFAULTS, matrix: { model: ["small", "large"] } }, PARAMS),
+      matrixOn: false,
+    },
+    { ...DEFAULTS, matrix: { model: ["small", "large"] } },
+    PARAMS,
+  );
+  assert.ok(off.ok && JSON.stringify(off.request.matrix) === "{}");
+  const traces = runRequestOf(
+    { ...runDraftOf(DEFAULTS, PARAMS), addRows: { mode: "traces", turnIds: [] } },
+    DEFAULTS,
+    PARAMS,
+  );
+  assert.equal(traces.ok, false);
+  const wide = runRequestOf(
+    {
+      ...runDraftOf(DEFAULTS, PARAMS),
+      matrixOn: true,
+      matrix: { temperature: "0,1,2,3,4,5,6,7,8,9,10,11,12" },
+    },
+    DEFAULTS,
+    PARAMS,
+  );
+  assert.equal(wide.ok, false);
 });

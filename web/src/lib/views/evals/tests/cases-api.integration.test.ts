@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/support-session-policy";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import {
   type CaseEvent,
@@ -83,6 +84,7 @@ async function setup() {
     isRestricted: async () => false,
     cases: () => store,
     evals: () => evals,
+    datasets: () => createDrizzleDatasetStore(db),
     taskLinks: () => taskLinks,
     readContent: async () => true,
     loadTurn: async (_projectId, turnId) => {

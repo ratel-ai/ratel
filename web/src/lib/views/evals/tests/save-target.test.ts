@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chosenTargets, type SaveOptions, saveOptions } from "../save-target";
+import {
+  chosenDataset,
+  chosenTargets,
+  type SaveOptions,
+  saveOptions,
+  targetDataset,
+} from "../save-target";
 import { evalContent } from "./support";
 
 const OPTIONS: SaveOptions = {
@@ -23,6 +29,8 @@ const OPTIONS: SaveOptions = {
     "wf-new": { kind: "new", name: "Cancel an order", taskId: "wf-new", content: evalContent() },
   },
   evals: [],
+  datasets: [{ id: "d1", name: "Order asks" }],
+  datasetOfEval: { e1: "Refunds", e2: "Refunds, hard", e3: "Status rows" },
 };
 
 test("a task with more evals needs the choice of one", () => {
@@ -41,15 +49,24 @@ test("each chosen task gives one target: its eval, or its new eval", () => {
   assert.equal(chosenTargets(OPTIONS, { taskIds: [], evalOfTask: {} }), null);
 });
 
-test("with no task, the eval that the person chose or named", () => {
+test("with no task, the dataset that the person chose or named (decision trace-to-eval)", () => {
   const none = { ...OPTIONS, tasks: [], targets: {} };
-  assert.deepEqual(chosenTargets(none, { taskIds: [], evalOfTask: {}, evalId: "e3" }), [
-    { evalId: "e3" },
-  ]);
-  assert.deepEqual(chosenTargets(none, { taskIds: [], evalOfTask: {}, newName: " Smoke " }), [
-    { newEval: { name: "Smoke", taskId: null } },
-  ]);
-  assert.equal(chosenTargets(none, { taskIds: [], evalOfTask: {}, newName: " " }), null);
+  assert.equal(chosenTargets(none, { taskIds: [], evalOfTask: {} }), null);
+  assert.deepEqual(chosenDataset(none, { datasetId: "d1" }), {
+    datasetId: "d1",
+    name: "Order asks",
+  });
+  assert.deepEqual(chosenDataset(none, { newName: " Smoke " }), { newName: "Smoke" });
+  assert.equal(chosenDataset(none, { newName: " " }), null);
+  assert.equal(chosenDataset(none, { datasetId: "gone" }), null);
+});
+
+test("each target says the dataset that the row goes into", () => {
+  assert.equal(targetDataset(OPTIONS, OPTIONS.targets["wf-status"], undefined), "Status rows");
+  assert.equal(targetDataset(OPTIONS, OPTIONS.targets["wf-refunds"], "e2"), "Refunds, hard");
+  assert.equal(targetDataset(OPTIONS, OPTIONS.targets["wf-refunds"], undefined), null);
+  // A new eval gets a new fixed dataset with its name.
+  assert.equal(targetDataset(OPTIONS, OPTIONS.targets["wf-new"], undefined), "Cancel an order");
 });
 
 test("a run of a Ratel sandbox saves into a new eval of the task of its sandbox, on that sandbox", async () => {
@@ -62,6 +79,7 @@ test("a run of a Ratel sandbox saves into a new eval of the task of its sandbox,
       lastSandbox: async () => "command-demo",
     },
     evals: { list: async () => [] },
+    datasets: { list: async () => [] },
   });
   assert.equal(options.defaultTaskId, "sandbox:support-demo");
   const target = options.targets["sandbox:support-demo"];

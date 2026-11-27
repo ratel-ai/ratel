@@ -31,6 +31,7 @@ export const casesApiDeps: CasesApiDeps = {
   ...evalsAccess,
   cases: () => createDrizzleCaseStore(getDb()),
   evals: () => createDrizzleEvalStore(getDb()),
+  datasets: () => createDrizzleDatasetStore(getDb()),
   taskLinks: () => createTaskLinks(),
   readContent: (projectId) => contentOptIn(projectId),
   loadTurn: loadTurnContent,

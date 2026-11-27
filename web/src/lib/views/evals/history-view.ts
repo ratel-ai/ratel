@@ -1,7 +1,7 @@
 import type { Compared } from "./baseline";
 import type { DatasetQuery } from "./domain/dataset";
 import { currentVersion, datasetOf, type EvalDefinition } from "./domain/eval";
-import type { Variant } from "./domain/experiment";
+import type { RunChanges, Variant } from "./domain/experiment";
 import {
   type EvalDelta,
   evalDeltas,
@@ -36,11 +36,16 @@ export type EvalOverviewRow = {
 
 export type EvalRunRow = {
   experimentId: string;
+  /** The name that the person gave the run. Null: none. */
+  name: string | null;
   at: string;
   state: "running" | "completed";
   datasetId: string | null;
+  /** The rows that the run froze. */
+  rows: number;
   sandboxVersionId: string;
   sandboxName: string;
+  gitCommit: string;
   scorers: string[];
   params: Record<string, unknown>;
   variants: Variant[];
@@ -49,6 +54,10 @@ export type EvalRunRow = {
   delta: { score: number | null } | null;
   deltaRefusal: { reason: string; message: string } | null;
   isBaseline: boolean;
+  /** The trials that no gating scorer could score. */
+  invalid: number;
+  /** What the run changed for itself only. */
+  changes: RunChanges;
 };
 
 export type ScorerSeries = {
@@ -213,11 +222,14 @@ function runRow(
   const delta = baseline && !isBaseline ? deltaOf(evalId, baseline, run) : null;
   return {
     experimentId: experiment.id,
+    name: experiment.name,
     at: experiment.createdAt.toISOString(),
     state: experiment.state,
     datasetId: experiment.datasetId,
+    rows: experiment.caseVersions.length,
     sandboxVersionId: experiment.sandboxVersionId,
     sandboxName: experiment.sandboxName,
+    gitCommit: experiment.gitCommit,
     scorers: (evalScores(run).find((one) => one.evalId === evalId)?.scorers ?? []).map(
       ({ name }) => name,
     ),
@@ -227,6 +239,8 @@ function runRow(
     delta: delta?.ok ? { score: delta.score } : null,
     deltaRefusal: delta && !delta.ok ? { reason: delta.reason, message: delta.message } : null,
     isBaseline,
+    invalid: run.trials.filter(({ result }) => result === "invalid").length,
+    changes: experiment.changes,
   };
 }
 

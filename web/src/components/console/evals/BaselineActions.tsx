@@ -1,29 +1,23 @@
 "use client";
 
 import { Button } from "@ratel/design-system/button";
-import { buttonVariants } from "@ratel/design-system/button-variants";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { suiteHref } from "@/lib/views/evals/paths";
 
 /** Which experiment is the baseline: this one, another one, or none. */
 export type BaselineState = "this" | "other" | "none";
 
-/** Pins a completed run, removes the pin, and opens the suite table with the deltas. */
+/** Pins a completed run as the baseline of its eval, and removes the pin. */
 export function BaselineActions({
   projectId,
   experimentId,
   baseline,
   canEdit,
-  showSuiteLink = true,
 }: {
   projectId: string;
   experimentId: string;
   baseline: BaselineState;
   canEdit: boolean;
-  /** False on the suite table: the deltas are there. */
-  showSuiteLink?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -61,14 +55,6 @@ export function BaselineActions({
         <Button loading={pending} onClick={() => send(baseline === "this" ? "DELETE" : "PUT")}>
           {baseline === "this" ? "Unpin baseline" : "Pin as baseline"}
         </Button>
-      ) : null}
-      {baseline === "other" && showSuiteLink ? (
-        <Link
-          href={suiteHref(projectId, experimentId)}
-          className={buttonVariants({ variant: "primary" })}
-        >
-          Deltas against the baseline
-        </Link>
       ) : null}
     </>
   );

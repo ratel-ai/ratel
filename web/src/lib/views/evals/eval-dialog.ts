@@ -218,3 +218,133 @@ function typedValue(
     ? { ok: false, message: `Give ${param.name} a value.` }
     : { ok: true, value };
 }
+
+/** The defaults of an eval, as "New run" starts from them. */
+export type RunDefaults = {
+  datasetId: string;
+  /** `LATEST`, or the pinned version of the eval. */
+  versionId: string;
+  params: Record<string, unknown>;
+  matrix: Record<string, unknown[]>;
+  trials: number;
+};
+
+export type RunDraft = {
+  name: string;
+  datasetId: string;
+  addRows:
+    | { mode: "none" }
+    | { mode: "traces"; turnIds: string[] }
+    | { mode: "last" | "auto"; limit: string };
+  /** Other scorers for this run only. Null: the scorers of the eval. */
+  scorers: ScorerChoice[] | null;
+  versionId: string;
+  params: ParamDraft;
+  matrix: Record<string, string>;
+  matrixOn: boolean;
+  trials: string;
+};
+
+export type RunRequest = {
+  name?: string;
+  datasetId?: string;
+  addRows?: { turnIds: string[] } | { query: { kind: "last_traces" | "auto"; limit: number } };
+  scorers?: EvalRequest["scorers"];
+  sandboxVersion?: string;
+  params?: Record<string, string | number | boolean>;
+  matrix?: EvalRequest["matrix"];
+  trials?: number;
+};
+
+/** "New run" filled with the defaults of the eval. */
+export function runDraftOf(defaults: RunDefaults, params: readonly ParamSpec[]): RunDraft {
+  return {
+    name: "",
+    datasetId: defaults.datasetId,
+    addRows: { mode: "none" },
+    scorers: null,
+    versionId: defaults.versionId,
+    params: Object.fromEntries(
+      params.map((param) => {
+        const value = defaults.params[param.name] ?? param.default;
+        return [param.name, param.type === "boolean" ? value === true : String(value ?? "")];
+      }),
+    ),
+    matrix: Object.fromEntries(
+      Object.entries(defaults.matrix).map(([name, values]) => [
+        name,
+        values.map(String).join(", "),
+      ]),
+    ),
+    matrixOn: Object.keys(defaults.matrix).length > 0,
+    trials: String(defaults.trials),
+  };
+}
+
+/**
+ * The request of "New run": only what differs from the defaults of the eval, so the run records
+ * what it changed. An empty request runs the eval as it is.
+ */
+export function runRequestOf(
+  draft: RunDraft,
+  defaults: RunDefaults,
+  params: readonly ParamSpec[],
+): { ok: true; request: RunRequest } | { ok: false; message: string } {
+  const request: RunRequest = {};
+  if (draft.name.trim()) request.name = draft.name.trim();
+  if (draft.datasetId && draft.datasetId !== defaults.datasetId)
+    request.datasetId = draft.datasetId;
+  const rows = draft.addRows;
+  if (rows.mode === "traces") {
+    if (rows.turnIds.length === 0) return { ok: false, message: "Choose the traces to add." };
+    request.addRows = { turnIds: rows.turnIds };
+  } else if (rows.mode !== "none") {
+    const limit = Number(rows.limit.trim());
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      return { ok: false, message: "Give a number of traces from 1 to 500." };
+    }
+    request.addRows = { query: { kind: rows.mode === "last" ? "last_traces" : "auto", limit } };
+  }
+  if (draft.scorers !== null) {
+    if (draft.scorers.length === 0) return { ok: false, message: "Choose at least one scorer." };
+    const scorers: EvalRequest["scorers"] = [];
+    for (const choice of draft.scorers) {
+      const made = scorerOf(choice);
+      if (!made.ok) return made;
+      scorers.push(made.scorer);
+    }
+    request.scorers = scorers;
+  }
+  if (draft.versionId !== defaults.versionId) request.sandboxVersion = draft.versionId;
+  const typed = paramsOfDraft(params, draft.params);
+  if (!typed.ok) return { ok: false, message: Object.values(typed.errors)[0] ?? "" };
+  const matrix = draft.matrixOn ? matrixOf(params, draft.matrix) : null;
+  if (matrix && !matrix.ok) return matrix;
+  const varied = new Set(Object.keys(matrix?.ok ? matrix.matrix : {}));
+  const changed = Object.fromEntries(
+    Object.entries(typed.value).filter(
+      ([name, value]) =>
+        !varied.has(name) && !sameValue(value, defaults.params[name], params, name),
+    ),
+  );
+  if (Object.keys(changed).length > 0) request.params = changed;
+  const nextMatrix = matrix?.ok ? matrix.matrix : {};
+  if (JSON.stringify(nextMatrix) !== JSON.stringify(defaults.matrix)) request.matrix = nextMatrix;
+  const trials = Number(draft.trials.trim());
+  if (!Number.isInteger(trials) || trials < 1 || trials > MAX_EVAL_TRIALS) {
+    return { ok: false, message: `Give a number of trials from 1 to ${MAX_EVAL_TRIALS}.` };
+  }
+  if (trials !== defaults.trials) request.trials = trials;
+  return { ok: true, request };
+}
+
+/** A param equals the default of the eval, or the default of the version when the eval has none. */
+function sameValue(
+  value: unknown,
+  ofEval: unknown,
+  params: readonly ParamSpec[],
+  name: string,
+): boolean {
+  const fallback = ofEval ?? params.find((param) => param.name === name)?.default;
+  return JSON.stringify(value) === JSON.stringify(fallback);
+}

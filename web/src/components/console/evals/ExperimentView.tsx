@@ -16,9 +16,9 @@ import type {
   ScorerColumn,
   ScorerCount,
 } from "@/lib/views/evals/page-model";
-import { caseHref, evalsHref } from "@/lib/views/evals/paths";
+import { caseHref, evalHref, evalsHref, trialHref } from "@/lib/views/evals/paths";
 import { BaselineActions, type BaselineState } from "./BaselineActions";
-import { CountBadges, StateBadge } from "./ExperimentList";
+import { CountBadges, StateBadge } from "./RunBadges";
 import { TrialPanel } from "./TrialPanel";
 
 const REFRESH_MS = 3_000;
@@ -72,7 +72,12 @@ export function ExperimentView({
     <Page>
       <PageHeader
         title={model.name ?? `${model.sandboxName} · ${model.commit.slice(0, 12)}`}
-        crumbs={[{ label: "Evals", href: evalsHref(model.projectId) }]}
+        crumbs={[
+          { label: "Evals", href: evalsHref(model.projectId) },
+          ...(model.eval
+            ? [{ label: model.eval.name, href: evalHref(model.projectId, model.eval.id) }]
+            : []),
+        ]}
         actions={
           running ? null : (
             <BaselineActions
@@ -86,6 +91,7 @@ export function ExperimentView({
       />
       <PageBody>
         <ExperimentHeader model={model} baseline={baseline} now={now} />
+        {model.variants.length > 1 ? <VariantGrid model={model} /> : null}
         <Section
           title="Cases"
           description={
@@ -221,7 +227,12 @@ function ExperimentHeader({
         </dd>
         <dt className="text-fg-subtle">Parameters</dt>
         <dd className="flex flex-wrap gap-1.5">
-          {params.length === 0 ? <span className="text-fg-subtle">Defaults</span> : null}
+          {model.variants.length > 1 ? (
+            <span className="text-fg">Matrix ({model.variants.length} variants)</span>
+          ) : null}
+          {params.length === 0 && model.variants.length <= 1 ? (
+            <span className="text-fg-subtle">Defaults</span>
+          ) : null}
           {params.map(([name, value]) => (
             <code
               key={name}
@@ -313,6 +324,90 @@ function GridLine({
         </span>
       </Td>
     </tr>
+  );
+}
+
+/**
+ * A matrix run: a column for each variant, side by side, with its param values in the header. A
+ * cell shows the passes of the variant's trials of the case, the output of its first ended trial,
+ * and a link to that trial next to the baseline trial.
+ */
+function VariantGrid({ model }: { model: ExperimentPageModel }) {
+  return (
+    <Section
+      title="Variants side by side"
+      description="Each column is a combination of the matrix. Open a trial to see it next to the baseline trial."
+    >
+      <div className="overflow-x-auto rounded-lg border border-line bg-raised">
+        <table
+          className="w-full table-fixed border-separate border-spacing-0 text-ui"
+          style={{ minWidth: `${19 + model.variants.length * 16}rem` }}
+        >
+          <caption className="sr-only">The variants of the run, side by side</caption>
+          <colgroup>
+            <col style={{ width: "9rem" }} />
+            <col style={{ width: "10rem" }} />
+            {model.variants.map(({ index }) => (
+              <col key={index} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr className="text-left text-xs text-fg-muted">
+              <Th>Case</Th>
+              <Th>Input</Th>
+              {model.variants.map(({ index, label }) => (
+                <Th key={index}>
+                  <span className="block font-mono text-fg">{label || `Variant ${index + 1}`}</span>
+                </Th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {model.rows.map((row) => (
+              <tr key={row.versionId} className="align-top [&>td]:border-t [&>td]:border-line">
+                <Td>
+                  <span className="block truncate font-medium text-fg" title={row.name}>
+                    {row.name}
+                  </span>
+                </Td>
+                <Td>
+                  <code
+                    className="line-clamp-3 font-mono text-xs break-words text-fg"
+                    title={row.input}
+                  >
+                    {row.input}
+                  </code>
+                </Td>
+                {model.variants.map(({ index }) => {
+                  const trials = row.trials.filter(({ variant }) => variant === index);
+                  const ended = trials.filter(({ result }) => result !== null);
+                  const passed = ended.filter(({ result }) => result === "pass").length;
+                  const shown = ended[0] ?? trials[0];
+                  return (
+                    <Td key={index}>
+                      <span className="mb-1 flex items-center gap-2 text-xs">
+                        <span className="font-mono text-fg-muted">
+                          {passed}/{trials.length} pass
+                        </span>
+                        {shown ? (
+                          <Link
+                            href={trialHref(model.projectId, model.id, shown.id)}
+                            className="text-fg-subtle hover:text-fg hover:underline"
+                          >
+                            Trial
+                          </Link>
+                        ) : null}
+                      </span>
+                      {shown ? <TrialOutput trial={shown} /> : null}
+                    </Td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
   );
 }
 

@@ -1,6 +1,4 @@
 import type { Member } from "@/lib/console/scope/member-access";
-import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
-import type { ParamSpec } from "@/lib/views/sandboxes/run-form";
 import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./domain/case";
 import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
 import {
@@ -9,6 +7,7 @@ import {
   type Experiment,
   type ExperimentState,
   type Trial,
+  type Variant,
 } from "./domain/experiment";
 import { type CaseCounts, caseCounts, trialsByCase } from "./experiment-view";
 
@@ -74,18 +73,6 @@ function versionView(version: CaseVersion | null): CaseVersionView | null {
   return version && { ...version, updatedAt: version.updatedAt.toISOString() };
 }
 
-export type ExperimentRow = {
-  id: string;
-  sandboxName: string;
-  commit: string;
-  state: ExperimentState;
-  cases: number;
-  counts: Counts;
-  createdAt: string;
-};
-
-export type ReadyVersion = { id: string; name: string; commit: string; params: ParamSpec[] };
-
 export type TrialView = Omit<Trial, "experimentId">;
 
 export type ExperimentPageModel = {
@@ -109,6 +96,10 @@ export type ExperimentPageModel = {
   /** One column for each scorer name of the cases, in the order of the cases. */
   scorers: ScorerColumn[];
   rows: GridRow[];
+  /** The eval of the run. Null for a suite run from before. */
+  eval: { id: string; name: string } | null;
+  /** The variants of a matrix run, each with its param values in words. Empty: no matrix. */
+  variants: Array<{ index: number; label: string }>;
 };
 
 export type ScorerColumn = { name: string; gating: boolean };
@@ -133,18 +124,6 @@ export type GridRow = CaseCounts & {
   costUsd: number | null;
   trials: GridTrial[];
 };
-
-export function experimentRow(experiment: Experiment, counts: Counts): ExperimentRow {
-  return {
-    id: experiment.id,
-    sandboxName: experiment.sandboxName,
-    commit: experiment.gitCommit,
-    state: experiment.state,
-    cases: experiment.caseVersions.length,
-    counts,
-    createdAt: experiment.createdAt.toISOString(),
-  };
-}
 
 /**
  * The experiment as a grid: one row for each case. `versions` are the frozen case versions and
@@ -177,6 +156,11 @@ export function experimentPageModel(
     counts: countTrials(trials),
     costUsd: sumOf(trials.map(({ costUsd }) => costUsd)),
     scorers,
+    eval:
+      experiment.evalId === null
+        ? null
+        : { id: experiment.evalId, name: experiment.evalVersions[0]?.name ?? "Eval" },
+    variants: variantLabels(experiment.variants),
     rows: caseCounts(experiment, trials).map((row) => {
       const caseTrials = byCase.get(row.versionId) ?? [];
       const version = byVersion.get(row.versionId);
@@ -195,6 +179,25 @@ export function experimentPageModel(
       };
     }),
   };
+}
+
+/** Each variant with the values of the params that differ between the variants: "style=shout". */
+export function variantLabels(
+  variants: readonly Variant[],
+): Array<{ index: number; label: string }> {
+  const names = [...new Set(variants.flatMap(({ params }) => Object.keys(params)))];
+  const varied = names.filter(
+    (name) => new Set(variants.map(({ params }) => JSON.stringify(params[name]))).size > 1,
+  );
+  return variants.map(({ index, params }) => ({
+    index,
+    label: varied
+      .map((name) => {
+        const value = params[name];
+        return `${name}=${typeof value === "string" ? value : JSON.stringify(value)}`;
+      })
+      .join(", "),
+  }));
 }
 
 /** The scorer names of the frozen cases, each one time. Gating when one case has it gating. */
@@ -233,13 +236,6 @@ function meanOf(values: ReadonlyArray<number | null>): number | null {
   const sum = sumOf(values);
   const known = values.filter((value) => value !== null).length;
   return sum === null ? null : sum / known;
-}
-
-/** The versions that a run can use, the newest first. */
-export function readyVersions(versions: readonly SandboxVersionSummary[]): ReadyVersion[] {
-  return versions
-    .filter(({ status }) => status === "ready")
-    .map(({ id, name, git, params }) => ({ id, name, commit: git?.commit ?? "", params }));
 }
 
 function trialViews(trials: readonly Trial[] = []): TrialView[] {

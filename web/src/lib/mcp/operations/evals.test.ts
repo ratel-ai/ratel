@@ -237,7 +237,14 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     listEvals: async () => [evalDefinition()],
     getEval: async (projectId, id) =>
       projectId === PROJECT && id === EVAL ? evalDefinition() : null,
-    saveOptions: async () => ({ tasks: [], defaultTaskId: null, targets: {}, evals: [] }),
+    saveOptions: async () => ({
+      tasks: [],
+      defaultTaskId: null,
+      targets: {},
+      evals: [],
+      datasets: [],
+      datasetOfEval: {},
+    }),
     turnCase: async () => ({
       name: "Case from a turn",
       content: {
@@ -908,6 +915,8 @@ const TASKS = {
   tasks: [{ id: "wf-refunds", name: "Refund an order" }],
   defaultTaskId: "wf-refunds",
   evals: [],
+  datasets: [],
+  datasetOfEval: {},
 };
 const NEW_TARGET = {
   kind: "new" as const,
@@ -987,6 +996,8 @@ test("evals_create_case: more tasks need one in task, no task needs an eval, and
       defaultTaskId: null,
       targets: { "wf-refunds": NEW_TARGET, "wf-status": { ...NEW_TARGET, taskId: "wf-status" } },
       evals: [],
+      datasets: [],
+      datasetOfEval: {},
     }),
   };
   const choose = failure(await call("evals_create_case", { turnId: CASE }, two));
@@ -1044,6 +1055,8 @@ test("evals_create_case: two tasks in task make one row in the eval of each", as
             },
           },
           evals: [],
+          datasets: [],
+          datasetOfEval: {},
         }),
         getEval: async (_projectId, id) =>
           id === EVAL

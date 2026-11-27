@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 import { SessionTimeline } from "@/components/console/session-replay/SessionTimeline";
 import { TraceView } from "@/components/console/traces/TraceView";
 import { evalHref, evalsHref, experimentHref } from "@/lib/views/evals/paths";
-import type { TrialPageModel, TrialSide } from "@/lib/views/evals/suite-page";
+import type { TrialPageModel, TrialSide } from "@/lib/views/evals/trial-page";
 import type { TrialViews } from "@/lib/views/evals/trial-views";
 import { TrialPanel } from "./TrialPanel";
 
@@ -32,7 +32,10 @@ export function TrialView({
   const crumbs = [
     { label: "Evals", href: evalsHref(projectId) },
     ...(model.evalId
-      ? [{ label: "Eval", href: evalHref(projectId, model.evalId, candidate.runId) }]
+      ? [
+          { label: model.evalName ?? "Eval", href: evalHref(projectId, model.evalId) },
+          { label: "Run", href: experimentHref(projectId, candidate.runId) },
+        ]
       : []),
   ];
   return (
