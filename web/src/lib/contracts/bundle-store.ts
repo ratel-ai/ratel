@@ -1,6 +1,7 @@
 /**
  * Where the pushed sandbox bundles are (gzip tars). The web process that takes a push and the
- * worker that builds it must read the same store. A stored bundle never changes.
+ * worker that builds it must read the same store. A stored bundle never changes. Once the build of
+ * its version ends (ready or failed) nothing reads it again, and the build deletes it.
  */
 export type BundleInfo = { sha256: string; bytes: number };
 
@@ -19,4 +20,9 @@ export type BundleStore = {
   put(key: string, body: AsyncIterable<Uint8Array>, bundle: BundleInfo): Promise<BundlePutResult>;
   /** The stored bundle, or null when the key has none. */
   open(key: string): Promise<AsyncIterable<Uint8Array> | null>;
+  /**
+   * Deletes the bundle of the key. A key with no bundle is no error. Optional: an adapter without
+   * it keeps every bundle (an edition store can expire them by its own rule).
+   */
+  delete?(key: string): Promise<void>;
 };

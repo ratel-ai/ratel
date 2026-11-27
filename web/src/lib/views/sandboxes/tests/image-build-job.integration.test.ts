@@ -142,6 +142,7 @@ async function setup(over: Setup = {}) {
   return {
     db,
     deps,
+    bundles,
     version,
     builds,
     provider,
@@ -868,4 +869,31 @@ test("the tarball opens after the VM starts, and closes when the write breaks", 
   assert.deepEqual(before, [0]);
   assert.equal(body.destroyed, true);
   assert.equal(t.provider.vms.size, 0);
+});
+
+test("the bundle leaves the store once the version is ready or failed, and stays while it waits", async () => {
+  const ready = await setup();
+  assert.deepEqual(await ready.run(), { status: "ready" });
+  assert.equal(await ready.bundles.open(bundleKey(ready.version)), null);
+
+  const failed = await setup({ agent: { health: "never" } });
+  assert.deepEqual(await failed.run(), { status: "failed" });
+  assert.equal(await failed.bundles.open(bundleKey(failed.version)), null);
+
+  // With the flag off the version waits for a build: its bundle stays.
+  const waiting = await setup();
+  assert.deepEqual(await waiting.run({ enabled: async () => false }), { status: "unbuilt" });
+  assert.notEqual(await waiting.bundles.open(bundleKey(waiting.version)), null);
+});
+
+test("a bundle that cannot be deleted does not change the outcome of the build", async () => {
+  const t = await setup();
+  const bundles = {
+    ...t.bundles,
+    delete: async () => {
+      throw new Error("store down");
+    },
+  };
+  assert.deepEqual(await t.run({ bundles }), { status: "ready" });
+  assert.equal((await t.read()).status, "ready");
 });

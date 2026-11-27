@@ -41,6 +41,10 @@ export function createLocalBundleStore(folder: string): BundleStore {
       const path = pathOf(key);
       return (await exists(path)) ? createReadStream(path) : null;
     },
+
+    async delete(key) {
+      await rm(pathOf(key), { force: true });
+    },
   };
 }
 
