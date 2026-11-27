@@ -107,6 +107,7 @@ function list(rows: TaskRow[], overrides: Partial<TaskListModel> = {}): TaskList
       allRuns: 0,
       finishRate: 0.95,
       correctionsPer100: null,
+      correctionsWindowDays: null,
       correctionsRecorded: false,
     },
     rows,

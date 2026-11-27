@@ -116,6 +116,8 @@ export interface SummaryViewProps {
    * from the shape of imported spans and no content came with them.
    */
   inferredTools?: boolean;
+  /** The project has a usable API key: the states before a reading point at it (`HealthStateV2`). */
+  hasApiKey?: boolean;
   now?: Date;
 }
 
@@ -215,6 +217,7 @@ function NotReady({
   canImport,
   imports,
   partial = null,
+  hasApiKey = false,
   readings,
 }: SummaryViewProps & {
   state: HealthPageState;
@@ -237,6 +240,7 @@ function NotReady({
           canImport={canImport}
           billingHref={billingHref}
           sourceLabel={imports?.sourceLabel}
+          hasApiKey={hasApiKey}
         />
       )}
       {collecting && readings ? (

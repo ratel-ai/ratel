@@ -8,6 +8,7 @@ import { RUNTIME_EVENT_RETENTION_DAYS } from "@/lib/ingest/trace-events/maintena
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import { intentClusters, intentEngineState } from "@/lib/readings/intent-engine/schema";
 import { type EngineDb, expireIdleClusters } from "@/lib/readings/intent-engine/store";
@@ -86,6 +87,7 @@ export async function listProjectsWithUnclusteredEvents(
     .leftJoin(intentEngineState, eq(intentEngineState.projectId, projects.id))
     .where(
       and(
+        notOnHold(projects.id),
         or(
           sql`${intentEngineState.projectId} is not null`,
           exists(
@@ -165,17 +167,20 @@ export async function expireIntentEngineClusters(
     .select({ id: intentEngineState.projectId })
     .from(intentEngineState)
     .where(
-      exists(
-        db
-          .select({ one: sql`1` })
-          .from(intentClusters)
-          .where(
-            and(
-              eq(intentClusters.projectId, intentEngineState.projectId),
-              eq(intentClusters.level, 0),
-              sql`${intentClusters.lastTs} < ${cutoffMs}`,
+      and(
+        notOnHold(intentEngineState.projectId),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(intentClusters)
+            .where(
+              and(
+                eq(intentClusters.projectId, intentEngineState.projectId),
+                eq(intentClusters.level, 0),
+                sql`${intentClusters.lastTs} < ${cutoffMs}`,
+              ),
             ),
-          ),
+        ),
       ),
     )
     .limit(EXPIRE_TICK_PROJECTS);

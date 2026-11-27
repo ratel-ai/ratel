@@ -16,6 +16,7 @@ import { LONG_JOB_KINDS } from "@/lib/jobs/kinds";
 import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 
 /** The job queue's queries (owned port of the upstream query hub). */
 
@@ -169,6 +170,7 @@ export function oldestQueuedJobAgeQuery(): SQL {
     select floor(extract(epoch from now() - min(${jobs.createdAt})) * 1000) as age_ms
     from ${jobs}
     where ${jobs.status} = 'queued' and ${jobs.kind} = any(array[${kinds}]::text[])
+      and ${notOnHold(jobs.projectId)}
   `;
 }
 
@@ -254,7 +256,7 @@ export async function claimNextQueuedJob(
     .update(jobs)
     .set({ status: "running", startedAt: new Date() })
     .where(
-      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${kindFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
+      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' and ${notOnHold(sql`q.project_id`)} ${projectFilter} ${createdFilter} ${kindFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
     )
     .returning({
       id: jobs.id,
@@ -270,18 +272,26 @@ export async function markJobDone(
   id: string,
   result: unknown,
   db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(jobs)
     .set({ status: "done", result: result ?? null, finishedAt: new Date() })
-    .where(eq(jobs.id, id));
+    .where(and(eq(jobs.id, id), eq(jobs.status, "running")))
+    .returning({ id: jobs.id });
+  return rows.length > 0;
 }
 
-export async function markJobError(id: string, error: string): Promise<void> {
-  await getDb()
+export async function markJobError(
+  id: string,
+  error: string,
+  db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
+): Promise<boolean> {
+  const rows = await db
     .update(jobs)
     .set({ status: "error", error, finishedAt: new Date() })
-    .where(eq(jobs.id, id));
+    .where(and(eq(jobs.id, id), eq(jobs.status, "running")))
+    .returning({ id: jobs.id });
+  return rows.length > 0;
 }
 
 /** One job scoped to the project that owns it, so an API-key caller can poll it. */

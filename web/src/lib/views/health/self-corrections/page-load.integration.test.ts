@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
+import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
   type Db,
@@ -11,13 +12,19 @@ import {
   setupDb,
 } from "@/lib/readings/trace-signals/signals/integration-support";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
-import { readSelfCorrectionsCard } from "@/lib/views/health/self-corrections/card";
+import {
+  readSelfCorrectionRate,
+  readSelfCorrectionsCard,
+} from "@/lib/views/health/self-corrections/card";
 import {
   exampleOf,
   loadExampleRow,
   loadReplyMessages,
 } from "@/lib/views/health/self-corrections/example";
 import { readSelfCorrectionsPage } from "@/lib/views/health/self-corrections/page-load";
+import { formatRate } from "@/lib/views/health/self-corrections/page-model";
+import { buildTaskList } from "@/lib/views/tasks/model";
+import { loadTasksInputs } from "@/lib/views/tasks/page-model";
 
 /**
  * The page's reads over a database a signal run wrote: grouped counts with
@@ -203,6 +210,30 @@ test("the Summary row: rate, change and trend, recovered, the tool the agent cor
   await client.close();
 });
 
+test("the Tasks tile reads the page's headline: the same turns, the same self-corrections, the same number", async () => {
+  const { client, db } = await seeded();
+  const page = await readSelfCorrectionsPage(db, {
+    projectId: PROJECT_ID,
+    windowDays: 7,
+    now: NOW,
+  });
+  assert.deepEqual(await readSelfCorrectionRate(db, PROJECT_ID, 7, NOW), {
+    windowDays: 7,
+    turns: page.turns,
+    events: page.events,
+  });
+  const inputs = await loadTasksInputs(PROJECT_ID, {
+    read: (_operation, read) => read(db as unknown as BoundReadDb),
+    planWindowDays: async () => 7,
+    selfCorrectionsTile: true,
+  });
+  const { stats } = buildTaskList(inputs);
+  assert.equal(stats.correctionsWindowDays, 7, "the plan's page shows no more than 7 days");
+  assert.ok(stats.correctionsPer100 !== null);
+  assert.equal(formatRate(stats.correctionsPer100), page.stats[0]?.value);
+  await client.close();
+});
+
 test("before any reading the page and the card say so", async () => {
   const { client, db } = await setupDb();
   const page = await readSelfCorrectionsPage(db, {
@@ -212,5 +243,6 @@ test("before any reading the page and the card say so", async () => {
   });
   assert.equal(page.state, "not_read");
   assert.equal((await readSelfCorrectionsCard(db, PROJECT_ID, 7, NOW)).state, "not_read");
+  assert.equal(await readSelfCorrectionRate(db, PROJECT_ID, 7, NOW), null, "nor does the rate");
   await client.close();
 });

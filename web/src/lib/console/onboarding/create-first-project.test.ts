@@ -49,6 +49,7 @@ function harness({
       keys.push(input);
       return { id: "55555555-5555-4555-8555-555555555555" };
     },
+    keyCreationRefusal: async () => null,
     generateApiKey: () => ({ plaintext: "rtl_secret-value", prefix: "rtl_secret-v", hash: "h" }),
     checkQuota: (_org, _key, count) => {
       counted = count;
@@ -234,4 +235,14 @@ test("a key the edition could not keep still lands, shown once", async () => {
   );
   assert.equal(state?.ok && state.apiKey, "rtl_secret-value");
   assert.equal(state?.ok && state.keyRevealable, false);
+});
+
+test("an organization that may not have a new key gets no project either", async () => {
+  const h = harness();
+  const state = await createFirstProject(
+    { name: "Support Copilot" },
+    { ...h.deps, keyCreationRefusal: async (id) => `not yet for ${id}` },
+  );
+  assert.deepEqual(state, { ok: false, error: `not yet for ${ORG.id}` });
+  assert.deepEqual([h.created, h.keys], [[], []]);
 });

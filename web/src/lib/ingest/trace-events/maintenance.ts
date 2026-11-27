@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, lt } from "drizzle-orm";
 import { traceEventRejects, traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 
 export interface RuntimeEventRetentionOptions {
   now?: Date;
@@ -26,7 +27,13 @@ export async function pruneExpiredRuntimeEvents(
   const expiredIds = db
     .select({ id: traceEvents.id })
     .from(traceEvents)
-    .where(and(eq(traceEvents.ingestSource, "runtime"), lt(traceEvents.receivedAt, cutoff)))
+    .where(
+      and(
+        eq(traceEvents.ingestSource, "runtime"),
+        lt(traceEvents.receivedAt, cutoff),
+        notOnHold(traceEvents.projectId),
+      ),
+    )
     .orderBy(asc(traceEvents.receivedAt), asc(traceEvents.id))
     .limit(PRUNE_BATCH_SIZE);
   const deleted = await db
@@ -45,7 +52,7 @@ export async function pruneExpiredRuntimeEventRejects(
   const expiredIds = db
     .select({ id: traceEventRejects.id })
     .from(traceEventRejects)
-    .where(lt(traceEventRejects.receivedAt, cutoff))
+    .where(and(lt(traceEventRejects.receivedAt, cutoff), notOnHold(traceEventRejects.projectId)))
     .orderBy(asc(traceEventRejects.receivedAt), asc(traceEventRejects.id))
     .limit(PRUNE_BATCH_SIZE);
   const deleted = await db

@@ -291,6 +291,7 @@ function importedAsk(span: DecodedSpan, byId: ReadonlyMap<string, DecodedSpan>):
 export function deriveToolInvocations(
   spans: readonly DecodedSpan[],
   dimensions: SpanDimensionsById = NO_SPAN_DIMENSIONS,
+  receivedAt?: Date,
 ): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
   const childrenOf = childrenIndex(spans);
@@ -312,6 +313,7 @@ export function deriveToolInvocations(
       callSpan,
       namedAgentOf(span, byId)?.name ?? null,
       server,
+      receivedAt,
     );
     out.push({
       ...row,
@@ -330,6 +332,7 @@ function toolRow(
   callSpan: string,
   agent: string | null,
   server: string | null,
+  receivedAt: Date | undefined,
 ): ParsedTraceEvent {
   // A call can fail without saying so on the span: its result says it instead.
   const errorType = toolErrorType(span) ?? resultFailure(span);
@@ -342,7 +345,7 @@ function toolRow(
   const callId =
     firstString(span.attributes, CALL_ID_KEYS) ??
     (dialect === "mcp" ? attrString(span.attributes, "jsonrpc.request.id") : undefined);
-  const startOk = plausibleOccurredAt(span.startUnixMs);
+  const startOk = plausibleOccurredAt(span.startUnixMs, receivedAt);
   const tookMs = startOk ? Math.max(0, Math.round(span.endUnixMs - span.startUnixMs)) : null;
   const empty = errorType ? null : resultEmpty(span);
   const argHash = argumentHash(span);
@@ -359,7 +362,7 @@ function toolRow(
     type,
     schemaVersion: 1,
     sessionId: (session ?? span.traceId).slice(0, MAX_ID),
-    occurredAt: startOk ?? new Date(),
+    occurredAt: startOk ?? receivedAt ?? new Date(),
     toolId,
     skillId: null,
     query: null,
