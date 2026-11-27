@@ -135,7 +135,6 @@ export function ExplorePanel({
         facets={facets}
         result={preview?.ok ? preview.result : null}
         refused={refused}
-        range={range}
       />
       <div
         aria-busy={pending || undefined}

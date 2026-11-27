@@ -9,7 +9,7 @@ const COMPILER_WORDS = new Set(
   (
     "select distinct as from where and or not group by having order asc desc nulls first last limit " +
     "is null true false between in like ilike count sum avg min max percentile_cont within date_bin " +
-    "timestamptz array filter double precision"
+    "timestamptz array filter double precision case when then else end coalesce cross join lateral unnest any"
   ).split(" "),
 );
 
@@ -24,6 +24,7 @@ function residue(sql: string): string {
     .replace(/"[a-z_][a-z0-9_]*"/g, " ")
     .replace(/\$\d+::(?:text|bigint|double precision|boolean|timestamptz|interval)/g, " ")
     .replace(/\b0\.(?:5|9|95|99)\b/g, " ")
+    .replace(/\b[01]\.0\b/g, " ")
     .replace(/[a-z_]+/g, (word) => (COMPILER_WORDS.has(word) ? " " : word))
     .replace(/[(),.*=<>+\-/@[\]:]/g, " ")
     .trim();
@@ -64,6 +65,20 @@ test("hostile literals are parameters, and no text of the query reaches the SQL"
   }
 });
 
+test("hostile literals in rate, coalesce and each are parameters too", () => {
+  for (const value of HOSTILE) {
+    const literal = `'${value.replaceAll("'", "''")}'`;
+    const text = `select each(models) as model, rate(service_name = ${literal}), coalesce(environment, ${literal}) as env, coalesce(sum(cost_usd), 0)
+      from traces where each(models) in (${literal}, 'b') and coalesce(service_name, ${literal}) != ${literal}
+      group by model, env having rate(contains(tools, ${literal})) >= 0`;
+    const result = compileRql(text, { now: NOW, filter: { models: [value] } });
+    if (!result.ok) assert.fail(`${value}: ${result.error.code} ${result.error.message}`);
+    assert.equal(residue(result.sql), "", `${value}\n${result.sql}`);
+    assert.ok(result.params.includes(value), value);
+    assert.ok(!result.sql.includes(value));
+  }
+});
+
 test("each query the docs give compiles to SQL with no residue", () => {
   const queries = [
     "select time_bucket('1 hour', started_at) as hour, p95(duration_ms), count(*) from traces where contains(models, 'gpt-4o') group by hour order by hour",
@@ -71,6 +86,8 @@ test("each query the docs give compiles to SQL with no residue", () => {
     "select session_id, cost_usd from sessions where trace_count between 2 and 50 order by cost_usd desc nulls last limit 20",
     "select user_id, percentile(total_duration_ms, 0.5) from users group by user_id",
     "select -input_tokens, not has_error, started_at from traces where started_at >= '2026-11-25T00:00:00Z'",
+    "select each(models) as model, rate(coalesce(root_error, has_error)) from traces group by model",
+    "select time_bucket('1 day', occurred_at) as day, coalesce(sum(context_tokens), 0) from prompts group by day",
   ];
   for (const text of queries) {
     const result = compileRql(text, { now: NOW });

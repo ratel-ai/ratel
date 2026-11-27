@@ -58,8 +58,9 @@ export interface QueryScope extends QueryWindow {
   /**
    * Who reads. An alert rule's query of kind sql takes the reserved RQL path: a gate of its own
    * and a shorter timeout (`RQL_LIMITS.alertTimeoutMs`), so a busy dashboard never fails a rule.
+   * `agent` is `run_rql`: its window is RQL's `maxWindowDays`, not the console's long range.
    */
-  purpose?: "alert";
+  purpose?: "alert" | "agent";
 }
 
 /** The groups kept in a grouped result. */

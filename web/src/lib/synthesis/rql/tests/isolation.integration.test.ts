@@ -13,7 +13,7 @@ import { pglitePool } from "./test-support";
  */
 
 const NOW = new Date();
-const VIEWS = ["events", "traces", "scores", "sessions", "users"];
+const VIEWS = ["events", "traces", "scores", "sessions", "users", "prompts"];
 const SECRET_MS = 7777;
 
 let pool: RqlPool & { end(): Promise<void> };
@@ -41,6 +41,17 @@ before(async () => {
       );
     for (let i = 0; i < 50; i++) await trace(a, `a${i}`, 100 + i);
     await trace(b, "b-secret", SECRET_MS);
+    // A captured prompt of each project: B's latency is the secret on the prompts view.
+    const prompt = (project: string, latencyMs: number) =>
+      q(
+        `with e as (insert into events (project_id, received_at) values ($1, $2) returning id)
+         insert into event_metrics (event_id, project_id, event_time, tokens_by_category, splits,
+           latency_ms, categorizer_version)
+         select id, $1, $2, '{"skills": 1}', '{}', $3, 1 from e`,
+        [project, at, latencyMs],
+      );
+    for (let i = 0; i < 20; i++) await prompt(a, 100 + i);
+    await prompt(b, SECRET_MS);
   } finally {
     client.release();
   }
@@ -68,35 +79,59 @@ test("each rql view is a security barrier", async () => {
   }
 });
 
-test("a failing condition of the query cannot read another project's values, on a sequential scan", async () => {
-  const outcomes = [];
-  for (const guess of [SECRET_MS - 1, SECRET_MS]) {
-    const compiled = compileRql(
-      `select count(*) from traces where duration_ms / (duration_ms - ${guess}) > 0`,
-      { now: NOW },
-    );
-    assert.ok(compiled.ok);
-    const client = await pool.connect();
-    try {
-      await client.query({ text: "begin read only" });
-      // The plan of a project with a large share of the table.
-      await client.query({ text: "set local enable_indexscan = off" });
-      await client.query({ text: "set local enable_bitmapscan = off" });
-      await client.query({ text: "set local role ratel_rql" });
-      await client.query({ text: "select set_config('rql.project_id', $1, true)", values: [a] });
-      const { rows } = await client.query({
-        text: compiled.sql,
-        values: compiled.params,
-        rowMode: "array",
-      });
-      outcomes.push(JSON.stringify(rows));
-    } catch (error) {
-      outcomes.push(`error: ${(error as Error).message}`);
-    } finally {
-      await client.query({ text: "rollback" }).catch(() => {});
-      client.release();
+for (const [table, column] of [
+  ["traces", "duration_ms"],
+  ["prompts", "latency_ms"],
+])
+  test(`a failing condition on ${table} cannot read another project's values, on a sequential scan`, async () => {
+    const outcomes = [];
+    for (const guess of [SECRET_MS - 1, SECRET_MS]) {
+      const compiled = compileRql(
+        `select count(*) from ${table} where ${column} / (${column} - ${guess}) > 0`,
+        { now: NOW },
+      );
+      assert.ok(compiled.ok);
+      const client = await pool.connect();
+      try {
+        await client.query({ text: "begin read only" });
+        // The plan of a project with a large share of the table.
+        await client.query({ text: "set local enable_indexscan = off" });
+        await client.query({ text: "set local enable_bitmapscan = off" });
+        await client.query({ text: "set local role ratel_rql" });
+        await client.query({ text: "select set_config('rql.project_id', $1, true)", values: [a] });
+        const { rows } = await client.query({
+          text: compiled.sql,
+          values: compiled.params,
+          rowMode: "array",
+        });
+        outcomes.push(JSON.stringify(rows));
+      } catch (error) {
+        outcomes.push(`error: ${(error as Error).message}`);
+      } finally {
+        await client.query({ text: "rollback" }).catch(() => {});
+        client.release();
+      }
     }
+    assert.equal(outcomes[1], outcomes[0], "the guess of B's value changes nothing for A");
+    assert.doesNotMatch(outcomes[1], /error/);
+  });
+
+test("the prompts view gives the rows of the project in rql.project_id only", async () => {
+  const compiled = compileRql("select count(*), max(latency_ms) from prompts", { now: NOW });
+  assert.ok(compiled.ok);
+  const client = await pool.connect();
+  try {
+    await client.query({ text: "begin read only" });
+    await client.query({ text: "set local role ratel_rql" });
+    await client.query({ text: "select set_config('rql.project_id', $1, true)", values: [a] });
+    const { rows } = await client.query({
+      text: compiled.sql,
+      values: compiled.params,
+      rowMode: "array",
+    });
+    assert.deepEqual(rows, [[20, 119]]);
+  } finally {
+    await client.query({ text: "rollback" }).catch(() => {});
+    client.release();
   }
-  assert.equal(outcomes[1], outcomes[0], "the guess of B's value changes nothing for A");
-  assert.doesNotMatch(outcomes[1], /error/);
 });

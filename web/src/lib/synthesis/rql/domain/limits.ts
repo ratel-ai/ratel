@@ -6,8 +6,13 @@
 export const RQL_LIMITS = Object.freeze({
   /** The window of a query that gives none: the last 24 hours before `now`. */
   defaultWindowHours: 24,
-  /** The longest window a query can ask for. */
+  /** The longest window a query of an agent (`run_rql`) can ask for. */
   maxWindowDays: 30,
+  /**
+   * The longest window of a console run: a dashboard, Explore or an alert rule reads the range of
+   * its page, as the metric form does. The timeout still bounds its cost.
+   */
+  consoleMaxWindowDays: 372,
   /** The rows of a query that has no LIMIT. */
   defaultLimit: 100,
   /** The most rows a query can give. A larger LIMIT is lowered to this value. */

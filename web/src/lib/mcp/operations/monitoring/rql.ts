@@ -41,7 +41,7 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
       domain: "observability",
       title: "Describe the RQL schema",
       description:
-        "Gives RQL (Ratel Query Language), the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users), their columns, the functions, the operators, the limits, the rules and example queries. Call it before run_rql.",
+        "Gives RQL (Ratel Query Language), the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users, prompts), their columns, the functions, the operators, the limits, the rules and example queries. Call it before run_rql.",
       keywords: ["rql schema", "rql tables", "query language"],
       scope: "project",
       mutates: false,
@@ -98,7 +98,8 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
           rqlVersion: params.rqlVersion ?? RQL_VERSION,
         };
         const result = (await deps
-          .runQuery(projectId, query, { since, until: window.until })
+          // An agent's run: RQL reads at most `maxWindowDays`, not the console's long range.
+          .runQuery(projectId, query, { since, until: window.until, purpose: "agent" })
           .catch((error: unknown) => {
             throw queryRefusal(error);
           })) as SqlResult;

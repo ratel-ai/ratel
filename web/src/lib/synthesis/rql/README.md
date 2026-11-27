@@ -8,7 +8,7 @@ has no database access. The runner (`run.ts`) runs a compiled query on the read-
 `register.ts`.
 
 ```ts
-compileRql(text, { now, window? }):
+compileRql(text, { now, window?: { from, to, by? }, filter?, console? }):
   | { ok: true, sql, params, limitParam, columns: { name, type }[], table, window: { from, to }, limit, oneRow }
   | { ok: false, error: { code, message, fix, at? } }
 describeRqlSchema(): RqlSchemaDescription   // for describe_rql_schema
@@ -20,15 +20,15 @@ runRql(compiled, { projectId }, deps?):
 | File | Holds |
 |---|---|
 | `compile.ts` | the entry point: `compileRql` with the `pgsql-ast-parser` adapter, `describeRqlSchema`, the public types |
-| `domain/catalog.ts` | pure: `RQL_VERSION`, the five tables (columns, types, descriptions, hints, the totals of `sessions` and `users`) and the functions |
-| `domain/limits.ts` | `RQL_LIMITS`: the window (24 hours by default, 30 days at most), the rows (100 by default, 1000 at most), the text (4000 characters), the output columns (50, each column of `*` counts), a list (100 items), the depth of an expression (200), a cell (2000 characters), a result (1 MB of JSON), the timeout (10 s) and the parallel queries of one project (2) |
+| `domain/catalog.ts` | pure: `RQL_VERSION`, the six tables (columns, types, descriptions, hints, the totals of `sessions` and `users`, the `knownColumn` of a window by known time) and the functions |
+| `domain/limits.ts` | `RQL_LIMITS`: the window (24 hours by default, 30 days at most for `run_rql`, 372 days for a console run), the rows (100 by default, 1000 at most), the text (4000 characters), the output columns (50, each column of `*` counts), a list (100 items), the depth of an expression (200), a cell (2000 characters), a result (1 MB of JSON), the timeout (10 s) and the parallel queries of one project (2) |
 | `domain/guard.ts` | pure: the checks before the parse, in one linear pass: the text length, a second statement after `;`, a list over 100 items, parentheses over 200 deep |
 | `domain/result.ts` | pure: the cell cut and the byte cap of a result, and the row size the executor counts |
 | `domain/ast.ts` | the parsed tree the parser port gives, with a `foreign` node for each refused construct |
 | `domain/check.ts` | pure: the parsed tree to a typed tree of catalog names and literal values, or the error |
-| `domain/rewrite.ts` | pure: prints the SQL from the typed tree; names are quoted catalog names, outputs are `c1`, `c2`..., values are `$n::type`; adds the window and the page filter |
+| `domain/rewrite.ts` | pure: prints the SQL from the typed tree; names are quoted catalog names, outputs are `c1`, `c2`..., values are `$n::type`; adds the window (by its time column, or by known time), the page filter, and one lateral join for each list that `each` reads |
 | `domain/version.ts` | `RQL_VERSION` alone, so a browser bundle that writes a query of kind sql does not take the catalog |
-| `domain/page-filter.ts` | pure: `RqlPageFilter` (the console's trace filter) and its conditions on `rql.traces` |
+| `domain/page-filter.ts` | pure: `RqlPageFilter` (the console's trace filter), its conditions on `rql.traces`, and the values it keeps of each list for `each` |
 | `domain/window.ts`, `domain/compile.ts`, `domain/errors.ts` | the window rules; parse, check and rewrite in one call; the error codes and `nearestName` (edit distance) |
 | `domain/describe.ts` | pure: the schema description (tables, columns, functions, operators, limits, rules, examples) |
 | `ports/parser.ts`, `adapters/pgsql-ast-parser.ts` | the `RqlParser` port and its one adapter |
@@ -45,7 +45,14 @@ runRql(compiled, { projectId }, deps?):
   so the runner changes it alone: a literal equal to the limit keeps its value.
 - The output columns are `c1`, `c2`...; `columns` gives their RQL names and types in that order.
 - A row table reads `"rql"."<table>"` with the window on its time column joined to the query's
-  `WHERE` by `and`. `sessions` and `users` read a derived query: the trace rows of the view in the
+  `WHERE` by `and`. A window `by: "known"` applies to the table's `knownColumn` instead
+  (`traces.known_at`, `scores.scored_at`), when it has one.
+- `rate(c)` is `avg(case when c then 1.0 else 0.0 end)`: a null condition counts as not true.
+  `coalesce` is `coalesce`.
+- `each(list)` is `"each_<list>"."v"` of
+  `cross join lateral (select distinct "v" from unnest("<list>") as "u"("v")) as "each_<list>"`: one
+  join per list, so every `each` of one list is one value. A page filter that names the list adds
+  `"each_<list>"."v" in (...)` for each of its clauses, as the metric form groups a filtered list. `sessions` and `users` read a derived query: the trace rows of the view in the
   window, grouped by `session_id` or `user_id` into the totals of the catalog; the query's
   clauses then apply to those totals.
 
@@ -56,16 +63,17 @@ The storage column `end_user_id` is `user_id` in each view: RQL has one name for
 `user_id` is the raw end-user id, as `trace_events` stores it: no hash, and no map to a person of
 the console.
 An RQL query that names `end_user_id` is refused, and the fix suggests `user_id`.
-`rql.events`, `rql.traces` and `rql.scores` have the catalog columns in the catalog order.
+`rql.events`, `rql.traces`, `rql.scores` and `rql.prompts` have the catalog columns in the catalog order.
 `rql.sessions` and `rql.users` have the trace columns that the totals of the catalog read.
 
 | View | Columns |
 |---|---|
 | `rql.events` (`otel_spans`) | `trace_id`, `span_id`, `parent_span_id`, `name`, `type` (`span_class`: `llm_call` to `llm_call`, `tool` to `tool_call`, `ratel_search` to `search`; another class with `operation_name` `invoke_agent` or `create_agent` to `agent_run`; each other span to `other`), `status` (`status_code`: 0 `unset`, 1 `ok`, 2 `error`), `started_at`, `ended_at`, `duration_ms`, `service_name`, `operation` (`operation_name`), `provider` (`provider_name`), `model`, `input_tokens`, `output_tokens`, `cached_tokens`, `reasoning_tokens`, `cost_usd`, `agent` (`agent_key`), `caller_agent` (`caller_agent_key`), `mcp_server`, `experiment_name`, `experiment_arm`, `session_id`, `user_id` (`end_user_id`), `attributes` |
-| `rql.traces` (`otel_trace_summaries`) | `trace_id`, `started_at`, `duration_ms`, `has_error`, `root_error`, `input_tokens`, `output_tokens`, `cost_usd`, `models`, `tools`, `agents`, `mcp_servers`, `service_name`, `environment`, `geo_country`, `session_id`, `user_id` (`end_user_id`) |
-| `rql.scores` (`trace_scores` with `trace_scorers` and `otel_trace_summaries`) | `scorer_id` (text), `scorer` (`trace_scorers.name`), `scorer_kind` (`trace_scorers.kind`), `trace_id`, `value`, `passed`, `confidence`, `scored_at`, `trace_started_at`, and from the trace: `session_id`, `user_id` (`end_user_id`), `service_name`, `environment`, `models`, `tools`, `agents` |
+| `rql.traces` (`otel_trace_summaries`) | `trace_id`, `started_at`, `duration_ms`, `has_error`, `root_error`, `input_tokens`, `output_tokens`, `cost_usd`, `models`, `tools`, `agents`, `mcp_servers`, `service_name`, `environment`, `geo_country`, `session_id`, `user_id` (`end_user_id`), `known_at` (`updated_at`) |
+| `rql.scores` (`trace_scores` with `trace_scorers` and `otel_trace_summaries`) | `scorer_id` (text), `scorer` (`trace_scorers.name`), `scorer_kind` (`trace_scorers.kind`), `trace_id`, `value`, `passed`, `confidence`, `scored_at`, `trace_started_at`, and from the trace: `session_id`, `user_id` (`end_user_id`), `service_name`, `environment`, `models`, `tools`, `agents`, `mcp_servers`, `trace_has_error`, `trace_input_tokens`, `trace_output_tokens`, `trace_cost_usd` (null when the trace is gone) |
 | `rql.sessions` (trace rows with a `session_id`) | `trace_id`, `session_id`, `user_id` (`end_user_id`), `started_at`, `duration_ms`, `has_error`, `input_tokens`, `output_tokens`, `cost_usd` |
 | `rql.users` (trace rows with an `end_user_id`) | the columns of `rql.sessions` |
+| `rql.prompts` (`event_metrics` with `events`) | `occurred_at` (`event_time`), `provider`, `model`, `input_tokens`, `output_tokens`, `context_tokens` (the sum of the five sources), `skills_tokens`, `tools_tokens`, `history_tokens`, `memory_tokens`, `user_input_tokens` (`tokens_by_category`, 0 for a missing key), `cost_usd`, `latency_ms` |
 
 ## The run
 
@@ -79,7 +87,8 @@ the compiled SQL with its params and the one at `limitParam` (the `LIMIT`) repla
 `statement_timeout`, so the whole read stops at the timeout, then
 `ROLLBACK`. A cursor reads only a SELECT, so a write is a syntax error before it runs. So the four walls are:
 
-- The views of migration `0057_rql_views` keep only the rows of `rql.project_id`; unset, no row.
+- The views of migrations `0057_rql_views`, `0060_rql_scores_project` and `0062_rql_metric_parity`
+  keep only the rows of `rql.project_id`; unset, no row.
   They are `security_barrier` views: the project filter runs before any condition of the query, so
   a condition that fails cannot test another project's rows (`tests/isolation.integration.test.ts`).
   They run with the rights of their owner, so `ratel_rql` has SELECT on the views only and no
@@ -145,12 +154,14 @@ something imports `synthesis/rql/query`. The seam has no flag check: each caller
 behind `customMonitoring` already. The text is compiled at every run, so a
 saved query is checked again at load: a version newer than `RQL_VERSION` is `rql_version`, an older
 one is compiled with today's RQL and, when it no longer compiles, the compile error says so. The
-window of the query is the scope's (`since`, `until`). The filter of the scope (the page filter of a
+window of the query is the scope's (`since`, `until`, and `by: "known"` for an alert rule), up to
+`consoleMaxWindowDays` (372); `run_rql` gives `scope.purpose: "agent"` and keeps `maxWindowDays` (30). The filter of the scope (the page filter of a
 dashboard or of Explore) goes to the compiler as `filter`: it keeps the rows whose trace matches, as
 the metric form does. On `traces` each part is a condition on its own columns; on `events`,
 `scores`, `sessions` and `users` it is `trace_id in (select trace_id from rql.traces where ...)`, so
 every part (models, tools, services, environments, agents, MCP servers, status, minimum cost,
-minimum tokens and the `and` clauses) applies on every table and no part is left out. On `sessions`
+minimum tokens and the `and` clauses) applies on every table and no part is left out. `prompts`
+has no trace: the filter keeps all of its rows. On `sessions`
 and `users` it narrows the trace rows before their totals. Each value is a bound parameter. Alert
 rules give no filter.
 A widget of chart `sql` holds the kind (`views/dashboards`: a table, or a chart for rows with one
