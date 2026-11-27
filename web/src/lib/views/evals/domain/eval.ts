@@ -112,8 +112,16 @@ export type EvalDefinition = EvalDetails & {
   versions: EvalVersion[];
 };
 
-/** An eval version as a run freezes it. */
-export type FrozenEval = { evalId: string; versionId: string; number: number; name: string };
+/** An eval version as a run freezes it, with the params and the trials that the run used. */
+export type FrozenEval = {
+  evalId: string;
+  versionId: string;
+  number: number;
+  name: string;
+  /** The default params of the eval with the params of the run over them. */
+  params: Record<string, unknown>;
+  trials: number;
+};
 
 /** The version that a run uses: the newest one. */
 export function currentVersion(definition: Pick<EvalDefinition, "versions">): EvalVersion {
@@ -129,9 +137,20 @@ export function runProblem(content: Pick<EvalContent, "scorers">): string | null
     : "Give the eval at least one gating scorer.";
 }
 
-export function freezeEval(definition: EvalDefinition): FrozenEval {
-  const { id, number } = currentVersion(definition);
-  return { evalId: definition.id, versionId: id, number, name: definition.name };
+/** The run's params go over the eval's. The run's trials, when it gives them, replace the eval's. */
+export function freezeEval(
+  definition: EvalDefinition,
+  run: { params?: Record<string, unknown>; trials?: number } = {},
+): FrozenEval {
+  const { id, number, params, trials } = currentVersion(definition);
+  return {
+    evalId: definition.id,
+    versionId: id,
+    number,
+    name: definition.name,
+    params: { ...params, ...run.params },
+    trials: run.trials ?? trials,
+  };
 }
 
 /** Whether an edit changes what a version freezes. The order of the keys of an object does not count. */

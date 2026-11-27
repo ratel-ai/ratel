@@ -103,6 +103,7 @@ export function freezeSuite(
   evals: readonly EvalDefinition[],
   cases: readonly EvalCase[],
   label: string | null = null,
+  run: { params?: Record<string, unknown>; trials?: number } = {},
 ): FrozenSuite {
   const byEval = Map.groupBy(cases, ({ evalId }) => evalId);
   const frozen: FrozenSuite = { caseVersions: [], evalVersions: [], scorerSnapshots: {} };
@@ -111,7 +112,7 @@ export function freezeSuite(
     if (runProblem(version)) continue;
     const approved = approvedCases(byEval.get(definition.id) ?? [], label);
     if (approved.length === 0) continue;
-    frozen.evalVersions.push(freezeEval(definition));
+    frozen.evalVersions.push(freezeEval(definition, run));
     for (const { evalCase, caseVersion } of approved) {
       frozen.caseVersions.push(frozenCase(evalCase, caseVersion));
       frozen.scorerSnapshots[caseVersion.id] = snapshotsOf(version);
@@ -143,6 +144,36 @@ function frozenCase(evalCase: EvalCase, version: CaseVersion): FrozenCase {
 
 function snapshotsOf(version: Pick<EvalVersion, "scorers">): ScorerSnapshot[] {
   return version.scorers.map(snapshotOf);
+}
+
+/** The frozen eval of a case version. Null for a run from before evals had definitions. */
+export function evalOfVersion(
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions">,
+  caseVersionId: string,
+): FrozenEval | null {
+  const evalId = experiment.caseVersions.find(
+    ({ versionId }) => versionId === caseVersionId,
+  )?.evalId;
+  return experiment.evalVersions.find((frozen) => frozen.evalId === evalId) ?? null;
+}
+
+/** The trials of a case: the trials of its eval, else the trials of the run. */
+export function trialsOfCase(
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "trialsPerCase">,
+  frozen: FrozenCase,
+): number {
+  return (
+    experiment.evalVersions.find(({ evalId }) => evalId === frozen.evalId)?.trials ??
+    experiment.trialsPerCase
+  );
+}
+
+/** The params of a trial: the params of its eval with the run's over them, else the run's. */
+export function paramsOfTrial(
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "params">,
+  caseVersionId: string,
+): Record<string, unknown> {
+  return evalOfVersion(experiment, caseVersionId)?.params ?? experiment.params;
 }
 
 export function emptyCounts(): Counts {

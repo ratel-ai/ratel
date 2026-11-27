@@ -20,6 +20,7 @@ import {
   type Trial,
   type TrialOutcome,
   type TrialState,
+  trialsOfCase,
 } from "../domain/experiment";
 import type { TrialResult } from "../domain/score";
 import type { ExperimentStore } from "../ports/experiment-store";
@@ -60,11 +61,12 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
           .values({ ...input, params: storable(input.params) })
           .returning();
         if (!row) throw new Error("the experiment row is missing");
-        const rows = input.caseVersions.flatMap(({ versionId }, position) =>
-          Array.from({ length: input.trialsPerCase }, (_, index) => ({
+        let position = 0;
+        const rows = input.caseVersions.flatMap((frozen) =>
+          Array.from({ length: trialsOfCase(input, frozen) }, (_, index) => ({
             experimentId: row.id,
-            caseVersionId: versionId,
-            position: position * input.trialsPerCase + index,
+            caseVersionId: frozen.versionId,
+            position: position++,
             index,
           })),
         );

@@ -151,7 +151,7 @@ test("the version of each side is reported", () => {
   );
 });
 
-test("other scorers are refused, and the scorers that differ are named", () => {
+test("cases whose scorers differ are left out of the verdict and named. The rest are compared", () => {
   const changed: EvalScorer = {
     ...NO_REFUND,
     definition: { kind: "check", config: { path: "tools", op: "eq", value: "refund_order" } },
@@ -171,15 +171,35 @@ test("other scorers are refused, and the scorers that differ are named", () => {
       same: { ...PASS, scorers: [{ ...NO_REFUND, id: "new-id", name: "new name" }] },
     }),
   );
-  assert.ok(!refusal.ok);
-  assert.equal(refusal.reason, "scorers_differ");
-  assert.deepEqual(refusal.scorers, [
+  assert.ok(refusal.ok);
+  assert.deepEqual(refusal.excluded, [
     { caseId: "a", caseName: "a", name: "No refund", difference: "changed" },
     { caseId: "b", caseName: "b", name: "Advisory", difference: "gating" },
     { caseId: "b", caseName: "b", name: "Extra", difference: "added" },
   ]);
+  assert.match(refusal.excludedMessage ?? "", /scorers of the two experiments differ/);
+  assert.deepEqual(
+    refusal.cases.map(({ caseId, change }) => [caseId, change]),
+    [
+      ["gone", "removed"],
+      ["a", "excluded"],
+      ["b", "excluded"],
+      ["same", "unchanged"],
+    ],
+  );
+  assert.equal(refusal.verdict, "unchanged");
+
+  const none = compare(
+    run("base", { a: PASS }),
+    run("next", { a: { ...PASS, scorers: [changed] }, added: PASS }),
+  );
+  assert.ok(!none.ok, "no case with the same scorers is left");
+  assert.equal(none.reason, "scorers_differ");
+  assert.deepEqual(none.scorers, [
+    { caseId: "a", caseName: "a", name: "No refund", difference: "changed" },
+  ]);
   for (const name of ["No refund", "Advisory", "Extra"]) {
-    assert.ok(refusal.message.includes(name), refusal.message);
+    assert.ok(refusal.excludedMessage?.includes(name), refusal.excludedMessage ?? "");
   }
 });
 
@@ -249,10 +269,7 @@ test("a judge with another model is another scorer", () => {
     [judgedBy("a", "a", "a"), judgedBy("a", "b", "a")],
     [judgedBy("a", "b", "a"), judgedBy("a", "b", "a")],
   ] as const) {
-    const refusal = compare(
-      run("base", { x: before, y: PASS }),
-      run("next", { x: after, y: PASS }),
-    );
+    const refusal = compare(run("base", { x: before }), run("next", { x: after }));
     assert.ok(!refusal.ok);
     assert.equal(refusal.reason, "scorers_differ");
     assert.deepEqual(refusal.scorers, [

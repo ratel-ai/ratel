@@ -789,6 +789,7 @@ const START_REFUSAL = {
   too_many_running: "quota_exceeded",
   too_many_trials: "invalid_params",
   invalid_params: "invalid_params",
+  wrong_sandbox: "conflict",
 } as const;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {

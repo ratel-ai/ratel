@@ -10,9 +10,11 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
 import { storable } from "@/lib/platform/storable";
-import { DEFAULT_TRIALS, type Experiment, MAX_TRIALS } from "./domain/experiment";
+import type { Compared } from "./baseline";
+import { type Experiment, MAX_TRIALS } from "./domain/experiment";
 import { experimentView } from "./experiment-view";
 import { type ExperimentDeps, type StartRefusal, startExperiment } from "./experiments";
+import { suiteTable } from "./suite-view";
 
 /**
  * Starts and reads experiments: with a project key (`protocol/evals/v1`), and for a member of the
@@ -24,6 +26,8 @@ export type ExperimentsApiDeps = {
   advance: (experiment: Experiment) => void;
   track: (experiment: Experiment, by: { externalId?: string; surface: string }) => Promise<void>;
   publicUrl: (path: string) => string;
+  /** The pinned baseline run of the project, with its trials. Null when none is pinned. */
+  baseline: (projectId: string) => Promise<Compared | null>;
 };
 
 /** Who may call the routes of a project key. */
@@ -43,8 +47,11 @@ const MAX_BODY_CHARS = 64 * 1024;
 const LIST_LIMIT = 50;
 const startSchema = z.object({
   sandboxVersion: z.union([z.literal("latest"), z.uuid()]),
-  trials: z.number().int().min(1).max(MAX_TRIALS).default(DEFAULT_TRIALS),
+  /** Absent: the trials of each eval. */
+  trials: z.number().int().min(1).max(MAX_TRIALS).optional(),
   params: z.record(z.string(), z.unknown()).default({}),
+  /** The names of the evals to run. Absent: the suite. */
+  evals: z.array(z.string().trim().min(1).max(200)).min(1).max(100).optional(),
   label: z.string().trim().min(1).max(100).optional(),
   name: z.string().trim().min(1).max(200).optional(),
 });
@@ -56,6 +63,7 @@ const STATUS: Record<StartRefusal, number> = {
   too_many_running: 429,
   too_many_trials: 413,
   invalid_params: 400,
+  wrong_sandbox: 409,
 };
 
 export function handleStartByKey(request: Request, deps: KeyDeps): Promise<Response> {
@@ -131,12 +139,13 @@ async function start(
     const where = issue?.path.join(".");
     return refuse(400, "invalid", `${where ? `${where}: ` : ""}${issue?.message ?? "Invalid."}`);
   }
-  const { sandboxVersion, trials, params, label, name } = body.data;
+  const { sandboxVersion, trials, params, label, name, evals } = body.data;
   const result = await startExperiment(
     { projectId, organizationId },
     {
       sandboxVersion,
-      trialsPerCase: trials,
+      ...(trials === undefined ? {} : { trialsPerCase: trials }),
+      ...(evals ? { evals } : {}),
       params,
       startedBy: by.startedBy,
       ...(label ? { label } : {}),
@@ -164,8 +173,12 @@ async function get(
   const known = z.uuid().safeParse(experimentId).success;
   const experiment = known ? await experiments.get(projectId, experimentId) : null;
   if (!experiment) return notFound();
-  const trials = await experiments.trials(experiment.id);
-  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps)));
+  const [trials, baseline] = await Promise.all([
+    experiments.trials(experiment.id),
+    deps.baseline(projectId),
+  ]);
+  const suite = suiteTable({ experiment, trials }, baseline);
+  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite));
 }
 
 export async function forKey(

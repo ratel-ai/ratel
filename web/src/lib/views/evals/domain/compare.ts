@@ -14,7 +14,8 @@ export type ComparedRun = {
 };
 
 export type Verdict = "regressed" | "improved" | "unchanged" | "inconclusive";
-export type CaseChange = Verdict | "added" | "removed";
+/** `excluded`: the scorers of the case (of its eval) differ between the two runs. */
+export type CaseChange = Verdict | "added" | "removed" | "excluded";
 export type CaseStatus = TrialResult;
 
 /** A case in one of the two experiments. */
@@ -35,8 +36,18 @@ export type ScorerDifference = {
   difference: "changed" | "gating" | "added" | "removed";
 };
 
-/** The order of `cases`: the changes first, the worst of them at the top. */
-export type Comparison = { ok: true; verdict: Verdict; rule: string; cases: ComparedCase[] };
+/**
+ * The order of `cases`: the changes first, the worst of them at the top. `excluded` names the
+ * scorers that differ, and `excludedMessage` says why their cases are not in the verdict.
+ */
+export type Comparison = {
+  ok: true;
+  verdict: Verdict;
+  rule: string;
+  cases: ComparedCase[];
+  excluded: ScorerDifference[];
+  excludedMessage: string | null;
+};
 export type CompareRefusal = {
   ok: false;
   reason: "same_experiment" | "not_completed" | "scorers_differ";
@@ -58,12 +69,15 @@ export const VERDICT_RULE: Record<Verdict | "nothing", string> = {
 
 /** `scorers` has all of them. The message names the first ones. */
 const NAMED_SCORERS = 3;
+/** The changes of a case that is in both runs and has the same scorers in both. */
+const SHARED = new Set<CaseChange>(["regressed", "improved", "unchanged", "inconclusive"]);
 const CHANGE_ORDER: CaseChange[] = [
   "regressed",
   "inconclusive",
   "improved",
   "added",
   "removed",
+  "excluded",
   "unchanged",
 ];
 
@@ -82,21 +96,29 @@ export function compare(
     );
   }
   const scorers = scorerDifferences(baseline, candidate);
-  if (scorers.length > 0) {
-    const words = scorers
-      .slice(0, NAMED_SCORERS)
-      .map(
-        ({ caseName, name, difference }) =>
-          `"${name}" of "${caseName}" (${DIFFERENCE[difference]})`,
-      );
-    const others = scorers.length - words.length;
-    if (others > 0) words.push(`and ${others} more`);
-    const message = `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it. If the judge model changed during this run, run it again too.`;
+  const excludedIds = new Set(scorers.map(({ caseId }) => caseId));
+  const cases = comparedCases(baseline, candidate, excludedIds);
+  const message = scorers.length > 0 ? differMessage(scorers) : null;
+  if (message && !cases.some(({ change }) => SHARED.has(change))) {
     return { ...refused("scorers_differ", message), scorers };
   }
-  const cases = comparedCases(baseline, candidate);
   const { verdict, rule } = decide(cases);
-  return { ok: true, verdict, rule, cases };
+  return { ok: true, verdict, rule, cases, excluded: scorers, excludedMessage: message };
+}
+
+/**
+ * Why the cases of some evals are not compared. When no case is left, the comparison is refused
+ * with this message.
+ */
+export function differMessage(scorers: readonly ScorerDifference[]): string {
+  const words = scorers
+    .slice(0, NAMED_SCORERS)
+    .map(
+      ({ caseName, name, difference }) => `"${name}" of "${caseName}" (${DIFFERENCE[difference]})`,
+    );
+  const others = scorers.length - words.length;
+  if (others > 0) words.push(`and ${others} more`);
+  return `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it. If the judge model changed during this run, run it again too.`;
 }
 
 export function changedCases({ cases }: Pick<Comparison, "cases">): ComparedCase[] {
@@ -107,7 +129,7 @@ export function otherCases({ cases }: Pick<Comparison, "cases">): ComparedCase[]
   return cases.filter(({ change }) => change === "unchanged");
 }
 
-const DIFFERENCE: Record<ScorerDifference["difference"], string> = {
+export const DIFFERENCE: Record<ScorerDifference["difference"], string> = {
   changed: "its definition or its judge model changed",
   gating: "gating on one side and advisory on the other",
   added: "not in the baseline",
@@ -116,7 +138,7 @@ const DIFFERENCE: Record<ScorerDifference["difference"], string> = {
 
 function decide(cases: readonly ComparedCase[]): { verdict: Verdict; rule: string } {
   const has = (wanted: CaseChange) => cases.some(({ change }) => change === wanted);
-  if (!cases.some(({ baseline, candidate }) => baseline && candidate)) {
+  if (!cases.some(({ change }) => SHARED.has(change))) {
     return { verdict: "inconclusive", rule: VERDICT_RULE.nothing };
   }
   const order = ["regressed", "inconclusive", "improved"] as const;
@@ -124,7 +146,11 @@ function decide(cases: readonly ComparedCase[]): { verdict: Verdict; rule: strin
   return { verdict, rule: VERDICT_RULE[verdict] };
 }
 
-function comparedCases(baseline: ComparedRun, candidate: ComparedRun): ComparedCase[] {
+function comparedCases(
+  baseline: ComparedRun,
+  candidate: ComparedRun,
+  excluded: ReadonlySet<string>,
+): ComparedCase[] {
   const before = sides(baseline);
   const after = sides(candidate);
   const names = new Map(
@@ -136,7 +162,8 @@ function comparedCases(baseline: ComparedRun, candidate: ComparedRun): ComparedC
     .map(([caseId, name]): ComparedCase => {
       const left = before.get(caseId) ?? null;
       const right = after.get(caseId) ?? null;
-      return { caseId, name, change: changeOf(left, right), baseline: left, candidate: right };
+      const change = left && right && excluded.has(caseId) ? "excluded" : changeOf(left, right);
+      return { caseId, name, change, baseline: left, candidate: right };
     })
     .sort(
       (left, right) =>
@@ -156,7 +183,7 @@ function sides({ experiment, trials }: ComparedRun): Map<string, CaseSide> {
   );
 }
 
-function statusOf({ pass, fail }: Counts): CaseStatus {
+export function statusOf({ pass, fail }: Counts): CaseStatus {
   if (fail > 0) return "fail";
   return pass > 0 ? "pass" : "invalid";
 }
@@ -183,42 +210,63 @@ function scorerDifferences(
     .flatMap(({ caseId, versionId, name }) => {
       const old = before.get(caseId);
       if (!old) return [];
-      const left = baseline.scorerSnapshots[old.versionId] ?? [];
-      const right = candidate.scorerSnapshots[versionId] ?? [];
-      const found = differences(left, right);
-      const models = new Map<string, Set<string>>();
-      addModels(models, left, baselineTrials, old.versionId);
-      addModels(models, right, candidateTrials, versionId);
-      // A scorer of both sides has one difference at most.
-      for (const { name: scorer, hash } of right) {
-        const changed = (models.get(hash)?.size ?? 0) > 1;
-        if (changed && !found.some((other) => other.name === scorer)) {
-          found.push({ name: scorer, difference: "changed" });
-        }
-      }
+      const found = scorerChanges(
+        {
+          snapshots: baseline.scorerSnapshots[old.versionId] ?? [],
+          trials: baselineTrials,
+          versionIds: new Set([old.versionId]),
+        },
+        {
+          snapshots: candidate.scorerSnapshots[versionId] ?? [],
+          trials: candidateTrials,
+          versionIds: new Set([versionId]),
+        },
+      );
       return found.map((difference) => ({ caseId, caseName: name, ...difference }));
     });
 }
 
-/** The models that gave an answer, by the content hash of their judge. */
-function addModels(
-  models: Map<string, Set<string>>,
-  snapshots: readonly ScorerSnapshot[],
-  trials: ComparedRun["trials"],
-  versionId: string,
-): void {
-  const hashes = new Map(snapshots.map(({ id, hash }) => [id, hash]));
-  for (const trial of trials) {
-    if (trial.caseVersionId !== versionId) continue;
-    for (const { scorerId, model } of trial.scorers) {
-      const hash = hashes.get(scorerId);
-      if (!hash || !model) continue;
-      models.set(hash, (models.get(hash) ?? new Set()).add(model));
+type Found = Pick<ScorerDifference, "name" | "difference">;
+
+/**
+ * How the scorers of one side differ from the other, with the judge models that answered. The id
+ * and the name of a scorer do not count.
+ */
+export type ScorerChange = Found;
+
+export function scorerChanges(
+  before: {
+    snapshots: readonly ScorerSnapshot[];
+    trials: ComparedRun["trials"];
+    versionIds: ReadonlySet<string>;
+  },
+  after: {
+    snapshots: readonly ScorerSnapshot[];
+    trials: ComparedRun["trials"];
+    versionIds: ReadonlySet<string>;
+  },
+): Found[] {
+  const found = differences([...before.snapshots], [...after.snapshots]);
+  const models = new Map<string, Set<string>>();
+  for (const side of [before, after]) {
+    const hashes = new Map(side.snapshots.map(({ id, hash }) => [id, hash]));
+    for (const trial of side.trials) {
+      if (!side.versionIds.has(trial.caseVersionId)) continue;
+      for (const { scorerId, model } of trial.scorers) {
+        const hash = hashes.get(scorerId);
+        if (!hash || !model) continue;
+        models.set(hash, (models.get(hash) ?? new Set()).add(model));
+      }
     }
   }
+  for (const { name, hash } of after.snapshots) {
+    const changed = (models.get(hash)?.size ?? 0) > 1;
+    if (changed && !found.some((other) => other.name === name)) {
+      found.push({ name, difference: "changed" });
+    }
+  }
+  return found;
 }
-
-type Found = Pick<ScorerDifference, "name" | "difference">;
 
 function differences(left: ScorerSnapshot[], right: ScorerSnapshot[]): Found[] {
   const before = [...left];

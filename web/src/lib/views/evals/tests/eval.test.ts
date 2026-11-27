@@ -101,7 +101,7 @@ test("a suite freezes the newest version of each eval that can run, and its appr
   ];
   const frozen = freezeSuite([refunds, advisory, empty], cases);
   assert.deepEqual(frozen.evalVersions, [
-    { evalId: "e1", versionId: "e1v2", number: 2, name: "Refunds" },
+    { evalId: "e1", versionId: "e1v2", number: 2, name: "Refunds", params: {}, trials: 3 },
   ]);
   assert.deepEqual(frozen.caseVersions, [
     { caseId: "c1", versionId: "c1-1", number: 1, name: "c1", evalId: "e1" },

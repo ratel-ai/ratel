@@ -19,6 +19,7 @@ const CHANGE: Record<ComparedCaseRow["change"], { label: string; tone: Tone }> =
   inconclusive: { label: "Inconclusive", tone: "warning" },
   added: { label: "Added", tone: "info" },
   removed: { label: "Removed", tone: "info" },
+  excluded: { label: "Other scorers", tone: "warning" },
   unchanged: { label: "Unchanged", tone: "neutral" },
 };
 

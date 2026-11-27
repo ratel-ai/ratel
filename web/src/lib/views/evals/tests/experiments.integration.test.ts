@@ -161,6 +161,9 @@ async function setup() {
   /** An eval with these scorers. */
   const evalWith = async (name: string, scorers: EvalScorer[]) =>
     (await seedEval(db, { name, content: { scorers } })).id;
+  /** An eval with this content. */
+  const evalOf = async (name: string, over: Parameters<typeof evalContent>[0]) =>
+    (await seedEval(db, { name, content: over })).id;
   const start = async (over: Partial<Parameters<typeof startExperiment>[1]> = {}) => {
     const result = await startExperiment(
       SUBJECT,
@@ -190,6 +193,7 @@ async function setup() {
     cases,
     evals,
     evalWith,
+    evalOf,
     deps,
     runs,
     started,
@@ -328,7 +332,14 @@ test("the experiment records the version, the commit, the params, the cases and 
   ]);
   const [judgedVersion] = (await t.evals.get(PROJECT_ID, judged))?.versions ?? [];
   assert.deepEqual(experiment.evalVersions, [
-    { evalId: judged, versionId: judgedVersion?.id, number: 1, name: "judged" },
+    {
+      evalId: judged,
+      versionId: judgedVersion?.id,
+      number: 1,
+      name: "judged",
+      params: { model: "x" },
+      trials: 3,
+    },
   ]);
   const snapshots = experiment.scorerSnapshots[versionId] ?? [];
   assert.deepEqual(
@@ -585,6 +596,7 @@ function keyDeps(t: Awaited<ReturnType<typeof setup>>, over: Partial<KeyDeps> = 
     advance: () => {},
     track: async () => {},
     publicUrl: (path) => `https://ratel.test${path}`,
+    baseline: async () => null,
     offForAll: () => false,
     authenticate: async () =>
       ({ ok: true, projectId: PROJECT_ID, apiKeyId: "k1" }) as Awaited<
@@ -625,6 +637,136 @@ test("a key starts an experiment and reads the counts, with no captured text", a
   assert.ok(!text.includes("captured answer"));
   const list = await (await handleListByKey(deps)).json();
   assert.equal(list.experiments[0].experimentId, body.experimentId);
+});
+
+test("a suite run takes each eval of the sandbox, with the trials and the params of each eval", async () => {
+  const t = await setup();
+  const status = await t.evalOf("Status", { trials: 2, params: { model: "small", depth: 2 } });
+  const other = await t.evalOf("Other sandbox", { sandboxName: "billing-agent" });
+  await t.approvedCase("refund");
+  await t.approvedCase("where is it", {}, [], status);
+  await t.approvedCase("billing", {}, [], other);
+  const experiment = await t.start({ trialsPerCase: undefined, params: { depth: 3 } });
+  assert.deepEqual(
+    experiment.evalVersions.map(({ name, trials, params }) => [name, trials, params]),
+    [
+      ["Refunds", 3, { depth: 3 }],
+      ["Status", 2, { model: "small", depth: 3 }],
+    ],
+  );
+  assert.deepEqual(experiment.params, { depth: 3 }, "the run keeps its own params");
+  const trials = await t.trials(experiment.id);
+  assert.equal(trials.length, 5);
+  await t.step(experiment);
+  // Postgres keeps the keys of jsonb in its own order.
+  const sent = t.started.map(({ options }) => JSON.stringify(options.params)).sort();
+  assert.deepEqual(sent, [
+    '{"depth":3,"model":"small"}',
+    '{"depth":3,"model":"small"}',
+    '{"depth":3}',
+    '{"depth":3}',
+    '{"depth":3}',
+  ]);
+  // The run's trials replace the trials of each eval.
+  const again = await t.start({ trialsPerCase: 1 });
+  assert.equal((await t.trials(again.id)).length, 2);
+});
+
+test("one eval runs alone by name. An unknown eval, another sandbox and an eval that cannot run are refused", async () => {
+  const t = await setup();
+  const status = await t.evalOf("Status", { trials: 1 });
+  const advisory = await t.evalWith("Advisory", [{ ...JUDGE, gating: false }]);
+  const other = await t.evalOf("Other sandbox", { sandboxName: "billing-agent" });
+  await t.approvedCase("refund");
+  await t.approvedCase("where is it", {}, [], status);
+  await t.approvedCase("polite", {}, [], advisory);
+  await t.approvedCase("billing", {}, [], other);
+  const alone = await t.start({ evals: ["Status"], trialsPerCase: undefined });
+  assert.deepEqual(
+    alone.evalVersions.map(({ name }) => name),
+    ["Status"],
+  );
+  assert.deepEqual(
+    alone.caseVersions.map(({ name }) => name),
+    ["where is it"],
+  );
+  const refusal = async (evals: string[]) => {
+    const result = await startExperiment(
+      SUBJECT,
+      { sandboxVersion: "latest", params: {}, startedBy: "u", evals },
+      t.deps,
+    );
+    assert.ok(!result.ok);
+    return [result.reason, result.message];
+  };
+  assert.deepEqual(await refusal(["Nope"]), ["not_found", 'There is no eval named "Nope".']);
+  assert.equal((await refusal(["Other sandbox"]))[0], "wrong_sandbox");
+  const [reason, message] = await refusal(["Status", "Advisory"]);
+  assert.equal(reason, "no_cases");
+  assert.match(message ?? "", /Advisory.*gating/);
+  // The suite leaves out the eval with no gating scorer and the eval of another sandbox.
+  const suite = await t.start({ trialsPerCase: undefined });
+  assert.deepEqual(
+    suite.evalVersions.map(({ name }) => name),
+    ["Refunds", "Status"],
+  );
+});
+
+test("a key runs one eval, and the read of the run has each eval with its score and its delta", async () => {
+  const t = await setup();
+  const status = await t.evalOf("Status", { trials: 2 });
+  await t.approvedCase("refund");
+  await t.approvedCase("where is it", {}, [], status);
+  const finish = async (experimentId: string, output: string) => {
+    const experiment = await t.deps.experiments.get(PROJECT_ID, experimentId);
+    assert.ok(experiment);
+    await t.step(experiment);
+    for (const run of t.runs.values()) if (run.status === "running") t.end(run, {}, output);
+    await t.step(experiment);
+    return experiment;
+  };
+  const first = await t.start({ trialsPerCase: undefined });
+  await finish(first.id, "No.");
+  const done = await t.deps.experiments.get(PROJECT_ID, first.id);
+  assert.ok(done);
+  const baseline = { experiment: done, trials: await t.trials(first.id) };
+  const deps = keyDeps(t, { baseline: async () => baseline });
+  const response = await handleStartByKey(
+    request({ sandboxVersion: "latest", evals: ["Status"] }),
+    deps,
+  );
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  await finish(body.experimentId, "No.");
+  const view = await (await handleGetByKey(body.experimentId, deps)).json();
+  assert.equal(view.baselineId, first.id);
+  assert.deepEqual(
+    view.evals.map(({ name, cases, counts, score, delta }: Record<string, unknown>) => [
+      name,
+      cases,
+      counts,
+      score,
+      delta,
+    ]),
+    [
+      [
+        "Status",
+        1,
+        { pass: 2, fail: 0, invalid: 0, open: 0 },
+        1,
+        { score: 0, scorers: [{ scorerId: "no-refund", delta: 0 }] },
+      ],
+    ],
+  );
+  assert.equal(view.evals[0].deltaRefusal, null);
+  assert.equal(view.verdict.ok, true);
+  assert.equal(view.verdict.verdict, "unchanged");
+  const firstView = await (await handleGetByKey(first.id, deps)).json();
+  assert.deepEqual(
+    firstView.evals.map(({ name }: { name: string }) => name),
+    ["Refunds", "Status"],
+  );
+  assert.equal(firstView.baselineId, null, "a run is not compared with itself");
 });
 
 test("a wrong body is refused, and a refusal has its reason", async () => {

@@ -248,6 +248,8 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
         ok: true,
         verdict: "improved",
         rule: VERDICT_RULE.improved,
+        excluded: [],
+        excludedMessage: null,
         cases: [
           {
             caseId: CASE,
