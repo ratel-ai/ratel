@@ -139,7 +139,7 @@ function intCol(v: number | undefined): number | null {
  * BatchSpanProcessor retries reuse, so re-exports collide on the deterministic
  * trace-event id and never double-count.
  */
-export function deriveRatelSearches(spans: DecodedSpan[]): ParsedTraceEvent[] {
+export function deriveRatelSearches(spans: DecodedSpan[], receivedAt?: Date): ParsedTraceEvent[] {
   const out: ParsedTraceEvent[] = [];
   for (const s of spans) {
     // An id-less span (the decoder tolerates them) would collapse every such
@@ -151,7 +151,7 @@ export function deriveRatelSearches(spans: DecodedSpan[]): ParsedTraceEvent[] {
     const topK = intCol(attrNumber(s.attributes, RATEL.searchTopK));
     const hitCount = intCol(attrNumber(s.attributes, RATEL.searchHitCount));
     // A broken start clock makes the duration as meaningless as the timestamp.
-    const startOk = plausibleOccurredAt(s.startUnixMs);
+    const startOk = plausibleOccurredAt(s.startUnixMs, receivedAt);
     const tookMs = startOk ? intCol(Math.round(s.endUnixMs - s.startUnixMs)) : null;
     const type = query ? (TARGET_TYPES[target] ?? "search") : SEARCH_UNCAPTURED_TYPE;
     const eventId = attrString(s.attributes, RATEL.eventId) ?? null;
@@ -168,7 +168,7 @@ export function deriveRatelSearches(spans: DecodedSpan[]): ParsedTraceEvent[] {
       schemaVersion: 1,
       // Spans carry no session id; the trace id is a stable, non-empty stand-in.
       sessionId: s.traceId,
-      occurredAt: startOk ?? new Date(),
+      occurredAt: startOk ?? receivedAt ?? new Date(),
       toolId: null,
       skillId: null,
       query: query || null,

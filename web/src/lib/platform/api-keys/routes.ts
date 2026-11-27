@@ -56,6 +56,9 @@ export type BearerRoute = keyof typeof BEARER_ROUTE_SCOPES;
 /** The MCP route, declared per tool rather than per route. */
 export const MCP_ROUTE = "POST /api/mcp";
 
+/** Reached with the internal secret, never with an API key (lib/platform/internal-auth). */
+export const INTERNAL_KEY_LOOKUP_ROUTE = "POST /api/internal/keys/resolve";
+
 /** The scope one MCP tool needs from an API key. */
 export function mcpOperationScope(operation: { mutates: boolean }): ApiKeyScope {
   return operation.mutates ? "mcp:write" : "mcp:read";

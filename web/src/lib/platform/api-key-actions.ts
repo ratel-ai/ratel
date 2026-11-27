@@ -80,6 +80,8 @@ export type ApiKeyActionDeps = {
   getProjectBySlug(organizationId: string, projectSlug: string): Promise<{ id: string } | null>;
   listApiKeysForProject(projectId: string): Promise<ApiKeyRecord[]>;
   findApiKeyForProject(projectId: string, keyId: string): Promise<ApiKeyRecord | null>;
+  /** Why the organization may not be given a new key now, or null (`api-key-creation.ts`). */
+  keyCreationRefusal(organizationId: string, projectId: string): Promise<string | null>;
   generateApiKey(kind: ApiKeyKind): GeneratedApiKey;
   createApiKey(input: {
     projectId: string;
@@ -162,6 +164,8 @@ export async function createApiKeyHandler(
 
   const project = await deps.getProjectBySlug(ctx.organization.id, input.projectSlug);
   if (!project) return { ok: false, error: "Project not found." };
+  const refusal = await deps.keyCreationRefusal(ctx.organization.id, project.id);
+  if (refusal) return { ok: false, error: refusal };
 
   const name = normalizeApiKeyName(input.name);
   if (!name.ok) return name;

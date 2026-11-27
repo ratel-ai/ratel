@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { type Config, getConfig } from "@/config";
 import type { JobHandler } from "@/lib/contracts/registry";
-import { markJobDone } from "@/lib/jobs/queries";
+import { markJobDone, markJobError } from "@/lib/jobs/queries";
 import { drainJobs, type JobKind, type JobStore } from "@/lib/jobs/runner";
 import { jobs } from "@/lib/jobs/schema";
 import type { getDb } from "@/lib/platform/db/client";
@@ -366,11 +366,7 @@ export async function runStep(
       return { id: job.id, projectId, kind, status: "running", payload: job.payload };
     },
     markDone: (id, result) => markJobDone(id, result, db),
-    markError: async (id, error) => {
-      await db.execute(
-        sql`update jobs set status = 'error', error = ${error}, finished_at = now() where id = ${id}`,
-      );
-    },
+    markError: (id, error) => markJobError(id, error, db),
   };
   await drainJobs(store, { [kind]: handler }, { projectId, max: 1 });
   const rows = (

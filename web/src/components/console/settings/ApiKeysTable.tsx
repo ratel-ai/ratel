@@ -29,6 +29,7 @@ export function ApiKeysTable({
   projectSlug,
   organizationId,
   restricted,
+  blockedNote = null,
   now,
 }: {
   keys: readonly ApiKeySummary[];
@@ -36,6 +37,8 @@ export function ApiKeysTable({
   organizationId: string;
   /** Inside an admin support session: no key is created or revoked. */
   restricted: boolean;
+  /** Why no key may be created now, with the date new ones become available; null: they are. */
+  blockedNote?: string | null;
   /** ISO time the page was rendered, so relative times agree on server and client. */
   now: string;
 }) {
@@ -172,7 +175,7 @@ export function ApiKeysTable({
   ];
 
   const createButton = (
-    <Button variant="primary" onClick={openCreate} disabled={restricted}>
+    <Button variant="primary" onClick={openCreate} disabled={restricted || blockedNote !== null}>
       <Plus aria-hidden />
       Create API key
     </Button>
@@ -186,6 +189,7 @@ export function ApiKeysTable({
         actions={keys.length > 0 ? createButton : null}
       >
         {restricted ? <Callout tone="info">{SUPPORT_SESSION_RESTRICTED_MESSAGE}</Callout> : null}
+        {blockedNote ? <Callout tone="info">{blockedNote}</Callout> : null}
         <DataTable
           caption="API keys"
           columns={columns}

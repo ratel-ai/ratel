@@ -117,7 +117,7 @@ export const detailBindings: DetailBinding[] = [
         { key: "finishRate", label: "Finish rate", format: "share" },
         { key: "medianMs", label: "Typical run", format: "duration" },
         { key: "callsPerRun", label: "Calls per run", format: "number" },
-        { key: "correctionsPer100", label: "Self-corrections per 100 runs", format: "per100" },
+        { key: "correctionsPer100", label: "Self-corrections per 100 turns", format: "per100" },
         { key: "cost", label: "Cost per run", format: "taskCost" },
       ],
       sections: [
