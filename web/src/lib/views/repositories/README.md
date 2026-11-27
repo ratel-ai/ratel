@@ -5,7 +5,7 @@ A project's linked GitHub repositories, the commits that make its versions, and 
 | Table | Holds |
 |---|---|
 | `project_repositories` | The repositories a project links, one row each. It holds GitHub's repository id (which survives a rename), its name, the App installation, the default branch, the version branch patterns, whether pull requests make versions, and the path of `ratel.yaml`. Migration 0059. |
-| `repository_commits` | One row per commit that makes a version. It holds the base it compares with, the branch and the PR number. Its status is `queued`, `building`, `ready` or `failed`. It holds where the commit came from (`source`: `webhook` or `push`), the diff a push sent (not kept over 1 MiB: `diff_truncated`), and the version it built, `sandbox_version_id`, which has no foreign key until `sandbox_versions` lands. Unlinking keeps the commits. |
+| `repository_commits` | One row per commit that makes a version. It holds the base it compares with, the branch and the PR number. Its status is `queued`, `building`, `ready` or `failed`. It holds where the commit came from (`source`: `webhook` or `push`), the diff a push sent (not kept over 512 KiB: `diff_truncated`), and the version it built, `sandbox_version_id`, which has no foreign key until `sandbox_versions` lands. Unlinking keeps the commits. |
 
 | File | Holds |
 |---|---|

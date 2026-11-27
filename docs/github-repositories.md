@@ -95,7 +95,7 @@ jobs:
 - **Branch:** `GITHUB_HEAD_REF` for a pull request, `GITHUB_REF_NAME` for a push.
 - **Pull request:** from the event payload, the PR number, its head commit (not `GITHUB_SHA`, which is the merge commit) and its base commit.
 - **Push:** the `before` commit from the event payload.
-- **The diff:** `git diff <base>...<head>`, up to 1 MiB.
+- **The diff:** `git diff <base>...<head>`, up to 512 KiB (half the push API's 1 MiB body).
 
 On the platform, the push API calls `recordPush` (`web/src/lib/views/repositories/push.ts`) once the version exists, behind the flag, and never fails the push. The commit row (`source` `push`) holds the version and the diff, and the selection reads that diff. A diff over the cap, or none, runs every eval.
 

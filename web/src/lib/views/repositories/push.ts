@@ -31,8 +31,11 @@ export const pushedGitSchema = z.object({
   diffTruncated: z.boolean().optional(),
 });
 
-/** A diff over this is not kept: the commit runs every eval. */
-export const MAX_DIFF_BYTES = 1_048_576;
+/**
+ * A diff over this is not kept: the commit runs every eval. Half the push API's 1 MiB body, so a
+ * push with a diff at the cap still fits.
+ */
+export const MAX_DIFF_BYTES = 524_288;
 
 export type PushDeps = {
   enabled(subject: FlagSubject): Promise<boolean>;
