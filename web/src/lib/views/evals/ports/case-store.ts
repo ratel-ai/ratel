@@ -23,7 +23,7 @@ export interface CaseStore {
   /** Adds the cases in one transaction, in order. `eval_not_found` for one of them: none is added. */
   createAll(inputs: readonly NewCase[]): Promise<EvalCase[] | "eval_not_found">;
   get(projectId: string, caseId: string): Promise<EvalCase | null>;
-  /** The newest first. With an eval, only its dataset. */
+  /** The newest first, with no row that a query resolved. With an eval, only the rows of its dataset. */
   list(projectId: string, evalId?: string): Promise<EvalCase[]>;
   /** Writes the name and the labels, and adds a version when the content differs from the newest. */
   update(

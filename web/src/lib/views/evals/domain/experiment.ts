@@ -95,7 +95,8 @@ export type FrozenSuite = Pick<Experiment, "caseVersions" | "evalVersions" | "sc
 
 /**
  * Freezes the newest version of each eval that can run, and the newest version of each case of its
- * dataset: each row counts (decision `rows-count-at-once`). A case version gets the scorers of its
+ * dataset (`cases` has the rows of the datasets, with the rows that a query resolved for this run):
+ * each row counts (decision `rows-count-at-once`). A case version gets the scorers of its
  * eval version. An eval with no gating scorer, or with no case, is left out. With a label, only the
  * cases that have it.
  */
@@ -105,16 +106,16 @@ export function freezeSuite(
   label: string | null = null,
   run: { params?: Record<string, unknown>; trials?: number } = {},
 ): FrozenSuite {
-  const byEval = Map.groupBy(cases, ({ evalId }) => evalId);
+  const byDataset = Map.groupBy(cases, ({ datasetId }) => datasetId);
   const frozen: FrozenSuite = { caseVersions: [], evalVersions: [], scorerSnapshots: {} };
   for (const definition of evals) {
     const version = currentVersion(definition);
     if (runProblem(version)) continue;
-    const rows = rowsOf(byEval.get(definition.id) ?? [], label);
+    const rows = rowsOf(byDataset.get(definition.datasetId) ?? [], label);
     if (rows.length === 0) continue;
     frozen.evalVersions.push(freezeEval(definition, run));
     for (const { evalCase, caseVersion } of rows) {
-      frozen.caseVersions.push(frozenCase(evalCase, caseVersion));
+      frozen.caseVersions.push(frozenCase(evalCase, caseVersion, definition.id));
       frozen.scorerSnapshots[caseVersion.id] = snapshotsOf(version);
     }
   }
@@ -132,13 +133,13 @@ function rowsOf(
   });
 }
 
-function frozenCase(evalCase: EvalCase, version: CaseVersion): FrozenCase {
+function frozenCase(evalCase: EvalCase, version: CaseVersion, evalId: string): FrozenCase {
   return {
     caseId: evalCase.id,
     versionId: version.id,
     number: version.number,
     name: evalCase.name,
-    evalId: evalCase.evalId,
+    evalId,
   };
 }
 

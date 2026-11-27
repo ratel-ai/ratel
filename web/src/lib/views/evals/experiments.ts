@@ -9,7 +9,9 @@ import type {
 } from "@/lib/views/sandboxes";
 import { EVAL_TRIAL_PREFIX } from "@/lib/views/sandboxes/domain/run";
 import { refusedParam } from "@/lib/views/sandboxes/run-form";
-import { type CaseVersion, runInputOf } from "./domain/case";
+import { resolveDataset } from "./datasets";
+import { type CaseVersion, type EvalCase, runInputOf } from "./domain/case";
+import { isQueryKind } from "./domain/dataset";
 import { currentVersion, type EvalDefinition, runProblem } from "./domain/eval";
 import {
   type Experiment,
@@ -24,8 +26,10 @@ import {
 import { type JudgeOutcome, scoreTrial, type TrialRecord } from "./domain/score";
 import { type JudgeDeps, judgeTrial } from "./judge";
 import type { CaseStore } from "./ports/case-store";
+import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import type { ExperimentStore } from "./ports/experiment-store";
+import type { TraceSource } from "./ports/trace-source";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
 export type SandboxPort = {
@@ -44,6 +48,9 @@ export type ExperimentDeps = {
   experiments: ExperimentStore;
   cases: Pick<CaseStore, "list">;
   evals: Pick<EvalStore, "list">;
+  datasets: Pick<DatasetStore, "get" | "keepResolved">;
+  /** The traces that a query dataset resolves when a run starts. */
+  traces: TraceSource;
   sandboxes: SandboxPort;
   judge: JudgeDeps;
   now: () => Date;
@@ -80,7 +87,10 @@ export type StartRefusal =
   | "too_many_running"
   | "too_many_trials"
   | "invalid_params"
-  | "wrong_sandbox";
+  | "wrong_sandbox"
+  | "no_content_access"
+  | "query_failed"
+  | "too_many_rows";
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -94,7 +104,8 @@ const LATEST_OF = 100;
 const logger = getLogger("evals/experiments");
 
 /**
- * Freezes the evals, the newest version of each of their cases, and their scorers. The suite is each eval of the sandbox
+ * Freezes the evals, the newest version of each row of their datasets, and their scorers. A query
+ * dataset is resolved now, and the run freezes the rows that it found. The suite is each eval of the sandbox
  * of the version (or of no sandbox). Chosen evals run by name. The trials start with
  * `advanceExperiment`.
  */
@@ -130,7 +141,9 @@ export async function startExperiment(
   if (runRefusal) return refused("invalid_params", runRefusal);
   const chosen = chooseEvals(allEvals, evals, version.name);
   if (!chosen.ok) return chosen;
-  const frozen = freezeSuite(chosen.evals, allCases, label ?? null, {
+  const resolved = await resolveQueryDatasets(projectId, chosen.evals, startedBy, deps);
+  if (!resolved.ok) return resolved;
+  const frozen = freezeSuite(chosen.evals, [...allCases, ...resolved.cases], label ?? null, {
     params,
     ...(trialsPerCase === undefined ? {} : { trials: trialsPerCase }),
   });
@@ -381,6 +394,31 @@ async function finishTrial(
     "eval trial finished",
   );
   return true;
+}
+
+/**
+ * The rows of each query dataset of the evals, resolved now and kept, one time for each dataset. A
+ * refusal of one dataset refuses the run with its reason.
+ */
+async function resolveQueryDatasets(
+  projectId: string,
+  evals: readonly EvalDefinition[],
+  startedBy: string,
+  deps: ExperimentDeps,
+): Promise<{ ok: true; cases: EvalCase[] } | Extract<StartExperimentResult, { ok: false }>> {
+  const cases: EvalCase[] = [];
+  for (const datasetId of new Set(evals.map((one) => one.datasetId))) {
+    const dataset = await deps.datasets.get(projectId, datasetId);
+    if (!dataset || !isQueryKind(dataset.query)) continue;
+    const result = await resolveDataset(projectId, dataset.query, deps.traces);
+    if (!result.ok) {
+      const reason =
+        result.reason === "no_rows" || result.reason === "not_a_query" ? "no_cases" : result.reason;
+      return refused(reason, `The dataset "${dataset.name}": ${result.message}`);
+    }
+    cases.push(...(await deps.datasets.keepResolved(projectId, datasetId, result.rows, startedBy)));
+  }
+  return { ok: true, cases };
 }
 
 /** The evals with these names, or the suite of the sandbox. */

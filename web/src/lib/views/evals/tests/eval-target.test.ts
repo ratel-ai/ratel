@@ -12,6 +12,7 @@ function definition(id: string, name: string, taskId: string | null): EvalDefini
   return {
     id,
     projectId: PROJECT_ID,
+    datasetId: id,
     name,
     taskId,
     createdAt: new Date(0),

@@ -9,10 +9,13 @@ import {
   sameContent,
 } from "../domain/eval";
 import type { EvalStore } from "../ports/eval-store";
-import { evalDefinitions, evalDefinitionVersions } from "../schema";
+import { evalDatasets, evalDefinitions, evalDefinitionVersions } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type EvalRow = typeof evalDefinitions.$inferSelect;
+
+const MAX_NAME_TRIES = 20;
 type VersionRow = typeof evalDefinitionVersions.$inferSelect;
 
 export function createDrizzleEvalStore(db: Db): EvalStore {
@@ -25,9 +28,10 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
     async create({ projectId, name, taskId, content, createdBy }) {
       try {
         return await db.transaction(async (tx) => {
+          const datasetId = await createOwnDataset(tx, { projectId, name, createdBy });
           const [row] = await tx
             .insert(evalDefinitions)
-            .values({ ...storable({ name, taskId }), projectId, createdBy })
+            .values({ ...storable({ name, taskId }), projectId, datasetId, createdBy })
             .returning();
           if (!row) throw new Error("the eval row is missing");
           const [version] = await tx
@@ -115,6 +119,27 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
   };
 }
 
+/** A new eval gets a fixed dataset with its name, or with a number after it when that is taken. */
+async function createOwnDataset(
+  tx: Tx,
+  { projectId, name, createdBy }: { projectId: string; name: string; createdBy: string },
+): Promise<string> {
+  for (let number = 1; number <= MAX_NAME_TRIES; number++) {
+    const [made] = await tx
+      .insert(evalDatasets)
+      .values({
+        ...storable({ name: number === 1 ? name : `${name} (${number})` }),
+        projectId,
+        kind: "fixed",
+        createdBy,
+      })
+      .onConflictDoNothing()
+      .returning({ id: evalDatasets.id });
+    if (made) return made.id;
+  }
+  throw new Error("no free name for the dataset of the eval");
+}
+
 async function withVersions(db: Pick<Db, "select">, row: EvalRow): Promise<EvalDefinition> {
   const versions = await db
     .select()
@@ -129,8 +154,8 @@ function columns({ sandboxName, params, trials, scorers }: EvalContent) {
 }
 
 function toEval(row: EvalRow, versions: VersionRow[]): EvalDefinition {
-  const { id, projectId, name, taskId, createdAt } = row;
-  return { id, projectId, name, taskId, createdAt, versions: versions.map(toVersion) };
+  const { id, projectId, name, taskId, datasetId, createdAt } = row;
+  return { id, projectId, name, taskId, datasetId, createdAt, versions: versions.map(toVersion) };
 }
 
 function toVersion(row: VersionRow): EvalVersion {

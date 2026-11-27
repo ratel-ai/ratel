@@ -114,7 +114,15 @@ test("a suite freezes the newest version of each eval that can run, and the newe
 });
 
 function definition(id: string, name: string, versions: EvalDefinition["versions"]) {
-  return { id, projectId: PROJECT_ID, name, taskId: null, createdAt: new Date(0), versions };
+  return {
+    id,
+    projectId: PROJECT_ID,
+    datasetId: id,
+    name,
+    taskId: null,
+    createdAt: new Date(0),
+    versions,
+  };
 }
 
 function version(id: string, number: number, scorers: (typeof NO_REFUND)[]) {
@@ -133,6 +141,7 @@ function evalCase(id: string, evalId: string, count: number, labels: string[] = 
   return {
     id,
     projectId: PROJECT_ID,
+    datasetId: evalId,
     evalId,
     name: id,
     labels,

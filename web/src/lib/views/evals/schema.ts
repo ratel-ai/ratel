@@ -15,11 +15,36 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 import type { CaseContent, EarlierTurn } from "./domain/case";
+import type { DatasetKind } from "./domain/dataset";
 import type { EvalScorer, FrozenEval } from "./domain/eval";
 import type { FrozenCase, TrialToolCall } from "./domain/experiment";
 import type { ScorerResult, ScorerSnapshot } from "./domain/score";
 
 /** The tables of evals (the `evals` flag). */
+
+/**
+ * A dataset: named rows that many evals can use (decision `datasets-first-class`). A `fixed` one
+ * holds its rows. A query kind holds its settings, and a run resolves and freezes its rows.
+ */
+export const evalDatasets = pgTable(
+  "eval_datasets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    kind: text("kind").$type<DatasetKind>().notNull(),
+    // The settings of a query kind (N, task id, RQL text or the choose rule), without the kind.
+    settings: jsonb("settings").$type<Record<string, unknown>>().notNull().default({}),
+    // The identity provider's user id, or `key:<id>`.
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("eval_datasets_project_name_idx").on(t.projectId, t.name)],
+);
 
 /** An eval: its name and its task. What it runs and how it scores is in its versions. */
 export const evalDefinitions = pgTable(
@@ -32,11 +57,18 @@ export const evalDefinitions = pgTable(
     name: text("name").notNull(),
     // No foreign key: a task is a reading of the traces, not a row of this module.
     taskId: text("task_id"),
+    // The dataset of the eval. Migration 0067 gave each older eval a fixed one with its rows.
+    datasetId: uuid("dataset_id")
+      .notNull()
+      .references(() => evalDatasets.id, { onDelete: "no action" }),
     // The identity provider's user id, or `key:<id>`.
     createdBy: text("created_by").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("eval_definitions_project_name_idx").on(t.projectId, t.name)],
+  (t) => [
+    uniqueIndex("eval_definitions_project_name_idx").on(t.projectId, t.name),
+    index("eval_definitions_dataset_idx").on(t.datasetId),
+  ],
 );
 
 /** A version of an eval. It never changes: an edit adds a version, and a run freezes one. */
@@ -58,7 +90,7 @@ export const evalDefinitionVersions = pgTable(
   (t) => [uniqueIndex("eval_definition_versions_eval_number_idx").on(t.evalId, t.number)],
 );
 
-/** A case: a row of the dataset of one eval, its name and its labels. What it holds is in its versions. */
+/** A case: a row of a dataset, its name and its labels. What it holds is in its versions. */
 export const evalCases = pgTable(
   "eval_cases",
   {
@@ -66,9 +98,14 @@ export const evalCases = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    evalId: uuid("eval_id")
+    datasetId: uuid("dataset_id")
       .notNull()
-      .references(() => evalDefinitions.id, { onDelete: "cascade" }),
+      .references(() => evalDatasets.id, { onDelete: "cascade" }),
+    // The eval that the row was saved to. Null for a row added to a dataset, or resolved by a query.
+    evalId: uuid("eval_id").references(() => evalDefinitions.id, { onDelete: "cascade" }),
+    // The turn of a row that a query resolved. One row for each turn: a run adds a version when the
+    // turn's content changed. Null for a row of a fixed dataset.
+    resolvedTurnId: uuid("resolved_turn_id"),
     name: text("name").notNull(),
     // Plain text. A label for a task or an intent refers to no row.
     labels: text("labels").array().notNull().default(sql`'{}'::text[]`),
@@ -79,6 +116,10 @@ export const evalCases = pgTable(
   (t) => [
     index("eval_cases_project_created_idx").on(t.projectId, t.createdAt),
     index("eval_cases_eval_idx").on(t.evalId),
+    index("eval_cases_dataset_idx").on(t.datasetId),
+    uniqueIndex("eval_cases_dataset_turn_idx")
+      .on(t.datasetId, t.resolvedTurnId)
+      .where(sql`${t.resolvedTurnId} is not null`),
   ],
 );
 

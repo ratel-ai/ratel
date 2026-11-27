@@ -5,6 +5,7 @@ import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import type { CaseContent, EvalCase } from "../domain/case";
 import type { EvalContent, EvalDefinition, EvalScorer } from "../domain/eval";
 import type { CaseStore, NewCase } from "../ports/case-store";
+import type { TraceSource } from "../ports/trace-source";
 
 export const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 export const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -75,5 +76,20 @@ export function inEval(
       if (made === "eval_not_found") throw new Error("the eval is not there");
       return made;
     },
+  };
+}
+
+/** A trace source with no trace, unless `over` gives some. */
+export function fakeTraceSource(over: Partial<TraceSource> = {}): TraceSource {
+  return {
+    readContent: async () => true,
+    lastTurns: async () => [],
+    taskTurns: async () => [],
+    runRql: async () => ({ ok: true, columns: [{ name: "trace_id" }], rows: [] }),
+    turnsOfTraces: async () => new Map(),
+    chooseTurns: async () => [],
+    loadTurn: async () => null,
+    readOnlyTools: async () => new Set(),
+    ...over,
   };
 }

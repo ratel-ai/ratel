@@ -11,11 +11,13 @@ import {
   startRun,
 } from "@/lib/views/sandboxes";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "./adapters/drizzle-experiment-store";
+import { createTraceSource } from "./adapters/trace-source";
 import { pinnedRun } from "./baseline";
 import { baselineDeps } from "./baseline-deps";
-import { evalsAccess } from "./console-deps";
+import { evalsAccess, readOnlyTools } from "./console-deps";
 import type { Experiment } from "./domain/experiment";
 import { advanceExperiment, type ExperimentDeps } from "./experiments";
 import type { ConsoleDeps, ExperimentsApiDeps } from "./experiments-api";
@@ -28,6 +30,8 @@ export function experimentDeps(): ExperimentDeps {
     experiments: createDrizzleExperimentStore(db),
     cases: createDrizzleCaseStore(db),
     evals: createDrizzleEvalStore(db),
+    datasets: createDrizzleDatasetStore(db),
+    traces: createTraceSource(db, { readOnlyTools, now: () => new Date() }),
     sandboxes: {
       enabled: (projectId) => sandboxesEnabledForProject(projectId),
       listVersions: listSandboxVersions,

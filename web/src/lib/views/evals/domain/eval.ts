@@ -107,6 +107,8 @@ export type EvalVersion = EvalContent & {
 export type EvalDefinition = EvalDetails & {
   id: string;
   projectId: string;
+  /** The dataset of the eval: its rows, or the query that a run resolves. */
+  datasetId: string;
   createdAt: Date;
   /** The newest first. There is always one. */
   versions: EvalVersion[];

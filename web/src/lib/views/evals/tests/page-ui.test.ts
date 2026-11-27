@@ -395,6 +395,7 @@ function suiteEval(id: string) {
   return {
     id,
     projectId: PROJECT_ID,
+    datasetId: id,
     name: id,
     taskId: null,
     createdAt: new Date(0),

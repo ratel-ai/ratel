@@ -132,9 +132,9 @@ export function suitePageModel({
 }): SuitePageModel {
   const table = run ? suiteTable(run, baseline) : null;
   const byEval = new Map(table?.rows.map((row) => [deltaKey(row), row]) ?? []);
-  const datasets = Map.groupBy(cases, ({ evalId }) => evalId);
+  const datasets = Map.groupBy(cases, ({ datasetId }) => datasetId);
   const rows: SuiteRowView[] = evals.map((definition) => {
-    const dataset = datasets.get(definition.id) ?? [];
+    const dataset = datasets.get(definition.datasetId) ?? [];
     const row = byEval.get(definition.id);
     return {
       evalId: definition.id,

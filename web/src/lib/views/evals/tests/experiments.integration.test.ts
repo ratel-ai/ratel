@@ -9,6 +9,7 @@ import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { SandboxRun, SandboxVersionSummary, StartRunResult } from "@/lib/views/sandboxes";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
@@ -35,6 +36,7 @@ import {
   content,
   createEvalsDb,
   evalContent,
+  fakeTraceSource,
   inEval,
   NO_REFUND,
   ORGANIZATION_ID,
@@ -97,6 +99,8 @@ async function setup() {
     cases,
     evals,
     experiments,
+    datasets: createDrizzleDatasetStore(db),
+    traces: fakeTraceSource(),
     sandboxes: {
       enabled: async () => true,
       listVersions: async () => versions,

@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
 import type { CaseContent, CaseVersion, EvalCase } from "../domain/case";
@@ -54,15 +54,22 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
     },
 
     async list(projectId, evalId) {
+      const ofEval =
+        evalId === undefined
+          ? undefined
+          : inArray(
+              evalCases.datasetId,
+              db
+                .select({ id: evalDefinitions.datasetId })
+                .from(evalDefinitions)
+                .where(
+                  and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)),
+                ),
+            );
       const rows = await db
         .select()
         .from(evalCases)
-        .where(
-          and(
-            eq(evalCases.projectId, projectId),
-            evalId === undefined ? undefined : eq(evalCases.evalId, evalId),
-          ),
-        )
+        .where(and(eq(evalCases.projectId, projectId), isNull(evalCases.resolvedTurnId), ofEval))
         .orderBy(desc(evalCases.createdAt), desc(evalCases.id));
       if (rows.length === 0) return [];
       const versions = await db
@@ -102,9 +109,9 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
           .where(eq(evalCases.id, caseId))
           .returning();
         if (!row) throw new Error("the case row is missing");
-        if (!isDeepStrictEqual(columns(content), columns(toVersion(newest)))) {
+        if (!isDeepStrictEqual(caseColumns(content), caseColumns(toVersion(newest)))) {
           await tx.insert(evalCaseVersions).values({
-            ...columns(content),
+            ...caseColumns(content),
             caseId,
             number: newest.number + 1,
             sourceTurnId: newest.sourceTurnId,
@@ -132,20 +139,26 @@ async function insertCase(
   const now = new Date();
   // The lock keeps the eval while the case joins it.
   const [owner] = await tx
-    .select({ id: evalDefinitions.id })
+    .select({ id: evalDefinitions.id, datasetId: evalDefinitions.datasetId })
     .from(evalDefinitions)
     .where(and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)))
     .for("share");
   if (!owner) return null;
   const [row] = await tx
     .insert(evalCases)
-    .values({ ...storable({ name, labels }), projectId, evalId, createdBy })
+    .values({
+      ...storable({ name, labels }),
+      projectId,
+      datasetId: owner.datasetId,
+      evalId,
+      createdBy,
+    })
     .returning();
   if (!row) throw new Error("the case row is missing");
   const [version] = await tx
     .insert(evalCaseVersions)
     .values({
-      ...columns(content),
+      ...caseColumns(content),
       caseId: row.id,
       number: 1,
       sourceTurnId: source?.turnId ?? null,
@@ -158,7 +171,7 @@ async function insertCase(
   return toCase(row, [version]);
 }
 
-function columns({ input, earlierTurns, toolFixtures, expectedOutput }: CaseContent) {
+export function caseColumns({ input, earlierTurns, toolFixtures, expectedOutput }: CaseContent) {
   return storable({
     input: { value: input ?? null },
     earlierTurns,
@@ -167,9 +180,18 @@ function columns({ input, earlierTurns, toolFixtures, expectedOutput }: CaseCont
   });
 }
 
-function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
-  const { id, projectId, evalId, name, labels, createdAt } = row;
-  return { id, projectId, evalId, name, labels, createdAt, versions: versions.map(toVersion) };
+export function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
+  const { id, projectId, datasetId, evalId, name, labels, createdAt } = row;
+  return {
+    id,
+    projectId,
+    datasetId,
+    evalId,
+    name,
+    labels,
+    createdAt,
+    versions: versions.map(toVersion),
+  };
 }
 
 export function toVersion(row: VersionRow): CaseVersion {

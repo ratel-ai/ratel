@@ -72,7 +72,10 @@ async function migrated() {
   await version(BOTH, 1, "approved", "first");
   await version(BOTH, 2, "draft", "edited");
   await version(DRAFT, 1, "draft", "draft only");
-  await client.exec(readFileSync(join(MIGRATIONS_DIR, MIGRATION), "utf8"));
+  // The later migrations too: the stores read the tables as they are now.
+  for (const file of files.filter((name) => name >= MIGRATION)) {
+    await client.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+  }
   // biome-ignore lint/suspicious/noExplicitAny: PGlite stands in for the Postgres client
   return { client, db: drizzle(client) as any };
 }

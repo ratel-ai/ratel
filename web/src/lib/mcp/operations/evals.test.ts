@@ -69,6 +69,7 @@ function evalCase(versions: CaseVersion[] = [caseVersion()]): EvalCase {
   return {
     id: CASE,
     projectId: PROJECT,
+    datasetId: EVAL,
     evalId: EVAL,
     name: "refund ask",
     labels: [],
@@ -87,6 +88,7 @@ function evalDefinition(input: Partial<NewEval> = {}): EvalDefinition {
   return {
     id: EVAL,
     projectId: PROJECT,
+    datasetId: EVAL,
     name: input.name ?? "Refunds",
     taskId: input.taskId ?? null,
     createdAt: T0,
@@ -209,6 +211,7 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
       inputs.map((input, n) => ({
         id: n === 0 ? CASE : `${CASE.slice(0, -1)}${n}`,
         projectId: input.projectId,
+        datasetId: input.evalId,
         evalId: input.evalId,
         name: input.name,
         labels: input.labels,

@@ -238,11 +238,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           deps.listEvals(ctx.projectId),
           deps.listCases(ctx.projectId),
         ]);
-        const byEval = Map.groupBy(cases, ({ evalId }) => evalId);
+        const byDataset = Map.groupBy(cases, ({ datasetId }) => datasetId);
         return {
           data: {
             evals: evals.map((definition) => {
-              const dataset = byEval.get(definition.id) ?? [];
+              const dataset = byDataset.get(definition.datasetId) ?? [];
               const version = currentVersion(definition);
               return {
                 evalId: definition.id,
@@ -1122,6 +1122,9 @@ const START_REFUSAL = {
   too_many_trials: "invalid_params",
   invalid_params: "invalid_params",
   wrong_sandbox: "conflict",
+  no_content_access: "forbidden",
+  query_failed: "invalid_params",
+  too_many_rows: "invalid_params",
 } as const;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {
