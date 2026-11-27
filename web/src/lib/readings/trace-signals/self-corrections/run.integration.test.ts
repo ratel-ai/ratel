@@ -173,7 +173,8 @@ test("a run writes every self-correction, phrases from captured replies included
   assert.deepEqual([sorry.match_start, sorry.match_end], [0, 9], "the range points into the reply");
 
   const run = await latestSignalRun(PROJECT_ID, db);
-  const stored = (run?.summary as { selfCorrections?: StoredSelfCorrections }).selfCorrections;
+  assert.ok(run);
+  const stored = (run.summary as { selfCorrections?: StoredSelfCorrections }).selfCorrections;
   // 12 runs corrected after update_task failed, and every one of them went on to succeed (the Health score counts them at half, RC-226).
   assert.deepEqual(stored, {
     version: 1,
@@ -215,8 +216,8 @@ test("the next run replaces the window's rows and reads each turn's task from th
   await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
   const first = await rows(client);
   const run = await latestSignalRun(PROJECT_ID, db);
-  const task = (run?.summary as { workflows?: { items: { id: string }[] } }).workflows?.items[0]
-    ?.id;
+  assert.ok(run);
+  const task = (run.summary as { workflows?: { items: { id: string }[] } }).workflows?.items[0]?.id;
   assert.ok(task, "the run mined find_task then update_task");
   // What the Tasks reading writes: each run's task.
   await client.query(`update trace_turns set workflow_id = $1 where project_id = $2`, [
@@ -237,7 +238,8 @@ test("the next run replaces the window's rows and reads each turn's task from th
   );
   const byTask = issues.find((s) => s.subjectKind === "workflow");
   assert.equal(byTask?.subjectKey, task);
-  assert.equal((byTask?.metrics as Record<string, unknown>).fixTool, "update_task");
+  assert.ok(byTask);
+  assert.equal((byTask.metrics as Record<string, unknown>).fixTool, "update_task");
   await client.close();
 });
 
@@ -269,6 +271,7 @@ test("a failed reading never fails the run, and leaves the issue unmeasured", as
     "the window keeps its earlier rows",
   );
   const run = await latestSignalRun(PROJECT_ID, db);
-  assert.equal((run?.summary as { selfCorrections?: unknown }).selfCorrections, undefined);
+  assert.ok(run);
+  assert.equal((run.summary as { selfCorrections?: unknown }).selfCorrections, undefined);
   await client.close();
 });

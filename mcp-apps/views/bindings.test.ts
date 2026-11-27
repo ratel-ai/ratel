@@ -36,8 +36,10 @@ function scenarios(fixtures: ViewFixtures, tool: string) {
   return { normal: pick(tool), dense: pick(`${tool} · dense`), empty: pick(`${tool} · empty`) };
 }
 
-const dataOf = (fixture: ViewFixture) =>
-  (fixture.result?.structuredContent as { data: unknown }).data;
+function dataOf(fixture: ViewFixture): unknown {
+  assert.ok(fixture.result, "the fixture has a tool result");
+  return (fixture.result.structuredContent as { data: unknown }).data;
+}
 
 function rowsOf(fixture: ViewFixture, path: string, tool: string): Row[] {
   const rows = getPath(dataOf(fixture), path);

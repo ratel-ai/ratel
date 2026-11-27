@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveConfig } from "@/config";
-import { registerNodeInstrumentation as register } from "@/instrumentation.node";
+import { registerNodeInstrumentation as register } from "@/instrumentation-node";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 
 const registerNodeInstrumentation = (

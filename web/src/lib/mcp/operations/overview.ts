@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
+import { GRID_COLUMNS } from "@/lib/console/grid/layout";
 import { projectRoot } from "@/lib/console/navigation";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
+import { cappedResult, headline } from "@/lib/mcp/operations/monitoring/results";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
-import { round } from "@/lib/mcp/serialize";
+import { round, TruncationTracker } from "@/lib/mcp/serialize";
 import { mcpClientName, UNKNOWN_CLIENT } from "@/lib/mcp/telemetry/session";
 import { getDb } from "@/lib/platform/db/client";
 import type { Organization } from "@/lib/platform/organizations";
@@ -15,6 +17,7 @@ import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import type { AttentionItem } from "@/lib/views/home/attention";
 import {
+  type FocusedAlerts,
   type FocusedAttention,
   type FocusedHealth,
   type FocusedOverviewData,
@@ -36,16 +39,24 @@ import {
   undoOverviewChange,
 } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
+import { findDashboardWidget } from "@/lib/views/overview-layout/dashboard-widgets";
 import {
+  dashboardItemId,
+  isDashboardItem,
   type OfferedWidgets,
   OVERVIEW_WIDGETS,
+  type OverviewItemId,
   type OverviewLayout,
+  type OverviewPlacement,
   type OverviewWidget,
   type OverviewWidgetId,
   onlyWidget,
+  parseDashboardItem,
+  placementTitle,
   visibleWidgets,
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
+import { projectDashboardsOn, projectWidgets } from "@/lib/views/overview-layout/offered";
 import type { OverviewLayoutStore } from "@/lib/views/overview-layout/ports/store";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 import type { Topology } from "@/lib/views/project-entities/topology";
@@ -70,6 +81,9 @@ export interface OverviewOperationDeps {
   /** Every widget there is, which the parameter lists. A project may be offered fewer. */
   widgets: OfferedWidgets;
   offeredWidgets: (projectId: string) => Promise<OfferedWidgets>;
+  /** The project has dashboards, so their widgets can be on the Overview. */
+  dashboardsOn: LayoutDeps["dashboardsOn"];
+  dashboardWidget: LayoutDeps["dashboardWidget"];
   /** What an agent reads of each widget. */
   widgetData: Readonly<Record<OverviewWidgetId, WidgetData>>;
   restricted: () => Promise<boolean>;
@@ -88,6 +102,7 @@ export const WIDGET_DATA: Readonly<Record<OverviewWidgetId, WidgetData>> = {
   topology: ({ topology }) => topology && topologyView(topology),
   health: ({ health }) => health && healthView(health),
   attention: ({ attention, root }) => attention && attentionView(attention, root),
+  alerts: ({ alerts }) => alerts && alertsView(alerts),
 };
 
 export const defaultOverviewDeps: OverviewOperationDeps = {
@@ -97,7 +112,9 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   loadOverview: loadFocusedOverview,
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
   widgets: WIDGET_CATALOG,
-  offeredWidgets: async () => WIDGET_CATALOG,
+  offeredWidgets: (projectId) => projectWidgets(projectId),
+  dashboardsOn: (projectId) => projectDashboardsOn(projectId),
+  dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref),
   widgetData: WIDGET_DATA,
   restricted: isRestrictedBySupportSession,
   clientName: requestClientName,
@@ -111,6 +128,8 @@ const REVISION = z
   .describe(
     "The revision of the layout that you read. If the layout changed after that, the call changes nothing.",
   );
+const DASHBOARD_ID = z.string().max(100);
+const WIDGET_ID = z.string().max(100);
 const cell = (low: number, high: number) => z.number().int().min(low).max(high).optional();
 
 export function overviewOperations(
@@ -122,7 +141,7 @@ export function overviewOperations(
       domain: "observability",
       title: "Get the Overview",
       description:
-        'Reads the Overview of a project as the signed-in person sees it: the metrics, the agents and MCP servers, the Health score, the rows that need attention and the widget layout. Give widget to read only that widget, also if it is removed from the Overview. Without widget, a removed widget has no data. With an API key, the layout is the default. Example: {"widget": "health", "range": "30d"}.',
+        'Reads the Overview of a project as the signed-in person sees it: its widgets with their data, the dashboard widgets on it and the layout. Give widget, or dashboardId and widgetId, to read only that widget, also if it is removed. Without them, a removed widget has no data. With an API key, the layout is the default. Example: {"widget": "health", "range": "30d"}.',
       keywords: [
         "overview",
         "recap",
@@ -141,6 +160,10 @@ export function overviewOperations(
           .optional()
           .meta({ enum: deps.widgets.map(({ id }) => id) })
           .describe("The widget to read. Without it, the result is the whole Overview."),
+        dashboardId: DASHBOARD_ID.optional().describe(
+          "With widgetId: reads only that dashboard widget, also if it is not on the Overview. list_dashboards gives the IDs.",
+        ),
+        widgetId: WIDGET_ID.optional().describe("With dashboardId. get_dashboard gives the IDs."),
         range: z
           .enum(["7d", "30d"])
           .default("7d")
@@ -148,27 +171,30 @@ export function overviewOperations(
       }),
       async execute(ctx, params) {
         const { project, organization } = await requireOverview(deps, ctx.projectId);
-        const widget =
-          params.widget === undefined
-            ? null
-            : requireWidget(params.widget, await deps.offeredWidgets(project.id));
-        const saved = widget
-          ? { layout: onlyWidget(widget), revision: "", undo: null }
+        const alone = await onlyLayout(deps, project.id, params);
+        const saved = alone
+          ? { layout: alone, revision: "", undo: null }
           : await savedLayout(project.id, layoutDeps(deps, ctx.auth));
         const { layout } = saved;
         const data = await load(deps, { project, organization }, layout, params.range);
         const view = ctx.forView
-          ? { view: await overviewView(deps, organization, data, widget) }
+          ? { view: await overviewView(deps, organization, data, alone?.[0].id) }
           : {};
-        if (widget)
+        const tracker = new TruncationTracker();
+        if (alone) {
+          const [{ id }] = alone;
           return {
             data: {
               ...pageData(data),
-              widget: widget.id,
-              [widget.id]: deps.widgetData[widget.id](data),
+              widget: id,
+              ...(isDashboardItem(id)
+                ? { dashboardWidgets: dashboardWidgetsView(data, tracker) }
+                : { [id]: deps.widgetData[id](data) }),
             },
+            truncated: tracker.value,
             ...view,
           };
+        }
         const removed = layout.filter((placed) => placed.removed).map(({ id }) => id);
         return {
           data: {
@@ -180,8 +206,14 @@ export function overviewOperations(
                   : ("person" as const),
               ...snapshotView(saved),
             },
-            ...Object.fromEntries(layout.map(({ id }) => [id, deps.widgetData[id](data)])),
+            ...Object.fromEntries(
+              layout.flatMap(({ id }) =>
+                isDashboardItem(id) ? [] : [[id, deps.widgetData[id](data)]],
+              ),
+            ),
+            dashboardWidgets: dashboardWidgetsView(data, tracker),
           },
+          truncated: tracker.value,
           ...(removed.length > 0
             ? {
                 hint: `These widgets are removed and have no data: ${removed.join(", ")}. Call get_overview with widget to read one. Call change_overview_layout with change "add" to add one again.`,
@@ -246,7 +278,7 @@ export function overviewWriteOperations(
       domain: "writes",
       title: "Change the Overview layout",
       description:
-        'Changes the Overview layout of the signed-in person in one project. Other people keep their layouts. The grid has 12 columns. Call get_overview first to read the layout. An API key cannot change a layout. Example: {"change": "move", "widget": "attention", "x": 0, "y": 0}.',
+        'Changes the Overview layout of the signed-in person in one project. Other people keep their layouts. The grid has 12 columns. The widget is one of the Overview, or a dashboard widget: give dashboardId and widgetId. Call get_overview first to read the layout. An API key cannot change a layout. Example: {"change": "move", "widget": "attention", "x": 0, "y": 0}.',
       keywords: [
         "arrange overview",
         "move widget",
@@ -262,9 +294,13 @@ export function overviewWriteOperations(
         change: z
           .enum(CHANGES)
           .describe(
-            "move needs widget, x and y. resize needs widget, w and h. add and remove need widget. reset restores the default layout and needs no other parameter.",
+            "move needs a widget, x and y. resize needs a widget, w and h. add and remove need a widget. reset restores the default layout and needs no other parameter.",
           ),
         widget: z.enum(OVERVIEW_WIDGETS).optional().describe("The widget to change."),
+        dashboardId: DASHBOARD_ID.optional().describe(
+          "With widgetId, in place of widget: a dashboard widget. The Overview shows it as its dashboard has it now. add puts it at the bottom. list_dashboards gives the IDs.",
+        ),
+        widgetId: WIDGET_ID.optional().describe("With dashboardId. get_dashboard gives the IDs."),
         x: cell(0, 11).describe("The first column of the widget. Column 0 is the left column."),
         y: cell(0, 10_000).describe(
           "The first row of the widget. Row 0 is the top row. The other widgets make room.",
@@ -379,6 +415,8 @@ function layoutDeps(deps: OverviewOperationDeps, auth: McpAuthContext): LayoutDe
     reader: mcpLayoutReader(auth, deps.restricted),
     store: deps.layoutStore,
     offered: deps.offeredWidgets,
+    dashboardsOn: deps.dashboardsOn,
+    dashboardWidget: deps.dashboardWidget,
     source: async () => ({ kind: "mcp", client: await deps.clientName() }),
   };
 }
@@ -440,19 +478,67 @@ async function overviewView(
   deps: OverviewOperationDeps,
   organization: Pick<Organization, "id">,
   overview: FocusedOverviewData,
-  widget: OverviewWidget | null = null,
+  /** The entry that was asked for alone. */
+  widget: OverviewItemId | null = null,
 ) {
   return {
     kind: "overview",
     overview,
     linked: await deps.entitiesLinked(organization),
-    ...(widget ? { widget: widget.id } : {}),
+    ...(widget ? { widget } : {}),
   };
+}
+
+/** The layout of the one widget that was asked for; null for the whole Overview. */
+async function onlyLayout(
+  deps: OverviewOperationDeps,
+  projectId: string,
+  params: WidgetParams,
+): Promise<OverviewLayout | null> {
+  const id = widgetOf(params);
+  if (id === undefined) return null;
+  if (!isDashboardItem(id))
+    return onlyWidget(requireWidget(id, await deps.offeredWidgets(projectId)));
+  if (!(await deps.dashboardsOn(projectId))) throw refused({ ok: false, reason: "dashboards_off" });
+  const ref = parseDashboardItem(id);
+  const source = ref && (await deps.dashboardWidget(projectId, ref));
+  if (!source) throw refused({ ok: false, reason: "no_source" });
+  const { title, h } = source;
+  return [{ id, x: 0, y: 0, w: GRID_COLUMNS, h, removed: false, title }];
+}
+
+interface WidgetParams {
+  widget?: string;
+  dashboardId?: string;
+  widgetId?: string;
+}
+
+/** One of the Overview's own by name, or a dashboard widget by its two IDs. */
+function widgetOf({ widget, dashboardId, widgetId }: WidgetParams): string | undefined {
+  if (dashboardId === undefined && widgetId === undefined) return widget;
+  if (dashboardId === undefined || widgetId === undefined || widget !== undefined)
+    throw invalidParams("A dashboard widget needs dashboardId and widgetId, and no widget.", [
+      {
+        path:
+          dashboardId === undefined
+            ? "dashboardId"
+            : widgetId === undefined
+              ? "widgetId"
+              : "widget",
+        message: "Give dashboardId and widgetId together, without widget.",
+      },
+    ]);
+  return dashboardItemId(dashboardId, widgetId);
 }
 
 function refused({ reason }: LayoutRefused): McpOperationError {
   if (reason === "not_found") return notFound("project");
   if (reason === "invalid") return invalidParams(LAYOUT_REFUSALS.invalid);
+  if (reason === "no_source")
+    return invalidParams(
+      `${LAYOUT_REFUSALS.no_source} list_dashboards and get_dashboard give the IDs.`,
+      [{ path: "widgetId", message: "Not a widget of that dashboard." }],
+    );
   if (reason === "not_kept")
     return invalidParams(LAYOUT_REFUSALS.not_kept, [
       { path: "changeId", message: "Not a change in the history." },
@@ -463,7 +549,7 @@ function refused({ reason }: LayoutRefused): McpOperationError {
       `${LAYOUT_REFUSALS.stale} Call list_overview_changes to read the latest changes and the revision.`,
       { reason },
     );
-  const code = reason === "nothing_to_undo" ? "conflict" : "forbidden";
+  const code = reason === "nothing_to_undo" || reason === "too_many" ? "conflict" : "forbidden";
   return new McpOperationError(code, LAYOUT_REFUSALS[reason], { reason });
 }
 
@@ -498,16 +584,15 @@ async function changedResult(
   };
 }
 
-interface ChangeParams {
+interface ChangeParams extends WidgetParams {
   change: (typeof CHANGES)[number];
-  widget?: string;
   x?: number;
   y?: number;
   w?: number;
   h?: number;
 }
 
-const NEEDS: Record<ChangeParams["change"], readonly Exclude<keyof ChangeParams, "change">[]> = {
+const NEEDS: Record<ChangeParams["change"], readonly ("widget" | "x" | "y" | "w" | "h")[]> = {
   move: ["widget", "x", "y"],
   resize: ["widget", "w", "h"],
   add: ["widget"],
@@ -517,7 +602,8 @@ const NEEDS: Record<ChangeParams["change"], readonly Exclude<keyof ChangeParams,
 
 function layoutChange(params: ChangeParams): Record<string, unknown> {
   const needs = NEEDS[params.change];
-  const missing = needs.filter((name) => params[name] === undefined);
+  const given = { ...params, widget: widgetOf(params) };
+  const missing = needs.filter((name) => given[name] === undefined);
   if (missing.length > 0)
     throw invalidParams(
       `The change "${params.change}" needs these parameters: ${missing.join(", ")}.`,
@@ -525,7 +611,7 @@ function layoutChange(params: ChangeParams): Record<string, unknown> {
     );
   return {
     kind: params.change,
-    ...Object.fromEntries(needs.map((name) => [name, params[name]])),
+    ...Object.fromEntries(needs.map((name) => [name, given[name]])),
   };
 }
 
@@ -536,6 +622,7 @@ function pageData(data: FocusedOverviewData) {
     range: data.rangeParam,
     lastEventAt: data.lastEventAt?.toISOString() ?? null,
     hasTelemetry: data.hasTelemetry,
+    traces: data.tracesSeen,
   };
 }
 
@@ -563,8 +650,9 @@ function layoutView(layout: OverviewLayout) {
   return {
     columns: 12,
     widgets: [
-      ...visibleWidgets(layout).map(({ id, x, y, w, h }) => ({
-        id,
+      ...visibleWidgets(layout).map(({ x, y, w, h, ...entry }) => ({
+        id: entry.id,
+        ...itemNames(entry),
         removed: false,
         x,
         y,
@@ -574,6 +662,44 @@ function layoutView(layout: OverviewLayout) {
       ...layout.filter(({ removed }) => removed).map(({ id }) => ({ id, removed: true })),
     ],
   };
+}
+
+/** What names a dashboard widget in a call. */
+function itemNames(entry: Pick<OverviewPlacement, "id" | "title">) {
+  if (!isDashboardItem(entry.id)) return {};
+  return { ...parseDashboardItem(entry.id), name: placementTitle(entry) };
+}
+
+const ITEM_ROWS = 20;
+
+/** The numbers as query_monitoring gives them, or why there are none. */
+function dashboardWidgetsView(data: FocusedOverviewData, tracker: TruncationTracker) {
+  const { dashboards, layout } = data;
+  return visibleWidgets(layout).flatMap((entry): object[] => {
+    if (!isDashboardItem(entry.id)) return [];
+    const names = { id: entry.id, ...itemNames(entry) };
+    if (dashboards === "failed") return [{ ...names, failed: true }];
+    const item = dashboards?.[entry.id];
+    if (!item) return [];
+    if (item.kind === "broken")
+      return [{ ...names, ...(item.title ? { name: item.title } : {}), problem: item.problem }];
+    const { title, dashboard, widget, result, filters } = item;
+    return [
+      {
+        ...names,
+        name: title,
+        dashboard: dashboard.name,
+        href: dashboard.href,
+        chart: widget.chart,
+        filters,
+        summary: headline(widget.query, result),
+        result:
+          result && result.kind !== "refused"
+            ? cappedResult(widget.query, result, ITEM_ROWS, tracker)
+            : result,
+      },
+    ];
+  });
 }
 
 function metricsView(metrics: MetricsData | "failed") {
@@ -630,7 +756,13 @@ function healthView({ windowDays, href, card }: FocusedHealth) {
             points: lost,
           })),
         }
-      : { score: null, why: card.line, ...(card.failed ? { failed: true } : {}) }),
+      : {
+          score: null,
+          why: card.line,
+          reason: card.reason,
+          ...(card.progress ? { progress: card.progress } : {}),
+          ...(card.reason === "failed" ? { failed: true } : {}),
+        }),
   };
 }
 
@@ -638,9 +770,15 @@ function attentionView(attention: FocusedAttention, root: string) {
   return {
     rows: attention.items.map((item) => attentionRow(item, root)),
     moreIssues: attention.moreIssues,
+    ...(attention.items.length === 0 && !attention.partial ? { state: attention.state } : {}),
     href: attention.healthHref,
     ...(attention.partial ? { partial: true } : {}),
   };
+}
+
+function alertsView(alerts: FocusedAlerts | "failed") {
+  if (alerts === "failed") return { failed: true };
+  return { count: alerts.items.length, rows: alerts.items, href: alerts.href, rules: alerts.rules };
 }
 
 function attentionRow(item: AttentionItem, root: string) {

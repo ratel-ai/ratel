@@ -45,6 +45,8 @@ export interface McpErrorBody {
   issues?: readonly { path: string; message: string }[];
   /** Set on `rate_limited`. */
   retryAfterSeconds?: number;
+  /** Set on an RQL refusal: what to write so that the query runs. */
+  fix?: string;
 }
 
 export class McpOperationError extends Error {

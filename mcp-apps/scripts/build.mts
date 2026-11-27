@@ -78,6 +78,8 @@ const serverActions: Plugin = {
 const CONSOLE_ONLY: Readonly<Record<string, string>> = {
   // Owned (ADR-0004): the panel lands in components/console here.
   [path.join(WEB_SRC, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
+  // Owned (ADR-0004): the dashboard view's clusters are a table.
+  [path.join(WEB_SRC, "components", "console", "dashboards", "ClustersBody")]: path.join(SHELL, "shims", "clusters-body.tsx"),
 };
 
 /**
@@ -95,7 +97,7 @@ const browserConfig: Plugin = {
 const consoleOnly: Plugin = {
   name: "console-only-shims",
   setup(build) {
-    build.onResolve({ filter: /WhatIfPanel$/ }, (args) => {
+    build.onResolve({ filter: /(WhatIfPanel|ClustersBody)$/ }, (args) => {
       const target = args.path.startsWith("@/") ? path.join(WEB_SRC, args.path.slice(2)) : path.resolve(args.resolveDir, args.path);
       const shim = CONSOLE_ONLY[target];
       return shim ? { path: shim } : undefined;
@@ -124,6 +126,9 @@ export async function bundleScript(entry: string): Promise<{ script: string; imp
     alias: {
       "next/link": path.join(SHELL, "shims", "next-link.tsx"),
       "next/navigation": path.join(SHELL, "shims", "next-navigation.ts"),
+      // Owned (ADR-0004): a view parses nothing and hashes nothing.
+      zod: path.join(SHELL, "shims", "zod.ts"),
+      "node:crypto": path.join(SHELL, "shims", "node-crypto.ts"),
     },
     // Owned (ADR-0004): a view's frame has no `process`; code that reads NODE_ENV (a framework
     // exception to web/src/config.ts) reads production, and any other read an empty object.

@@ -653,3 +653,33 @@ test("a batch whose prices are unknown stores no cost, emitter cost included", (
   );
   assert.equal(row.costUsd, null);
 });
+
+test("the session falls back to the MCP transport session, and the end user comes from the resource", () => {
+  const rows = toOtelSpanRows("project-1", [
+    span({
+      attributes: { "mcp.session.id": "mcp-1" },
+      resourceAttributes: { "enduser.id": "user-9" },
+    }),
+    span({
+      spanId: "1123456789abcdef",
+      attributes: { "gen_ai.conversation.id": "conv-1", "mcp.session.id": "mcp-1" },
+    }),
+  ]);
+
+  assert.deepEqual(
+    rows.map((row) => [row.sessionId, row.endUserId]),
+    [
+      ["mcp-1", "user-9"],
+      ["conv-1", null],
+    ],
+  );
+});
+
+test("a session or end-user id longer than 256 characters is cut, as on trace_events", () => {
+  const [row] = toOtelSpanRows("project-1", [
+    span({ attributes: { "session.id": "s".repeat(300), "user.id": "u".repeat(300) } }),
+  ]);
+
+  assert.equal(row.sessionId, "s".repeat(256));
+  assert.equal(row.endUserId, "u".repeat(256));
+});

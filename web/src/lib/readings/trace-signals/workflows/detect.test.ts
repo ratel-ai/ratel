@@ -40,7 +40,10 @@ function world(): SignalTurn[] {
     ),
     ...many(40, (i) => wfTurn(close(i))),
     ...many(40, (i) =>
-      wfTurn(swap(i, ["invite", "create_task", "link_doc"]), { durationMs: 15_000 }),
+      wfTurn(
+        swap(i, ["invite", "create_task", "link_doc"]).map((tool) => ({ tool, tookMs: 4_000 })),
+        { durationMs: 15_000 },
+      ),
     ),
     ...many(40, () => wfTurn(["fetch", "summarize", "export"])),
     ...many(1, () =>
@@ -126,6 +129,20 @@ test("workflow_slow needs both the ratio and the 5 s floor", () => {
     [],
     "slow, but no slower than the rest",
   );
+});
+
+test("workflow_slow stays quiet when the tools explain almost none of a run and no model calls are linked", () => {
+  // An MCP server's view of a coding session: three quick tool calls in a
+  // 20-minute run. The time is the agent's own work, which this project does
+  // not send, so blaming the run's length on its tools would be false.
+  const sessions = [
+    ...many(30, () =>
+      wfTurn(["task_update", "brief_edit", "attach_proof"], { durationMs: 1_200_000 }),
+    ),
+    ...many(30, () => wfTurn(["task_get", "task_note"], { durationMs: 60_000 })),
+    ...many(30, () => wfTurn(["plan_get", "plan_update"], { durationMs: 60_000 })),
+  ];
+  assert.deepEqual(about(detectWorkflowSignals(entriesOf(sessions)), "workflow_slow"), []);
 });
 
 test("workflow_fixed_chain fires on a stable 3-tool chain and not on a varying or 2-tool one", () => {

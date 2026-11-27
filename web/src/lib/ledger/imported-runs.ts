@@ -48,7 +48,7 @@ export const IMPORT_PERSIST_CONTEXT = {
 
 /**
  * The core's ingest and job queue for imported runs, lent to the edition at startup
- * (`instrumentation.node.ts`). The bodies are upstream's `storeDeps` in
+ * (`instrumentation-node.ts`). The bodies are upstream's `storeDeps` in
  * `lib/health-imports/start.ts`, which the edition calls through this port.
  */
 export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): ImportedRunsPort {

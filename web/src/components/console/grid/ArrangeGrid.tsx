@@ -1,6 +1,14 @@
 "use client";
 
-import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  cloneElement,
+  type ReactNode,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import { GridLayout, type Layout, type LayoutItem } from "react-grid-layout";
 import { type GridCard, useMedia } from "@/components/console/grid/CardGrid";
 import {
@@ -24,7 +32,13 @@ const DRAG = { cancel: "button, a", threshold: 4 } as const;
 const HANDLE = "[data-grid-handle]";
 const SURFACE = "[data-grid-handle], [data-grid-surface]";
 
-/** The grid while a person arranges it. Loaded by `CardGrid`. */
+/**
+ * The grid while a person arranges it. Loaded by `CardGrid`.
+ *
+ * The library holds a moving card's pixels in a ref, and redraws the card only when its cell or its
+ * child element changes (`GridItem`'s memo, 2.3.0). So each move draws the held card's wrapper
+ * again: without that, the card stays in its place until the pointer reaches the next cell.
+ */
 export default function ArrangeGrid({
   cards,
   container,
@@ -55,9 +69,31 @@ export default function ArrangeGrid({
   );
   const drag = useMemo(() => ({ ...DRAG, handle: mouse ? SURFACE : HANDLE }), [mouse]);
 
-  function onStop(next: Layout, _from: LayoutItem | null, taken: LayoutItem | null) {
-    onPlaces(new Map(next.map(({ i, x, y, w, h }) => [i, { x, y, w, h }])), taken?.i);
-  }
+  const [held, setHeld] = useState<{ id: string } | null>(null);
+  const onMove = useCallback(
+    (_next: Layout, _from: LayoutItem | null, taken: LayoutItem | null) => {
+      setHeld(taken && { id: taken.i });
+    },
+    [],
+  );
+  const onStop = useCallback(
+    (next: Layout, _from: LayoutItem | null, taken: LayoutItem | null) => {
+      setHeld(null);
+      onPlaces(new Map(next.map(({ i, x, y, w, h }) => [i, { x, y, w, h }])), taken?.i);
+    },
+    [onPlaces],
+  );
+  const drawn = useMemo(
+    () =>
+      cards.map((card) => (
+        <div key={card.id} data-grid-card={card.id}>
+          <div data-grid-exact="" style={exactly(card, width)}>
+            {children(card)}
+          </div>
+        </div>
+      )),
+    [cards, children, width],
+  );
 
   return (
     <GridLayout
@@ -66,16 +102,16 @@ export default function ArrangeGrid({
       gridConfig={GRID}
       dragConfig={drag}
       resizeConfig={RESIZE}
+      onDragStart={onMove}
+      onDrag={onMove}
       onDragStop={onStop}
+      onResizeStart={onMove}
+      onResize={onMove}
       onResizeStop={onStop}
     >
-      {cards.map((card) => (
-        <div key={card.id} data-grid-card={card.id}>
-          <div data-grid-exact="" style={exactly(card, width)}>
-            {children(card)}
-          </div>
-        </div>
-      ))}
+      {drawn.map((card) =>
+        card.key === held?.id ? cloneElement(card, { "data-grid-held": "" }) : card,
+      )}
     </GridLayout>
   );
 }

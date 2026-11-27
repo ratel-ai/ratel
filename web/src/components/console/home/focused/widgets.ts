@@ -1,4 +1,11 @@
-import { Bell, ChartNoAxesColumn, HeartPulse, type LucideIcon, Waypoints } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  ChartNoAxesColumn,
+  HeartPulse,
+  type LucideIcon,
+  Waypoints,
+} from "lucide-react";
 import {
   type OfferedWidgets,
   type OverviewLayout,
@@ -30,6 +37,11 @@ export const WIDGETS: Readonly<
     title: WIDGET_TITLES.attention,
     description: "Failed runs, issues and fixes to look at.",
     icon: Bell,
+  },
+  alerts: {
+    title: WIDGET_TITLES.alerts,
+    description: "Alert rules that fire now.",
+    icon: BellRing,
   },
 };
 

@@ -26,8 +26,19 @@
     cursor: grab;
   }
 }
-.react-grid-item.react-draggable-dragging :is([data-grid-handle], [data-grid-surface]) {
-  cursor: grabbing;
+/* The held card is off the page: it follows the pointer, over its landing place, which shows through. */
+[data-grid-held] [data-card] {
+  border-color: var(--ds-line-active);
+  background: var(--ds-overlay);
+  box-shadow: var(--shadow-overlay);
+  opacity: 0.85;
+}
+/* Wherever the pointer is: it leaves the corner when the card is as small as it gets. */
+body:has(.react-grid-item.react-draggable-dragging) * {
+  cursor: grabbing !important;
+}
+body:has(.react-grid-item.resizing) * {
+  cursor: se-resize !important;
 }
 .react-grid-item.resizing,
 .react-grid-item.react-draggable-dragging,
@@ -36,11 +47,14 @@
   user-select: none;
 }
 .react-grid-item.react-grid-placeholder {
-  border: 1px dashed var(--ds-line-strong);
+  border: 1px dashed var(--ds-fg-subtle);
   border-radius: 8px;
   background: var(--ds-hover);
 }
-.react-grid-item > .react-resizable-handle {
+.react-grid-placeholder > .react-resizable-handle {
+  display: none;
+}
+.react-grid-item:not(.react-grid-placeholder) > .react-resizable-handle {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -49,16 +63,12 @@
   cursor: se-resize;
   touch-action: none;
 }
-.react-grid-item > .react-resizable-handle::after {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--ds-fg-subtle);
-  border-bottom: 2px solid var(--ds-fg-subtle);
-  border-bottom-right-radius: 3px;
-  content: "";
+/* The card draws the mark (`CardFrame`'s resize handle, which the keyboard uses). A finger needs 44 px. */
+@media (pointer: coarse) {
+  .react-grid-item:not(.react-grid-placeholder) > .react-resizable-handle {
+    width: 44px;
+    height: 44px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .react-grid-item {

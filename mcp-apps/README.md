@@ -84,7 +84,7 @@ One prompt per view, in a new chat with the server on:
   `{ ok, data, truncated?, … }` envelope) and their config from their binding:
   `useRatelView().binding.config`.
 - A link to a console page (`/projects/…`) opens on this app's console (the
-  origin the server writes into the view, else cloud.ratel.sh) through the
+  origin the server writes into the view, else app.ratel.sh) through the
   host; `?peek=` links stay in the view.
 - Fonts: the console's Geist comes from next/font, which a view cannot load.
   The build inlines Geist and Geist Mono from the `geist` package, cut to the
@@ -108,14 +108,29 @@ for a host:
 - open-link falls back to a new window where the host has none; a host that
   refuses is final. `askAgent` and `setContext` resolve to false, never throw.
 
+## The dashboard view
+
+`views/dashboard` draws `get_dashboard` and `query_monitoring` with the console's own `WidgetBody`,
+from the widgets and results in the tool's `view`, on the stored 12-column grid, read-only. A host
+that passes the text only gets a table of one line per widget. `query_monitoring` with `queries`
+shows two to four results side by side, and Open in Ratel opens the same in Explore. Clusters are a table with a link to
+the console: the Intents map's drawings bring about 150 KB. The view is 733 KB:
+the map's shapes are about 210 KB of it.
+
+The overview view draws the dashboard widgets that are on an Overview with the same bodies, and the
+same table for clusters. It is 787 KB for that reason, now the largest one.
+
+`shell/shims/zod.ts` and `node-crypto.ts` stand in for `zod` and `node:crypto` in every view: the
+console's modules declare schemas as they load, and a view parses nothing.
+
 ## Generic views
 
 Most tools need no UI code: add a binding to one of these.
 
 | View | Binds | Config (`shell/config.ts`) |
 |---|---|---|
-| `list` | `list_traces`, `list_intents`, `list_tasks`, `list_fixes`, `list_insights`, `list_skills`, `list_shipments`, `list_sdk_events`, `list_logs`, `list_projects`, `list_span_groups`, `list_invoked_tools`, `list_declared_tools` | rows path, row key, columns, search keys, filters, default sort, the tool's own sort argument (`sortArg`), cursor, detail tool and its args (read from the row; the bridge names the project), and optionally the view model to draw from (`fromView`) |
-| `detail` | `get_intent`, `get_task`, `get_fix`, `get_skill`, `get_sdk_event`, `get_project_overview` | root path, title, fields, sections (fields, table, list), console link |
+| `list` | `list_traces`, `list_intents`, `list_tasks`, `list_fixes`, `list_insights`, `list_skills`, `list_shipments`, `list_sdk_events`, `list_logs`, `list_projects`, `list_span_groups`, `list_invoked_tools`, `list_declared_tools`, `list_scorers`, `list_alerts`, `list_alert_destinations`, `list_slack_channels`, `get_location_attributes`, `list_dashboards` | rows path, row key, columns, search keys, filters, default sort, the tool's own sort argument (`sortArg`), cursor, detail tool and its args (read from the row; the bridge names the project), and optionally the view model to draw from (`fromView`) |
+| `detail` | `get_intent`, `get_task`, `get_fix`, `get_skill`, `get_sdk_event`, `get_project_overview`, `get_scorer`, `get_alert` | root path, title, fields, sections (fields, table, list), console link |
 | `series` | `get_cost_by_day`, `get_trace_health` | rows path, x, one measure, 2 to 5 stats (`aggregate: "window"` reads the tool's own figure from `data`), empty text |
 
 Each bound tool has harness fixtures named `<tool>`, `<tool> · dense` and
@@ -158,6 +173,10 @@ A view shows what its console page shows. Three rules keep it so:
   tool's own rows.
 
 ## Dedicated views
+
+- `table`: `run_rql` as a table of the RQL query's own columns, each with its RQL type, from the
+  tool's `columns` and `rows`. The columns change with each query, so the list view's fixed columns
+  do not fit. A cut table and an empty one say so. It is published only when the tool exists (`customMonitoring`).
 
 - `trace`: `get_trace` as the console's own TraceView (embedded, as the
   session replay's Trace view shows it), from the trace page's props in the

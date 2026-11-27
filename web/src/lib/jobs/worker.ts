@@ -1,3 +1,4 @@
+import type { WorkerLane } from "@/lib/contracts/registry";
 import { getLogger } from "@/lib/platform/logger";
 
 const logger = getLogger("jobs/worker");
@@ -20,6 +21,13 @@ export interface WorkerDeps {
   drainImports?: () => Promise<{ done: number; failed: number }>;
   /** The same for queued image builds, which must not hold up imports either. */
   drainBuilds?: () => Promise<{ done: number; failed: number }>;
+  /** The registrations' lanes (`Registration.workerLanes`), each run `concurrency` times. */
+  extraLanes?: readonly WorkerLane[];
+  /**
+   * `false`: run only `extraLanes`, with no analysis lane, no sweep and no imports (a persist-only
+   * process, APP_ROLE=persist).
+   */
+  analysis?: boolean;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
@@ -56,20 +64,35 @@ export function startWorker(deps: WorkerDeps): WorkerHandle {
   };
 
   logger.info({}, "background worker started");
-  const lanes = [
-    lane("analysis", async () => {
-      if (deps.now() - lastSweepAt >= SWEEP_EVERY_MS) {
-        lastSweepAt = deps.now();
-        await deps.sweep();
-        return true;
-      }
-      const { done, failed } = await deps.drain();
-      return done + failed > 0;
-    }),
-  ];
+  const analysis = deps.analysis !== false;
+  const lanes: Promise<void>[] = [];
+  if (analysis) {
+    lanes.push(
+      lane("analysis", async () => {
+        if (deps.now() - lastSweepAt >= SWEEP_EVERY_MS) {
+          lastSweepAt = deps.now();
+          await deps.sweep();
+          return true;
+        }
+        const { done, failed } = await deps.drain();
+        return done + failed > 0;
+      }),
+    );
+  }
+  for (const extra of deps.extraLanes ?? []) {
+    for (let copy = 0; copy < Math.max(1, extra.concurrency); copy++) {
+      lanes.push(
+        lane(extra.name, async () => {
+          const { done, failed } = await extra.step();
+          return done + failed > 0;
+        }),
+      );
+    }
+  }
+  // A persist-only process runs no imports and no builds.
   for (const [name, drain] of [
-    ["imports", deps.drainImports],
-    ["builds", deps.drainBuilds],
+    ["imports", analysis ? deps.drainImports : undefined],
+    ["builds", analysis ? deps.drainBuilds : undefined],
   ] as const) {
     if (!drain) continue;
     lanes.push(
