@@ -20,7 +20,7 @@ import { type EvalsOperationDeps, evalsOperations } from "./evals";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "22222222-2222-4222-8222-222222222222";
 const CASE = "33333333-3333-4333-8333-333333333333";
-const DRAFT = "44444444-4444-4444-8444-444444444444";
+const VERSION = "44444444-4444-4444-8444-444444444444";
 const RUN = "55555555-5555-4555-8555-555555555555";
 const BASE_RUN = "66666666-6666-4666-8666-666666666666";
 const TRIAL = "77777777-7777-4777-8777-777777777777";
@@ -51,18 +51,15 @@ const GATING_CHECK = {
 
 function caseVersion(overrides: Partial<CaseVersion> = {}): CaseVersion {
   return {
-    id: DRAFT,
+    id: VERSION,
     caseId: CASE,
     number: 1,
-    state: "draft",
     input: { message: "I want my money back" },
     earlierTurns: [],
     toolFixtures: [],
     expectedOutput: null,
     sourceTurnId: null,
     sourceOutput: "No.",
-    approvedBy: null,
-    approvedAt: null,
     updatedAt: T0,
     ...overrides,
   };
@@ -112,9 +109,9 @@ function experiment(overrides: Partial<Experiment> = {}): Experiment {
     gitDirty: false,
     params: {},
     trialsPerCase: 1,
-    caseVersions: [{ caseId: CASE, versionId: DRAFT, number: 1, name: "refund ask" }],
+    caseVersions: [{ caseId: CASE, versionId: VERSION, number: 1, name: "refund ask" }],
     evalVersions: [],
-    scorerSnapshots: { [DRAFT]: [{ ...GATING_CHECK, hash: "h1" }] },
+    scorerSnapshots: { [VERSION]: [{ ...GATING_CHECK, hash: "h1" }] },
     startedBy: "mcp:key:key-1",
     state: "completed",
     createdAt: T0,
@@ -127,7 +124,7 @@ function trial(overrides: Partial<Trial> = {}): Trial {
   return {
     id: TRIAL,
     experimentId: RUN,
-    caseVersionId: DRAFT,
+    caseVersionId: VERSION,
     index: 0,
     state: "done",
     result: "pass",
@@ -208,15 +205,16 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     enabled: async () => true,
     listCases: async () => [evalCase()],
     getCase: async (projectId, id) => (projectId === PROJECT && id === CASE ? evalCase() : null),
-    createCase: async (input) => ({
-      id: CASE,
-      projectId: input.projectId,
-      evalId: input.evalId,
-      name: input.name,
-      labels: input.labels,
-      createdAt: T0,
-      versions: [caseVersion({ ...input.content, sourceOutput: input.source?.output ?? null })],
-    }),
+    createCases: async (inputs) =>
+      inputs.map((input, n) => ({
+        id: n === 0 ? CASE : `${CASE.slice(0, -1)}${n}`,
+        projectId: input.projectId,
+        evalId: input.evalId,
+        name: input.name,
+        labels: input.labels,
+        createdAt: T0,
+        versions: [caseVersion({ ...input.content, sourceOutput: input.source?.output ?? null })],
+      })),
     getEvalByName: async () => null,
     listEvals: async () => [evalDefinition()],
     getEval: async (projectId, id) =>
@@ -234,7 +232,6 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     }),
     pinnedRun: async () => ({ experiment: baseline, trials: [baselineTrial] }),
     createEval: async (input) => evalDefinition(input),
-    approveCase: async () => "approved",
     startExperiment: async () => ({
       ok: true,
       experiment: experiment({ state: "running", finishedAt: null }),
@@ -248,7 +245,7 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
       output: id === TRIAL ? { reply: "Here is your refund." } : { reply: "No." },
       toolCalls: [],
     }),
-    caseVersion: async (id) => (id === DRAFT ? caseVersion() : null),
+    caseVersion: async (id) => (id === VERSION ? caseVersion() : null),
     getBaseline: async () => ({ experimentId: BASE_RUN, pinnedBy: "x", pinnedAt: T0 }),
     pinBaseline: async (_projectId, experimentId, pinnedBy) => ({
       ok: true,
@@ -277,7 +274,7 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
               counts: { pass: 0, fail: 1, invalid: 0, open: 0 },
             },
             candidate: {
-              versionId: DRAFT,
+              versionId: VERSION,
               number: 1,
               status: "pass",
               counts: { pass: 1, fail: 0, invalid: 0, open: 0 },
@@ -324,7 +321,6 @@ const PARAMS: Record<string, Record<string, unknown>> = {
   evals_list_cases: {},
   evals_get_case: { caseId: CASE },
   evals_create_case: { eval: "Refunds", name: "x", input: "hi" },
-  evals_approve_case: { caseId: CASE },
   evals_start_run: {},
   evals_list_runs: {},
   evals_get_run: { runId: RUN },
@@ -345,17 +341,22 @@ test("evals: the tools are listed only when the flag is on for the caller", () =
   }
 });
 
-test("evals: create, create case, approve, start and pin mutate; the rest only read", () => {
+test("evals: create, create case, start and pin mutate; the rest only read; no approve tool", () => {
   const mutating = evalsOperations(fakeDeps())
     .filter((operation) => operation.mutates)
     .map((operation) => operation.id);
   assert.deepEqual(mutating, [
     "evals_create",
     "evals_create_case",
-    "evals_approve_case",
     "evals_start_run",
     "evals_pin_baseline",
   ]);
+  const ids = assembleOperations({ evals: true }).map((operation) => operation.id);
+  assert.ok(!ids.some((id) => id.includes("approve")));
+  for (const operation of evalsOperations(fakeDeps())) {
+    assert.ok(operation.description.length <= 400, `${operation.id} has a short description`);
+    assert.doesNotMatch(operation.description, /approv|draft/i, operation.id);
+  }
 });
 
 for (const id of IDS) {
@@ -373,28 +374,23 @@ for (const id of IDS) {
 
 // — Cases ——————————————————————————————————————————————————————————————————————
 
-test("evals_list_cases: says which cases are approved, and hints when none is", async () => {
-  const result = ok<{
-    cases: Array<{ approvedVersion: number | null; draftVersion: number | null }>;
-    approved: number;
-  }>(await call("evals_list_cases", {}));
-  assert.equal(result.data.approved, 0);
+test("evals_list_cases: each case with the version that counts", async () => {
+  const result = ok<{ cases: Array<Record<string, unknown>> }>(await call("evals_list_cases", {}));
   assert.deepEqual(result.data.cases[0], {
     caseId: CASE,
     evalId: EVAL,
     name: "refund ask",
     labels: [],
-    approvedVersion: null,
-    draftVersion: 1,
+    version: 1,
     createdAt: T0.toISOString(),
   });
-  assert.match(result.hint ?? "", /evals_approve_case/);
+  assert.match(result.hint ?? "", /evals_start_run/);
 });
 
 test("evals_create_case: copies the input and the answer of a sandbox run", async () => {
   let saved: NewCase | undefined;
   let made: NewEval | undefined;
-  const result = ok<{ caseId: string; evalId: string; state: string }>(
+  const result = ok<{ cases: Array<{ caseId: string; evalId: string; version: number }> }>(
     await call(
       "evals_create_case",
       {
@@ -412,9 +408,9 @@ test("evals_create_case: copies the input and the answer of a sandbox run", asyn
         ],
       },
       {
-        createCase: async (input) => {
-          saved = input;
-          return fakeDeps().createCase(input);
+        createCases: async (inputs) => {
+          saved = inputs[0];
+          return fakeDeps().createCases(inputs);
         },
         createEval: async (input) => {
           made = input;
@@ -423,16 +419,16 @@ test("evals_create_case: copies the input and the answer of a sandbox run", asyn
       },
     ),
   );
-  assert.equal(result.data.state, "draft");
+  assert.equal(result.data.cases[0]?.version, 1);
   assert.deepEqual(saved?.content.input, { message: "refund?" });
   assert.deepEqual(saved?.source, { turnId: null, output: '{"reply":"No."}' });
   assert.equal(saved?.evalId, EVAL);
-  assert.equal(result.data.evalId, EVAL);
+  assert.equal(result.data.cases[0]?.evalId, EVAL);
   assert.equal(made?.name, "Refunds");
   assert.equal(made?.content.scorers[0]?.gating, true);
   assert.equal(made?.content.scorers[0]?.definition.kind, "check");
   assert.equal(saved?.createdBy, "mcp:key:key-1");
-  assert.match(result.hint ?? "", /evals_approve_case/);
+  assert.match(result.hint ?? "", /counts in the next eval run/);
 });
 
 test("evals_create_case: a sandbox run of another project is not_found", async () => {
@@ -459,16 +455,16 @@ test("evals_create_case: a run that has not ended is refused", async () => {
 });
 
 test("evals_create_case: a new eval with no gating scorer is saved and says why it cannot run", async () => {
-  const result = ok<{ approvalProblem?: string }>(
+  const result = ok<{ cases: Array<{ runProblem?: string }> }>(
     await call("evals_create_case", { eval: "Refunds", name: "x", input: "hi" }),
   );
-  assert.match(result.data.approvalProblem ?? "", /gating/);
+  assert.match(result.data.cases[0]?.runProblem ?? "", /gating/);
 });
 
 test("evals_create_case: a case goes into the eval with that name, and its scorers stay", async () => {
   let created = false;
   let saved: NewCase | undefined;
-  const result = ok<{ evalId: string; approvalProblem?: string }>(
+  const result = ok<{ cases: Array<{ runProblem?: string }> }>(
     await call(
       "evals_create_case",
       { eval: "Refunds", name: "x", input: "hi", scorers: [] },
@@ -479,16 +475,16 @@ test("evals_create_case: a case goes into the eval with that name, and its score
           created = true;
           return evalDefinition(input);
         },
-        createCase: async (input) => {
-          saved = input;
-          return fakeDeps().createCase(input);
+        createCases: async (inputs) => {
+          saved = inputs[0];
+          return fakeDeps().createCases(inputs);
         },
       },
     ),
   );
   assert.equal(created, false);
   assert.equal(saved?.evalId, EVAL);
-  assert.equal(result.data.approvalProblem, undefined);
+  assert.equal(result.data.cases[0]?.runProblem, undefined);
 });
 
 test("evals_create_case: an eval id names that eval, and no new eval is made", async () => {
@@ -503,9 +499,9 @@ test("evals_create_case: an eval id names that eval, and no new eval is made", a
           created = true;
           return evalDefinition(input);
         },
-        createCase: async (input) => {
-          saved = input;
-          return fakeDeps().createCase(input);
+        createCases: async (inputs) => {
+          saved = inputs[0];
+          return fakeDeps().createCases(inputs);
         },
       },
     ),
@@ -526,44 +522,11 @@ test("evals_create_case: a check that reads a path a trial does not have is refu
   assert.equal(result.error, "invalid_params");
 });
 
-test("evals_approve_case: approves the draft as it was read", async () => {
-  let approved: { versionId: string; updatedAt: Date } | undefined;
-  const result = ok<{ state: string; version: number }>(
-    await call(
-      "evals_approve_case",
-      { caseId: CASE },
-      {
-        approveCase: async (_projectId, _caseId, draft) => {
-          approved = draft;
-          return "approved";
-        },
-      },
-    ),
-  );
-  assert.deepEqual(approved, { versionId: DRAFT, updatedAt: T0 });
-  assert.equal(result.data.state, "approved");
-});
-
-test("evals_approve_case: refuses a draft with no input, with the reason", async () => {
-  const result = failure(
-    await call(
-      "evals_approve_case",
-      { caseId: CASE },
-      {
-        getCase: async () => evalCase([caseVersion({ input: null })]),
-      },
-    ),
-  );
-  assert.equal(result.error, "conflict");
-  assert.equal(result.reason, "not_ready");
-  assert.match(result.message, /input/);
-});
-
 test("evals_get_case: withholds captured text from a key without content access", async () => {
-  const result = ok<{ newest: { input: unknown }; contentWithheld?: boolean }>(
+  const result = ok<{ version: { input: unknown }; contentWithheld?: boolean }>(
     await call("evals_get_case", { caseId: CASE }, { mayReadContent: async () => false }),
   );
-  assert.equal(result.data.newest.input, null);
+  assert.equal(result.data.version.input, null);
   assert.equal(result.data.contentWithheld, true);
 });
 
@@ -589,7 +552,7 @@ test("evals_start_run: returns the run id at once and a hint to poll evals_get_r
   assert.match(result.hint ?? "", new RegExp(RUN));
 });
 
-test("evals_start_run: only approved cases count, and none approved is refused with the reason", async () => {
+test("evals_start_run: an eval with no case is refused with the reason", async () => {
   const result = failure(
     await call(
       "evals_start_run",
@@ -598,14 +561,14 @@ test("evals_start_run: only approved cases count, and none approved is refused w
         startExperiment: async () => ({
           ok: false,
           reason: "no_cases",
-          message: "No case is approved. Approve one first.",
+          message: "No eval has a case and a gating scorer. Add a case first.",
         }),
       },
     ),
   );
   assert.equal(result.error, "conflict");
   assert.equal(result.reason, "no_cases");
-  assert.match(result.message, /approved/);
+  assert.match(result.message, /Add a case/);
 });
 
 test("evals_get_run: shows for each case the input, the outputs and the raw counts", async () => {
@@ -848,7 +811,7 @@ function advancingClock(): Pick<EvalsOperationDeps, "now" | "sleep"> {
 
 // — Evals and their datasets (decision `eval-definitions`) ————————————————————————————
 
-test("evals_list: each eval with its scorers and the numbers of approved and draft cases", async () => {
+test("evals_list: each eval with its scorers and the number of its cases", async () => {
   const result = ok<{ evals: Array<Record<string, unknown>> }>(await call("evals_list", {}));
   assert.deepEqual(result.data.evals[0], {
     evalId: EVAL,
@@ -858,8 +821,7 @@ test("evals_list: each eval with its scorers and the numbers of approved and dra
     sandboxName: null,
     trials: 3,
     scorers: ["mentions refund"],
-    approvedCases: 0,
-    draftCases: 1,
+    cases: 1,
   });
 });
 
@@ -924,7 +886,7 @@ const NEW_TARGET = {
 
 test("evals_create_case: a turn goes into the eval of its task", async () => {
   let saved: NewCase | undefined;
-  const result = ok<{ evalId: string; name: string }>(
+  const result = ok<{ cases: Array<{ evalId: string }> }>(
     await call(
       "evals_create_case",
       { turnId: CASE },
@@ -935,14 +897,14 @@ test("evals_create_case: a turn goes into the eval of its task", async () => {
             "wf-refunds": { kind: "existing", evalId: EVAL, name: "Refunds", taskId: "wf-refunds" },
           },
         }),
-        createCase: async (input) => {
-          saved = input;
-          return fakeDeps().createCase(input);
+        createCases: async (inputs) => {
+          saved = inputs[0];
+          return fakeDeps().createCases(inputs);
         },
       },
     ),
   );
-  assert.equal(result.data.evalId, EVAL);
+  assert.equal(result.data.cases[0]?.evalId, EVAL);
   assert.equal(saved?.name, "Case from a turn");
   assert.deepEqual(saved?.source, { turnId: CASE, output: "Refunded." });
 });
@@ -955,7 +917,7 @@ test("evals_create_case: a task with no eval needs confirmNewEval, then the eval
   assert.deepEqual([refused.error, refused.reason], ["conflict", "confirm_new_eval"]);
   assert.match(refused.message, /"Refund an order".*"mentions refund"/);
   let made: NewEval | undefined;
-  const result = ok<{ evalId: string }>(
+  const result = ok<{ cases: Array<{ evalId: string }> }>(
     await call(
       "evals_create_case",
       { turnId: CASE, confirmNewEval: true },
@@ -968,7 +930,7 @@ test("evals_create_case: a task with no eval needs confirmNewEval, then the eval
       },
     ),
   );
-  assert.equal(result.data.evalId, EVAL);
+  assert.equal(result.data.cases[0]?.evalId, EVAL);
   assert.deepEqual(
     [made?.name, made?.taskId, made?.content.scorers],
     ["Refund an order", "wf-refunds", [GATING_CHECK]],
@@ -996,6 +958,72 @@ test("evals_create_case: more tasks need one in task, no task needs an eval, and
     await call("evals_create_case", { turnId: CASE }, { mayReadContent: async () => false }),
   );
   assert.deepEqual([hidden.error, hidden.reason], ["forbidden", "no_content_access"]);
+});
+
+test("evals_create_case: a task with more evals needs one in eval", async () => {
+  const options = {
+    saveOptions: async () => ({
+      ...TASKS,
+      targets: {
+        "wf-refunds": {
+          kind: "choose" as const,
+          taskId: "wf-refunds",
+          evals: [
+            { id: EVAL, name: "Refunds" },
+            { id: EVAL_VERSION, name: "Refunds, hard" },
+          ],
+        },
+      },
+    }),
+  };
+  const refused = failure(await call("evals_create_case", { turnId: CASE }, options));
+  assert.deepEqual([refused.error, refused.reason], ["conflict", "choose_eval"]);
+  assert.match(refused.message, /"Refunds", "Refunds, hard"/);
+});
+
+test("evals_create_case: two tasks in task make one row in the eval of each", async () => {
+  let saved: NewCase[] = [];
+  const result = ok<{ cases: Array<{ evalId: string; eval: string }> }>(
+    await call(
+      "evals_create_case",
+      { turnId: CASE, task: ["wf-refunds", "wf-status"] },
+      {
+        saveOptions: async () => ({
+          tasks: [
+            { id: "wf-refunds", name: "Refund an order" },
+            { id: "wf-status", name: "Track an order" },
+          ],
+          defaultTaskId: null,
+          targets: {
+            "wf-refunds": { kind: "existing", evalId: EVAL, name: "Refunds", taskId: "wf-refunds" },
+            "wf-status": {
+              kind: "existing",
+              evalId: EVAL_VERSION,
+              name: "Status",
+              taskId: "wf-status",
+            },
+          },
+          evals: [],
+        }),
+        getEval: async (_projectId, id) =>
+          id === EVAL
+            ? evalDefinition()
+            : { ...evalDefinition({ name: "Status" }), id: EVAL_VERSION },
+        createCases: async (inputs) => {
+          saved = [...inputs];
+          return fakeDeps().createCases(inputs);
+        },
+      },
+    ),
+  );
+  assert.deepEqual(
+    saved.map(({ evalId }) => evalId),
+    [EVAL, EVAL_VERSION],
+  );
+  assert.deepEqual(
+    result.data.cases.map(({ eval: name }) => name),
+    ["Refunds", "Status"],
+  );
 });
 
 test("evals_start_run: the suite, or the evals that you name; the trials of each eval by default", async () => {

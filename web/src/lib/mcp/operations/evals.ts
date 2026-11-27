@@ -31,11 +31,9 @@ import {
 import { baselineDeps } from "@/lib/views/evals/baseline-deps";
 import { readOnlyTools } from "@/lib/views/evals/console-deps";
 import {
-  approvalProblem,
-  approvedVersion,
   type CaseVersion,
   caseContentSchema,
-  draftVersion,
+  currentVersion as currentRow,
   type EvalCase,
 } from "@/lib/views/evals/domain/case";
 import { type CompareRefusal, type Comparison, compare } from "@/lib/views/evals/domain/compare";
@@ -47,6 +45,7 @@ import {
   MAX_EVAL_NAME_CHARS,
   runProblem,
 } from "@/lib/views/evals/domain/eval";
+import type { SaveTarget } from "@/lib/views/evals/domain/eval-target";
 import {
   countTrials,
   type Experiment,
@@ -66,7 +65,7 @@ import {
 } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
-import type { ApproveResult, NewCase } from "@/lib/views/evals/ports/case-store";
+import type { NewCase } from "@/lib/views/evals/ports/case-store";
 import type { NewEval } from "@/lib/views/evals/ports/eval-store";
 import { type SaveOptions, type SaveSource, saveOptions } from "@/lib/views/evals/save-target";
 import { suiteTable } from "@/lib/views/evals/suite-view";
@@ -74,8 +73,9 @@ import { loadTurnContent } from "@/lib/views/evals/turn-content";
 import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
 
 /**
- * The eval tools (decision `mcp-surface`): save a sandbox run as a case, approve it, start an eval
- * run (an experiment) against a sandbox version, read it, and compare it with a baseline. Ids start
+ * The eval tools (decision `mcp-surface`): save a turn or a sandbox run as a case (it counts at
+ * once, decision `rows-count-at-once`), start an eval run (an experiment) against a sandbox
+ * version, read it, and compare it with a baseline. Ids start
  * with `evals_`: `run_eval`, `get_eval`, `get_experiment` and `create_experiment` are taken by the
  * improvement loop. They are listed only for a caller with the `evals` flag, and each call checks
  * the flag for its project again.
@@ -98,15 +98,10 @@ export interface EvalsOperationDeps {
   /** The pinned baseline run with its trials. Null when none is pinned. */
   pinnedRun(projectId: string): Promise<ComparedRun | null>;
   getCase(projectId: string, caseId: string): Promise<EvalCase | null>;
-  createCase(input: NewCase): Promise<EvalCase | "eval_not_found">;
+  /** One case for each input, in one transaction. */
+  createCases(inputs: readonly NewCase[]): Promise<EvalCase[] | "eval_not_found">;
   getEvalByName(projectId: string, name: string): Promise<EvalDefinition | null>;
   createEval(input: NewEval): Promise<EvalDefinition | "name_taken">;
-  approveCase(
-    projectId: string,
-    caseId: string,
-    draft: { versionId: string; updatedAt: Date },
-    by: { userId: string; now: Date },
-  ): Promise<ApproveResult>;
   startExperiment(subject: UsageSubject, start: StartExperiment): Promise<StartExperimentResult>;
   /**
    * Drives a new eval run in this process until it closes, so an agent does not wait for the
@@ -158,11 +153,9 @@ const defaultDeps: EvalsOperationDeps = {
   },
   pinnedRun: (projectId) => pinnedRun(projectId, baselineDeps()),
   getCase: (projectId, caseId) => createDrizzleCaseStore(getDb()).get(projectId, caseId),
-  createCase: (input) => createDrizzleCaseStore(getDb()).create(input),
+  createCases: (inputs) => createDrizzleCaseStore(getDb()).createAll(inputs),
   getEvalByName: (projectId, name) => createDrizzleEvalStore(getDb()).getByName(projectId, name),
   createEval: (input) => createDrizzleEvalStore(getDb()).create(input),
-  approveCase: (projectId, caseId, draft, by) =>
-    createDrizzleCaseStore(getDb()).approve(projectId, caseId, draft, by),
   startExperiment: (subject, start) => startExperiment(subject, start, experimentDeps()),
   advance: (experiment) => {
     void drive(experiment).catch((error: unknown) => {
@@ -189,6 +182,7 @@ const defaultDeps: EvalsOperationDeps = {
 
 const caseIdParam = uuidParam().describe("The id of a case. evals_list_cases gives the case ids.");
 const runIdParam = uuidParam().describe("The id of an eval run. evals_start_run gives it.");
+const taskIdParam = z.string().trim().min(1).max(200);
 const evalParam = z
   .string()
   .trim()
@@ -232,7 +226,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "List evals",
       description:
-        "Use this tool to see the evals of the project. An eval has a dataset of cases and the scorers that score each case. It returns each eval with its id, name, task id, version number, sandbox, trials, scorer names, and the numbers of approved and draft cases.",
+        "Use this tool to see the evals of the project. An eval has a dataset of cases and the scorers that score each case. It returns each eval with its id, name, task id, version number, sandbox, trials, scorer names, and the number of cases.",
       keywords: ["evals", "eval definitions", "suite"],
       scope: "project",
       mutates: false,
@@ -258,8 +252,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
                 sandboxName: version.sandboxName,
                 trials: version.trials,
                 scorers: version.scorers.map(({ name }) => name),
-                approvedCases: dataset.filter((one) => approvedVersion(one)).length,
-                draftCases: dataset.filter((one) => draftVersion(one)).length,
+                cases: dataset.length,
               };
             }),
           },
@@ -275,7 +268,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Read an eval",
       description:
-        "Use this tool to read one eval by its name or id. It returns its newest version: the sandbox, the default params, the trials, and each scorer with its check or its judge question. It also returns the cases of its dataset with their approved and draft version numbers.",
+        "Use this tool to read one eval by its name or id. It returns its newest version: the sandbox, the default params, the trials, and each scorer with its check or its judge question. It also returns the cases of its dataset with the number of the version that counts.",
       keywords: ["evals", "eval definition", "dataset", "scorers"],
       scope: "project",
       mutates: false,
@@ -306,8 +299,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
               caseId: evalCase.id,
               name: evalCase.name,
               labels: evalCase.labels,
-              approvedVersion: approvedVersion(evalCase)?.number ?? null,
-              draftVersion: draftVersion(evalCase)?.number ?? null,
+              version: currentRow(evalCase)?.number ?? null,
             })),
             ...(problem ? { runProblem: problem } : {}),
             ...(readable ? {} : { contentWithheld: true }),
@@ -399,7 +391,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "List eval cases",
       description:
-        "Use this tool to see the cases of the datasets of the project, or of one eval. It returns each case with its id, name, eval id, labels, approved version number and draft version number. Only an approved case counts in an eval run.",
+        "Use this tool to see the cases of the datasets of the project, or of one eval. It returns each case with its id, name, eval id, labels and the number of the version that counts. Each case counts in an eval run: the newest version of each.",
       keywords: ["evals", "eval cases", "dataset"],
       scope: "project",
       mutates: false,
@@ -418,18 +410,16 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           evalId: evalCase.evalId,
           name: evalCase.name,
           labels: evalCase.labels,
-          approvedVersion: approvedVersion(evalCase)?.number ?? null,
-          draftVersion: draftVersion(evalCase)?.number ?? null,
+          version: currentRow(evalCase)?.number ?? null,
           createdAt: evalCase.createdAt.toISOString(),
         }));
-        const approved = cases.filter((row) => row.approvedVersion !== null).length;
         return {
-          data: { cases, approved },
+          data: { cases },
           ...(read.truncated ? { truncated: true } : {}),
           hint:
-            approved === 0
-              ? "No case is approved. Create one with evals_create_case, then call evals_approve_case."
-              : "Call evals_get_case to read a case, or evals_start_run to run the approved cases.",
+            cases.length === 0
+              ? "No case yet. Create one with evals_create_case."
+              : "Call evals_get_case to read a case, or evals_start_run to run the cases.",
         };
       },
     }),
@@ -438,7 +428,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Read an eval case",
       description:
-        "Use this tool to read one eval case. It returns the eval id, the input, the expected output and the state of the newest version. It also returns the version that counts in an eval run. The scorers are the eval's: evals_get returns them.",
+        "Use this tool to read one eval case. It returns the eval id and the version that counts in an eval run (the newest): its number, input and expected output. The scorers are the eval's: evals_get returns them.",
       keywords: ["evals", "case detail", "expected output"],
       scope: "project",
       mutates: false,
@@ -449,24 +439,17 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         const evalCase = await deps.getCase(ctx.projectId, params.caseId);
         if (!evalCase) throw notFound("eval case");
         const readable = await deps.mayReadContent(ctx);
-        const [newest] = evalCase.versions;
-        const draft = draftVersion(evalCase);
+        const current = currentRow(evalCase);
         return {
           data: {
             caseId: evalCase.id,
             evalId: evalCase.evalId,
             name: evalCase.name,
             labels: evalCase.labels,
-            newest: newest ? versionView(newest, readable) : null,
-            approvedVersion: approvedVersion(evalCase)?.number ?? null,
+            version: current ? versionView(current, readable) : null,
             ...(readable ? {} : { contentWithheld: true }),
           },
-          hint: !readable
-            ? CONTENT_WITHHELD_HINT
-            : draft
-              ? (approvalProblem(draft) ??
-                `The newest version is a draft. Call evals_approve_case with caseId "${evalCase.id}" to make it count.`)
-              : "The newest version is approved. It counts in the next eval run.",
+          hint: readable ? "This version counts in the next eval run." : CONTENT_WITHHELD_HINT,
         };
       },
     }),
@@ -475,7 +458,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Create an eval case",
       description:
-        "Use this tool to save a trace turn, a sandbox run or an input as a draft case of an eval. This tool changes data. With no eval, the case goes into the eval of the task of the turn. When the task has no eval, confirmNewEval true creates it with the default scorers of the task. It returns the case id, the eval id and the draft version number.",
+        "Use this tool to save a trace turn, a sandbox run or an input as a case of an eval. This tool changes data. The case counts at once. With no eval, it goes into the eval of each task in task, or of the one task. A task with more evals needs eval. confirmNewEval true creates a missing task eval. It returns each case with its id, eval and version number.",
       keywords: ["evals", "save as case", "new case", "trace to eval"],
       scope: "project",
       mutates: true,
@@ -501,12 +484,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .optional()
           .describe("A sandbox run to copy. Its input becomes the input of the case."),
         task: z
-          .string()
-          .trim()
-          .min(1)
-          .max(200)
+          .union([taskIdParam, z.array(taskIdParam).min(1).max(20)])
           .optional()
-          .describe("The task id to use when the turn or the run has more than one task."),
+          .describe(
+            "The task id, or more task ids, when the turn or the run has more tasks. Each task gets one case.",
+          ),
         confirmNewEval: z
           .boolean()
           .default(false)
@@ -534,85 +516,41 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         const made = await caseSource(deps, ctx, params);
         const content = caseContentSchema.safeParse(storable(made.content));
         if (!content.success) throw contentRefusal(content.error);
-        const target = params.eval
-          ? await evalNamed(deps, ctx, params.eval, params.scorers ?? [])
-          : await evalOfTask(deps, ctx, made.source, params.task ?? null, params.confirmNewEval);
-        const created = await deps.createCase({
-          projectId: ctx.projectId,
-          evalId: target.id,
-          name: params.name ?? made.name,
-          labels: [...new Set(params.labels ?? [])],
-          content: content.data,
-          createdBy: requester(ctx.auth),
-          ...(made.origin ? { source: made.origin } : {}),
-        });
-        if (created === "eval_not_found") throw notFound("eval");
-        const draft = draftVersion(created);
-        const problem = approvalProblem(content.data) ?? runProblem(currentVersion(target));
-        return {
-          data: {
-            caseId: created.id,
+        const tasks = params.task === undefined ? [] : [params.task].flat();
+        const targets = params.eval
+          ? [await evalNamed(deps, ctx, params.eval, params.scorers ?? [])]
+          : await evalsOfTasks(deps, ctx, made.source, tasks, params.confirmNewEval);
+        const created = await deps.createCases(
+          targets.map((target) => ({
+            projectId: ctx.projectId,
             evalId: target.id,
-            eval: target.name,
-            name: created.name,
-            draftVersion: draft?.number ?? null,
-            state: "draft",
-            ...(problem ? { approvalProblem: problem } : {}),
-          },
-          hint: problem
-            ? `${problem} The case is saved as a draft.`
-            : `Call evals_approve_case with caseId "${created.id}" to make the case count in an eval run.`,
-        };
-      },
-    }),
-    defineOperation({
-      id: "evals_approve_case",
-      domain: "evals",
-      title: "Approve an eval case",
-      description:
-        "Use this tool to approve the draft of an eval case. This tool changes data: the draft becomes the version that counts in the next eval run. It returns the case id, the version number and the state. It refuses a draft with no input or no gating scorer.",
-      keywords: ["evals", "approve case"],
-      scope: "project",
-      mutates: true,
-      apiKeyScope: "evals:write",
-      params: z.object({ ...projectScoped, caseId: caseIdParam }),
-      async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
-        const evalCase = await deps.getCase(ctx.projectId, params.caseId);
-        if (!evalCase) throw notFound("eval case");
-        const draft = draftVersion(evalCase);
-        if (!draft) {
-          throw new McpOperationError(
-            "conflict",
-            "This case has no draft. Its newest version is approved.",
-            {
-              reason: "no_draft",
-            },
-          );
-        }
-        const problem = approvalProblem(draft);
-        if (problem) {
-          throw new McpOperationError("conflict", problem, { reason: "not_ready" });
-        }
-        const result = await deps.approveCase(
-          ctx.projectId,
-          evalCase.id,
-          { versionId: draft.id, updatedAt: draft.updatedAt },
-          { userId: requester(ctx.auth), now: deps.now() },
+            name: params.name ?? made.name,
+            labels: [...new Set(params.labels ?? [])],
+            content: content.data,
+            createdBy: requester(ctx.auth),
+            ...(made.origin ? { source: made.origin } : {}),
+          })),
         );
-        if (result === "not_found") throw notFound("eval case");
-        if (result === "changed") {
-          throw new McpOperationError(
-            "conflict",
-            "Another person changed this case. Read it again.",
-            {
-              reason: "changed",
-            },
-          );
-        }
+        if (created === "eval_not_found") throw notFound("eval");
+        const cases = created.map((evalCase, n) => {
+          const target = targets[n];
+          const problem = target ? runProblem(currentVersion(target)) : null;
+          return {
+            caseId: evalCase.id,
+            evalId: evalCase.evalId,
+            eval: target?.name ?? null,
+            name: evalCase.name,
+            version: currentRow(evalCase)?.number ?? null,
+            ...(problem ? { runProblem: problem } : {}),
+          };
+        });
+        const problems = cases.flatMap(({ runProblem: problem }) => (problem ? [problem] : []));
         return {
-          data: { caseId: evalCase.id, version: draft.number, state: "approved" },
-          hint: "The case counts in the next eval run. Call evals_start_run to run the approved cases.",
+          data: { cases },
+          hint:
+            problems.length > 0
+              ? `${problems.join(" ")} A run leaves such an eval out until it has one.`
+              : "The case counts in the next eval run. Call evals_start_run to run it.",
         };
       },
     }),
@@ -621,7 +559,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Start an eval run",
       description:
-        "Use this tool to run the suite, or chosen evals, on a sandbox version. The suite is each eval of the sandbox with an approved case and a gating scorer. This tool changes data: it starts VM runs. It returns the run id, the state, the eval names, and the numbers of cases and trials. Call evals_get_run until the state is completed.",
+        "Use this tool to run the suite, or chosen evals, on a sandbox version. The suite is each eval of the sandbox with a case and a gating scorer. This tool changes data: it starts VM runs. It returns the run id, the state, the eval names, and the numbers of cases and trials. Call evals_get_run until the state is completed.",
       keywords: ["evals", "start eval run"],
       scope: "project",
       mutates: true,
@@ -932,14 +870,12 @@ function versionView(version: CaseVersion, readable: boolean) {
   return {
     versionId: version.id,
     number: version.number,
-    state: version.state,
     input: readable ? version.input : null,
     expectedOutput: readable ? version.expectedOutput : null,
     sourceOutput: readable ? version.sourceOutput : null,
     earlierTurns: readable ? version.earlierTurns.length : 0,
     toolFixtures: version.toolFixtures.length,
-    approvedAt: version.approvedAt?.toISOString() ?? null,
-    updatedAt: version.updatedAt.toISOString(),
+    createdAt: version.updatedAt.toISOString(),
   };
 }
 
@@ -1019,48 +955,77 @@ async function caseSource(
 }
 
 /**
- * The eval of the task of the turn or the run (decision `trace-to-eval`). A new eval of a task
- * needs `confirmNewEval`: the caller sees its name and its scorers first.
+ * The evals of the tasks of the turn or the run (decision `trace-to-eval`): one row goes into each.
+ * The tasks are the ones in `task`, else the one task, else the task of the page. A task with more
+ * evals needs `eval`. A new eval of a task needs `confirmNewEval`: the caller sees its name and its
+ * scorers first.
  */
-async function evalOfTask(
+async function evalsOfTasks(
   deps: EvalsOperationDeps,
   ctx: Pick<OperationContext, "auth" | "projectId">,
   source: SaveSource,
-  task: string | null,
+  tasks: readonly string[],
   confirmed: boolean,
-): Promise<EvalDefinition> {
-  const options = await deps.saveOptions(ctx.projectId, source, task);
-  const taskId = task ?? options.defaultTaskId;
-  if (options.tasks.length === 0 || (task && !options.targets[task])) {
+): Promise<EvalDefinition[]> {
+  const options = await deps.saveOptions(ctx.projectId, source, tasks[0] ?? null);
+  if (options.tasks.length === 0 || tasks.some((task) => !options.targets[task])) {
     throw invalidParams("No task matched this case. Give the name of its eval in eval.", [
       { path: "eval", message: "Give the eval of the case." },
     ]);
   }
-  const target = taskId ? options.targets[taskId] : undefined;
-  if (!target) {
-    const tasks = options.tasks.map(({ id, name }) => `${id} (${name})`).join(", ");
+  const chosen = tasks.length > 0 ? [...new Set(tasks)] : [options.defaultTaskId ?? ""];
+  const targets = chosen.flatMap((taskId) => {
+    const target = options.targets[taskId];
+    return target ? [target] : [];
+  });
+  if (targets.length === 0) {
+    const names = options.tasks.map(({ id, name }) => `${id} (${name})`).join(", ");
     throw new McpOperationError(
       "conflict",
-      `The case has more than one task: ${tasks}. Give one in task.`,
-      {
-        reason: "choose_task",
-      },
+      `The case has more than one task: ${names}. Give one or more in task.`,
+      { reason: "choose_task" },
     );
   }
-  if (target.kind === "existing") {
-    const found = await deps.getEval(ctx.projectId, target.evalId);
-    if (!found) throw notFound("eval");
-    return found;
-  }
-  if (target.kind !== "new") throw notFound("eval");
-  if (!confirmed) {
-    const scorers = target.content.scorers.map(({ name }) => `"${name}"`).join(", ") || "none";
+  const choose = targets.find((target) => target.kind === "choose");
+  if (choose) {
+    const names = choose.evals.map(({ name }) => `"${name}"`).join(", ");
     throw new McpOperationError(
       "conflict",
-      `The task has no eval. Call again with confirmNewEval true to create the eval "${target.name}" with these scorers: ${scorers}.`,
+      `The task ${choose.taskId} has more evals: ${names}. Give one in eval.`,
+      { reason: "choose_eval" },
+    );
+  }
+  const fresh = targets.flatMap((target) => (target.kind === "new" ? [target] : []));
+  if (fresh.length > 0 && !confirmed) {
+    const words = fresh.map(({ name, content }) => {
+      const scorers = content.scorers.map((scorer) => `"${scorer.name}"`).join(", ") || "none";
+      return `"${name}" with these scorers: ${scorers}`;
+    });
+    throw new McpOperationError(
+      "conflict",
+      `The task has no eval. Call again with confirmNewEval true to create the eval ${words.join("; ")}.`,
       { reason: "confirm_new_eval" },
     );
   }
+  const evals: EvalDefinition[] = [];
+  for (const target of targets) {
+    if (target.kind === "existing") {
+      const found = await deps.getEval(ctx.projectId, target.evalId);
+      if (!found) throw notFound("eval");
+      evals.push(found);
+    } else if (target.kind === "new") {
+      evals.push(await createTaskEval(deps, ctx, target));
+    }
+  }
+  return evals;
+}
+
+/** The new eval of a task. A name that another call took at the same time is that eval. */
+async function createTaskEval(
+  deps: EvalsOperationDeps,
+  ctx: Pick<OperationContext, "auth" | "projectId">,
+  target: Extract<SaveTarget, { kind: "new" }>,
+): Promise<EvalDefinition> {
   const created = await deps.createEval({
     projectId: ctx.projectId,
     name: target.name,

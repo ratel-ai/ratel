@@ -53,6 +53,22 @@ test("a task with an eval saves into that eval", () => {
   });
 });
 
+test("a task with more evals has no default eval: the person chooses one", () => {
+  const evals = [
+    definition("e1", "Refunds", REFUNDS.id),
+    definition("e2", "Status", STATUS.id),
+    definition("e3", "Refunds, hard", REFUNDS.id),
+  ];
+  assert.deepEqual(saveTarget(REFUNDS, evals, DEFAULTS), {
+    kind: "choose",
+    taskId: REFUNDS.id,
+    evals: [
+      { id: "e1", name: "Refunds" },
+      { id: "e3", name: "Refunds, hard" },
+    ],
+  });
+});
+
 test("a task with no eval gets a new eval with the task's default scorers and the last sandbox", () => {
   const evals = [definition("e1", "Refund an order", null)];
   assert.deepEqual(saveTarget(REFUNDS, evals, DEFAULTS), {

@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-export type VersionState = "draft" | "approved";
-
 const MAX_NAME_CHARS = 200;
 const MAX_LABELS = 20;
 export const MAX_LIST = 200;
@@ -48,13 +46,10 @@ export type CaseVersion = CaseContent & {
   id: string;
   caseId: string;
   number: number;
-  state: VersionState;
   /** The turn that the case was saved from. */
   sourceTurnId: string | null;
   /** What the agent answered in that turn. No scorer reads it. */
   sourceOutput: string | null;
-  approvedBy: string | null;
-  approvedAt: Date | null;
   updatedAt: Date;
 };
 
@@ -68,17 +63,16 @@ export type EvalCase = CaseDetails & {
   versions: CaseVersion[];
 };
 
-/** The version that counts: the newest approved one. */
-export function approvedVersion(evalCase: Pick<EvalCase, "versions">): CaseVersion | null {
-  return evalCase.versions.find(({ state }) => state === "approved") ?? null;
+/**
+ * The version that counts: the newest (decision `rows-count-at-once`). A version never changes: an
+ * edit adds a version. Null only for a case with no version.
+ */
+export function currentVersion(evalCase: Pick<EvalCase, "versions">): CaseVersion | null {
+  return evalCase.versions[0] ?? null;
 }
 
-export function draftVersion(evalCase: Pick<EvalCase, "versions">): CaseVersion | null {
-  return evalCase.versions.find(({ state }) => state === "draft") ?? null;
-}
-
-/** Why a version cannot be approved, or null. The scorers are the eval's (`eval.ts#runProblem`). */
-export function approvalProblem(content: Pick<CaseContent, "input">): string | null {
+/** Why a row cannot be saved, or null. The scorers are the eval's (`eval.ts#runProblem`). */
+export function inputProblem(content: Pick<CaseContent, "input">): string | null {
   return content.input === null ? "Give the case an input." : null;
 }
 

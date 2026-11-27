@@ -275,10 +275,7 @@ function datasetColumns(model: EvalPageModel, scorerNames: string[]): Column<Dat
           >
             {row.name}
           </Link>
-          <span className="text-xs text-fg-subtle">
-            {row.approved ? `v${row.approved}` : "Draft only"}
-            {row.approved && row.draft ? ` · draft v${row.draft}` : ""}
-          </span>
+          {row.version ? <span className="text-xs text-fg-subtle">v{row.version}</span> : null}
         </div>
       ),
     },

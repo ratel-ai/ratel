@@ -5,7 +5,7 @@ import { casesApiDeps } from "@/lib/views/evals/console-deps";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** PUT /api/projects/[projectId]/evals/cases/[caseId]: writes the draft, or makes a new one. */
+/** PUT /api/projects/[projectId]/evals/cases/[caseId]: adds a version when the content changed. */
 export const PUT = withRequestLog(
   async (request: Request, context: { params: Promise<{ projectId: string; caseId: string }> }) => {
     const { projectId, caseId } = await context.params;

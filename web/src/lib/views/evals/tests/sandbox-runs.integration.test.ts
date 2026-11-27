@@ -105,7 +105,7 @@ async function setup(agent: AgentScript = {}) {
     },
     now: () => new Date(),
   });
-  /** One trial of one approved case, to its end. */
+  /** One trial of one case, to its end. */
   const trial = async (more: Partial<RunDeps> = {}) => {
     const made = await cases.create({
       projectId: PROJECT_ID,
@@ -114,14 +114,7 @@ async function setup(agent: AgentScript = {}) {
       content: content(),
       createdBy: "user_1",
     });
-    const [draft] = made.versions;
-    assert.ok(draft);
-    await cases.approve(
-      PROJECT_ID,
-      made.id,
-      { versionId: draft.id, updatedAt: draft.updatedAt },
-      { userId: "user_1", now: new Date() },
-    );
+    assert.ok(made.versions[0]);
     const started = await startExperiment(
       SUBJECT,
       { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "user_1" },

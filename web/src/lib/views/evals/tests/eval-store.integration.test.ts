@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
-import { approvedVersion, draftVersion } from "../domain/case";
+import { currentVersion as currentRow } from "../domain/case";
 import { currentVersion } from "../domain/eval";
 import {
   content,
@@ -152,7 +152,7 @@ test("an edit from a version that is not the newest, or of another project, chan
   );
 });
 
-test("the rows of a dataset have draft and approved versions, and belong to one eval", async () => {
+test("a row counts at once, an edit adds a version, and a row belongs to one eval", async () => {
   const t = await setup();
   const refunds = await seedEval(t.db);
   const status = await seedEval(t.db, { name: "Status" });
@@ -166,31 +166,44 @@ test("the rows of a dataset have draft and approved versions, and belong to one 
   });
   assert.ok(typeof made === "object");
   assert.equal(made.evalId, refunds.id);
-  const draft = draftVersion(made);
-  assert.ok(draft);
-  assert.equal(approvedVersion(made), null);
-  await t.cases.approve(
+  const first = currentRow(made);
+  assert.ok(first);
+  const edit = {
+    name: "late refund",
+    labels: [],
+    content: content({ expectedOutput: "No refund." }),
+  };
+  const saved = await t.cases.update(
     PROJECT_ID,
     made.id,
-    { versionId: draft.id, updatedAt: draft.updatedAt },
-    BY,
-  );
-  const saved = await t.cases.saveDraft(
-    PROJECT_ID,
-    made.id,
-    { name: "late refund", labels: [], content: content({ expectedOutput: "No refund." }) },
-    { versionId: draft.id, updatedAt: draft.updatedAt },
+    edit,
+    { versionId: first.id },
     new Date(),
   );
   assert.ok(typeof saved === "object");
   assert.deepEqual(
-    saved.versions.map(({ number, state }) => [number, state]),
+    saved.versions.map(({ number, expectedOutput }) => [number, expectedOutput]),
     [
-      [2, "draft"],
-      [1, "approved"],
+      [2, "No refund."],
+      [1, null],
     ],
   );
+  assert.deepEqual(saved.versions[1], first, "the first version did not change");
   assert.equal(Object.hasOwn(saved.versions[0] ?? {}, "scorers"), false, "no scorer on a case");
+  // The same content adds no version. An edit from an older version changes nothing.
+  const same = await t.cases.update(
+    PROJECT_ID,
+    made.id,
+    edit,
+    { versionId: saved.versions[0]?.id ?? "" },
+    new Date(),
+  );
+  assert.ok(typeof same === "object");
+  assert.equal(same.versions.length, 2);
+  assert.equal(
+    await t.cases.update(PROJECT_ID, made.id, edit, { versionId: first.id }, new Date()),
+    "changed",
+  );
   assert.deepEqual(
     (await t.cases.list(PROJECT_ID, refunds.id)).map(({ id }) => id),
     [made.id],
@@ -207,4 +220,27 @@ test("the rows of a dataset have draft and approved versions, and belong to one 
     createdBy: "user_1",
   });
   assert.equal(refused, "eval_not_found");
+});
+
+test("rows for several evals are saved together, or none is", async () => {
+  const t = await setup();
+  const refunds = await seedEval(t.db);
+  const status = await seedEval(t.db, { name: "Status" });
+  const row = (evalId: string) => ({
+    projectId: PROJECT_ID,
+    evalId,
+    name: "late refund",
+    labels: [],
+    content: content(),
+    createdBy: "user_1",
+  });
+  const made = await t.cases.createAll([row(refunds.id), row(status.id)]);
+  assert.ok(Array.isArray(made));
+  assert.deepEqual(
+    made.map(({ evalId }) => evalId),
+    [refunds.id, status.id],
+  );
+  const stranger = await seedEval(t.db, { name: "Theirs", projectId: OTHER_PROJECT_ID });
+  assert.equal(await t.cases.createAll([row(refunds.id), row(stranger.id)]), "eval_not_found");
+  assert.equal((await t.cases.list(PROJECT_ID, refunds.id)).length, 1);
 });

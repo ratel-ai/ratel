@@ -16,7 +16,7 @@ export const metadata = { title: "Eval case" };
 
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
-/** One case: its draft in the editor, and the approved version. `new` is a case from nothing. */
+/** One case in the editor, from the version that counts. `new` is a case from nothing. */
 export default async function EvalCasePage({
   params,
   searchParams,
@@ -50,6 +50,6 @@ export default async function EvalCasePage({
   const canEdit = !(await isRestrictedBySupportSession());
   const chosen = Array.isArray(query?.eval) ? query.eval[0] : query?.eval;
   const model = caseEditorModel({ projectId: project.id, canEdit }, found, evals, chosen ?? null);
-  // Another draft is another form.
-  return <CaseEditor key={model.draft?.id ?? model.approved?.id ?? "new"} model={model} />;
+  // Another version is another form.
+  return <CaseEditor key={model.current?.id ?? "new"} model={model} />;
 }

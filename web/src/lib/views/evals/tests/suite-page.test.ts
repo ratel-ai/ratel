@@ -37,7 +37,7 @@ function definition(id: string, taskId: string | null = null): EvalDefinition {
   };
 }
 
-function evalCase(id: string, evalId: string, state: "draft" | "approved" = "approved"): EvalCase {
+function evalCase(id: string, evalId: string): EvalCase {
   return {
     id,
     projectId: PROJECT_ID,
@@ -51,11 +51,8 @@ function evalCase(id: string, evalId: string, state: "draft" | "approved" = "app
         id: `${id}-v1`,
         caseId: id,
         number: 1,
-        state,
         sourceTurnId: null,
         sourceOutput: null,
-        approvedBy: null,
-        approvedAt: null,
         updatedAt: new Date(0),
       },
     ],
@@ -67,7 +64,7 @@ const CASES = [
   evalCase("a", "refunds"),
   evalCase("b", "refunds"),
   evalCase("s", "status"),
-  evalCase("d", "new", "draft"),
+  evalCase("d", "new"),
 ];
 const RUNS = [
   {
@@ -100,7 +97,7 @@ test("the suite table has every eval: the score, a cell for each scorer, the del
     [
       refunds?.name,
       refunds?.taskId,
-      refunds?.approvedCases,
+      refunds?.cases,
       refunds?.run?.score,
       refunds?.run?.counts.invalid,
     ],
@@ -116,7 +113,7 @@ test("the suite table has every eval: the score, a cell for each scorer, the del
   assert.equal(refunds?.href, `/project/${PROJECT_ID}/evals/refunds`);
   assert.equal(status?.run?.delta, null);
   assert.match(status?.run?.deltaReason ?? "", /scorers of this eval differ/);
-  assert.deepEqual([unrun?.name, unrun?.run, unrun?.draftCases], ["new", null, 1]);
+  assert.deepEqual([unrun?.name, unrun?.run, unrun?.cases], ["new", null, 1]);
   assert.ok(model.verdict?.ok);
   assert.equal(model.verdict.verdict, "improved");
 });
@@ -168,8 +165,9 @@ test("an eval page has its definition and its dataset with the output and a brea
   );
   assert.equal(model.run?.score, 1);
   assert.deepEqual(
-    model.dataset.map(({ caseId, status, change, output, expectedOutput, scorers }) => [
+    model.dataset.map(({ caseId, version, status, change, output, expectedOutput, scorers }) => [
       caseId,
+      version,
       status,
       change,
       output,
@@ -177,8 +175,8 @@ test("an eval page has its definition and its dataset with the output and a brea
       scorers["No refund"]?.passRate,
     ]),
     [
-      ["a", "pass", "improved", "No refund for A200.", "No refund.", 1],
-      ["b", "pass", "unchanged", null, "No refund.", 1],
+      ["a", 1, "pass", "improved", "No refund for A200.", "No refund.", 1],
+      ["b", 1, "pass", "unchanged", null, "No refund.", 1],
     ],
   );
   assert.deepEqual(

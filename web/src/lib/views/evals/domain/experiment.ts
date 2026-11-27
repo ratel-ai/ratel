@@ -1,5 +1,4 @@
-import type { CaseVersion, EvalCase } from "./case";
-import { approvedVersion } from "./case";
+import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./case";
 import {
   currentVersion,
   type EvalDefinition,
@@ -36,7 +35,7 @@ export type Experiment = {
   sandboxName: string;
   /** The name that the person gave the run. Null when it has none. */
   name: string | null;
-  /** The label that chose the cases. Null: all approved cases. */
+  /** The label that chose the cases. Null: all cases. */
   labelFilter: string | null;
   gitCommit: string;
   gitDirty: boolean;
@@ -95,9 +94,10 @@ export type Counts = { pass: number; fail: number; invalid: number; open: number
 export type FrozenSuite = Pick<Experiment, "caseVersions" | "evalVersions" | "scorerSnapshots">;
 
 /**
- * Freezes the newest version of each eval that can run, and the approved version of each case of
- * its dataset (no draft). A case version gets the scorers of its eval version. An eval with no
- * gating scorer, or with no approved case, is left out. With a label, only the cases that have it.
+ * Freezes the newest version of each eval that can run, and the newest version of each case of its
+ * dataset: each row counts (decision `rows-count-at-once`). A case version gets the scorers of its
+ * eval version. An eval with no gating scorer, or with no case, is left out. With a label, only the
+ * cases that have it.
  */
 export function freezeSuite(
   evals: readonly EvalDefinition[],
@@ -110,10 +110,10 @@ export function freezeSuite(
   for (const definition of evals) {
     const version = currentVersion(definition);
     if (runProblem(version)) continue;
-    const approved = approvedCases(byEval.get(definition.id) ?? [], label);
-    if (approved.length === 0) continue;
+    const rows = rowsOf(byEval.get(definition.id) ?? [], label);
+    if (rows.length === 0) continue;
     frozen.evalVersions.push(freezeEval(definition, run));
-    for (const { evalCase, caseVersion } of approved) {
+    for (const { evalCase, caseVersion } of rows) {
       frozen.caseVersions.push(frozenCase(evalCase, caseVersion));
       frozen.scorerSnapshots[caseVersion.id] = snapshotsOf(version);
     }
@@ -121,13 +121,13 @@ export function freezeSuite(
   return frozen;
 }
 
-function approvedCases(
+function rowsOf(
   cases: readonly EvalCase[],
   label: string | null,
 ): Array<{ evalCase: EvalCase; caseVersion: CaseVersion }> {
   return cases.flatMap((evalCase) => {
     if (label !== null && !evalCase.labels.includes(label)) return [];
-    const caseVersion = approvedVersion(evalCase);
+    const caseVersion = currentRow(evalCase);
     return caseVersion ? [{ evalCase, caseVersion }] : [];
   });
 }

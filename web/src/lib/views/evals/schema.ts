@@ -82,7 +82,7 @@ export const evalCases = pgTable(
   ],
 );
 
-/** A version of a case. Only a draft changes: an approved version is frozen. */
+/** A version of a case (a row of a dataset). It never changes: an edit adds a version, and the newest counts. */
 export const evalCaseVersions = pgTable(
   "eval_case_versions",
   {
@@ -91,8 +91,6 @@ export const evalCaseVersions = pgTable(
       .notNull()
       .references(() => evalCases.id, { onDelete: "cascade" }),
     number: integer("number").notNull(),
-    // "draft" | "approved"
-    state: text("state").notNull().default("draft"),
     // In an object: a driver parses the text of a jsonb string one more time.
     input: jsonb("input").$type<{ value: unknown }>().notNull(),
     earlierTurns: jsonb("earlier_turns").$type<EarlierTurn[]>().notNull(),
@@ -102,15 +100,10 @@ export const evalCaseVersions = pgTable(
     sourceTurnId: uuid("source_turn_id"),
     // The recorded answer of that turn, for the editor. No scorer reads it.
     sourceOutput: text("source_output"),
-    approvedBy: text("approved_by"),
-    approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("eval_case_versions_case_number_idx").on(t.caseId, t.number),
-    uniqueIndex("eval_case_versions_one_draft_idx").on(t.caseId).where(sql`${t.state} = 'draft'`),
-  ],
+  (t) => [uniqueIndex("eval_case_versions_case_number_idx").on(t.caseId, t.number)],
 );
 
 /** What the judge that Ratel pays spent, for each organization and UTC day, with what is held. */

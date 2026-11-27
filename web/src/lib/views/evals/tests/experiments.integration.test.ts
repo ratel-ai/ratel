@@ -133,7 +133,8 @@ async function setup() {
     },
     now: () => new Date(clock),
   };
-  const approvedCase = async (
+  /** A row of the dataset of the eval. It counts at once. */
+  const addCase = async (
     name: string,
     over: Partial<CaseContent> = {},
     labels: string[] = [],
@@ -147,15 +148,7 @@ async function setup() {
       content: content(over),
       createdBy: "user_1",
     });
-    const [draft] = made.versions;
-    assert.ok(draft);
-    const { id: versionId, updatedAt } = draft;
-    await cases.approve(
-      PROJECT_ID,
-      made.id,
-      { versionId, updatedAt },
-      { userId: "user_1", now: new Date() },
-    );
+    assert.ok(typeof made === "object");
     return made;
   };
   /** An eval with these scorers. */
@@ -197,7 +190,7 @@ async function setup() {
     deps,
     runs,
     started,
-    approvedCase,
+    addCase,
     start,
     end,
     trials: experiments.trials,
@@ -216,18 +209,11 @@ async function setup() {
   };
 }
 
-test("two approved cases make 6 trials and 6 sandbox runs, each in a new instance", async () => {
+test("two cases make 6 trials and 6 sandbox runs, each in a new instance", async () => {
   const t = await setup();
   const fixtures = [{ tool: "refund_order", arguments: { a: 1 }, result: { ok: true } }];
-  await t.approvedCase("one", { toolFixtures: fixtures });
-  await t.approvedCase("two", { earlierTurns: [{ role: "user", text: "hi" }] });
-  await t.cases.create({
-    projectId: PROJECT_ID,
-    name: "only a draft",
-    labels: [],
-    content: content(),
-    createdBy: "u",
-  });
+  await t.addCase("one", { toolFixtures: fixtures });
+  await t.addCase("two", { earlierTurns: [{ role: "user", text: "hi" }] });
   const experiment = await t.start({ params: { model: "x" } });
   assert.deepEqual(experiment.caseVersions.map(({ name }) => name).sort(), ["one", "two"]);
   assert.deepEqual(await t.step(experiment), { started: 6, finished: 0, closed: false });
@@ -253,18 +239,11 @@ test("two approved cases make 6 trials and 6 sandbox runs, each in a new instanc
   });
 });
 
-test("a run with a label takes only the approved cases with that label, with its name", async () => {
+test("a run with a label takes only the cases with that label, with its name", async () => {
   const t = await setup();
-  await t.approvedCase("refund one", {}, ["refunds"]);
-  await t.approvedCase("refund two", {}, ["refunds", "smoke"]);
-  await t.approvedCase("status", {}, ["status"]);
-  await t.cases.create({
-    projectId: PROJECT_ID,
-    name: "refund draft",
-    labels: ["refunds"],
-    content: content(),
-    createdBy: "u",
-  });
+  await t.addCase("refund one", {}, ["refunds"]);
+  await t.addCase("refund two", {}, ["refunds", "smoke"]);
+  await t.addCase("status", {}, ["status"]);
   const experiment = await t.start({ label: "refunds", name: "Refunds on the new prompt" });
   assert.deepEqual(experiment.caseVersions.map(({ name }) => name).sort(), [
     "refund one",
@@ -287,13 +266,13 @@ test("a run with a label takes only the approved cases with that label, with its
   assert.deepEqual(none, {
     ok: false,
     reason: "no_cases",
-    message: "No approved case has the label nope.",
+    message: "No case has the label nope.",
   });
 });
 
 test("a param that the version does not declare, or of the wrong type, is refused with the reason", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const start = (params: Record<string, unknown>) =>
     startExperiment(
       SUBJECT,
@@ -321,7 +300,7 @@ test("a param that the version does not declare, or of the wrong type, is refuse
 test("the experiment records the version, the commit, the params, the cases and the scorers", async () => {
   const t = await setup();
   const judged = await t.evalWith("judged", [NO_REFUND, JUDGE]);
-  const made = await t.approvedCase("one", {}, [], judged);
+  const made = await t.addCase("one", {}, [], judged);
   const experiment = await t.start({ params: { model: "x" } });
   const versionId = made.versions[0]?.id ?? "";
   assert.equal(experiment.sandboxVersionId, VERSION.id);
@@ -354,7 +333,7 @@ test("the experiment records the version, the commit, the params, the cases and 
 
 test("the results: pass with an advisory judge, fail of a check, fail of the agent, invalid", async () => {
   const t = await setup();
-  await t.approvedCase("one", {}, [], await t.evalWith("judged", [NO_REFUND, JUDGE]));
+  await t.addCase("one", {}, [], await t.evalWith("judged", [NO_REFUND, JUDGE]));
   const experiment = await t.start({ trialsPerCase: 5 });
   await t.step(experiment);
   const trials = await t.trials(experiment.id);
@@ -397,19 +376,19 @@ test("the results: pass with an advisory judge, fail of a check, fail of the age
 
 test("the row and its frozen lists do not change after the start", async () => {
   const t = await setup();
-  const made = await t.approvedCase("one");
+  const made = await t.addCase("one");
   const experiment = await t.start();
   const [before] = await t.table("eval_experiments");
-  await t.cases.saveDraft(
+  // An edit of the case adds a version. The run keeps the version that it froze.
+  const editedCase = await t.cases.update(
     PROJECT_ID,
     made.id,
     { name: "renamed", labels: ["x"], content: content({ expectedOutput: "changed" }) },
-    {
-      versionId: made.versions[0]?.id ?? "",
-      updatedAt: made.versions[0]?.updatedAt ?? new Date(),
-    },
+    { versionId: made.versions[0]?.id ?? "" },
     new Date(),
   );
+  assert.ok(typeof editedCase === "object");
+  assert.equal(editedCase.versions[0]?.number, 2);
   // An edit of the eval adds a version. The run keeps the version that it froze.
   const frozenEval = experiment.evalVersions[0];
   assert.ok(frozenEval);
@@ -489,7 +468,7 @@ test("no route changes an experiment", () => {
 
 test("a refused start makes the trial invalid with the name of the limit", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   t.setRefuse((n) =>
     n === 1
       ? {
@@ -512,7 +491,7 @@ test("a refused start makes the trial invalid with the name of the limit", async
 
 test("a start that throws, a run that is gone and a claim of an ended process are invalid", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start();
   const [claimed] = await t.deps.experiments.claimStarts(experiment, 1, t.deps.now());
   t.pass(CLAIM_STOPPED_MS + 1000);
@@ -534,7 +513,7 @@ test("a start that throws, a run that is gone and a claim of an ended process ar
 
 test("a scoring of an ended process starts again, and two steps score a trial one time", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start({ trialsPerCase: 1 });
   await t.step(experiment);
   for (const run of t.runs.values()) t.end(run);
@@ -549,7 +528,7 @@ test("a scoring of an ended process starts again, and two steps score a trial on
 
 test("a large experiment has a limited number of open trials", async () => {
   const t = await setup();
-  for (let n = 0; n < 8; n += 1) await t.approvedCase(`case ${n}`);
+  for (let n = 0; n < 8; n += 1) await t.addCase(`case ${n}`);
   const experiment = await t.start();
   assert.equal((await t.step(experiment)).started, OPEN_TRIALS);
   assert.equal((await t.step(experiment)).started, 0);
@@ -561,7 +540,7 @@ test("a large experiment has a limited number of open trials", async () => {
 
 test("two processes start each trial one time", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start();
   await Promise.all([t.step(experiment), t.step(experiment)]);
   assert.equal(t.started.length, 3);
@@ -576,7 +555,7 @@ test("refusals of a start", async () => {
       t.deps,
     ).then((result) => (result.ok ? "ok" : result.reason));
   assert.equal(await start(), "no_cases");
-  await t.approvedCase("one");
+  await t.addCase("one");
   assert.equal(await start(OTHER_PROJECT_ID), "not_found");
   t.setVersions([{ ...VERSION, status: "preparing" }]);
   assert.equal(await start(), "not_ready");
@@ -610,7 +589,7 @@ function keyDeps(t: Awaited<ReturnType<typeof setup>>, over: Partial<KeyDeps> = 
 
 test("a key starts an experiment and reads the counts, with no captured text", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const advanced: string[] = [];
   const deps = keyDeps(t, { advance: ({ id }) => void advanced.push(id) });
   const response = await handleStartByKey(request({ sandboxVersion: "latest", trials: 2 }), deps);
@@ -643,9 +622,9 @@ test("a suite run takes each eval of the sandbox, with the trials and the params
   const t = await setup();
   const status = await t.evalOf("Status", { trials: 2, params: { model: "small", depth: 2 } });
   const other = await t.evalOf("Other sandbox", { sandboxName: "billing-agent" });
-  await t.approvedCase("refund");
-  await t.approvedCase("where is it", {}, [], status);
-  await t.approvedCase("billing", {}, [], other);
+  await t.addCase("refund");
+  await t.addCase("where is it", {}, [], status);
+  await t.addCase("billing", {}, [], other);
   const experiment = await t.start({ trialsPerCase: undefined, params: { depth: 3 } });
   assert.deepEqual(
     experiment.evalVersions.map(({ name, trials, params }) => [name, trials, params]),
@@ -677,10 +656,10 @@ test("one eval runs alone by name. An unknown eval, another sandbox and an eval 
   const status = await t.evalOf("Status", { trials: 1 });
   const advisory = await t.evalWith("Advisory", [{ ...JUDGE, gating: false }]);
   const other = await t.evalOf("Other sandbox", { sandboxName: "billing-agent" });
-  await t.approvedCase("refund");
-  await t.approvedCase("where is it", {}, [], status);
-  await t.approvedCase("polite", {}, [], advisory);
-  await t.approvedCase("billing", {}, [], other);
+  await t.addCase("refund");
+  await t.addCase("where is it", {}, [], status);
+  await t.addCase("polite", {}, [], advisory);
+  await t.addCase("billing", {}, [], other);
   const alone = await t.start({ evals: ["Status"], trialsPerCase: undefined });
   assert.deepEqual(
     alone.evalVersions.map(({ name }) => name),
@@ -715,8 +694,8 @@ test("one eval runs alone by name. An unknown eval, another sandbox and an eval 
 test("a key runs one eval, and the read of the run has each eval with its score and its delta", async () => {
   const t = await setup();
   const status = await t.evalOf("Status", { trials: 2 });
-  await t.approvedCase("refund");
-  await t.approvedCase("where is it", {}, [], status);
+  await t.addCase("refund");
+  await t.addCase("where is it", {}, [], status);
   const finish = async (experimentId: string, output: string) => {
     const experiment = await t.deps.experiments.get(PROJECT_ID, experimentId);
     assert.ok(experiment);
@@ -801,7 +780,7 @@ function authenticate(scope: ApiKeyScope, key: { projectId: string; scopes: stri
 
 test("a key with no scope gets 403, and a key of another project gets no data", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start();
   const START = BEARER_ROUTE_SCOPES["POST /api/v1/evals/experiments"];
   const READ = BEARER_ROUTE_SCOPES["GET /api/v1/evals/experiments/[experimentId]"];
@@ -838,7 +817,7 @@ test("with the flag off the routes answer 404", async () => {
 
 test("a member starts an experiment, and a support session cannot", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const deps = (over: Partial<ConsoleDeps> = {}): ConsoleDeps => ({
     ...keyDeps(t),
     getSession: async () => ({ user: { id: "u1", externalId: "user_1" } }),
@@ -865,7 +844,7 @@ test("a member starts an experiment, and a support session cannot", async () => 
 
 test("the drain gives each project a turn, and a project has a limit of running experiments", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   for (let n = 0; n < MAX_RUNNING_EXPERIMENTS; n += 1) await t.start({ trialsPerCase: 1 });
   const more = await startExperiment(
     SUBJECT,
@@ -883,7 +862,7 @@ test("the drain gives each project a turn, and a project has a limit of running 
 
 test("with the evals flag off no trial starts", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start();
   t.deps.sandboxes.enabled = async () => false;
   assert.equal((await t.step(experiment)).started, 0);
@@ -894,7 +873,7 @@ test("with the evals flag off no trial starts", async () => {
 
 test("a step ends at its deadline, and the next one goes on", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start({ trialsPerCase: 10 });
   await t.step(experiment);
   for (const run of t.runs.values()) t.end(run);
@@ -907,7 +886,7 @@ test("a step ends at its deadline, and the next one goes on", async () => {
 test("the judges of a trial run at the same time", async () => {
   const t = await setup();
   const judges = [1, 2, 3].map((n) => ({ ...JUDGE, id: `j${n}` }));
-  await t.approvedCase("one", {}, [], await t.evalWith("judged", [NO_REFUND, ...judges]));
+  await t.addCase("one", {}, [], await t.evalWith("judged", [NO_REFUND, ...judges]));
   const experiment = await t.start({ trialsPerCase: 1 });
   await t.step(experiment);
   for (const run of t.runs.values()) t.end(run);
@@ -933,7 +912,7 @@ test("the judges of a trial run at the same time", async () => {
 
 test("the experiments of a project share the open trials", async () => {
   const t = await setup();
-  for (let n = 0; n < 5; n += 1) await t.approvedCase(`case ${n}`);
+  for (let n = 0; n < 5; n += 1) await t.addCase(`case ${n}`);
   const first = await t.start();
   const second = await t.start();
   assert.equal((await t.step(first)).started, 15);
@@ -942,7 +921,7 @@ test("the experiments of a project share the open trials", async () => {
 
 test("the read of a key does not load the outputs", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start();
   await t.step(experiment);
   for (const run of t.runs.values()) t.end(run);
@@ -958,7 +937,7 @@ test("the read of a key does not load the outputs", async () => {
 
 test("the grid reads a cut output of each trial and the case versions of an experiment", async () => {
   const t = await setup();
-  const made = await t.approvedCase("one", { expectedOutput: "Yes." });
+  const made = await t.addCase("one", { expectedOutput: "Yes." });
   const experiment = await t.start({ trialsPerCase: 2 });
   await t.step(experiment);
   const [first, second] = [...t.runs.values()];
@@ -977,7 +956,7 @@ test("the grid reads a cut output of each trial and the case versions of an expe
 
 test("a run that started stays linked when the trial did not become running", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start({ trialsPerCase: 1 });
   t.deps.experiments = {
     ...t.deps.experiments,
@@ -993,7 +972,7 @@ test("a run that started stays linked when the trial did not become running", as
 
 test("a start that became running is not ended as interrupted", async () => {
   const t = await setup();
-  await t.approvedCase("one");
+  await t.addCase("one");
   const experiment = await t.start({ trialsPerCase: 1 });
   const { experiments } = t.deps;
   const [claimed] = await experiments.claimStarts(experiment, 1, t.deps.now());
@@ -1009,7 +988,7 @@ test("a start that became running is not ended as interrupted", async () => {
 
 test("params that are too deep are refused, not a server error", async () => {
   const t = await setup();
-  await t.approvedCase("a");
+  await t.addCase("a");
   const deps = keyDeps(t);
   const body = `{"sandboxVersion":"latest","params":{"a":${"[".repeat(20_000)}${"]".repeat(20_000)}}}`;
   const response = await handleStartByKey(new Request("http://x", { method: "POST", body }), deps);
@@ -1018,7 +997,7 @@ test("params that are too deep are refused, not a server error", async () => {
 
 test("a trial that the concurrency limit refused waits for the next step", async () => {
   const t = await setup();
-  await t.approvedCase("a");
+  await t.addCase("a");
   const experiment = await t.start({ trialsPerCase: 3 });
   const full = (max: number) => ({
     ok: false as const,

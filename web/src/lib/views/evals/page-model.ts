@@ -1,7 +1,7 @@
 import type { Member } from "@/lib/console/scope/member-access";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
 import type { ParamSpec } from "@/lib/views/sandboxes/run-form";
-import { approvedVersion, type CaseVersion, draftVersion, type EvalCase } from "./domain/case";
+import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./domain/case";
 import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
 import {
   type Counts,
@@ -17,10 +17,7 @@ import { type CaseCounts, caseCounts, trialsByCase } from "./experiment-view";
 /** The longest text of a cell of the cases table. The case page shows the full value. */
 export const PREVIEW_CHARS = 160;
 
-export type CaseVersionView = Omit<CaseVersion, "approvedAt" | "updatedAt"> & {
-  approvedAt: string | null;
-  updatedAt: string;
-};
+export type CaseVersionView = Omit<CaseVersion, "updatedAt"> & { updatedAt: string };
 
 export type CaseEditorModel = {
   projectId: string;
@@ -33,8 +30,8 @@ export type CaseEditorModel = {
   evalId: string | null;
   /** The evals of the project, with the scorers of their newest version. */
   evals: EvalOption[];
-  approved: CaseVersionView | null;
-  draft: CaseVersionView | null;
+  /** The version that counts: the newest. Null for a new case. */
+  current: CaseVersionView | null;
 };
 
 export type EvalOption = { id: string; name: string; scorers: EvalScorer[] };
@@ -69,19 +66,12 @@ export function caseEditorModel(
       name: definition.name,
       scorers: currentVersion(definition).scorers,
     })),
-    approved: versionView(evalCase && approvedVersion(evalCase)),
-    draft: versionView(evalCase && draftVersion(evalCase)),
+    current: versionView(evalCase && currentRow(evalCase)),
   };
 }
 
 function versionView(version: CaseVersion | null): CaseVersionView | null {
-  return (
-    version && {
-      ...version,
-      approvedAt: version.approvedAt?.toISOString() ?? null,
-      updatedAt: version.updatedAt.toISOString(),
-    }
-  );
+  return version && { ...version, updatedAt: version.updatedAt.toISOString() };
 }
 
 export type ExperimentRow = {
@@ -110,7 +100,7 @@ export type ExperimentPageModel = {
   trialsPerCase: number;
   /** The name that the person gave the run. Null when it has none. */
   name: string | null;
-  /** The label that chose the cases. Null: all approved cases. */
+  /** The label that chose the cases. Null: all cases. */
   labelFilter: string | null;
   createdAt: string;
   counts: Counts;

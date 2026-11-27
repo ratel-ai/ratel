@@ -6,10 +6,12 @@ import {
 } from "./eval";
 
 /**
- * Where "Save as eval case" puts a turn or a run (decision `trace-to-eval`): the eval of its task.
+ * Where "Save as eval case" puts a turn or a run (decision `trace-to-eval`): an eval of its task.
  * One task is the default. With more, the task of the page is the default, else the person
- * chooses. A task with no eval gets a new eval with the task's default scorers, which the person
- * confirms. A turn with no task goes to an eval that the person names.
+ * chooses one or more, and the turn becomes one row in each chosen eval. A task with one eval saves
+ * into it. With more, the person chooses one. A task with no eval gets a new eval with the task's
+ * default scorers, which the person confirms. A turn with no task goes to an eval that the person
+ * names.
  */
 
 /** A task as the evals module knows it: an id and a name. */
@@ -27,6 +29,7 @@ export type TaskScorerInput =
 
 export type SaveTarget =
   | { kind: "existing"; evalId: string; name: string; taskId: string | null }
+  | { kind: "choose"; taskId: string; evals: Array<{ id: string; name: string }> }
   | { kind: "new"; name: string; taskId: string; content: EvalContent }
   | { kind: "named" };
 
@@ -41,15 +44,24 @@ export function defaultTask(tasks: readonly TaskRef[], pageTaskId: string | null
   return tasks.find(({ id }) => id === pageTaskId) ?? null;
 }
 
-/** The eval of the task, or a new one for it. With no task, the person names the eval. */
+/**
+ * The eval of the task, the evals that the person chooses from, or a new eval for the task. With no
+ * task, the person names the eval.
+ */
 export function saveTarget(
   task: TaskRef | null,
   evals: readonly EvalDefinition[],
   defaults: NewEvalDefaults,
 ): SaveTarget {
   if (!task) return { kind: "named" };
-  const found = evals.find(({ taskId }) => taskId === task.id);
-  if (found) return { kind: "existing", evalId: found.id, name: found.name, taskId: task.id };
+  const found = evals.filter(({ taskId }) => taskId === task.id);
+  const [only] = found;
+  if (only && found.length === 1) {
+    return { kind: "existing", evalId: only.id, name: only.name, taskId: task.id };
+  }
+  if (found.length > 1) {
+    return { kind: "choose", taskId: task.id, evals: found.map(({ id, name }) => ({ id, name })) };
+  }
   return {
     kind: "new",
     name: freeName(task.name, evals),

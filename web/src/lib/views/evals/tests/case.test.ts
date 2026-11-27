@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { approvalProblem, caseContentSchema, caseDetailsSchema, runInputOf } from "../domain/case";
+import { caseContentSchema, caseDetailsSchema, inputProblem, runInputOf } from "../domain/case";
 import { caseFromTurn, recordedConversation, type TurnContent } from "../domain/from-turn";
 import { content } from "./support";
 
@@ -157,9 +157,9 @@ test("the recorded conversation is the messages of the calls, with no message re
   assert.equal(recordedConversation([]), null);
 });
 
-test("an approval needs an input. The scorers are the eval's", () => {
-  assert.equal(approvalProblem(content()), null);
-  assert.match(approvalProblem(content({ input: null })) ?? "", /input/);
+test("a row needs an input. The scorers are the eval's", () => {
+  assert.equal(inputProblem(content()), null);
+  assert.match(inputProblem(content({ input: null })) ?? "", /input/);
   assert.equal(
     Object.hasOwn(caseContentSchema.parse({ ...content(), scorers: [] }), "scorers"),
     false,

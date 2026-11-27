@@ -139,7 +139,6 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   evals_list_cases: "improve",
   evals_get_case: "improve",
   evals_create_case: "improve",
-  evals_approve_case: "improve",
   evals_start_run: "improve",
   evals_list_runs: "improve",
   evals_get_run: "improve",

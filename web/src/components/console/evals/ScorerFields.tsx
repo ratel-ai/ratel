@@ -20,7 +20,7 @@ const OPERATORS: Record<CheckOperator, string> = {
 };
 const PATHS = "output, tools, tool_arguments.<tool>.<field>, cost_usd, duration_ms";
 
-/** The scorers of a draft: deterministic checks, and yes or no questions for a judge. */
+/** The scorers in an eval form: deterministic checks, and yes or no questions for a judge. */
 export function ScorerFields({
   scorers,
   onChange,

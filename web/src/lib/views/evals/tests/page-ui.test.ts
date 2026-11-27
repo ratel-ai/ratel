@@ -12,10 +12,8 @@ import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import type { CaseVersion } from "../domain/case";
-import { compare } from "../domain/compare";
 import type { Experiment, Trial } from "../domain/experiment";
 import { pairedTrials } from "../domain/paired-trials";
-import type { TrialResult } from "../domain/score";
 import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
 import {
   type CaseEditorModel,
@@ -34,11 +32,8 @@ const version = (over: Partial<CaseVersionView> = {}): CaseVersionView => ({
   id: "v1",
   caseId: "c1",
   number: 1,
-  state: "approved",
   sourceTurnId: "t1",
   sourceOutput: "Refunded.",
-  approvedBy: "user_1",
-  approvedAt: NOW,
   updatedAt: NOW,
   ...over,
 });
@@ -50,8 +45,7 @@ const model = (over: Partial<CaseEditorModel> = {}): CaseEditorModel => ({
   labels: ["task: refunds"],
   evalId: "e1",
   evals: [{ id: "e1", name: "Refunds", scorers: [NO_REFUND] }],
-  approved: null,
-  draft: version({ state: "draft" }),
+  current: version(),
   ...over,
 });
 const labels = (evalsPage: boolean) =>
@@ -72,26 +66,21 @@ test("the rail has Evals only with the flag on", () => {
   assert.ok(!labels(false).includes("Evals"));
 });
 
-test("the editor of an approved case with a draft shows both", () => {
+test("the editor of a case shows the version that counts, and saves a new version", () => {
   const html = render(
-    createElement(CaseEditor, {
-      model: model({
-        approved: version(),
-        draft: version({ id: "v2", number: 2, state: "draft" }),
-      }),
-    }),
+    createElement(CaseEditor, { model: model({ current: version({ id: "v2", number: 2 }) }) }),
   );
   const text = visibleText(html);
-  assert.match(text, /Version 1 counts in eval runs/);
-  assert.match(text, /Draft v2/);
+  assert.match(text, /Version 2 counts in eval runs\. A save adds a new version\./);
+  assert.match(text, /Save/);
+  assert.doesNotMatch(text, /draft|approve/i);
   assert.match(text, /No refund \(gating\): tools is not refund_order/);
   assert.match(html, /traces\/turns\/t1/);
 });
 
 test("a support session sees no action", () => {
-  const text = visibleText(render(createElement(CaseEditor, { model: model({ canEdit: false }) })));
-  assert.ok(!text.includes("Approve"));
-  assert.ok(!text.includes("Save draft"));
+  const html = render(createElement(CaseEditor, { model: model({ canEdit: false }) }));
+  assert.doesNotMatch(html, /<button[^>]*>Save<\/button>/);
 });
 
 test("the turn page shows the action behind the flag, and the pages are under the gated layout", () => {

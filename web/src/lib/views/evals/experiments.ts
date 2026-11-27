@@ -59,7 +59,7 @@ export type StartExperiment = {
   /** The names of the evals to run. Absent: the suite, each eval of the sandbox. */
   evals?: string[];
   startedBy: string;
-  /** Only the approved cases with this label. All of them when it is not there. */
+  /** Only the cases with this label. All of them when it is not there. */
   label?: string;
   name?: string;
 };
@@ -89,7 +89,7 @@ const LATEST_OF = 100;
 const logger = getLogger("evals/experiments");
 
 /**
- * Freezes the evals, their approved cases and their scorers. The suite is each eval of the sandbox
+ * Freezes the evals, the newest version of each of their cases, and their scorers. The suite is each eval of the sandbox
  * of the version (or of no sandbox). Chosen evals run by name. The trials start with
  * `advanceExperiment`.
  */
@@ -132,11 +132,8 @@ export async function startExperiment(
   const cases = frozen.caseVersions.length;
   if (cases === 0) {
     return label === undefined
-      ? refused(
-          "no_cases",
-          "No eval has an approved case and a gating scorer. Approve a case first.",
-        )
-      : refused("no_cases", `No approved case has the label ${label}.`);
+      ? refused("no_cases", "No eval has a case and a gating scorer. Add a case first.")
+      : refused("no_cases", `No case has the label ${label}.`);
   }
   const trials = totalTrials(frozen);
   if (trials > MAX_EXPERIMENT_TRIALS) {
@@ -415,7 +412,7 @@ function leftOut(
   const problem = runProblem(currentVersion(missing));
   return problem
     ? `The eval "${missing.name}" cannot run. ${problem}`
-    : `The eval "${missing.name}" has no approved case. Approve one first.`;
+    : `The eval "${missing.name}" has no case. Add one first.`;
 }
 
 function totalTrials({ caseVersions, evalVersions }: FrozenSuite): number {

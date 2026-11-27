@@ -2,47 +2,42 @@ import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
-import type { CaseContent, CaseVersion, EvalCase, VersionState } from "../domain/case";
-import type { CaseStore } from "../ports/case-store";
+import type { CaseContent, CaseVersion, EvalCase } from "../domain/case";
+import type { CaseStore, NewCase } from "../ports/case-store";
 import { evalCases, evalCaseVersions, evalDefinitions } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type CaseRow = typeof evalCases.$inferSelect;
 type VersionRow = typeof evalCaseVersions.$inferSelect;
 
+/** A rollback with no row added: one eval of the batch is not in the project. */
+class EvalNotFound extends Error {}
+
 export function createDrizzleCaseStore(db: Db): CaseStore {
-  return {
-    create({ projectId, evalId, name, labels, content, createdBy, source }) {
-      return db.transaction(async (tx) => {
-        const now = new Date();
-        // The lock keeps the eval while the case joins it.
-        const [owner] = await tx
-          .select({ id: evalDefinitions.id })
-          .from(evalDefinitions)
-          .where(and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)))
-          .for("share");
-        if (!owner) return "eval_not_found";
-        const [row] = await tx
-          .insert(evalCases)
-          .values({ ...storable({ name, labels }), projectId, evalId, createdBy })
-          .returning();
-        if (!row) throw new Error("the case row is missing");
-        const [version] = await tx
-          .insert(evalCaseVersions)
-          .values({
-            ...columns(content),
-            caseId: row.id,
-            number: 1,
-            sourceTurnId: source?.turnId ?? null,
-            sourceOutput: storable(source?.output ?? null),
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning();
-        if (!version) throw new Error("the version row is missing");
-        return toCase(row, [version]);
+  const createAll: CaseStore["createAll"] = async (inputs) => {
+    try {
+      return await db.transaction(async (tx) => {
+        const made: EvalCase[] = [];
+        for (const input of inputs) {
+          const one = await insertCase(tx, input);
+          if (!one) throw new EvalNotFound();
+          made.push(one);
+        }
+        return made;
       });
+    } catch (error) {
+      if (error instanceof EvalNotFound) return "eval_not_found";
+      throw error;
+    }
+  };
+  return {
+    async create(input) {
+      const made = await createAll([input]);
+      return made === "eval_not_found" ? made : (made[0] ?? "eval_not_found");
     },
+
+    createAll,
 
     async get(projectId, caseId) {
       const [row] = await db
@@ -84,9 +79,9 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
       return rows.map((row) => toCase(row, byCase.get(row.id) ?? []));
     },
 
-    saveDraft(projectId, caseId, { name, labels, content }, base, now) {
+    update(projectId, caseId, { name, labels, content }, base, now) {
       return db.transaction(async (tx) => {
-        // The row lock: two edits at the same time make one draft.
+        // The row lock: two edits at the same time add one version.
         const [found] = await tx
           .select({ id: evalCases.id })
           .from(evalCases)
@@ -100,21 +95,14 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
           .orderBy(desc(evalCaseVersions.number))
           .limit(1);
         if (!newest) throw new Error("the case has no version");
-        if (newest.id !== base.versionId || +newest.updatedAt !== +base.updatedAt) return "changed";
+        if (newest.id !== base.versionId) return "changed";
         const [row] = await tx
           .update(evalCases)
           .set(storable({ name, labels }))
           .where(eq(evalCases.id, caseId))
           .returning();
         if (!row) throw new Error("the case row is missing");
-        // Each write has its own time, so the time names one state of the draft.
-        const updatedAt = new Date(Math.max(now.getTime(), newest.updatedAt.getTime() + 1));
-        if (newest.state === "draft") {
-          await tx
-            .update(evalCaseVersions)
-            .set({ ...columns(content), updatedAt })
-            .where(isDraft(newest.id));
-        } else if (!isDeepStrictEqual(columns(content), columns(toVersion(newest)))) {
+        if (!isDeepStrictEqual(columns(content), columns(toVersion(newest)))) {
           await tx.insert(evalCaseVersions).values({
             ...columns(content),
             caseId,
@@ -122,7 +110,7 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
             sourceTurnId: newest.sourceTurnId,
             sourceOutput: newest.sourceOutput,
             createdAt: now,
-            updatedAt,
+            updatedAt: now,
           });
         }
         const versions = await tx
@@ -133,36 +121,41 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
         return toCase(row, versions);
       });
     },
-
-    approve(projectId, caseId, { versionId, updatedAt }, { userId, now }) {
-      return db.transaction(async (tx) => {
-        // The same row lock as an edit takes.
-        const [row] = await tx
-          .select({ id: evalCases.id })
-          .from(evalCases)
-          .where(and(eq(evalCases.projectId, projectId), eq(evalCases.id, caseId)))
-          .for("update");
-        if (!row) return "not_found";
-        const approved = await tx
-          .update(evalCaseVersions)
-          .set({ state: "approved", approvedBy: userId, approvedAt: now })
-          .where(
-            and(
-              isDraft(versionId),
-              eq(evalCaseVersions.caseId, caseId),
-              eq(evalCaseVersions.updatedAt, updatedAt),
-            ),
-          )
-          .returning({ id: evalCaseVersions.id });
-        return approved.length > 0 ? "approved" : "changed";
-      });
-    },
   };
 }
 
-/** Each write of a version has this condition: an approved version never changes. */
-function isDraft(versionId: string) {
-  return and(eq(evalCaseVersions.id, versionId), eq(evalCaseVersions.state, "draft"));
+/** Adds one case with its first version. Null when the project has no such eval. */
+async function insertCase(
+  tx: Tx,
+  { projectId, evalId, name, labels, content, createdBy, source }: NewCase,
+): Promise<EvalCase | null> {
+  const now = new Date();
+  // The lock keeps the eval while the case joins it.
+  const [owner] = await tx
+    .select({ id: evalDefinitions.id })
+    .from(evalDefinitions)
+    .where(and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)))
+    .for("share");
+  if (!owner) return null;
+  const [row] = await tx
+    .insert(evalCases)
+    .values({ ...storable({ name, labels }), projectId, evalId, createdBy })
+    .returning();
+  if (!row) throw new Error("the case row is missing");
+  const [version] = await tx
+    .insert(evalCaseVersions)
+    .values({
+      ...columns(content),
+      caseId: row.id,
+      number: 1,
+      sourceTurnId: source?.turnId ?? null,
+      sourceOutput: storable(source?.output ?? null),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  if (!version) throw new Error("the version row is missing");
+  return toCase(row, [version]);
 }
 
 function columns({ input, earlierTurns, toolFixtures, expectedOutput }: CaseContent) {
@@ -180,6 +173,6 @@ function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
 }
 
 export function toVersion(row: VersionRow): CaseVersion {
-  const { createdAt: _, state, input, ...rest } = row;
-  return { ...rest, state: state as VersionState, input: input.value ?? null };
+  const { createdAt: _, input, ...rest } = row;
+  return { ...rest, input: input.value ?? null };
 }

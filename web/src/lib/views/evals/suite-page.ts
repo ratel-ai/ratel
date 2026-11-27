@@ -1,5 +1,5 @@
 import type { Compared } from "./baseline";
-import { approvedVersion, draftVersion, type EvalCase } from "./domain/case";
+import { currentVersion as currentRow, type EvalCase } from "./domain/case";
 import type { CaseChange, CaseStatus } from "./domain/compare";
 import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
 import type { Counts, Trial } from "./domain/experiment";
@@ -47,8 +47,8 @@ export type SuiteRowView = {
   name: string;
   taskId: string | null;
   href: string | null;
-  approvedCases: number;
-  draftCases: number;
+  /** The rows of its dataset. Each one counts. */
+  cases: number;
   run: RunCell | null;
 };
 
@@ -69,8 +69,8 @@ export type SuitePageModel = {
 export type DatasetRow = {
   caseId: string;
   name: string;
-  approved: number | null;
-  draft: number | null;
+  /** The number of the version that counts. */
+  version: number | null;
   input: string;
   expectedOutput: string | null;
   /** The output of the first trial of the case in the run, cut to `PREVIEW_CHARS`. */
@@ -141,8 +141,7 @@ export function suitePageModel({
       name: definition.name,
       taskId: definition.taskId,
       href: evalHref(projectId, definition.id),
-      approvedCases: dataset.filter((one) => approvedVersion(one)).length,
-      draftCases: dataset.filter((one) => draftVersion(one)).length,
+      cases: dataset.length,
       run: row ? runCell(row, table?.baselineId ?? null) : null,
     };
   });
@@ -153,8 +152,7 @@ export function suitePageModel({
       name: `${legacy.name} (a run from before evals had definitions)`,
       taskId: null,
       href: null,
-      approvedCases: legacy.cases,
-      draftCases: 0,
+      cases: legacy.cases,
       run: runCell(legacy, table?.baselineId ?? null),
     });
   }
@@ -207,17 +205,14 @@ export function evalPageModel({
     dataset: cases
       .filter(({ evalId }) => evalId === definition.id)
       .map((evalCase): DatasetRow => {
-        const approved = approvedVersion(evalCase);
-        const draft = draftVersion(evalCase);
-        const shown = approved ?? draft;
+        const shown = currentRow(evalCase);
         const scored = inRun.get(evalCase.id);
         const caseTrials = scored ? trialsOf(scored.versionId) : [];
         const first = caseTrials.find((trial) => outputs.has(trial.id));
         return {
           caseId: evalCase.id,
           name: evalCase.name,
-          approved: approved?.number ?? null,
-          draft: draft?.number ?? null,
+          version: shown?.number ?? null,
           input: shown ? preview(shown.input) : "",
           expectedOutput: shown?.expectedOutput ? preview(shown.expectedOutput) : null,
           output: first ? (outputs.get(first.id) ?? null) : null,

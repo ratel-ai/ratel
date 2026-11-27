@@ -206,12 +206,7 @@ function suiteColumns(model: SuitePageModel): Column<SuiteRowView>[] {
       header: "Cases",
       align: "right",
       width: "6rem",
-      cell: (row) => (
-        <span title={`${row.approvedCases} approved, ${row.draftCases} drafts`}>
-          {row.approvedCases}
-          {row.draftCases > 0 ? <span className="text-fg-subtle"> +{row.draftCases}</span> : null}
-        </span>
-      ),
+      cell: (row) => <span>{row.cases}</span>,
     },
     {
       id: "score",

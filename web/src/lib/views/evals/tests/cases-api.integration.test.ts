@@ -9,12 +9,11 @@ import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import {
   type CaseEvent,
   type CasesApiDeps,
-  handleApproveCase,
   handleCreateCase,
   handleEditCase,
   handleSaveOptions,
 } from "../cases-api";
-import { approvedVersion, type CaseContent } from "../domain/case";
+import { type CaseContent, currentVersion as currentRow } from "../domain/case";
 import { currentVersion } from "../domain/eval";
 import type { TurnContent } from "../domain/from-turn";
 import type { TaskLinks } from "../ports/task-links";
@@ -102,9 +101,13 @@ async function setup() {
     const { status } = await response;
     return { status, body: await (await response).json() };
   };
-  /** A body with no eval goes to the eval `Refunds`. */
-  const post = (body: unknown, d = deps(), projectId = PROJECT_ID) =>
-    answer(handleCreateCase(request(withEval(body, refunds.id)), projectId, d));
+  /** A body with no eval goes to the eval `Refunds`. The first case of the answer is `made`. */
+  const post = async (body: unknown, d = deps(), projectId = PROJECT_ID) => {
+    const answered = await answer(
+      handleCreateCase(request(withEval(body, refunds.id)), projectId, d),
+    );
+    return { ...answered, made: answered.body.cases?.[0] };
+  };
   /** With no base, the newest version as it is now. */
   const put = async (
     caseId: string,
@@ -114,14 +117,9 @@ async function setup() {
     projectId = PROJECT_ID,
   ) => {
     const newest = base ? null : (await store.get(PROJECT_ID, caseId))?.versions[0];
-    const sent = base ?? {
-      versionId: newest?.id ?? PROJECT_ID,
-      updatedAt: (newest?.updatedAt ?? new Date()).toISOString(),
-    };
+    const sent = base ?? { versionId: newest?.id ?? PROJECT_ID };
     return answer(handleEditCase(request({ ...body, base: sent }), projectId, caseId, d));
   };
-  const approve = (caseId: string, draft: object, d = deps(), projectId = PROJECT_ID) =>
-    answer(handleApproveCase(request(draft), projectId, caseId, d));
   const get = async (caseId: string) => {
     const found = await store.get(PROJECT_ID, caseId);
     assert.ok(found);
@@ -151,7 +149,6 @@ async function setup() {
     deps,
     post,
     put,
-    approve,
     get,
     rows,
     events,
@@ -162,7 +159,8 @@ async function setup() {
 
 function withEval(body: unknown, evalId: string): unknown {
   const isObject = typeof body === "object" && body !== null && !Array.isArray(body);
-  return isObject && !("evalId" in body) && !("newEval" in body) ? { evalId, ...body } : body;
+  const named = isObject && ("evalId" in body || "newEval" in body || "targets" in body);
+  return isObject && !named ? { evalId, ...body } : body;
 }
 
 const request = (body: unknown) =>
@@ -175,10 +173,10 @@ const edit = (over: Partial<CaseContent> = {}) => ({
 
 test("a case from a turn holds the input, the tool fixtures and the source turn", async () => {
   const t = await setup();
-  const { status, body } = await t.post({ turnId: TURN_ID });
+  const { status, made } = await t.post({ turnId: TURN_ID });
   assert.equal(status, 201);
-  const [version] = (await t.get(body.caseId)).versions;
-  assert.equal(version?.state, "draft");
+  const [version] = (await t.get(made.caseId)).versions;
+  assert.deepEqual([made.versionId, made.number], [version?.id, 1]);
   assert.equal(version?.sourceTurnId, TURN_ID);
   assert.equal(version?.sourceOutput, "Refunded.");
   assert.deepEqual(version?.input, { message: "refund A200" });
@@ -190,9 +188,9 @@ test("a case from a turn holds the input, the tool fixtures and the source turn"
 
 test("a case with no trace holds only what the person typed", async () => {
   const t = await setup();
-  const { status, body } = await t.post(edit());
+  const { status, made } = await t.post(edit());
   assert.equal(status, 201);
-  const saved = await t.get(body.caseId);
+  const saved = await t.get(made.caseId);
   assert.equal(saved.name, "Late refund");
   assert.deepEqual(saved.labels, ["task:refunds", "intent:money back"]);
   const [version] = saved.versions;
@@ -223,68 +221,49 @@ test("a turn of another project and a turn with no input give no case", async ()
   assert.equal(status, 422);
 });
 
-test("approve freezes the version, and an edit makes a new draft", async () => {
+test("a new row counts at once, and an edit adds a version that counts", async () => {
   const t = await setup();
-  const { body: made } = await t.post(edit());
-  const approved = await t.approve(made.caseId, made.draft);
-  assert.deepEqual([approved.status, approved.body.state], [200, "approved"]);
-  const [frozen] = await t.rows();
-  assert.equal(frozen?.approved_by, "user_1");
-
+  const { made } = await t.post(edit());
+  assert.equal(currentRow(await t.get(made.caseId))?.number, 1);
+  const [first] = await t.rows();
   const { status, body } = await t.put(made.caseId, edit({ input: { message: "other" } }));
-  assert.deepEqual([status, body.draft.number], [200, 2]);
-  await t.put(made.caseId, edit({ input: { message: "third" } }));
-  assert.equal((await t.approve(made.caseId, made.draft)).status, 409, "it is approved already");
-  const [first, second, ...more] = await t.rows();
-  assert.deepEqual(first, frozen, "the approved version did not change");
-  assert.deepEqual(
-    [second?.state, second?.input, more.length],
-    ["draft", { value: { message: "third" } }, 0],
-  );
-  assert.equal(approvedVersion(await t.get(made.caseId))?.number, 1, "the approved one counts");
-
-  const { draft } = (await t.put(made.caseId, edit({ input: { message: "third" } }))).body;
-  assert.equal((await t.approve(made.caseId, draft)).status, 200);
-  assert.equal(approvedVersion(await t.get(made.caseId))?.number, 2);
-  assert.deepEqual((await t.rows())[0], frozen);
+  assert.deepEqual([status, body.number], [200, 2]);
+  const [kept, second, ...more] = await t.rows();
+  assert.deepEqual(kept, first, "the first version did not change");
+  assert.deepEqual([second?.input, more.length], [{ value: { message: "other" } }, 0]);
+  assert.equal(currentRow(await t.get(made.caseId))?.number, 2, "the newest counts");
 });
 
-test("an edit of the name of an approved case makes no draft", async () => {
+test("an edit of the name only adds no version", async () => {
   const t = await setup();
-  const { body: made } = await t.post(edit());
-  await t.approve(made.caseId, made.draft);
+  const { made } = await t.post(edit());
   const { body } = await t.put(made.caseId, { ...edit(), name: "New name" });
-  assert.equal(body.draft, null);
+  assert.deepEqual([body.versionId, body.number], [made.versionId, 1]);
   assert.equal((await t.get(made.caseId)).name, "New name");
+  assert.equal((await t.rows()).length, 1);
 });
 
-test("a draft that changed after the person read it is not approved", async () => {
+test("a row with no input is refused, on create and on edit", async () => {
   const t = await setup();
-  const { body: made } = await t.post(edit());
-  await t.put(made.caseId, edit({ input: { message: "other" } }));
-  const { status, body } = await t.approve(made.caseId, made.draft);
-  assert.deepEqual([status, body.error], [409, "changed"]);
-  assert.equal((await t.rows())[0]?.state, "draft");
-});
-
-test("a case with no input is not approved", async () => {
-  const t = await setup();
-  const { body: made } = await t.post(edit({ input: null }));
-  const { status, body } = await t.approve(made.caseId, made.draft);
-  assert.deepEqual([status, body.error], [422, "not_ready"]);
+  const created = await t.post(edit({ input: null }));
+  assert.deepEqual([created.status, created.body.error], [422, "no_input"]);
+  const { made } = await t.post(edit());
+  const edited = await t.put(made.caseId, edit({ input: null }));
+  assert.deepEqual([edited.status, edited.body.error], [422, "no_input"]);
+  assert.equal((await t.rows()).length, 1);
 });
 
 test("a case goes into the dataset of the eval that the request names, of its project only", async () => {
   const t = await setup();
   const other = await seedEval(t.db, { name: "Status" });
-  const { status, body } = await t.post({ ...edit(), evalId: other.id });
+  const { status, made } = await t.post({ ...edit(), evalId: other.id });
   assert.equal(status, 201);
-  assert.equal((await t.get(body.caseId)).evalId, other.id);
+  assert.equal((await t.get(made.caseId)).evalId, other.id);
   const fromTurn = await t.post({ turnId: TURN_ID, evalId: other.id });
-  assert.equal((await t.get(fromTurn.body.caseId)).evalId, other.id);
+  assert.equal((await t.get(fromTurn.made.caseId)).evalId, other.id);
   assert.deepEqual(
     (await t.store.list(PROJECT_ID, other.id)).map(({ id }) => id).sort(),
-    [body.caseId, fromTurn.body.caseId].sort(),
+    [made.caseId, fromTurn.made.caseId].sort(),
   );
   assert.deepEqual(await t.store.list(PROJECT_ID, t.refunds.id), []);
 
@@ -293,24 +272,23 @@ test("a case goes into the dataset of the eval that the request names, of its pr
   assert.deepEqual([refused.status, refused.body.error], [404, "not_found"]);
   const missing = await t.post({ ...edit(), evalId: null });
   assert.deepEqual([missing.status, missing.body.error], [400, "invalid"]);
-  assert.match(missing.body.message, /evalId or newEval/);
+  assert.match(missing.body.message, /targets/);
   assert.equal((await t.rows()).length, 2);
 });
 
 test("another project, a stranger, the flag off and a support session change nothing", async () => {
   const t = await setup();
-  const { body: made } = await t.post(edit());
+  const { made } = await t.post(edit());
   const before = await t.rows();
   const all = async (d: CasesApiDeps, projectId = PROJECT_ID) => [
     (await t.post(edit(), d, projectId)).status,
     (await t.put(made.caseId, edit({ input: 1 }), null, d, projectId)).status,
-    (await t.approve(made.caseId, made.draft, d, projectId)).status,
   ];
-  assert.deepEqual(await all(t.deps(), OTHER_PROJECT_ID), [404, 404, 404]);
-  assert.deepEqual(await all(t.deps({ enabled: async () => false })), [404, 404, 404]);
-  assert.deepEqual(await all(t.deps({ getSession: async () => null })), [401, 401, 401]);
+  assert.deepEqual(await all(t.deps(), OTHER_PROJECT_ID), [404, 404]);
+  assert.deepEqual(await all(t.deps({ enabled: async () => false })), [404, 404]);
+  assert.deepEqual(await all(t.deps({ getSession: async () => null })), [401, 401]);
   const restricted = t.deps({ isRestricted: async () => true });
-  assert.deepEqual(await all(restricted), [403, 403, 403]);
+  assert.deepEqual(await all(restricted), [403, 403]);
   assert.equal((await t.post(edit(), restricted)).body.message, SUPPORT_SESSION_RESTRICTED_MESSAGE);
   const other = t.deps({
     findProjectScope: async (projectId) => ({
@@ -320,13 +298,12 @@ test("another project, a stranger, the flag off and a support session change not
     }),
   });
   assert.equal((await t.put(made.caseId, edit(), null, other, OTHER_PROJECT_ID)).status, 404);
-  assert.equal((await t.approve(made.caseId, made.draft, other, OTHER_PROJECT_ID)).status, 404);
   assert.deepEqual(await t.rows(), before);
 });
 
 test("a wrong body and a wrong id are refused", async () => {
   const t = await setup();
-  const made = { versionId: TURN_ID, updatedAt: new Date().toISOString() };
+  const made = { versionId: TURN_ID };
   assert.equal((await t.post({ ...edit(), name: " " })).status, 400);
   assert.equal((await t.post(null)).status, 400);
   assert.equal((await t.post(edit({ expectedOutput: "x".repeat(600_000) }))).status, 400);
@@ -345,40 +322,31 @@ test("a label refers to no row: the tables of cases reference projects, cases an
   ]);
 });
 
-test("the routes of cases are create, edit and approve", () => {
+test("the routes of cases are create and edit: no approve", () => {
   const root = fileURLToPath(new URL("../../../../app/api/projects", import.meta.url));
   const files = readdirSync(join(root, "[projectId]/evals/cases"), { recursive: true })
     .map(String)
     .filter((file) => file.endsWith("route.ts"))
     .sort();
-  assert.deepEqual(files, ["[caseId]/approve/route.ts", "[caseId]/route.ts", "route.ts"]);
+  assert.deepEqual(files, ["[caseId]/route.ts", "route.ts"]);
 });
 
 test("text that looks like JSON stays text", async () => {
   const t = await setup();
   for (const input of ["123", "null", '{"a":1}']) {
-    const { body } = await t.post(edit({ input }));
-    assert.equal((await t.get(body.caseId)).versions[0]?.input, input);
+    const { made } = await t.post(edit({ input }));
+    assert.equal((await t.get(made.caseId)).versions[0]?.input, input);
   }
 });
 
 test("an edit of a form that another person changed is refused", async () => {
   const t = await setup();
-  const { body: made } = await t.post(edit());
-  assert.equal((await t.put(made.caseId, edit({ input: "A" }), made.draft)).status, 200);
-  const stale = await t.put(made.caseId, edit({ input: "B" }), made.draft);
+  const { made } = await t.post(edit());
+  const read = { versionId: made.versionId };
+  assert.equal((await t.put(made.caseId, edit({ input: "A" }), read)).status, 200);
+  const stale = await t.put(made.caseId, edit({ input: "B" }), read);
   assert.deepEqual([stale.status, stale.body.error], [409, "changed"]);
   assert.equal((await t.get(made.caseId)).versions[0]?.input, "A");
-});
-
-test("two edits in the same millisecond have two tokens", async () => {
-  const t = await setup();
-  const now = () => new Date("2026-11-25T10:00:00Z");
-  const { body: made } = await t.post(edit());
-  const a = await t.put(made.caseId, edit({ input: "A" }), made.draft, t.deps({ now }));
-  const b = await t.put(made.caseId, edit({ input: "B" }), a.body.draft, t.deps({ now }));
-  assert.notEqual(a.body.draft.updatedAt, b.body.draft.updatedAt);
-  assert.equal((await t.approve(made.caseId, a.body.draft)).status, 409);
 });
 
 test("NUL is removed before the check, and JSON that is too deep is refused", async () => {
@@ -431,15 +399,15 @@ test("save as eval case: a new eval is created with the task's scorers, then the
   assert.equal(first.status, 201);
   const made = await t.evals.getByName(PROJECT_ID, "Refund an order");
   assert.ok(made);
-  assert.equal(first.body.evalId, made.id);
+  assert.equal(first.made.evalId, made.id);
   assert.equal(made.taskId, "wf-refunds");
   assert.deepEqual(
     currentVersion(made).scorers.map(({ name }) => name),
     ["Calls refund_order"],
   );
   assert.equal(currentVersion(made).sandboxName, "support-demo");
-  const saved = await t.get(first.body.caseId);
-  assert.deepEqual([saved.evalId, saved.versions[0]?.state], [made.id, "draft"]);
+  const saved = await t.get(first.made.caseId);
+  assert.deepEqual([saved.evalId, currentRow(saved)?.number], [made.id, 1]);
   assert.deepEqual(t.events.slice(0, 2), [
     { name: "eval_created", source: "save_case" },
     { name: "eval_case_created", source: "turn" },
@@ -454,10 +422,10 @@ test("save as eval case: a new eval is created with the task's scorers, then the
     taskId: "wf-refunds",
   });
   const second = await t.post({ turnId: TURN_ID, evalId: made.id });
-  assert.equal(second.body.evalId, made.id);
+  assert.equal(second.made.evalId, made.id);
   // A second new eval of the same name is the eval that exists.
   const again = await t.post({ turnId: TURN_ID, newEval: target });
-  assert.equal(again.body.evalId, made.id);
+  assert.equal(again.made.evalId, made.id);
   assert.equal((await t.evals.list(PROJECT_ID)).length, 2);
 });
 
@@ -481,4 +449,52 @@ test("save options: more tasks default to the task of the page, and no task asks
   assert.deepEqual([smoke?.taskId, smoke && currentVersion(smoke).scorers], [null, []]);
   const off = await t.options("", t.deps({ enabled: async () => false }));
   assert.equal(off.status, 404);
+});
+
+test("save options: a task with more evals lets the person choose one", async () => {
+  const t = await setup();
+  const hard = await seedEval(t.db, { name: "Refunds, hard" });
+  await t.client.query("update eval_definitions set task_id = 'wf-refunds'");
+  const { body } = await t.options(`turnId=${TURN_ID}`);
+  assert.deepEqual(body.targets["wf-refunds"], {
+    kind: "choose",
+    taskId: "wf-refunds",
+    evals: [
+      { id: t.refunds.id, name: "Refunds" },
+      { id: hard.id, name: "Refunds, hard" },
+    ],
+  });
+});
+
+test("a turn of two chosen tasks becomes one row in each chosen eval, or no row", async () => {
+  const t = await setup();
+  const status = await seedEval(t.db, { name: "Status" });
+  const { body: options } = await t.options(`turnId=${TURN_ID}`);
+  const { status: code, body } = await t.post({
+    turnId: TURN_ID,
+    targets: [{ evalId: status.id }, { newEval: options.targets["wf-refunds"] }],
+  });
+  assert.equal(code, 201);
+  const made = await t.evals.getByName(PROJECT_ID, "Refund an order");
+  assert.deepEqual(
+    body.cases.map(({ evalId }: { evalId: string }) => evalId),
+    [status.id, made?.id],
+  );
+  for (const { caseId } of body.cases) {
+    assert.equal((await t.get(caseId)).versions[0]?.sourceTurnId, TURN_ID);
+  }
+  // The same eval twice is one row. An eval of another project saves no row.
+  const twice = await t.post({
+    ...edit(),
+    targets: [{ evalId: status.id }, { evalId: status.id }],
+  });
+  assert.equal(twice.body.cases.length, 1);
+  const stranger = await seedEval(t.db, { name: "Theirs", projectId: OTHER_PROJECT_ID });
+  const before = (await t.rows()).length;
+  const refused = await t.post({
+    ...edit(),
+    targets: [{ evalId: status.id }, { evalId: stranger.id }],
+  });
+  assert.deepEqual([refused.status, refused.body.error], [404, "not_found"]);
+  assert.equal((await t.rows()).length, before);
 });

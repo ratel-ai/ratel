@@ -153,13 +153,13 @@ test("the migration puts each case into an eval of its task label and its scorer
     (await cases.list(OTHER_PROJECT_ID)).map(({ evalId }) => evalId),
     [theirs?.id],
   );
-  // The versions of the cases keep their content and their states.
+  // The versions of the cases keep their content.
   const b = await cases.get(PROJECT_ID, ids.B);
   assert.deepEqual(
-    b?.versions.map(({ number, state, input }) => [number, state, input]),
+    b?.versions.map(({ number, input }) => [number, input]),
     [
-      [2, "draft", { message: "refund A200" }],
-      [1, "approved", { message: "refund A200" }],
+      [2, { message: "refund A200" }],
+      [1, { message: "refund A200" }],
     ],
   );
 });

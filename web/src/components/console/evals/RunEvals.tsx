@@ -34,7 +34,7 @@ export function RunEvals({
   return (
     <Section
       title="Run suite"
-      description="Runs each approved case of the chosen evals on your agent. Each trial has a new sandbox instance."
+      description="Runs each case of the chosen evals on your agent. Each trial has a new sandbox instance."
     >
       {version ? (
         <div className="flex flex-col gap-4 rounded-lg border border-line bg-raised p-4">

@@ -86,7 +86,7 @@ test("an edit with the same content is the same version", () => {
   assert.ok(!sameContent(evalContent(), evalContent({ sandboxName: "support-demo" })));
 });
 
-test("a suite freezes the newest version of each eval that can run, and its approved cases", () => {
+test("a suite freezes the newest version of each eval that can run, and the newest version of each row", () => {
   const refunds = definition("e1", "Refunds", [
     version("e1v2", 2, [NO_REFUND, JUDGE]),
     version("e1v1", 1, [NO_REFUND]),
@@ -95,18 +95,20 @@ test("a suite freezes the newest version of each eval that can run, and its appr
   const empty = definition("e3", "Empty", [version("e3v1", 1, [NO_REFUND])]);
   assert.equal(currentVersion(refunds).id, "e1v2");
   const cases = [
-    evalCase("c1", "e1", ["draft", "approved"], ["smoke"]),
-    evalCase("c2", "e1", ["draft"]),
-    evalCase("c3", "e2", ["approved"]),
+    evalCase("c1", "e1", 2, ["smoke"]),
+    evalCase("c2", "e1", 1),
+    evalCase("c3", "e2", 1),
   ];
   const frozen = freezeSuite([refunds, advisory, empty], cases);
   assert.deepEqual(frozen.evalVersions, [
     { evalId: "e1", versionId: "e1v2", number: 2, name: "Refunds", params: {}, trials: 3 },
   ]);
   assert.deepEqual(frozen.caseVersions, [
-    { caseId: "c1", versionId: "c1-1", number: 1, name: "c1", evalId: "e1" },
+    { caseId: "c1", versionId: "c1-2", number: 2, name: "c1", evalId: "e1" },
+    { caseId: "c2", versionId: "c2-1", number: 1, name: "c2", evalId: "e1" },
   ]);
-  assert.deepEqual(frozen.scorerSnapshots, { "c1-1": [NO_REFUND, JUDGE].map(snapshotOf) });
+  const snapshots = [NO_REFUND, JUDGE].map(snapshotOf);
+  assert.deepEqual(frozen.scorerSnapshots, { "c1-2": snapshots, "c2-1": snapshots });
   assert.deepEqual(freezeSuite([refunds], cases, "other").evalVersions, []);
   assert.equal(freezeSuite([refunds], cases, "smoke").caseVersions.length, 1);
 });
@@ -126,13 +128,8 @@ function version(id: string, number: number, scorers: (typeof NO_REFUND)[]) {
   };
 }
 
-/** A case whose versions are, the newest first, in these states. */
-function evalCase(
-  id: string,
-  evalId: string,
-  states: Array<"draft" | "approved">,
-  labels: string[] = [],
-): EvalCase {
+/** A case with this many versions, the newest first. */
+function evalCase(id: string, evalId: string, count: number, labels: string[] = []): EvalCase {
   return {
     id,
     projectId: PROJECT_ID,
@@ -140,16 +137,13 @@ function evalCase(
     name: id,
     labels,
     createdAt: new Date(0),
-    versions: states.map((state, n) => ({
+    versions: Array.from({ length: count }, (_, n) => ({
       ...content(),
-      id: `${id}-${states.length - n}`,
+      id: `${id}-${count - n}`,
       caseId: id,
-      number: states.length - n,
-      state,
+      number: count - n,
       sourceTurnId: null,
       sourceOutput: null,
-      approvedBy: null,
-      approvedAt: null,
       updatedAt: new Date(0),
     })),
   };
