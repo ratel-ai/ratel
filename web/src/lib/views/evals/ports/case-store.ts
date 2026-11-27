@@ -4,7 +4,8 @@ export type NewCase = CaseDetails & {
   projectId: string;
   content: CaseContent;
   createdBy: string;
-  source?: { turnId: string; output: string | null };
+  /** The turn or the sandbox run that the case was saved from. A run has no turn id. */
+  source?: { turnId: string | null; output: string | null };
 };
 
 export type VersionToken = { versionId: string; updatedAt: Date };
