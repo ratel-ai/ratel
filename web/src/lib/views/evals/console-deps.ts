@@ -7,6 +7,8 @@ import { trackServerEvent } from "@/lib/platform/telemetry";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
+import { createTaskLinks } from "./adapters/task-links";
 import type { CasesApiDeps } from "./cases-api";
 import { evalsEnabledForProject } from "./gate";
 import { loadTurnContent } from "./turn-content";
@@ -22,6 +24,8 @@ export const evalsAccess: MemberAccessDeps = {
 export const casesApiDeps: CasesApiDeps = {
   ...evalsAccess,
   cases: () => createDrizzleCaseStore(getDb()),
+  evals: () => createDrizzleEvalStore(getDb()),
+  taskLinks: () => createTaskLinks(),
   readContent: (projectId) => contentOptIn(projectId),
   loadTurn: loadTurnContent,
   readOnlyTools,

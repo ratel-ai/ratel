@@ -8,6 +8,7 @@ import { PairedTrials } from "@/components/console/evals/CompareCase";
 import { CompareView } from "@/components/console/evals/CompareView";
 import { EvalsView } from "@/components/console/evals/EvalsView";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
+import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
 import { TrialPanel } from "@/components/console/evals/TrialPanel";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
@@ -197,6 +198,31 @@ test("the turn page shows the action behind the flag, and the pages are under th
     /evalsEnabledForProject\(project\.id\)\) &&\s*!\(await isRestrictedBySupportSession\(\)\) &&\s*\(await contentOptIn\(project\.id\)\);\s*const saveAction = canSave \? \(?\s*<SaveAsEvalCase/,
   );
   assert.match(source("../(evals)/project/[projectId]/layout.tsx"), /notFound\(\)/);
+});
+
+test("save as eval case is one button on the turn page and on the run panel; the dialog opens on a click", () => {
+  const turn = visibleText(
+    render(createElement(SaveAsEvalCase, { projectId: PROJECT_ID, source: { turnId: "t1" } })),
+  );
+  assert.match(turn, /Save as eval case/);
+  assert.ok(!turn.includes("Create the eval"), "the dialog is closed until a click");
+  const run = visibleText(
+    render(
+      createElement(SaveAsEvalCase, {
+        projectId: PROJECT_ID,
+        label: "Save as case",
+        source: { traceId: null, name: "x", content: { input: "hi", expectedOutput: null } },
+      }),
+    ),
+  );
+  assert.match(run, /Save as case/);
+  const panel = readFileSync(
+    fileURLToPath(
+      new URL("../../../../components/console/sandboxes/SandboxRunOnce.tsx", import.meta.url),
+    ),
+    "utf8",
+  );
+  assert.match(panel, /<SaveAsEvalCase\b[\s\S]*traceId: run\.traceId/);
 });
 
 const gridTrial = (over: Partial<Trial>): Trial => ({

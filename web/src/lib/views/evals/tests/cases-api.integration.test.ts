@@ -5,15 +5,19 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/support-session-policy";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import {
   type CaseEvent,
   type CasesApiDeps,
   handleApproveCase,
   handleCreateCase,
   handleEditCase,
+  handleSaveOptions,
 } from "../cases-api";
 import { approvedVersion, type CaseContent } from "../domain/case";
+import { currentVersion } from "../domain/eval";
 import type { TurnContent } from "../domain/from-turn";
+import type { TaskLinks } from "../ports/task-links";
 import {
   content,
   createEvalsDb,
@@ -47,7 +51,27 @@ async function setup() {
   const { db, client } = await createEvalsDb();
   const refunds = await seedEval(db);
   const store = createDrizzleCaseStore(db);
+  const evals = createDrizzleEvalStore(db);
   const events: CaseEvent[] = [];
+  const tasks: Record<string, Array<{ id: string; name: string }>> = {
+    [TURN_ID]: [{ id: "wf-refunds", name: "Refund an order" }],
+  };
+  const taskLinks: TaskLinks = {
+    tasksOfTurn: async (_projectId, turnId) => tasks[turnId] ?? [],
+    tasksOfTrace: async (_projectId, traceId) => tasks[traceId] ?? [],
+    defaultScorers: async () => [
+      {
+        id: "task-expected_tool",
+        name: "Calls refund_order",
+        gating: true,
+        definition: {
+          kind: "check",
+          config: { path: "tools", op: "contains", value: "refund_order" },
+        },
+      },
+    ],
+    lastSandbox: async () => "support-demo",
+  };
   let reads = 0;
   let clock = Date.parse("2026-11-25T10:00:00Z");
   const deps = (over: Partial<CasesApiDeps> = {}): CasesApiDeps => ({
@@ -59,6 +83,8 @@ async function setup() {
     enabled: async () => true,
     isRestricted: async () => false,
     cases: () => store,
+    evals: () => evals,
+    taskLinks: () => taskLinks,
     readContent: async () => true,
     loadTurn: async (_projectId, turnId) => {
       reads += 1;
@@ -107,10 +133,21 @@ async function setup() {
         "select * from eval_case_versions order by number",
       )
     ).rows;
+  const options = async (query: string, d = deps()) => {
+    const response = await handleSaveOptions(
+      new Request(`http://x/save-target?${query}`),
+      PROJECT_ID,
+      d,
+    );
+    return { status: response.status, body: await response.json() };
+  };
   return {
     client,
     db,
     refunds,
+    evals,
+    tasks,
+    options,
     deps,
     post,
     put,
@@ -125,7 +162,7 @@ async function setup() {
 
 function withEval(body: unknown, evalId: string): unknown {
   const isObject = typeof body === "object" && body !== null && !Array.isArray(body);
-  return isObject && !("evalId" in body) ? { evalId, ...body } : body;
+  return isObject && !("evalId" in body) && !("newEval" in body) ? { evalId, ...body } : body;
 }
 
 const request = (body: unknown) =>
@@ -256,6 +293,7 @@ test("a case goes into the dataset of the eval that the request names, of its pr
   assert.deepEqual([refused.status, refused.body.error], [404, "not_found"]);
   const missing = await t.post({ ...edit(), evalId: null });
   assert.deepEqual([missing.status, missing.body.error], [400, "invalid"]);
+  assert.match(missing.body.message, /evalId or newEval/);
   assert.equal((await t.rows()).length, 2);
 });
 
@@ -354,4 +392,93 @@ test("NUL is removed before the check, and JSON that is too deep is refused", as
     t.deps(),
   );
   assert.equal(response.status, 400);
+});
+
+test("save options: a turn of one task whose eval does not exist yet gets a new eval to confirm", async () => {
+  const t = await setup();
+  const { status, body } = await t.options(`turnId=${TURN_ID}`);
+  assert.equal(status, 200);
+  assert.equal(body.defaultTaskId, "wf-refunds");
+  assert.deepEqual(body.targets["wf-refunds"], {
+    kind: "new",
+    name: "Refund an order",
+    taskId: "wf-refunds",
+    content: {
+      sandboxName: "support-demo",
+      params: {},
+      trials: 3,
+      scorers: [
+        {
+          id: "task-expected_tool",
+          name: "Calls refund_order",
+          gating: true,
+          definition: {
+            kind: "check",
+            config: { path: "tools", op: "contains", value: "refund_order" },
+          },
+        },
+      ],
+    },
+  });
+  assert.deepEqual(body.evals, [{ id: t.refunds.id, name: "Refunds" }]);
+});
+
+test("save as eval case: a new eval is created with the task's scorers, then the next turn joins it", async () => {
+  const t = await setup();
+  const { body: options } = await t.options(`turnId=${TURN_ID}`);
+  const target = options.targets["wf-refunds"];
+  const first = await t.post({ turnId: TURN_ID, newEval: target });
+  assert.equal(first.status, 201);
+  const made = await t.evals.getByName(PROJECT_ID, "Refund an order");
+  assert.ok(made);
+  assert.equal(first.body.evalId, made.id);
+  assert.equal(made.taskId, "wf-refunds");
+  assert.deepEqual(
+    currentVersion(made).scorers.map(({ name }) => name),
+    ["Calls refund_order"],
+  );
+  assert.equal(currentVersion(made).sandboxName, "support-demo");
+  const saved = await t.get(first.body.caseId);
+  assert.deepEqual([saved.evalId, saved.versions[0]?.state], [made.id, "draft"]);
+  assert.deepEqual(t.events.slice(0, 2), [
+    { name: "eval_created", source: "save_case" },
+    { name: "eval_case_created", source: "turn" },
+  ]);
+
+  // The eval exists now: the next save of a turn of the task goes into it.
+  const { body: next } = await t.options(`turnId=${TURN_ID}`);
+  assert.deepEqual(next.targets["wf-refunds"], {
+    kind: "existing",
+    evalId: made.id,
+    name: "Refund an order",
+    taskId: "wf-refunds",
+  });
+  const second = await t.post({ turnId: TURN_ID, evalId: made.id });
+  assert.equal(second.body.evalId, made.id);
+  // A second new eval of the same name is the eval that exists.
+  const again = await t.post({ turnId: TURN_ID, newEval: target });
+  assert.equal(again.body.evalId, made.id);
+  assert.equal((await t.evals.list(PROJECT_ID)).length, 2);
+});
+
+test("save options: more tasks default to the task of the page, and no task asks for a name", async () => {
+  const t = await setup();
+  const trace = "a".repeat(32);
+  t.tasks[trace] = [
+    { id: "wf-refunds", name: "Refund an order" },
+    { id: "wf-status", name: "Track an order" },
+  ];
+  assert.equal((await t.options(`traceId=${trace}`)).body.defaultTaskId, null);
+  assert.equal(
+    (await t.options(`traceId=${trace}&task=wf-status`)).body.defaultTaskId,
+    "wf-status",
+  );
+  const none = await t.options(`traceId=${"b".repeat(32)}`);
+  assert.deepEqual([none.body.tasks, none.body.defaultTaskId, none.body.targets], [[], null, {}]);
+  const named = await t.post({ ...edit(), newEval: { name: "Smoke", taskId: null } });
+  assert.equal(named.status, 201);
+  const smoke = await t.evals.getByName(PROJECT_ID, "Smoke");
+  assert.deepEqual([smoke?.taskId, smoke && currentVersion(smoke).scorers], [null, []]);
+  const off = await t.options("", t.deps({ enabled: async () => false }));
+  assert.equal(off.status, 404);
 });

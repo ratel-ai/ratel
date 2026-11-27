@@ -74,11 +74,14 @@ export default async function TurnTracePage({
         { operation: "trace_turn_test" },
       )
     : null;
+  const pageTask = Array.isArray(search.task) ? search.task[0] : search.task;
   const canSave =
     (await evalsEnabledForProject(project.id)) &&
     !(await isRestrictedBySupportSession()) &&
     (await contentOptIn(project.id));
-  const saveAction = canSave ? <SaveAsEvalCase projectId={project.id} turnId={turnId} /> : null;
+  const saveAction = canSave ? (
+    <SaveAsEvalCase projectId={project.id} source={{ turnId }} pageTaskId={pageTask ?? null} />
+  ) : null;
   const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
   const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (

@@ -22,6 +22,7 @@ import {
   paramDraftOf,
   paramsOfDraft,
 } from "@/lib/views/sandboxes/run-form";
+import { SaveAsEvalCase } from "../evals/SaveAsEvalCase";
 import { ParamControl } from "./ParamControl";
 
 const POLL_MS = 1_500;
@@ -293,7 +294,15 @@ function RunResult({
         <span className="text-xs text-fg-subtle">{formatRelativeTime(run.createdAt, now)}</span>
         {canSave && result?.status === "completed" ? (
           <span className="ml-auto">
-            <SaveAsCase projectId={projectId} run={run} />
+            <SaveAsEvalCase
+              projectId={projectId}
+              label="Save as case"
+              source={{
+                traceId: run.traceId,
+                name: caseNameOf(run.input),
+                content: { input: run.input, expectedOutput: expectedOutputOf(run.result?.output) },
+              }}
+            />
           </span>
         ) : null}
       </div>
@@ -350,49 +359,6 @@ function RunResult({
         </pre>
       </Disclosure>
     </div>
-  );
-}
-
-/** Saves the run as a draft case: its input, and its output as the expected output. */
-function SaveAsCase({ projectId, run }: { projectId: string; run: RunRow }) {
-  const router = useRouter();
-  const [pending, setPending] = useState(false);
-
-  async function save() {
-    setPending(true);
-    const failed = (description: string) => {
-      setPending(false);
-      toast({ title: "The case was not saved", description, tone: "danger" });
-    };
-    try {
-      const response = await fetch(`/api/projects/${projectId}/evals/cases`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: caseNameOf(run.input),
-          labels: [],
-          content: {
-            input: run.input,
-            expectedOutput: expectedOutputOf(run.result?.output),
-            scorers: [],
-          },
-        }),
-      });
-      const body = (await response.json().catch(() => ({}))) as {
-        caseId?: string;
-        message?: string;
-      };
-      if (response.ok && body.caseId) router.push(caseHref(projectId, body.caseId));
-      else failed(body.message ?? "Try again.");
-    } catch {
-      failed("Try again.");
-    }
-  }
-
-  return (
-    <Button size="sm" variant="secondary" onClick={save} disabled={pending}>
-      {pending ? "Saving…" : "Save as case"}
-    </Button>
   );
 }
 
