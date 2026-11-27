@@ -17,7 +17,7 @@ import { ORGANIZATION_ID, PROJECT_ID } from "./support";
  * Migration 0067 (decision `datasets-first-class`): each existing eval gets one fixed dataset, with
  * the id and the name of the eval, and its rows. A run from before still opens.
  */
-const MIGRATION = "0067_eval_datasets.sql";
+const MIGRATION = "0068_eval_datasets.sql";
 const REFUNDS = "e0000000-0000-4000-8000-000000000000";
 const STATUS = "e1000000-0000-4000-8000-000000000000";
 const CASE = "a0000000-0000-4000-8000-000000000000";
