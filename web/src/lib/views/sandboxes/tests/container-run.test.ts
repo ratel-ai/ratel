@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { runContainer } from "../container-run";
 import type { RatelYaml } from "../domain/config";
+import { MAX_RESPONSE_BYTES } from "../domain/contract";
 import { startVmSession } from "../vm-session";
 import { scriptAgent } from "./fake-agent";
 import { createFakeProvider } from "./fake-provider";
@@ -95,4 +96,22 @@ test("a container that does not start names the error of Docker, not its help li
   const message = ran.answer.ok ? "" : ran.answer.error.message;
   assert.match(message, /Error response from daemon: failed to resolve reference/);
   assert.doesNotMatch(message, /--help/);
+});
+
+test("an HTTP answer over the cap is too_large, and the VM sends at most the cap", async () => {
+  const body = JSON.stringify({ output: "x".repeat(MAX_RESPONSE_BYTES) });
+  const { ran, commands } = await runIn({ answer: { status: 200, body } });
+  assert.equal(!ran.answer.ok && ran.answer.error.code, "too_large");
+  const call = commands.find((command) => command.includes("/ratel/run")) ?? "";
+  assert.match(call, new RegExp(`head -c ${MAX_RESPONSE_BYTES + 1}`));
+});
+
+test("a command answer over the cap is too_large, and the VM sends at most the cap", async () => {
+  const stdout = "y".repeat(MAX_RESPONSE_BYTES + 1);
+  const { ran, commands } = await runIn({ command: { exitCode: 0, stdout } }, COMMAND_CONFIG);
+  assert.equal(!ran.answer.ok && ran.answer.error.code, "too_large");
+  const call = commands.find((command) => command.startsWith("docker create")) ?? "";
+  assert.match(call, new RegExp(`head -c ${MAX_RESPONSE_BYTES + 1}`));
+  // The stderr of the command (the logs) is cut on the VM too.
+  assert.match(call, /tail -c \d+/);
 });

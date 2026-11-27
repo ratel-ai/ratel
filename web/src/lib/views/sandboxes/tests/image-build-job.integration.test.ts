@@ -18,6 +18,7 @@ import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { sandboxProvider, sandboxProviderConfigured } from "../adapters/provider-from-env";
 import type { RatelYaml } from "../domain/config";
+import { MAX_RESPONSE_BYTES } from "../domain/contract";
 import { snapshotName } from "../domain/snapshot-name";
 import { bundleKey, versionView } from "../domain/version";
 import {
@@ -54,6 +55,8 @@ const KEY = Buffer.alloc(32, 7);
 const SECRET = "sk-live-secret-5521"; // gitleaks:allow (fake test value)
 const ENV_FILE = "/tmp/ratel-smoke-env";
 const REQUEST_FILE = "/tmp/ratel-smoke-request.json";
+const EXIT_FILE = "/tmp/ratel-smoke-exit";
+const STDERR_FILE = "/tmp/ratel-smoke-stderr";
 const IMAGE_FILE = "/home/user/image.tar";
 
 type Setup = {
@@ -478,7 +481,7 @@ test("command mode: the request goes on stdin, and stdout text is the output", a
     t
       .commands()
       .includes(
-        `docker create -i --name smoke-${t.version.id} --env-file ${ENV_FILE} ${tag} 'node' 'agent.js' '--it'\\''s' >/dev/null; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; timeout 30 docker start -ai smoke-${t.version.id} < ${REQUEST_FILE}; code=$?; rm -f ${REQUEST_FILE}; exit $code`,
+        `docker create -i --name smoke-${t.version.id} --env-file ${ENV_FILE} ${tag} 'node' 'agent.js' '--it'\\''s' >/dev/null; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; { timeout 30 docker start -ai smoke-${t.version.id} < ${REQUEST_FILE} 2> ${STDERR_FILE}; echo $? > ${EXIT_FILE}; } | head -c ${MAX_RESPONSE_BYTES + 1}; code=$(cat ${EXIT_FILE} 2>/dev/null || echo 1); tail -c ${256 * 1024} ${STDERR_FILE} >&2 2>/dev/null; rm -f ${REQUEST_FILE} ${EXIT_FILE} ${STDERR_FILE}; exit $code`,
       ),
   );
   const vmRef = t.provider.starts[1]?.vmRef ?? "";
