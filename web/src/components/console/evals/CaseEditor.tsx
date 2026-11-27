@@ -5,15 +5,15 @@ import { Button } from "@ratel/design-system/button";
 import { Field, Input, Textarea } from "@ratel/design-system/input";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
+import { Select } from "@ratel/design-system/select";
 import { Callout } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { CaseScorer } from "@/lib/views/evals/domain/case";
 import type { CaseEditorModel, CaseVersionView } from "@/lib/views/evals/page-model";
 import { caseHref, evalsHref } from "@/lib/views/evals/paths";
-import { ScorerFields, scorerSentence } from "./ScorerFields";
+import { scorerSentence } from "./ScorerFields";
 
 const JSON_FIELDS = [
   ["input", "Input (JSON)", 4],
@@ -36,14 +36,15 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
     toolFixtures: show(start?.toolFixtures ?? []),
   });
   const [expectedOutput, setExpectedOutput] = useState(start?.expectedOutput ?? "");
-  const [scorers, setScorers] = useState<CaseScorer[]>(start?.scorers ?? []);
+  const [evalId, setEvalId] = useState(model.evalId ?? model.evals[0]?.id ?? "");
+  const scorers = model.evals.find(({ id }) => id === evalId)?.scorers ?? [];
   const [errors, setErrors] = useState<Partial<Record<JsonField, string>>>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   /** The saved draft, or null when there is nothing to approve. */
   async function save(): Promise<{ caseId: string; draft: Draft | null } | null> {
-    const content: Record<string, unknown> = { expectedOutput: expectedOutput || null, scorers };
+    const content: Record<string, unknown> = { expectedOutput: expectedOutput || null };
     const wrong: Partial<Record<JsonField, string>> = {};
     for (const [field] of JSON_FIELDS) {
       try {
@@ -57,7 +58,12 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
     return send(
       model.id ? "PUT" : "POST",
       `/api/projects/${projectId}/evals/cases${model.id ? `/${model.id}` : ""}`,
-      { name, labels: labelsOf(labels), content, ...(base ? { base } : {}) },
+      {
+        name,
+        labels: labelsOf(labels),
+        content,
+        ...(base ? { base } : { evalId }),
+      },
     );
   }
 
@@ -132,6 +138,19 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
         ) : null}
         <Status projectId={projectId} approved={approved} draft={draft} />
         <Section title="Case">
+          {model.id ? null : (
+            <Field label="Eval (its dataset gets the case)" className="w-full max-w-2xl">
+              {() => (
+                <Select
+                  aria-label="Eval"
+                  value={evalId}
+                  onValueChange={setEvalId}
+                  options={model.evals.map(({ id, name }) => ({ value: id, label: name }))}
+                  disabled={!canEdit}
+                />
+              )}
+            </Field>
+          )}
           <Field label="Name" className="w-full max-w-2xl">
             {(control) => (
               <Input
@@ -189,7 +208,17 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
             )}
           </Field>
         </Section>
-        <ScorerFields scorers={scorers} onChange={setScorers} canEdit={canEdit} />
+        <Section title="Scorers" description="The scorers of the eval score each case of it.">
+          {scorers.length > 0 ? (
+            <ul className="text-ui text-fg-muted">
+              {scorers.map((scorer) => (
+                <li key={scorer.id}>{scorerSentence(scorer)}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-ui text-fg-muted">The eval has no scorer.</p>
+          )}
+        </Section>
         {draft && approved ? <Frozen version={approved} /> : null}
       </PageBody>
     </Page>
@@ -239,11 +268,6 @@ function Frozen({ version }: { version: CaseVersionView }) {
       <pre className="max-h-60 max-w-2xl overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
         {show(version.input)}
       </pre>
-      <ul className="text-ui text-fg-muted">
-        {version.scorers.map((scorer) => (
-          <li key={scorer.id}>{scorerSentence(scorer)}</li>
-        ))}
-      </ul>
     </Section>
   );
 }

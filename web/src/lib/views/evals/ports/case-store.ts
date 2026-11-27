@@ -2,6 +2,8 @@ import type { CaseContent, CaseDetails, EvalCase } from "../domain/case";
 
 export type NewCase = CaseDetails & {
   projectId: string;
+  /** The eval whose dataset gets the case. */
+  evalId: string;
   content: CaseContent;
   createdBy: string;
   /** The turn or the sandbox run that the case was saved from. A run has no turn id. */
@@ -14,11 +16,11 @@ export type ApproveResult = "approved" | "not_found" | "changed";
 
 /** The cases of a project. No method changes an approved version. */
 export interface CaseStore {
-  /** Adds a case with one draft. */
-  create(input: NewCase): Promise<EvalCase>;
+  /** Adds a case with one draft. `eval_not_found`: the project has no such eval. */
+  create(input: NewCase): Promise<EvalCase | "eval_not_found">;
   get(projectId: string, caseId: string): Promise<EvalCase | null>;
-  /** The newest first. */
-  list(projectId: string): Promise<EvalCase[]>;
+  /** The newest first. With an eval, only its dataset. */
+  list(projectId: string, evalId?: string): Promise<EvalCase[]>;
   /** Writes the draft, or a new draft when there is none and the content differs. */
   saveDraft(
     projectId: string,

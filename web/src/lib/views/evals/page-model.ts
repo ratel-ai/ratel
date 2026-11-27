@@ -12,6 +12,7 @@ import {
   type ScorerDifference,
   type Verdict,
 } from "./domain/compare";
+import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
 import {
   type Counts,
   countTrials,
@@ -53,9 +54,15 @@ export type CaseEditorModel = {
   id: string | null;
   name: string;
   labels: string[];
+  /** The eval whose dataset has the case. Null for a new case: the person chooses it. */
+  evalId: string | null;
+  /** The evals of the project, with the scorers of their newest version. */
+  evals: EvalOption[];
   approved: CaseVersionView | null;
   draft: CaseVersionView | null;
 };
+
+export type EvalOption = { id: string; name: string; scorers: EvalScorer[] };
 
 export type CaseEditor = Pick<Member, "projectId"> & { canEdit: boolean };
 
@@ -103,6 +110,7 @@ export function preview(value: unknown): string {
 export function caseEditorModel(
   { projectId, canEdit }: CaseEditor,
   evalCase: EvalCase | null,
+  evals: readonly EvalDefinition[],
 ): CaseEditorModel {
   return {
     projectId,
@@ -110,6 +118,12 @@ export function caseEditorModel(
     id: evalCase?.id ?? null,
     name: evalCase?.name ?? "",
     labels: evalCase?.labels ?? [],
+    evalId: evalCase?.evalId ?? null,
+    evals: evals.map((definition) => ({
+      id: definition.id,
+      name: definition.name,
+      scorers: currentVersion(definition).scorers,
+    })),
     approved: versionView(evalCase && approvedVersion(evalCase)),
     draft: versionView(evalCase && draftVersion(evalCase)),
   };

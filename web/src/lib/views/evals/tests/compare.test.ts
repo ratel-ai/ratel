@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CaseScorer } from "../domain/case";
 import {
   type ComparedRun,
   changedCases,
@@ -8,13 +7,14 @@ import {
   otherCases,
   VERDICT_RULE,
 } from "../domain/compare";
+import type { EvalScorer } from "../domain/eval";
 import { type ScorerResult, snapshotOf, type TrialResult } from "../domain/score";
 import { NO_REFUND } from "./support";
 
 type Side = {
   results: Array<TrialResult | null>;
   number?: number;
-  scorers?: CaseScorer[];
+  scorers?: EvalScorer[];
   name?: string;
   /** The judge model of each trial. */
   models?: string[];
@@ -152,7 +152,7 @@ test("the version of each side is reported", () => {
 });
 
 test("other scorers are refused, and the scorers that differ are named", () => {
-  const changed: CaseScorer = {
+  const changed: EvalScorer = {
     ...NO_REFUND,
     definition: { kind: "check", config: { path: "tools", op: "eq", value: "refund_order" } },
   };
@@ -185,7 +185,7 @@ test("other scorers are refused, and the scorers that differ are named", () => {
 
 test("a message with many scorers names the first ones and counts the others", () => {
   const ids = Array.from({ length: 30 }, (_, index) => `case-${10 + index}`);
-  const side = (scorers: CaseScorer[]) =>
+  const side = (scorers: EvalScorer[]) =>
     Object.fromEntries(ids.map((id) => [id, { ...PASS, scorers }]));
   const refusal = compare(
     run("base", side([NO_REFUND])),
@@ -235,7 +235,7 @@ test("the same two experiments always give the same result, in any order of the 
   assert.deepEqual(compare(mixed(baseline, "base"), mixed(candidate, "next")), first);
 });
 
-const JUDGE: CaseScorer = {
+const JUDGE: EvalScorer = {
   id: "judge",
   name: "Polite",
   gating: true,
@@ -268,7 +268,7 @@ test("the same judge model, and a judge with no answer, are compared", () => {
 });
 
 test("two judges of a case can have two models, also with new ids", () => {
-  const other: CaseScorer = {
+  const other: EvalScorer = {
     ...JUDGE,
     id: "other",
     name: "Short",

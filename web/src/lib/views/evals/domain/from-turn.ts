@@ -59,7 +59,6 @@ export function caseFromTurn(
           result: call.result ?? null,
         })),
       expectedOutput: null,
-      scorers: [],
     },
     sourceOutput:
       (conversation?.answer ?? own.findLast(({ role }) => role === "assistant")?.text)?.slice(

@@ -17,6 +17,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { storable } from "@/lib/platform/storable";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import {
   type ComparisonResult,
@@ -28,13 +29,20 @@ import { baselineDeps } from "@/lib/views/evals/baseline-deps";
 import {
   approvalProblem,
   approvedVersion,
-  type CaseContent,
   type CaseVersion,
   caseContentSchema,
   draftVersion,
   type EvalCase,
 } from "@/lib/views/evals/domain/case";
 import { type CompareRefusal, type Comparison, compare } from "@/lib/views/evals/domain/compare";
+import {
+  currentVersion,
+  type EvalDefinition,
+  type EvalScorer,
+  evalContentSchema,
+  MAX_EVAL_NAME_CHARS,
+  runProblem,
+} from "@/lib/views/evals/domain/eval";
 import {
   countTrials,
   DEFAULT_TRIALS,
@@ -53,6 +61,7 @@ import {
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
 import type { ApproveResult, NewCase } from "@/lib/views/evals/ports/case-store";
+import type { NewEval } from "@/lib/views/evals/ports/eval-store";
 import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
 
 /**
@@ -71,7 +80,9 @@ export interface EvalsOperationDeps {
   /** The newest first. */
   listCases(projectId: string): Promise<EvalCase[]>;
   getCase(projectId: string, caseId: string): Promise<EvalCase | null>;
-  createCase(input: NewCase): Promise<EvalCase>;
+  createCase(input: NewCase): Promise<EvalCase | "eval_not_found">;
+  getEvalByName(projectId: string, name: string): Promise<EvalDefinition | null>;
+  createEval(input: NewEval): Promise<EvalDefinition | "name_taken">;
   approveCase(
     projectId: string,
     caseId: string,
@@ -118,6 +129,8 @@ const defaultDeps: EvalsOperationDeps = {
   listCases: (projectId) => createDrizzleCaseStore(getDb()).list(projectId),
   getCase: (projectId, caseId) => createDrizzleCaseStore(getDb()).get(projectId, caseId),
   createCase: (input) => createDrizzleCaseStore(getDb()).create(input),
+  getEvalByName: (projectId, name) => createDrizzleEvalStore(getDb()).getByName(projectId, name),
+  createEval: (input) => createDrizzleEvalStore(getDb()).create(input),
   approveCase: (projectId, caseId, draft, by) =>
     createDrizzleCaseStore(getDb()).approve(projectId, caseId, draft, by),
   startExperiment: (subject, start) => startExperiment(subject, start, experimentDeps()),
@@ -252,7 +265,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Create an eval case",
       description:
-        "Use this tool to save an input as an eval case. This tool changes data: it adds a draft case. Give sandboxRunId to copy the input and the answer of a sandbox run. It returns the case id, the draft version number and the state. A case needs a gating scorer before approval.",
+        "Use this tool to save an input as a case in the dataset of an eval. This tool changes data: it adds a draft case. When the eval does not exist, it creates the eval with the scorers that you give. Give sandboxRunId to copy the input and the answer of a sandbox run. It returns the case id, the eval id, the draft version number and the state. An eval runs only with a gating scorer.",
       keywords: ["evals", "save as case", "new case"],
       scope: "project",
       mutates: true,
@@ -265,6 +278,12 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .min(1)
           .max(200)
           .describe("A short name that says what the case tests."),
+        eval: z
+          .string()
+          .trim()
+          .min(1)
+          .max(MAX_EVAL_NAME_CHARS)
+          .describe("The name of the eval whose dataset gets the case."),
         labels: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
         sandboxRunId: uuidParam()
           .optional()
@@ -282,7 +301,9 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .array(scorerParam)
           .max(20)
           .optional()
-          .describe("The scorers. A trial passes when every gating scorer passes."),
+          .describe(
+            "The scorers of the eval, used only when the eval does not exist. A trial passes when every gating scorer passes.",
+          ),
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
@@ -296,33 +317,33 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           ]);
         }
         const content = caseContentSchema.safeParse(
-          storable({
-            input,
-            expectedOutput: params.expectedOutput ?? null,
-            scorers: (params.scorers ?? []).map(caseScorer),
-          }),
+          storable({ input, expectedOutput: params.expectedOutput ?? null }),
         );
         if (!content.success) throw contentRefusal(content.error);
+        const target = await evalNamed(deps, ctx, params.eval, params.scorers ?? []);
         const created = await deps.createCase({
           projectId: ctx.projectId,
+          evalId: target.id,
           name: params.name,
           labels: [...new Set(params.labels ?? [])],
           content: content.data,
           createdBy: requester(ctx.auth),
           ...(source ? { source: { turnId: null, output: source.output } } : {}),
         });
+        if (created === "eval_not_found") throw notFound("eval");
         const draft = draftVersion(created);
-        const problem = approvalProblem(content.data);
+        const problem = approvalProblem(content.data) ?? runProblem(currentVersion(target));
         return {
           data: {
             caseId: created.id,
+            evalId: target.id,
             name: created.name,
             draftVersion: draft?.number ?? null,
             state: "draft",
             ...(problem ? { approvalProblem: problem } : {}),
           },
           hint: problem
-            ? `${problem} The case is saved as a draft. Create the case again with a gating scorer.`
+            ? `${problem} The case is saved as a draft.`
             : `Call evals_approve_case with caseId "${created.id}" to make the case count in an eval run.`,
         };
       },
@@ -686,14 +707,6 @@ function versionView(version: CaseVersion, readable: boolean) {
     sourceOutput: readable ? version.sourceOutput : null,
     earlierTurns: readable ? version.earlierTurns.length : 0,
     toolFixtures: version.toolFixtures.length,
-    scorers: version.scorers.map(({ name, gating, definition }) => ({
-      name,
-      gating,
-      kind: definition.kind,
-      ...(definition.kind === "check"
-        ? { check: definition.config }
-        : { question: readable ? definition.config.prompt : null }),
-    })),
     approvedAt: version.approvedAt?.toISOString() ?? null,
     updatedAt: version.updatedAt.toISOString(),
   };
@@ -716,7 +729,32 @@ async function runSource(deps: EvalsOperationDeps, projectId: string, runId: str
   };
 }
 
-function caseScorer(scorer: z.output<typeof scorerParam>): CaseContent["scorers"][number] {
+/** The eval with this name. When there is none, a new eval with these scorers. */
+async function evalNamed(
+  deps: EvalsOperationDeps,
+  ctx: Pick<OperationContext, "auth" | "projectId">,
+  name: string,
+  scorers: readonly z.output<typeof scorerParam>[],
+): Promise<EvalDefinition> {
+  const found = await deps.getEvalByName(ctx.projectId, name);
+  if (found) return found;
+  const content = evalContentSchema.safeParse({ scorers: scorers.map(evalScorer) });
+  if (!content.success) throw contentRefusal(content.error);
+  const created = await deps.createEval({
+    projectId: ctx.projectId,
+    name,
+    taskId: null,
+    content: content.data,
+    createdBy: requester(ctx.auth),
+  });
+  if (created !== "name_taken") return created;
+  // Another call made it at the same time.
+  const made = await deps.getEvalByName(ctx.projectId, name);
+  if (!made) throw notFound("eval");
+  return made;
+}
+
+function evalScorer(scorer: z.output<typeof scorerParam>): EvalScorer {
   const base = { id: randomUUID(), name: scorer.name, gating: scorer.gating };
   if (scorer.kind === "judge") {
     return {
@@ -750,6 +788,7 @@ const START_REFUSAL = {
   no_cases: "conflict",
   too_many_running: "quota_exceeded",
   too_many_trials: "invalid_params",
+  invalid_params: "invalid_params",
 } as const;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {

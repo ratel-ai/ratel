@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CheckConfig } from "@/lib/contracts/check";
-import type { CaseScorer } from "../domain/case";
+import type { EvalScorer } from "../domain/eval";
 import {
   checkTrial,
   definitionHash,
@@ -25,7 +25,7 @@ const trial = (over: Partial<TrialRecord> = {}): TrialRecord => ({
   outputTokens: 20,
   ...over,
 });
-const judge = (gating: boolean): CaseScorer => ({
+const judge = (gating: boolean): EvalScorer => ({
   id: "j",
   name: "Polite",
   gating,
@@ -43,7 +43,7 @@ const refused: JudgeOutcome = {
   code: "refused_budget",
   reason: "The judge budget of this organization for today (100 USD) is used.",
 };
-const score = (scorer: CaseScorer, outcome: JudgeOutcome) =>
+const score = (scorer: EvalScorer, outcome: JudgeOutcome) =>
   scoreTrial(trial(), [NO_REFUND, scorer], new Map([["j", outcome]]));
 
 const CHECKS: [string, CheckConfig, "pass" | "fail"][] = [

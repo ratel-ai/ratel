@@ -8,7 +8,7 @@ import {
 } from "@/lib/contracts/check";
 import { runCheck } from "@/lib/views/scorers/check";
 import type { ScorerDefinition, ScorerTrace } from "@/lib/views/scorers/types";
-import type { CaseScorer } from "./case";
+import type { EvalScorer } from "./eval";
 
 /** What one trial did: what the scorers read. */
 export type TrialRecord = {
@@ -46,7 +46,7 @@ export type TrialScore = {
 };
 
 /** A scorer as an experiment keeps it. */
-export type ScorerSnapshot = CaseScorer & { hash: string };
+export type ScorerSnapshot = EvalScorer & { hash: string };
 
 /**
  * The result of a trial from its scorers. A gating scorer that fails makes it `fail`. Otherwise a
@@ -54,7 +54,7 @@ export type ScorerSnapshot = CaseScorer & { hash: string };
  */
 export function scoreTrial(
   trial: TrialRecord,
-  scorers: readonly CaseScorer[],
+  scorers: readonly EvalScorer[],
   judged: ReadonlyMap<string, JudgeOutcome>,
 ): TrialScore {
   const results = scorers.map((scorer) => scoreOne(trial, scorer, judged.get(scorer.id)));
@@ -75,7 +75,7 @@ export function definitionHash(definition: ScorerDefinition): string {
   return createHash("sha256").update(canonical(definition)).digest("hex");
 }
 
-export function snapshotOf(scorer: CaseScorer): ScorerSnapshot {
+export function snapshotOf(scorer: EvalScorer): ScorerSnapshot {
   return { ...scorer, hash: definitionHash(scorer.definition) };
 }
 
@@ -109,7 +109,7 @@ const SHOWN_CHARS = 300;
 
 function scoreOne(
   trial: TrialRecord,
-  { id, name, gating, definition }: CaseScorer,
+  { id, name, gating, definition }: EvalScorer,
   judged: JudgeOutcome | undefined,
 ): ScorerResult {
   const base = { scorerId: id, name, kind: definition.kind, gating };

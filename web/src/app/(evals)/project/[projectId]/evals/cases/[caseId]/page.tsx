@@ -7,6 +7,7 @@ import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { caseEditorModel } from "@/lib/views/evals/page-model";
 
@@ -33,17 +34,19 @@ export default async function EvalCasePage({
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const found = UUID.test(caseId)
-    ? await withFeatureSpan(
-        "evals",
-        "load_case",
-        () => createDrizzleCaseStore(getDb()).get(project.id, caseId),
-        { attributes: { "project.id": project.id } },
-      )
-    : null;
+  const [found, evals] = await withFeatureSpan(
+    "evals",
+    "load_case",
+    () =>
+      Promise.all([
+        UUID.test(caseId) ? createDrizzleCaseStore(getDb()).get(project.id, caseId) : null,
+        createDrizzleEvalStore(getDb()).list(project.id),
+      ]),
+    { attributes: { "project.id": project.id } },
+  );
   if (!found && caseId !== "new") notFound();
   const canEdit = !(await isRestrictedBySupportSession());
-  const model = caseEditorModel({ projectId: project.id, canEdit }, found);
+  const model = caseEditorModel({ projectId: project.id, canEdit }, found, evals);
   // Another draft is another form.
   return <CaseEditor key={model.draft?.id ?? model.approved?.id ?? "new"} model={model} />;
 }

@@ -12,7 +12,7 @@ import { refusedParam } from "@/lib/views/sandboxes/run-form";
 import { type CaseVersion, runInputOf } from "./domain/case";
 import {
   type Experiment,
-  freezeCases,
+  freezeSuite,
   MAX_EXPERIMENT_TRIALS,
   type Trial,
   type TrialOutcome,
@@ -21,6 +21,7 @@ import {
 import { type JudgeOutcome, scoreTrial, type TrialRecord } from "./domain/score";
 import { type JudgeDeps, judgeTrial } from "./judge";
 import type { CaseStore } from "./ports/case-store";
+import type { EvalStore } from "./ports/eval-store";
 import type { ExperimentStore } from "./ports/experiment-store";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
@@ -39,6 +40,7 @@ export type SandboxPort = {
 export type ExperimentDeps = {
   experiments: ExperimentStore;
   cases: Pick<CaseStore, "list">;
+  evals: Pick<EvalStore, "list">;
   sandboxes: SandboxPort;
   judge: JudgeDeps;
   now: () => Date;
@@ -78,7 +80,7 @@ const LATEST_OF = 100;
 
 const logger = getLogger("evals/experiments");
 
-/** Freezes the approved cases and their scorers. The trials start with `advanceExperiment`. */
+/** Freezes the evals, their approved cases and their scorers. The trials start with `advanceExperiment`. */
 export async function startExperiment(
   subject: UsageSubject,
   { sandboxVersion, trialsPerCase, params, startedBy, label, name }: StartExperiment,
@@ -99,11 +101,18 @@ export async function startExperiment(
   }
   const refusal = refusedParam(version.params, params);
   if (refusal) return refused("invalid_params", refusal);
-  const frozen = freezeCases(await deps.cases.list(projectId), label ?? null);
+  const [evals, allCases] = await Promise.all([
+    deps.evals.list(projectId),
+    deps.cases.list(projectId),
+  ]);
+  const frozen = freezeSuite(evals, allCases, label ?? null);
   const cases = frozen.caseVersions.length;
   if (cases === 0) {
     return label === undefined
-      ? refused("no_cases", "No case is approved. Approve one first.")
+      ? refused(
+          "no_cases",
+          "No eval has an approved case and a gating scorer. Approve a case first.",
+        )
       : refused("no_cases", `No approved case has the label ${label}.`);
   }
   if (cases * trialsPerCase > MAX_EXPERIMENT_TRIALS) {

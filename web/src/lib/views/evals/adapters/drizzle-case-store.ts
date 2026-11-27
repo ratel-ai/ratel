@@ -4,7 +4,7 @@ import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
 import type { CaseContent, CaseVersion, EvalCase, VersionState } from "../domain/case";
 import type { CaseStore } from "../ports/case-store";
-import { evalCases, evalCaseVersions } from "../schema";
+import { evalCases, evalCaseVersions, evalDefinitions } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
 type CaseRow = typeof evalCases.$inferSelect;
@@ -12,12 +12,19 @@ type VersionRow = typeof evalCaseVersions.$inferSelect;
 
 export function createDrizzleCaseStore(db: Db): CaseStore {
   return {
-    create({ projectId, name, labels, content, createdBy, source }) {
+    create({ projectId, evalId, name, labels, content, createdBy, source }) {
       return db.transaction(async (tx) => {
         const now = new Date();
+        // The lock keeps the eval while the case joins it.
+        const [owner] = await tx
+          .select({ id: evalDefinitions.id })
+          .from(evalDefinitions)
+          .where(and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)))
+          .for("share");
+        if (!owner) return "eval_not_found";
         const [row] = await tx
           .insert(evalCases)
-          .values({ ...storable({ name, labels }), projectId, createdBy })
+          .values({ ...storable({ name, labels }), projectId, evalId, createdBy })
           .returning();
         if (!row) throw new Error("the case row is missing");
         const [version] = await tx
@@ -51,11 +58,16 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
       return toCase(row, versions);
     },
 
-    async list(projectId) {
+    async list(projectId, evalId) {
       const rows = await db
         .select()
         .from(evalCases)
-        .where(eq(evalCases.projectId, projectId))
+        .where(
+          and(
+            eq(evalCases.projectId, projectId),
+            evalId === undefined ? undefined : eq(evalCases.evalId, evalId),
+          ),
+        )
         .orderBy(desc(evalCases.createdAt), desc(evalCases.id));
       if (rows.length === 0) return [];
       const versions = await db
@@ -153,19 +165,18 @@ function isDraft(versionId: string) {
   return and(eq(evalCaseVersions.id, versionId), eq(evalCaseVersions.state, "draft"));
 }
 
-function columns({ input, earlierTurns, toolFixtures, expectedOutput, scorers }: CaseContent) {
+function columns({ input, earlierTurns, toolFixtures, expectedOutput }: CaseContent) {
   return storable({
     input: { value: input ?? null },
     earlierTurns,
     toolFixtures,
     expectedOutput,
-    scorers,
   });
 }
 
 function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
-  const { id, projectId, name, labels, createdAt } = row;
-  return { id, projectId, name, labels, createdAt, versions: versions.map(toVersion) };
+  const { id, projectId, evalId, name, labels, createdAt } = row;
+  return { id, projectId, evalId, name, labels, createdAt, versions: versions.map(toVersion) };
 }
 
 export function toVersion(row: VersionRow): CaseVersion {

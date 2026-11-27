@@ -6,7 +6,7 @@ import { Input, Textarea } from "@ratel/design-system/input";
 import { Section } from "@ratel/design-system/section";
 import { Select } from "@ratel/design-system/select";
 import { CHECK_OPERATORS, type CheckConfig, type CheckOperator } from "@/lib/contracts/check";
-import type { CaseScorer } from "@/lib/views/evals/domain/case";
+import type { EvalScorer } from "@/lib/views/evals/domain/eval";
 
 const OPERATORS: Record<CheckOperator, string> = {
   eq: "is",
@@ -26,13 +26,13 @@ export function ScorerFields({
   onChange,
   canEdit,
 }: {
-  scorers: CaseScorer[];
-  onChange: (scorers: CaseScorer[]) => void;
+  scorers: EvalScorer[];
+  onChange: (scorers: EvalScorer[]) => void;
   canEdit: boolean;
 }) {
-  const set = (id: string, next: CaseScorer) =>
+  const set = (id: string, next: EvalScorer) =>
     onChange(scorers.map((scorer) => (scorer.id === id ? next : scorer)));
-  const add = (scorer: Omit<CaseScorer, "id">) =>
+  const add = (scorer: Omit<EvalScorer, "id">) =>
     onChange([...scorers, { ...scorer, id: crypto.randomUUID() }]);
   return (
     <Section
@@ -115,7 +115,7 @@ export function ScorerFields({
 }
 
 /** A scorer in words. */
-export function scorerSentence({ name, gating, definition }: CaseScorer): string {
+export function scorerSentence({ name, gating, definition }: EvalScorer): string {
   const what =
     definition.kind === "judge"
       ? `judge: ${definition.config.prompt}`
@@ -128,9 +128,9 @@ function Definition({
   canEdit,
   onChange,
 }: {
-  scorer: CaseScorer;
+  scorer: EvalScorer;
   canEdit: boolean;
-  onChange: (definition: CaseScorer["definition"]) => void;
+  onChange: (definition: EvalScorer["definition"]) => void;
 }) {
   const { definition } = scorer;
   if (definition.kind === "judge") {

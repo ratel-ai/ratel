@@ -9,9 +9,11 @@ import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { SandboxRun, SandboxVersionSummary, StartRunResult } from "@/lib/views/sandboxes";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
-import type { CaseContent, CaseScorer } from "../domain/case";
+import type { CaseContent } from "../domain/case";
+import type { EvalScorer } from "../domain/eval";
 import { countTrials, unscored } from "../domain/experiment";
 import {
   advanceExperiment,
@@ -29,7 +31,17 @@ import {
   handleStartByMember,
   type KeyDeps,
 } from "../experiments-api";
-import { content, createEvalsDb, ORGANIZATION_ID, OTHER_PROJECT_ID, PROJECT_ID } from "./support";
+import {
+  content,
+  createEvalsDb,
+  evalContent,
+  inEval,
+  NO_REFUND,
+  ORGANIZATION_ID,
+  OTHER_PROJECT_ID,
+  PROJECT_ID,
+  seedEval,
+} from "./support";
 
 const SUBJECT = { organizationId: ORGANIZATION_ID, projectId: PROJECT_ID };
 const COMMIT = "b".repeat(40);
@@ -47,7 +59,7 @@ const VERSION: SandboxVersionSummary = {
     { name: "depth", type: "number", default: 1, description: null, options: [] },
   ],
 };
-const JUDGE: CaseScorer = {
+const JUDGE: EvalScorer = {
   id: "judge",
   name: "Polite",
   gating: false,
@@ -62,7 +74,9 @@ type Started = {
 
 async function setup() {
   const { db, client } = await createEvalsDb();
-  const cases = createDrizzleCaseStore(db);
+  const refunds = await seedEval(db);
+  const evals = createDrizzleEvalStore(db);
+  const cases = inEval(createDrizzleCaseStore(db), refunds.id);
   const experiments = createDrizzleExperimentStore(db);
   const runs = new Map<string, SandboxRun>();
   const started: Started[] = [];
@@ -81,6 +95,7 @@ async function setup() {
   };
   const deps: ExperimentDeps = {
     cases,
+    evals,
     experiments,
     sandboxes: {
       enabled: async () => true,
@@ -122,9 +137,11 @@ async function setup() {
     name: string,
     over: Partial<CaseContent> = {},
     labels: string[] = [],
+    evalId = refunds.id,
   ) => {
     const made = await cases.create({
       projectId: PROJECT_ID,
+      evalId,
       name,
       labels,
       content: content(over),
@@ -141,6 +158,9 @@ async function setup() {
     );
     return made;
   };
+  /** An eval with these scorers. */
+  const evalWith = async (name: string, scorers: EvalScorer[]) =>
+    (await seedEval(db, { name, content: { scorers } })).id;
   const start = async (over: Partial<Parameters<typeof startExperiment>[1]> = {}) => {
     const result = await startExperiment(
       SUBJECT,
@@ -168,6 +188,8 @@ async function setup() {
   return {
     client,
     cases,
+    evals,
+    evalWith,
     deps,
     runs,
     started,
@@ -294,14 +316,19 @@ test("a param that the version does not declare, or of the wrong type, is refuse
 
 test("the experiment records the version, the commit, the params, the cases and the scorers", async () => {
   const t = await setup();
-  const made = await t.approvedCase("one", { scorers: [...content().scorers, JUDGE] });
+  const judged = await t.evalWith("judged", [NO_REFUND, JUDGE]);
+  const made = await t.approvedCase("one", {}, [], judged);
   const experiment = await t.start({ params: { model: "x" } });
   const versionId = made.versions[0]?.id ?? "";
   assert.equal(experiment.sandboxVersionId, VERSION.id);
   assert.equal(experiment.gitCommit, COMMIT);
   assert.deepEqual(experiment.params, { model: "x" });
   assert.deepEqual(experiment.caseVersions, [
-    { caseId: made.id, versionId, number: 1, name: "one" },
+    { caseId: made.id, versionId, number: 1, name: "one", evalId: judged },
+  ]);
+  const [judgedVersion] = (await t.evals.get(PROJECT_ID, judged))?.versions ?? [];
+  assert.deepEqual(experiment.evalVersions, [
+    { evalId: judged, versionId: judgedVersion?.id, number: 1, name: "judged" },
   ]);
   const snapshots = experiment.scorerSnapshots[versionId] ?? [];
   assert.deepEqual(
@@ -316,7 +343,7 @@ test("the experiment records the version, the commit, the params, the cases and 
 
 test("the results: pass with an advisory judge, fail of a check, fail of the agent, invalid", async () => {
   const t = await setup();
-  await t.approvedCase("one", { scorers: [...content().scorers, JUDGE] });
+  await t.approvedCase("one", {}, [], await t.evalWith("judged", [NO_REFUND, JUDGE]));
   const experiment = await t.start({ trialsPerCase: 5 });
   await t.step(experiment);
   const trials = await t.trials(experiment.id);
@@ -365,13 +392,29 @@ test("the row and its frozen lists do not change after the start", async () => {
   await t.cases.saveDraft(
     PROJECT_ID,
     made.id,
-    { name: "renamed", labels: ["x"], content: content({ scorers: [JUDGE] }) },
+    { name: "renamed", labels: ["x"], content: content({ expectedOutput: "changed" }) },
     {
       versionId: made.versions[0]?.id ?? "",
       updatedAt: made.versions[0]?.updatedAt ?? new Date(),
     },
     new Date(),
   );
+  // An edit of the eval adds a version. The run keeps the version that it froze.
+  const frozenEval = experiment.evalVersions[0];
+  assert.ok(frozenEval);
+  const edited = await t.evals.update(
+    PROJECT_ID,
+    frozenEval.evalId,
+    {
+      name: "Refunds",
+      taskId: null,
+      content: evalContent({ scorers: [{ ...JUDGE, gating: true }] }),
+    },
+    frozenEval.versionId,
+    { userId: "user_1", now: new Date() },
+  );
+  assert.ok(typeof edited === "object");
+  assert.equal(edited.versions[0]?.number, 2);
   await t.step(experiment);
   for (const run of t.runs.values()) t.end(run);
   await t.step(experiment);
@@ -396,7 +439,12 @@ test("the row and its frozen lists do not change after the start", async () => {
     });
   }
   assert.deepEqual(await t.table("eval_trials"), trials);
-  assert.notEqual((await t.start()).id, experiment.id);
+  const next = await t.start();
+  assert.notEqual(next.id, experiment.id);
+  assert.deepEqual(
+    next.evalVersions.map(({ number }) => number),
+    [2],
+  );
   assert.deepEqual(
     await t.deps.experiments.get(PROJECT_ID, experiment.id).then((e) => e?.state),
     "completed",
@@ -717,7 +765,7 @@ test("a step ends at its deadline, and the next one goes on", async () => {
 test("the judges of a trial run at the same time", async () => {
   const t = await setup();
   const judges = [1, 2, 3].map((n) => ({ ...JUDGE, id: `j${n}` }));
-  await t.approvedCase("one", { scorers: [...content().scorers, ...judges] });
+  await t.approvedCase("one", {}, [], await t.evalWith("judged", [NO_REFUND, ...judges]));
   const experiment = await t.start({ trialsPerCase: 1 });
   await t.step(experiment);
   for (const run of t.runs.values()) t.end(run);

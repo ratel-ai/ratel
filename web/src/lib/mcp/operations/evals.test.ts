@@ -6,8 +6,10 @@ import { assembleOperations } from "@/lib/mcp/operations";
 import { buildRegistry } from "@/lib/mcp/registry";
 import type { CaseVersion, EvalCase } from "@/lib/views/evals/domain/case";
 import { VERDICT_RULE } from "@/lib/views/evals/domain/compare";
+import type { EvalDefinition } from "@/lib/views/evals/domain/eval";
 import type { Experiment, Trial } from "@/lib/views/evals/domain/experiment";
 import type { NewCase } from "@/lib/views/evals/ports/case-store";
+import type { NewEval } from "@/lib/views/evals/ports/eval-store";
 import type { SandboxRun } from "@/lib/views/sandboxes";
 import { type EvalsOperationDeps, evalsOperations } from "./evals";
 
@@ -25,6 +27,8 @@ const TRIAL = "77777777-7777-4777-8777-777777777777";
 const BASE_TRIAL = "88888888-8888-4888-8888-888888888888";
 const SANDBOX_RUN = "99999999-9999-4999-8999-999999999999";
 const BASE_VERSION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const EVAL = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const EVAL_VERSION = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const T0 = new Date("2026-11-26T10:00:00.000Z");
 
 const auth: McpAuthContext = {
@@ -55,7 +59,6 @@ function caseVersion(overrides: Partial<CaseVersion> = {}): CaseVersion {
     earlierTurns: [],
     toolFixtures: [],
     expectedOutput: null,
-    scorers: [GATING_CHECK],
     sourceTurnId: null,
     sourceOutput: "No.",
     approvedBy: null,
@@ -66,7 +69,34 @@ function caseVersion(overrides: Partial<CaseVersion> = {}): CaseVersion {
 }
 
 function evalCase(versions: CaseVersion[] = [caseVersion()]): EvalCase {
-  return { id: CASE, projectId: PROJECT, name: "refund ask", labels: [], createdAt: T0, versions };
+  return {
+    id: CASE,
+    projectId: PROJECT,
+    evalId: EVAL,
+    name: "refund ask",
+    labels: [],
+    createdAt: T0,
+    versions,
+  };
+}
+
+function evalDefinition(input: Partial<NewEval> = {}): EvalDefinition {
+  const content = input.content ?? {
+    sandboxName: null,
+    params: {},
+    trials: 3,
+    scorers: [GATING_CHECK],
+  };
+  return {
+    id: EVAL,
+    projectId: PROJECT,
+    name: input.name ?? "Refunds",
+    taskId: input.taskId ?? null,
+    createdAt: T0,
+    versions: [
+      { ...content, id: EVAL_VERSION, evalId: EVAL, number: 1, createdBy: "u", createdAt: T0 },
+    ],
+  };
 }
 
 function experiment(overrides: Partial<Experiment> = {}): Experiment {
@@ -76,11 +106,14 @@ function experiment(overrides: Partial<Experiment> = {}): Experiment {
     organizationId: "org-1",
     sandboxVersionId: "sv-1",
     sandboxName: "support-agent",
+    name: null,
+    labelFilter: null,
     gitCommit: "",
     gitDirty: false,
     params: {},
     trialsPerCase: 1,
     caseVersions: [{ caseId: CASE, versionId: DRAFT, number: 1, name: "refund ask" }],
+    evalVersions: [],
     scorerSnapshots: { [DRAFT]: [{ ...GATING_CHECK, hash: "h1" }] },
     startedBy: "mcp:key:key-1",
     state: "completed",
@@ -178,11 +211,14 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     createCase: async (input) => ({
       id: CASE,
       projectId: input.projectId,
+      evalId: input.evalId,
       name: input.name,
       labels: input.labels,
       createdAt: T0,
       versions: [caseVersion({ ...input.content, sourceOutput: input.source?.output ?? null })],
     }),
+    getEvalByName: async () => null,
+    createEval: async (input) => evalDefinition(input),
     approveCase: async () => "approved",
     startExperiment: async () => ({
       ok: true,
@@ -267,7 +303,7 @@ function failure(result: Awaited<ReturnType<typeof call>>) {
 const PARAMS: Record<string, Record<string, unknown>> = {
   evals_list_cases: {},
   evals_get_case: { caseId: CASE },
-  evals_create_case: { name: "x", input: "hi" },
+  evals_create_case: { eval: "Refunds", name: "x", input: "hi" },
   evals_approve_case: { caseId: CASE },
   evals_start_run: {},
   evals_list_runs: {},
@@ -335,10 +371,12 @@ test("evals_list_cases: says which cases are approved, and hints when none is", 
 
 test("evals_create_case: copies the input and the answer of a sandbox run", async () => {
   let saved: NewCase | undefined;
-  const result = ok<{ caseId: string; state: string }>(
+  let made: NewEval | undefined;
+  const result = ok<{ caseId: string; evalId: string; state: string }>(
     await call(
       "evals_create_case",
       {
+        eval: "Refunds",
         name: "refund ask",
         sandboxRunId: SANDBOX_RUN,
         scorers: [
@@ -356,14 +394,21 @@ test("evals_create_case: copies the input and the answer of a sandbox run", asyn
           saved = input;
           return fakeDeps().createCase(input);
         },
+        createEval: async (input) => {
+          made = input;
+          return evalDefinition(input);
+        },
       },
     ),
   );
   assert.equal(result.data.state, "draft");
   assert.deepEqual(saved?.content.input, { message: "refund?" });
   assert.deepEqual(saved?.source, { turnId: null, output: '{"reply":"No."}' });
-  assert.equal(saved?.content.scorers[0]?.gating, true);
-  assert.equal(saved?.content.scorers[0]?.definition.kind, "check");
+  assert.equal(saved?.evalId, EVAL);
+  assert.equal(result.data.evalId, EVAL);
+  assert.equal(made?.name, "Refunds");
+  assert.equal(made?.content.scorers[0]?.gating, true);
+  assert.equal(made?.content.scorers[0]?.definition.kind, "check");
   assert.equal(saved?.createdBy, "mcp:key:key-1");
   assert.match(result.hint ?? "", /evals_approve_case/);
 });
@@ -372,7 +417,7 @@ test("evals_create_case: a sandbox run of another project is not_found", async (
   const result = failure(
     await call(
       "evals_create_case",
-      { name: "x", sandboxRunId: SANDBOX_RUN },
+      { eval: "Refunds", name: "x", sandboxRunId: SANDBOX_RUN },
       { getSandboxRun: async () => null },
     ),
   );
@@ -383,7 +428,7 @@ test("evals_create_case: a run that has not ended is refused", async () => {
   const result = failure(
     await call(
       "evals_create_case",
-      { name: "x", sandboxRunId: SANDBOX_RUN },
+      { eval: "Refunds", name: "x", sandboxRunId: SANDBOX_RUN },
       { getSandboxRun: async () => sandboxRun({ status: "running", result: null }) },
     ),
   );
@@ -391,16 +436,43 @@ test("evals_create_case: a run that has not ended is refused", async () => {
   assert.equal(result.reason, "run_active");
 });
 
-test("evals_create_case: a case with no gating scorer is saved and says why it cannot be approved", async () => {
+test("evals_create_case: a new eval with no gating scorer is saved and says why it cannot run", async () => {
   const result = ok<{ approvalProblem?: string }>(
-    await call("evals_create_case", { name: "x", input: "hi" }),
+    await call("evals_create_case", { eval: "Refunds", name: "x", input: "hi" }),
   );
   assert.match(result.data.approvalProblem ?? "", /gating/);
+});
+
+test("evals_create_case: a case goes into the eval with that name, and its scorers stay", async () => {
+  let created = false;
+  let saved: NewCase | undefined;
+  const result = ok<{ evalId: string; approvalProblem?: string }>(
+    await call(
+      "evals_create_case",
+      { eval: "Refunds", name: "x", input: "hi", scorers: [] },
+      {
+        getEvalByName: async (projectId, name) =>
+          projectId === PROJECT && name === "Refunds" ? evalDefinition() : null,
+        createEval: async (input) => {
+          created = true;
+          return evalDefinition(input);
+        },
+        createCase: async (input) => {
+          saved = input;
+          return fakeDeps().createCase(input);
+        },
+      },
+    ),
+  );
+  assert.equal(created, false);
+  assert.equal(saved?.evalId, EVAL);
+  assert.equal(result.data.approvalProblem, undefined);
 });
 
 test("evals_create_case: a check that reads a path a trial does not have is refused", async () => {
   const result = failure(
     await call("evals_create_case", {
+      eval: "Refunds",
       name: "x",
       input: "hi",
       scorers: [{ kind: "check", name: "c", path: "service", op: "eq", value: "a" }],
@@ -427,19 +499,19 @@ test("evals_approve_case: approves the draft as it was read", async () => {
   assert.equal(result.data.state, "approved");
 });
 
-test("evals_approve_case: refuses a draft with no gating scorer, with the reason", async () => {
+test("evals_approve_case: refuses a draft with no input, with the reason", async () => {
   const result = failure(
     await call(
       "evals_approve_case",
       { caseId: CASE },
       {
-        getCase: async () => evalCase([caseVersion({ scorers: [] })]),
+        getCase: async () => evalCase([caseVersion({ input: null })]),
       },
     ),
   );
   assert.equal(result.error, "conflict");
   assert.equal(result.reason, "not_ready");
-  assert.match(result.message, /gating/);
+  assert.match(result.message, /input/);
 });
 
 test("evals_get_case: withholds captured text from a key without content access", async () => {
@@ -598,6 +670,7 @@ test("evals_compare: two runs with different scorers are refused with the reason
               'The scorers of the two experiments differ: "mentions refund" of "refund ask".',
             scorers: [],
             pin: null,
+            otherId: null,
           },
         }),
       },

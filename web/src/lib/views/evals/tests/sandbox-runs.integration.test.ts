@@ -16,10 +16,11 @@ import { type AgentScript, scriptAgent } from "@/lib/views/sandboxes/tests/fake-
 import { createFakeProvider } from "@/lib/views/sandboxes/tests/fake-provider";
 import { bundleInfo, COMMIT, IMAGE, tarGz } from "@/lib/views/sandboxes/tests/support";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
 import { advanceExperiment, type ExperimentDeps, startExperiment } from "../experiments";
-import { content, createEvalsDb, ORGANIZATION_ID, PROJECT_ID } from "./support";
+import { content, createEvalsDb, inEval, ORGANIZATION_ID, PROJECT_ID, seedEval } from "./support";
 
 /**
  * An eval trial through the real runs of Ratel sandboxes (a fake provider): the evals engine reads
@@ -81,10 +82,12 @@ async function setup(agent: AgentScript = {}) {
     tools: [{ name: "refund_order", sideEffect: true }],
     params: [],
   };
-  const cases = createDrizzleCaseStore(db);
+  const refunds = await seedEval(db);
+  const cases = inEval(createDrizzleCaseStore(db), refunds.id);
   const experiments = createDrizzleExperimentStore(db);
   const deps = (more: Partial<RunDeps> = {}): ExperimentDeps => ({
     cases,
+    evals: createDrizzleEvalStore(db),
     experiments,
     sandboxes: {
       enabled: async () => true,

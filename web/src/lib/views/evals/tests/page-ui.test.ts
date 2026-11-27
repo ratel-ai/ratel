@@ -53,6 +53,8 @@ const model = (over: Partial<CaseEditorModel> = {}): CaseEditorModel => ({
   id: "c1",
   name: "Late refund",
   labels: ["task: refunds"],
+  evalId: "e1",
+  evals: [{ id: "e1", name: "Refunds", scorers: [NO_REFUND] }],
   approved: null,
   draft: version({ state: "draft" }),
   ...over,
@@ -232,6 +234,7 @@ const gridExperiment: Experiment = {
   gitDirty: false,
   params: { tone: "formal", offerRefund: true },
   trialsPerCase: 3,
+  evalVersions: [],
   caseVersions: [
     { caseId: "c1", versionId: "v1", number: 2, name: "Late refund" },
     { caseId: "c2", versionId: "v2", number: 1, name: "Status" },
@@ -423,6 +426,7 @@ const compared = (id: string, cases: Record<string, TrialResult>) => {
     gitDirty: false,
     params: {},
     trialsPerCase: 1,
+    evalVersions: [],
     caseVersions: Object.keys(cases).map((name) => ({
       caseId: name,
       versionId: name,

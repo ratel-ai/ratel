@@ -20,8 +20,8 @@ import { caseFromTurn, type TurnContent } from "./domain/from-turn";
 import type { CaseStore } from "./ports/case-store";
 
 /**
- * The session routes of cases: create (from a turn or from nothing), edit and approve. An edit
- * writes the draft, or makes a new one. No route changes an approved version.
+ * The session routes of cases: create (from a turn or from nothing) in the dataset of an eval, edit
+ * and approve. An edit writes the draft, or makes a new one. No route changes an approved version.
  */
 export type CasesApiDeps = MemberAccessDeps & {
   cases: () => CaseStore;
@@ -40,8 +40,10 @@ export type CaseEvent =
 
 /** The JSON of a request may be a little larger than the content in it. */
 const MAX_BODY_CHARS = MAX_CONTENT_CHARS * 2;
-const fromTurnSchema = z.object({ turnId: z.uuid() });
+const evalIdSchema = z.object({ evalId: z.uuid("choose the eval of the case") });
+const fromTurnSchema = evalIdSchema.extend({ turnId: z.uuid() });
 const editSchema = caseDetailsSchema.extend({ content: caseContentSchema });
+const createSchema = editSchema.extend(evalIdSchema.shape);
 const tokenSchema = z.object({ versionId: z.uuid(), updatedAt: z.iso.datetime() });
 const changeSchema = editSchema.extend({ base: tokenSchema });
 
@@ -53,8 +55,8 @@ export function handleCreateCase(
   return write(projectId, "create_case", deps, async (member) => {
     const body = await readJson(request);
     const turn = fromTurnSchema.safeParse(body);
-    if (turn.success) return createFromTurn(turn.data.turnId, member, deps);
-    const edit = editSchema.safeParse(body);
+    if (turn.success) return createFromTurn(turn.data, member, deps);
+    const edit = createSchema.safeParse(body);
     if (!edit.success) return invalid(edit.error);
     return create(edit.data, { source: "blank" }, member, deps);
   });
@@ -110,7 +112,7 @@ export function handleApproveCase(
 }
 
 async function createFromTurn(
-  turnId: string,
+  { turnId, evalId }: z.infer<typeof fromTurnSchema>,
   member: Member,
   deps: CasesApiDeps,
 ): Promise<Response> {
@@ -128,7 +130,7 @@ async function createFromTurn(
   const content = caseContentSchema.safeParse(made.content);
   if (!content.success) return invalid(content.error);
   return create(
-    { name: made.name, labels: [], content: content.data },
+    { name: made.name, labels: [], content: content.data, evalId },
     { source: "turn", turnId, output: made.sourceOutput },
     member,
     deps,
@@ -136,7 +138,7 @@ async function createFromTurn(
 }
 
 async function create(
-  edit: CaseDetails & { content: CaseContent },
+  edit: CaseDetails & { content: CaseContent; evalId: string },
   origin: { source: "blank" } | { source: "turn"; turnId: string; output: string | null },
   member: Member,
   deps: CasesApiDeps,
@@ -149,6 +151,7 @@ async function create(
       ? { source: { turnId: origin.turnId, output: origin.output } }
       : {}),
   });
+  if (created === "eval_not_found") return refuse(404, "not_found", "There is no such eval.");
   await deps.track({ name: "eval_case_created", source: origin.source }, member);
   return reply(201, { caseId: created.id, draft: draftView(created) });
 }
