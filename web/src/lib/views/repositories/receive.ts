@@ -64,7 +64,7 @@ export async function receiveWebhook(
       skipped.push({ projectId: link.projectId, reason: decision.reason });
       continue;
     }
-    const status = decision.action === "build" ? "queued" : "awaiting_approval";
+    const status = "queued";
     const { id, created } = await deps.recordCommit({
       projectId: link.projectId,
       repositoryId: event.repositoryId,
@@ -72,11 +72,10 @@ export async function receiveWebhook(
       baseSha: event.baseSha,
       branch: event.branch,
       pullRequest: event.pullRequest,
-      fromFork: event.fromFork,
       title: event.title,
       author: event.author,
       status,
-      reason: decision.action === "await_approval" ? decision.reason : null,
+      reason: null,
     });
     recorded.push({ projectId: link.projectId, commitId: id, status, created });
   }

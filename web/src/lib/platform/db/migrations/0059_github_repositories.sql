@@ -1,5 +1,5 @@
 CREATE TABLE "project_repositories" (
-	"project_id" uuid PRIMARY KEY NOT NULL,
+	"project_id" uuid NOT NULL,
 	"provider" text DEFAULT 'github' NOT NULL,
 	"repository_id" bigint NOT NULL,
 	"full_name" text NOT NULL,
@@ -9,7 +9,8 @@ CREATE TABLE "project_repositories" (
 	"pull_requests" boolean DEFAULT true NOT NULL,
 	"config_path" text DEFAULT 'ratel.yaml' NOT NULL,
 	"linked_by" text NOT NULL,
-	"linked_at" timestamp with time zone DEFAULT now() NOT NULL
+	"linked_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "project_repositories_project_id_provider_repository_id_pk" PRIMARY KEY("project_id","provider","repository_id")
 );
 --> statement-breakpoint
 CREATE TABLE "repository_commits" (
@@ -20,7 +21,6 @@ CREATE TABLE "repository_commits" (
 	"base_sha" text,
 	"branch" text NOT NULL,
 	"pull_request" integer,
-	"from_fork" boolean DEFAULT false NOT NULL,
 	"title" text NOT NULL,
 	"author" text,
 	"status" text NOT NULL,

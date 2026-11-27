@@ -130,26 +130,18 @@ export type VersionPolicy = {
   pullRequests: boolean;
 };
 
-export type CommitDecision =
-  | { action: "build" }
-  | { action: "skip"; reason: string }
-  | { action: "await_approval"; reason: string };
+export type CommitDecision = { action: "build" } | { action: "skip"; reason: string };
 
 /**
  * Whether a commit makes a version: the default branch and the listed patterns do; a pull request
- * does when the link takes them, and from a fork only once an admin approves (its code would run
- * with the project's sandbox secrets).
+ * does when the link takes them. A pull request from a fork is ignored: its code would run with
+ * the project's sandbox secrets.
  */
 export function decideCommit(policy: VersionPolicy, event: CommitEvent): CommitDecision {
   if (event.kind === "pull_request") {
+    if (event.fromFork) return { action: "skip", reason: "pull requests from forks are ignored" };
     if (!policy.pullRequests) {
       return { action: "skip", reason: "pull requests make no versions for this project" };
-    }
-    if (event.fromFork) {
-      return {
-        action: "await_approval",
-        reason: "a pull request from a fork runs only once an admin approves it",
-      };
     }
     return { action: "build" };
   }

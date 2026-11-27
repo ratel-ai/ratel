@@ -1,6 +1,6 @@
 # Connect a GitHub repository (design note, RTL-408)
 
-**Status:** proposed. Marcello has not agreed it yet. It becomes an ADR once he does.
+**Status:** proposed. Marcello agreed the plan and answered questions 2–6 (2026-11-27). The build path (question 1) is still open. It becomes an ADR once that is settled.
 **Flag:** `githubRepositories` (`FF_GITHUB_REPOSITORIES`). It is off by default and gates every surface below.
 **Comes after:** the eval core (RP-308: sandboxes, `ratel push`, datasets, evals, runs, baseline), which is still in open PRs (#487 → #509 → #518–#522).
 
@@ -48,15 +48,18 @@ Permissions:
 
 - The head commit of a push to the default branch, plus the branch patterns the link lists (`release/*`).
 - The head commit of a pull request from the same repository, compared with its base.
-- A fork's pull request is recorded as `awaiting_approval` and never built on its own.
+- A pull request from a fork is ignored: not recorded, not built, not run (decided 2026-11-27).
 - Tags, deleted branches and every other event are ignored.
 - One commit is one version, whether a push or a pull request named it.
+- Same-repository PRs make versions by default. Later, a link will say which branches run and how automatically (on every push, or on request).
+
+**Repositories per project:** several (decided 2026-11-27). An agent, its tools and its prompts may each live in their own repository. Each link has its own `configPath`, and a monorepo can link the same repository from several projects. How a commit to a repository that holds no `ratel.yaml` (a tools library) rebuilds the agent is an open question.
 
 ## 2. How the agent is built from source
 
 | Option | For | Against |
 |---|---|---|
-| **A. Our builder on the sandbox VMs** (recommended) | Nothing to set up in the customer's repository. It reuses the VM provider, the prepare VM, the smoke check and the snapshot of #487. | A build costs us VM time. A build that needs private registries or secrets needs more work. |
+| **A. Our builder on the sandbox VMs** (recommended) | Nothing to set up in the customer's repository. It reuses the VM provider, the prepare VM, the smoke check and the snapshot of #487. | A build costs VM time. A build that needs private registries or secrets needs more work. |
 | B. GitHub Actions runs `ratel push` | It works today, with no new infrastructure. Build secrets stay in the customer's CI. GitHub already keeps secrets from fork PRs. | It needs a workflow file and a Ratel key in their repository secrets. It is not "connect and go". |
 | C. Pull from a registry (GHCR, ECR) | No build at all. | Registry credentials for each project, and the customer must already publish images. |
 
@@ -71,9 +74,11 @@ The builder for A:
 
 This keeps the rule of RP-391 (no snapshot of a VM that saw a secret) without a new exception.
 
+**Cost:** the customer pays for build VM time (decided 2026-11-27). It is metered as their usage, with a plan limit that scales, alongside `sandbox_vm_starts_per_day`.
+
 ## 3. Change → eval selection
 
-The first rule is pure and explainable. It reads only the diff. It is `selectEvals` in [`web/src/lib/views/repositories/selection/select.ts`](../web/src/lib/views/repositories/selection/select.ts), with tests on fixture diffs.
+The first rule is pure and explainable. It reads only the diff, and a decision model reads the files it cannot map (see below). It is `selectEvals` in [`web/src/lib/views/repositories/selection/select.ts`](../web/src/lib/views/repositories/selection/select.ts), with tests on fixture diffs.
 
 **Inputs:**
 
@@ -81,6 +86,8 @@ The first rule is pure and explainable. It reads only the diff. It is `selectEva
 - The tools the version declares, from its `ratel.yaml`.
 - Each eval, with the tools it exercises (its rows' expected calls, the checks that name a tool, and its traces' calls), and optionally the prompts and paths it covers.
 - Recent traces, with the tools they called.
+
+**The agent's folder:** a file outside the folder of the link's `ratel.yaml` touches nothing. In a monorepo, a change to the product website never runs an eval. Inside the folder, the rules and the evals' paths are read relative to it.
 
 **Per file**, the first rule that applies:
 
@@ -102,7 +109,17 @@ The first rule is pure and explainable. It reads only the diff. It is `selectEva
 
 Each pick says why ("uses refund_order", "covers src/persona/voice.ts"). The version page shows the reasons.
 
-**Later:** match spans and code paths (a call graph from the agent's entry point to each tool), learn which files moved which scores, and let a person pin evals that always run.
+**The decision model, for unmapped files** (`selection/classify.ts`): the rule is a heuristic over names, so code that names no tool (a helper, a client, the agent loop) is unmapped and would run everything. Before that, each unmapped file goes to the decision engine Ratel already uses (`readings/decisions`, OpenAI's Decisions API, also behind match quality, workflow decisions and Tool Picker). It asks one closed question per file, with its changed lines:
+
+- the options are each declared tool, "not the agent" (a website, other tooling) and "code every run goes through";
+- an answer at a confidence of 0.8 or more is used, and the summary lists it with its confidence;
+- a lower confidence, a refusal, an engine that fails, or no `OPENAI_API_KEY` leaves the file unmapped;
+- at most 20 files are asked about per commit, so a large change runs everything anyway;
+- the questions are charged to the customer, as Tool Picker's are.
+
+The heuristic stays first because it is free, deterministic and explains itself. The model only reads what the heuristic cannot.
+
+**Later:** a call graph from the agent's entry point to each tool, spans and code paths (a call graph from the agent's entry point to each tool), learn which files moved which scores, and let a person pin evals that always run.
 
 ## 4. Where results go
 
@@ -116,16 +133,17 @@ Each pick says why ("uses refund_order", "covers src/persona/voice.ts"). The ver
 - **Linking:** only a project admin links a repository, and only one that the App's installation reaches. Ratel checks this with an installation token when the link is made, so nobody can claim another organization's repository id.
 - **Tokens:** installation tokens are minted per use and never stored, logged or passed to a VM.
 - **Builds:** no secrets, no snapshot, a registry-only outbound allow-list, and time and size caps. Sandbox secrets still reach only the run VMs, as in #487.
-- **Fork PRs:** never built or run until a project admin approves that commit. Their code would run with the project's sandbox secrets, such as the model key.
+- **Fork PRs:** ignored. Their code would run with the project's sandbox secrets, such as the model key.
 - **Commit text:** a commit title is stored capped at 200 characters and shown as text, never as HTML.
 
 ## 6. What the foundations PR lays (draft, no merge, no deploy)
 
 - **Flag:** `githubRepositories` (`FF_GITHUB_REPOSITORIES`), off by default.
-- **Table `project_repositories`:** a project's one linked repository. It holds the GitHub repository id, the installation, the default branch, the version branch patterns, whether PRs make versions, and the path of `ratel.yaml`.
-- **Table `repository_commits`:** one row per commit that makes (or awaits approval to make) a version. It holds the base it compares with, the status, and `sandbox_version_id`. That column has no foreign key until `sandbox_versions` lands with the eval core.
+- **Table `project_repositories`:** the repositories a project links, one row each. It holds the GitHub repository id, the installation, the default branch, the version branch patterns, whether PRs make versions, and the path of `ratel.yaml`.
+- **Table `repository_commits`:** one row per commit that makes a version. It holds the base it compares with, the status, and `sandbox_version_id`. That column has no foreign key until `sandbox_versions` lands with the eval core.
 - **Route `POST /api/v1/github/webhook`:** verifies the delivery, reads push and pull_request, decides per project, and records the commit only for projects with the flag on.
-- **`selectEvals`:** the first selection rule, with fixture diffs.
+- **`selectEvals`:** the first selection rule, with fixture diffs, scoped to the agent's folder.
+- **`selectEvalsWithModel`:** the decision engine reads the files the rule leaves unmapped.
 
 **Not in it yet:**
 
@@ -135,13 +153,18 @@ Each pick says why ("uses refund_order", "covers src/persona/voice.ts"). The ver
 - The adapter from eval definitions to `EvalTarget`.
 - The version page.
 
+## Decided (2026-11-27, Marcello)
+
+- **Cost:** the customer pays for build VM time, metered with a scaling limit.
+- **Repositories:** a project may link several.
+- **Pull requests:** same-repository PRs make versions by default. Which branches run, and how automatically, becomes configurable later.
+- **Unmapped changes:** running everything is acceptable. A change outside the agent (the product website) runs nothing: the agent's folder and the decision model handle that.
+- **Forks:** pull requests from forks are ignored for now.
+- **Selection:** the heuristic first, then the decision engine for what it cannot map.
+
 ## Open questions
 
 1. **Build path:** is A (our builder) the default, or do we ship B (Actions + `ratel push`) first because it needs no new infrastructure?
-2. **Cost:** who pays for build VM time? Does it count toward `sandbox_vm_starts_per_day`, or get a limit of its own?
-3. **Repositories per project:** one, or several? Today it is one. A monorepo with several agents can link the same repository from several projects through `configPath`.
-4. **Branches:** does a PR from the same repository make a version by default, or only once someone opts in?
-5. **Unmapped changes:** is "run everything" the right answer, or should it run a smoke set with a note?
-6. **Who approves a fork's PR:** project admins only? Is the approval per commit, or per PR until the next push?
-7. **Migration numbering:** the stack's 0059–0066 collide with this PR's 0059. Whichever merges second regenerates. The `sandbox_version_id` foreign key comes with that.
-8. **Deploys:** none to staging or prod before Berca's migration ends (2026-11-27 or later).
+2. **Repositories without a `ratel.yaml`:** when a tools or prompts repository changes, which agent version does it rebuild, and against which commit of the agent's repository?
+3. **Migration numbering:** the stack's 0059–0066 collide with this PR's 0059. Whichever merges second regenerates. The `sandbox_version_id` foreign key comes with that.
+4. **Deploys:** none to staging or prod before Berca's migration ends (2026-11-27 or later).

@@ -1,5 +1,5 @@
 {
-  "id": "a791ac5e-5e51-4add-98e2-cf4d8cd802c5",
+  "id": "47b31b48-fbc6-49cb-bcdb-906c615e22e9",
   "prevId": "2fb0b4d5-d86c-4076-af6c-77daa891f48f",
   "version": "7",
   "dialect": "postgresql",
@@ -12202,7 +12202,7 @@
         "project_id": {
           "name": "project_id",
           "type": "uuid",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true
         },
         "provider": {
@@ -12309,7 +12309,16 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "project_repositories_project_id_provider_repository_id_pk": {
+          "name": "project_repositories_project_id_provider_repository_id_pk",
+          "columns": [
+            "project_id",
+            "provider",
+            "repository_id"
+          ]
+        }
+      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -12361,13 +12370,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "from_fork": {
-          "name": "from_fork",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "title": {
           "name": "title",

@@ -4,6 +4,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -16,12 +17,15 @@ import { projects } from "@/lib/platform/projects/schema";
  * `githubRepositories`). See `docs/github-repositories.md`.
  */
 
-/** The one repository a project links. GitHub's repository id survives a rename; the name is for show. */
+/**
+ * The repositories a project links: one or several (an agent, its tools, its prompts). GitHub's
+ * repository id survives a rename; the name is for show.
+ */
 export const projectRepositories = pgTable(
   "project_repositories",
   {
     projectId: uuid("project_id")
-      .primaryKey()
+      .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     provider: text("provider").notNull().default("github"),
     repositoryId: bigint("repository_id", { mode: "number" }).notNull(),
@@ -32,17 +36,21 @@ export const projectRepositories = pgTable(
     // Branch patterns besides the default branch whose commits make versions (`release/*`).
     versionBranches: text("version_branches").array().notNull().default([]),
     pullRequests: boolean("pull_requests").notNull().default(true),
-    // Where the agent's ratel.yaml is: a monorepo may hold several agents.
+    // Where the agent's ratel.yaml is: a monorepo may hold several agents. Its folder is the
+    // agent's: a change outside it touches nothing the agent runs.
     configPath: text("config_path").notNull().default("ratel.yaml"),
     linkedBy: text("linked_by").notNull(),
     linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("project_repositories_repository_idx").on(t.provider, t.repositoryId)],
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.provider, t.repositoryId] }),
+    index("project_repositories_repository_idx").on(t.provider, t.repositoryId),
+  ],
 );
 
 /**
- * A commit that makes, or may make, a version: `queued` until the builder takes it,
- * `awaiting_approval` for a fork's pull request, then `building`, `ready` or `failed`. One row per
+ * A commit that makes a version: `queued` until the builder takes it, then `building`, `ready` or
+ * `failed`. A pull request from a fork is never recorded. One row per
  * commit: the same code is one version, whether a push or a pull request named it.
  * `sandbox_version_id` is the version it built. No foreign key yet: `sandbox_versions` lands with
  * the eval core (RP-308), and the key comes with it.
@@ -60,7 +68,6 @@ export const repositoryCommits = pgTable(
     baseSha: text("base_sha"),
     branch: text("branch").notNull(),
     pullRequest: integer("pull_request"),
-    fromFork: boolean("from_fork").notNull().default(false),
     title: text("title").notNull(),
     author: text("author"),
     status: text("status").notNull(),
@@ -78,11 +85,5 @@ export const repositoryCommits = pgTable(
 export type ProjectRepositoryRow = typeof projectRepositories.$inferSelect;
 export type RepositoryCommitRow = typeof repositoryCommits.$inferSelect;
 
-export const COMMIT_STATUSES = [
-  "queued",
-  "awaiting_approval",
-  "building",
-  "ready",
-  "failed",
-] as const;
+export const COMMIT_STATUSES = ["queued", "building", "ready", "failed"] as const;
 export type CommitStatus = (typeof COMMIT_STATUSES)[number];

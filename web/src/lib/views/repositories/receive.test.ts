@@ -118,7 +118,7 @@ test("a branch that makes no versions is skipped, with why, and not recorded", a
   assert.equal(recorded.length, 0);
 });
 
-test("a fork's pull request is recorded as awaiting approval", async () => {
+test("a fork's pull request is skipped and not recorded", async () => {
   const { deps, recorded } = fakes([link(ON)]);
   const body = JSON.stringify({
     action: "opened",
@@ -133,18 +133,11 @@ test("a fork's pull request is recorded as awaiting approval", async () => {
     },
   });
   const result = await deliver(deps, body, "pull_request");
-  assert.equal(result.status, 202);
-  assert.deepEqual(
-    recorded.map((c) => [c.status, c.fromFork, c.pullRequest, c.reason]),
-    [
-      [
-        "awaiting_approval",
-        true,
-        12,
-        "a pull request from a fork runs only once an admin approves it",
-      ],
-    ],
-  );
+  assert.deepEqual(result.body, {
+    recorded: [],
+    skipped: [{ projectId: ON, reason: "pull requests from forks are ignored" }],
+  });
+  assert.equal(recorded.length, 0);
 });
 
 test("events that name no commit are acknowledged and ignored", async () => {

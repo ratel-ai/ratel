@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
 import {
@@ -26,7 +26,7 @@ export type LinkInput = {
   linkedBy: string;
 };
 
-/** Links a project's repository, in place of the one it had. */
+/** Links a repository to a project, or updates the link it has (keeping when it was linked). */
 export async function linkRepository(input: LinkInput, db: RepositoryDb = getDb()): Promise<void> {
   const values = {
     provider: "github",
@@ -38,28 +38,47 @@ export async function linkRepository(input: LinkInput, db: RepositoryDb = getDb(
     pullRequests: input.pullRequests ?? true,
     configPath: input.configPath ?? "ratel.yaml",
     linkedBy: input.linkedBy,
-    linkedAt: new Date(),
   };
   await db
     .insert(projectRepositories)
     .values({ projectId: input.projectId, ...values })
-    .onConflictDoUpdate({ target: projectRepositories.projectId, set: values });
+    .onConflictDoUpdate({
+      target: [
+        projectRepositories.projectId,
+        projectRepositories.provider,
+        projectRepositories.repositoryId,
+      ],
+      set: values,
+    });
 }
 
-/** Unlinks it. Its commits stay: they are the project's version history. */
-export async function unlinkRepository(projectId: string, db: RepositoryDb = getDb()) {
-  await db.delete(projectRepositories).where(eq(projectRepositories.projectId, projectId));
+/** Unlinks one repository. Its commits stay: they are the project's version history. */
+export async function unlinkRepository(
+  projectId: string,
+  repositoryId: number,
+  db: RepositoryDb = getDb(),
+): Promise<void> {
+  await db
+    .delete(projectRepositories)
+    .where(
+      and(
+        eq(projectRepositories.projectId, projectId),
+        eq(projectRepositories.provider, "github"),
+        eq(projectRepositories.repositoryId, repositoryId),
+      ),
+    );
 }
 
-export async function getRepositoryLink(
+/** A project's linked repositories, in the order they were linked. */
+export async function listRepositoryLinks(
   projectId: string,
   db: RepositoryDb = getDb(),
-): Promise<ProjectRepositoryRow | null> {
-  const [row] = await db
+): Promise<ProjectRepositoryRow[]> {
+  return db
     .select()
     .from(projectRepositories)
-    .where(eq(projectRepositories.projectId, projectId));
-  return row ?? null;
+    .where(eq(projectRepositories.projectId, projectId))
+    .orderBy(asc(projectRepositories.linkedAt), asc(projectRepositories.repositoryId));
 }
 
 export type RepositoryLink = ProjectRepositoryRow & { organizationId: string };
@@ -90,7 +109,6 @@ export type CommitInput = Pick<
   | "baseSha"
   | "branch"
   | "pullRequest"
-  | "fromFork"
   | "title"
   | "author"
   | "reason"

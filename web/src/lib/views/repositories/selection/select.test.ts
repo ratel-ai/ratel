@@ -176,3 +176,74 @@ test("the trace list is capped", () => {
   });
   assert.deepEqual(selection.traces, ["trace-refund", "trace-status"]);
 });
+
+const MONOREPO = [
+  "diff --git a/website/src/pages/pricing.tsx b/website/src/pages/pricing.tsx",
+  "index 1..2 100644",
+  "--- a/website/src/pages/pricing.tsx",
+  "+++ b/website/src/pages/pricing.tsx",
+  "@@ -1 +1 @@",
+  "-<h1>Pricing</h1>",
+  "+<h1>Plans and pricing</h1>",
+  "diff --git a/agents/support/src/tools/refund_order.ts b/agents/support/src/tools/refund_order.ts",
+  "index 1..2 100644",
+  "--- a/agents/support/src/tools/refund_order.ts",
+  "+++ b/agents/support/src/tools/refund_order.ts",
+  "@@ -1 +1 @@",
+  "-  return payments.refund(order);",
+  "+  return payments.refund(order, { once: true });",
+].join("\n");
+
+test("in a monorepo, a change outside the agent's folder touches nothing", () => {
+  const selection = selectEvals({
+    diff: MONOREPO,
+    root: "agents/support",
+    tools: TOOLS,
+    evals: EVALS,
+    traces: TRACES,
+  });
+  assert.equal(selection.mode, "some");
+  assert.deepEqual(selection.change.outside, ["website/src/pages/pricing.tsx"]);
+  assert.deepEqual(selection.change.tools, ["refund_order"]);
+  assert.deepEqual(picked(selection), [["e-refunds", ["r-damaged"]]]);
+});
+
+test("the agent's own ratel.yaml and paths are read from its folder", () => {
+  const diff = fixture("model-change.diff").replaceAll("ratel.yaml", "agents/support/ratel.yaml");
+  const selection = selectEvals({
+    diff,
+    root: "agents/support",
+    tools: TOOLS,
+    evals: EVALS,
+    traces: TRACES,
+  });
+  assert.deepEqual(selection.change.global, ["agents/support/ratel.yaml changes model"]);
+});
+
+test("a file the rule cannot map takes what the decision model read in it", () => {
+  const base = { diff: fixture("unmapped-code.diff"), tools: TOOLS, evals: EVALS, traces: TRACES };
+  const asTool = selectEvals({
+    ...base,
+    resolved: { "src/format.ts": { kind: "tool", tool: "refund_order", confidence: 0.91 } },
+  });
+  assert.equal(asTool.mode, "some");
+  assert.deepEqual(asTool.change.unmapped, []);
+  assert.deepEqual(asTool.change.classified, [
+    { path: "src/format.ts", as: "refund_order", confidence: 0.91 },
+  ]);
+  assert.deepEqual(picked(asTool), [["e-refunds", ["r-damaged"]]]);
+
+  const outside = selectEvals({
+    ...base,
+    resolved: { "src/format.ts": { kind: "outside", confidence: 0.95 } },
+  });
+  assert.equal(outside.mode, "none");
+  assert.deepEqual(outside.change.outside, ["src/format.ts"]);
+
+  const shared = selectEvals({
+    ...base,
+    resolved: { "src/format.ts": { kind: "shared", confidence: 0.88 } },
+  });
+  assert.equal(shared.mode, "all");
+  assert.deepEqual(shared.change.global, ["src/format.ts is code every run goes through"]);
+});

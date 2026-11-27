@@ -132,14 +132,14 @@ test("the default branch makes versions; another branch only when its pattern is
   );
 });
 
-test("a pull request from the repository builds; from a fork it waits for an admin", () => {
+test("a pull request from the repository builds; one from a fork is ignored", () => {
   const own = parseGitHubEvent("pull_request", pullRequest("opened"));
   const fork = parseGitHubEvent("pull_request", pullRequest("opened", true));
   assert.ok("kind" in own && "kind" in fork);
   assert.deepEqual(decideCommit(LINK, own), { action: "build" });
   assert.deepEqual(decideCommit(LINK, fork), {
-    action: "await_approval",
-    reason: "a pull request from a fork runs only once an admin approves it",
+    action: "skip",
+    reason: "pull requests from forks are ignored",
   });
   assert.deepEqual(decideCommit({ ...LINK, pullRequests: false }, own), {
     action: "skip",

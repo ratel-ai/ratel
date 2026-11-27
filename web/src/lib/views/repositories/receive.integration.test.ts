@@ -98,7 +98,7 @@ test("a push, then the pull request of the same commit, make one version row", a
   assert.deepEqual(await store.listCommits(OFF, 10, db), []);
 });
 
-test("a fork's pull request waits for approval; a tag push records nothing", async () => {
+test("a fork's pull request and a tag push record nothing", async () => {
   const fork = "f".repeat(40);
   await deliver("pull_request", {
     action: "opened",
@@ -122,8 +122,9 @@ test("a fork's pull request waits for approval; a tag push records nothing", asy
   assert.deepEqual(tag.body, { ignored: "not a branch" });
 
   const rows = await store.listCommits(ON, 10, db);
-  const row = rows.find((r) => r.sha === fork);
-  assert.equal(row?.status, "awaiting_approval");
-  assert.equal(row?.fromFork, true);
-  assert.equal(rows.length, 2);
+  assert.equal(
+    rows.find((r) => r.sha === fork),
+    undefined,
+  );
+  assert.equal(rows.length, 1);
 });

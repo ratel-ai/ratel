@@ -30,7 +30,6 @@ const COMMIT = {
   baseSha: "b".repeat(40),
   branch: "main",
   pullRequest: null,
-  fromFork: false,
   title: "Never refund an order twice",
   author: "octo",
   status: "queued" as const,
@@ -55,24 +54,33 @@ after(async () => {
   await client.close();
 });
 
-test("a project links one repository; linking again replaces it", async () => {
+test("a project links several repositories; linking one again updates it", async () => {
   await store.linkRepository(LINK, db);
-  const first = await store.getRepositoryLink(PROJECT, db);
-  assert.equal(first?.fullName, "acme/support-agent");
-  assert.deepEqual(first?.versionBranches, []);
-  assert.equal(first?.pullRequests, true);
-  assert.equal(first?.configPath, "ratel.yaml");
+  const [first] = await store.listRepositoryLinks(PROJECT, db);
+  assert.equal(first.fullName, "acme/support-agent");
+  assert.deepEqual(first.versionBranches, []);
+  assert.equal(first.pullRequests, true);
+  assert.equal(first.configPath, "ratel.yaml");
 
   await store.linkRepository(
-    { ...LINK, repositoryId: 5151, fullName: "acme/other", versionBranches: ["release/*"] },
+    { ...LINK, repositoryId: 5151, fullName: "acme/tools", configPath: "agent/ratel.yaml" },
     db,
   );
-  const second = await store.getRepositoryLink(PROJECT, db);
-  assert.equal(second?.repositoryId, 5151);
-  assert.deepEqual(second?.versionBranches, ["release/*"]);
+  await store.linkRepository({ ...LINK, versionBranches: ["release/*"] }, db);
+  const links = await store.listRepositoryLinks(PROJECT, db);
+  assert.deepEqual(
+    links.map((link) => [link.fullName, link.versionBranches, link.configPath]),
+    [
+      ["acme/support-agent", ["release/*"], "ratel.yaml"],
+      ["acme/tools", [], "agent/ratel.yaml"],
+    ],
+  );
 
-  await store.unlinkRepository(PROJECT, db);
-  assert.equal(await store.getRepositoryLink(PROJECT, db), null);
+  await store.unlinkRepository(PROJECT, 4242, db);
+  assert.deepEqual(
+    (await store.listRepositoryLinks(PROJECT, db)).map((link) => link.repositoryId),
+    [5151],
+  );
 });
 
 test("every project that links a repository, with its organization", async () => {
@@ -119,6 +127,10 @@ test("a commit moves on, and keeps the version it built", async () => {
 test("the newest commits come first, per project", async () => {
   await store.recordCommit(COMMIT, db);
   await store.recordCommit({ ...COMMIT, sha: "c".repeat(40), title: "Second" }, db);
+  // Two inserts can share a timestamp: give them their own.
+  await client.exec(
+    `update repository_commits set received_at = now() + interval '1 second' where title = 'Second'`,
+  );
   await store.recordCommit({ ...COMMIT, projectId: OTHER, sha: "d".repeat(40) }, db);
   const rows = await store.listCommits(PROJECT, 10, db);
   assert.deepEqual(
