@@ -618,7 +618,7 @@ test("the drain gives each project a turn, and a project has a limit of running 
   assert.equal(seen.size, MAX_RUNNING_EXPERIMENTS, "no experiment waits for an older one");
 });
 
-test("with the sandboxes flag off no trial starts", async () => {
+test("with the evals flag off no trial starts", async () => {
   const t = await setup();
   await t.approvedCase("one");
   const experiment = await t.start();

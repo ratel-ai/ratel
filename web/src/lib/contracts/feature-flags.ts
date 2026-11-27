@@ -16,9 +16,8 @@ export const CORE_FLAGS = [
   "agentsPages",
   "toolRunInsights",
   "focusedConsole",
-  // Ratel sandboxes. Owner: rstagi. Remove once `sandboxes` is on for every organization.
-  "sandboxes",
-  // Evals on Ratel sandboxes. Owner: rstagi. Remove once `evals` is on for every organization.
+  // Ratel sandboxes and evals on them, together. Owner: rstagi. Remove once `evals` is on for every
+  // organization.
   "evals",
 ] as const;
 
