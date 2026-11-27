@@ -2,11 +2,24 @@ import { Button } from "@ratel/design-system/button";
 import { EmptyState } from "@ratel/design-system/states";
 import { ArrowUpRight, Inbox, LayoutDashboard, Puzzle } from "lucide-react";
 import type { ReactNode } from "react";
+import { BrokenWidgetBody } from "@/components/console/dashboards/WidgetCardBody";
 import { GridCells } from "@/components/console/grid/GridCells";
+import {
+  type ItemFrame,
+  itemBodies,
+  itemFrames,
+} from "@/components/console/home/focused/item-bodies";
 import { widgetBodies } from "@/components/console/home/focused/widget-bodies";
-import { WIDGETS } from "@/components/console/home/focused/widgets";
 import { GRID_GAP_PX, GRID_ROW_PX } from "@/lib/console/grid/layout";
-import { visibleWidgets } from "@/lib/views/overview-layout/domain/layout";
+import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
+import {
+  isDashboardItem,
+  type OverviewPlacement,
+  placementTitle,
+  visibleWidgets,
+} from "@/lib/views/overview-layout/domain/layout";
+import Link from "../../shell/shims/next-link";
+import { ClustersTable } from "../dashboard/clusters-table";
 import type { OverviewView } from "./overview";
 
 type Bodies = Readonly<Record<string, ReactNode>>;
@@ -37,14 +50,25 @@ export function OverviewBody({
   const { overview, widget } = view;
   const href = consoleHref(view);
   const bodies = drawn(view);
-  const cards = visibleWidgets(overview.layout);
+  const frames = itemFrames(overview);
+  const cards = visibleWidgets(overview.layout).map((card) => ({
+    ...card,
+    ownHeight: isDashboardItem(card.id),
+  }));
+  const frameOf = (card: OverviewPlacement) => ({
+    title: frames[card.id]?.title ?? titleOf(card),
+    item: isDashboardItem(card.id) ? (frames[card.id] ?? null) : undefined,
+  });
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <p className="min-w-0 truncate text-xs text-fg-subtle">
           {widget === null ? null : (
             <>
-              <span className="font-medium text-fg">{titleOf(widget)}</span> ·{" "}
+              <span className="font-medium text-fg">
+                {cards[0] ? frameOf(cards[0]).title : widget}
+              </span>{" "}
+              ·{" "}
             </>
           )}
           <span className={widget === null ? "font-medium text-fg" : undefined}>
@@ -67,11 +91,18 @@ export function OverviewBody({
         <p className="text-sm text-fg-muted">The Overview has no widgets.</p>
       ) : widget === null ? (
         <GridCells cards={cards}>
-          {({ id }) => <Widget id={id} body={bodies[id]} className="h-full overflow-hidden" />}
+          {(card) => (
+            <Widget id={card.id} {...frameOf(card)} body={bodies[card.id]} className="h-full" />
+          )}
         </GridCells>
       ) : (
         // Alone it is as tall as its content, and no less than on the page.
-        <Widget id={widget} body={bodies[widget]} minHeight={heightOf(cards[0].h)} />
+        <Widget
+          id={widget}
+          {...frameOf(cards[0])}
+          body={bodies[widget]}
+          height={heightOf(cards[0].h)}
+        />
       )}
     </div>
   );
@@ -79,24 +110,51 @@ export function OverviewBody({
 
 function Widget({
   id,
+  title,
+  item,
   body,
   className = "",
-  minHeight,
+  height,
 }: {
   id: string;
+  title: string;
+  /** A dashboard widget's; null for one that did not load. Absent for the Overview's own. */
+  item?: ItemFrame | null;
   body: ReactNode;
   className?: string;
-  minHeight?: number;
+  height?: number;
 }) {
   return (
     <section
-      aria-label={titleOf(id)}
+      aria-label={title}
       data-overview-widget={id}
-      style={{ minHeight }}
-      className={`flex min-w-0 flex-col ${className}`}
+      // A chart of a dashboard fills what there is.
+      style={item === undefined ? { minHeight: height } : { height }}
+      className={`flex min-w-0 flex-col ${item === undefined ? "overflow-hidden" : "gap-3 p-4"} ${className}`}
     >
-      <h2 className="sr-only">{titleOf(id)}</h2>
-      {body ?? (
+      {item === undefined ? (
+        <h2 className="sr-only">{title}</h2>
+      ) : (
+        // The console's title row (components/console/grid/CardFrame.tsx).
+        <div className="flex min-h-7 items-center gap-2">
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg" title={title}>
+            {title}
+          </h2>
+          {item?.dashboard ? (
+            <Link
+              href={item.dashboard.href}
+              className="max-w-1/2 truncate text-xs text-fg-subtle hover:text-fg hover:underline"
+            >
+              {item.dashboard.name}
+            </Link>
+          ) : null}
+        </div>
+      )}
+      {item?.problem ? (
+        <BrokenWidgetBody problem={item.problem} />
+      ) : body ? (
+        body
+      ) : (
         <EmptyState
           icon={Puzzle}
           title="This widget cannot be drawn here"
@@ -110,19 +168,39 @@ function Widget({
 function bodiesOf(view: OverviewView): Bodies {
   const href = consoleHref(view);
   // No widget draws the last event's time.
-  return widgetBodies(
-    { ...view.overview, lastEventAt: null },
-    view.linked,
-    (peek) => `${href}${href.includes("?") ? "&" : "?"}peek=${peek}`,
+  const { overview } = view;
+  const clusters = Object.entries(overview.dashboards ?? {}).flatMap(([id, item]) =>
+    // The console's drawing of them is the Intents map's (dashboard/clusters-table.tsx).
+    item?.kind === "widget" && item.result?.kind === "clusters"
+      ? [
+          [
+            id,
+            <ClustersTable
+              key={id}
+              projectId={overview.project.id}
+              result={item.result as DashboardClusters}
+            />,
+          ],
+        ]
+      : [],
   );
+  return {
+    ...widgetBodies(
+      { ...overview, lastEventAt: null },
+      view.linked,
+      (peek) => `${href}${href.includes("?") ? "&" : "?"}peek=${peek}`,
+    ),
+    ...itemBodies(overview),
+    ...Object.fromEntries(clusters),
+  };
 }
 
 function consoleHref({ overview: { root, window, rangeParam } }: OverviewView): string {
   return window === 7 ? root : `${root}?range=${rangeParam}`;
 }
 
-function titleOf(id: string): string {
-  return (WIDGETS as Readonly<Record<string, { title: string } | undefined>>)[id]?.title ?? id;
+function titleOf(card: OverviewPlacement): string {
+  return placementTitle(card) ?? card.id;
 }
 
 function heightOf(rows: number): number {

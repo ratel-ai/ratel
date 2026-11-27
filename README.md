@@ -162,6 +162,7 @@ RATEL_ORG_NAME=Acme
 BASE_URL=https://ratel.example.com
 POSTGRES_PASSWORD=<generated>
 TRACE_SIGNALS_HASH_SALT=<generated>
+RATEL_SECRET_KEY=<generated>
 ```
 
 Then start it with `docker compose up -d --wait`. Point your proxy at `127.0.0.1:3000`, and configure it so that:
@@ -174,7 +175,7 @@ Model keys are optional, and every field is explained in `.env.example`.
 
 **TLS.** Terminate it at the proxy and keep `BASE_URL` on the `https://` address, since the console's snippets are built from it.
 
-**Backups.** All state is in the Postgres volume (`ratel_pgdata`). Dump it with `docker compose exec -T db pg_dump -U ratel ratel > ratel.sql`, and restore into an empty database with `docker compose exec -T db psql -U ratel ratel < ratel.sql`. Keep `.env` too: a lost `TRACE_SIGNALS_HASH_SALT` splits old hashes from new.
+**Backups.** All state is in the Postgres volume (`ratel_pgdata`). Dump it with `docker compose exec -T db pg_dump -U ratel ratel > ratel.sql`, and restore into an empty database with `docker compose exec -T db psql -U ratel ratel < ratel.sql`. Keep `.env` too: a lost `TRACE_SIGNALS_HASH_SALT` splits old hashes from new, and a lost `RATEL_SECRET_KEY` cannot open the stored Slack secrets.
 
 **Upgrades.** Rerun the installer. By hand: check out the release's tag, set `RATEL_VERSION` in `.env` to the same version and run `docker compose up -d --wait`. The volume stays, also when the running version was built from source: its old `ratel-web` and `ratel-worker` images can then be deleted. Migrations run on boot and only add to the schema, so a rollback means restoring the dump you took before the upgrade and running the earlier version.
 

@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   changeLayout,
-  DEFAULT_LAYOUT,
+  defaultLayout,
+  WIDGET_CATALOG as EVERY_WIDGET,
   type OfferedWidgets,
-  OVERVIEW_WIDGETS,
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewWidgetId,
+  offeredWidgets,
   onlyWidget,
   sameLayout,
   stepChange,
   visibleWidgets,
-  WIDGET_CATALOG,
 } from "../domain/layout";
 import {
   changeArrangement,
@@ -20,6 +20,11 @@ import {
   readArrangement,
   storeArrangement,
 } from "../domain/stored";
+
+/** The four that are always offered. */
+const WIDGET_CATALOG: OfferedWidgets = EVERY_WIDGET.filter(({ id }) => id !== "alerts");
+const DEFAULT_LAYOUT = defaultLayout(WIDGET_CATALOG);
+const OVERVIEW_WIDGETS = WIDGET_CATALOG.map(({ id }) => id);
 
 const places = (layout: OverviewLayout) =>
   Object.fromEntries(
@@ -146,7 +151,7 @@ test("a keyboard step is an arrange, null with no room, and reset is the default
   const layout = changeLayout(DEFAULT_LAYOUT, change);
   assert.deepEqual(order(layout), ["topology", "metrics", "health", "attention"]);
   assert.equal(stepChange(DEFAULT_LAYOUT, "metrics", "up"), null);
-  assert.deepEqual(changeLayout(layout, { kind: "reset" }), DEFAULT_LAYOUT);
+  assert.deepEqual(changeLayout(layout, { kind: "reset" }, WIDGET_CATALOG), DEFAULT_LAYOUT);
 });
 
 test("one widget alone is as wide as the grid, whatever a layout holds", () => {
@@ -173,9 +178,20 @@ test("a change from outside is checked", () => {
     );
 });
 
+test("the alerts are offered with customMonitoring, under the rest, and no widget is below its minimum", () => {
+  assert.deepEqual(offeredWidgets({ customMonitoring: false }), WIDGET_CATALOG);
+  const offered = offeredWidgets({ customMonitoring: true });
+  assert.deepEqual(offered, EVERY_WIDGET);
+  assert.deepEqual(places(defaultLayout(offered)), {
+    ...places(DEFAULT_LAYOUT),
+    alerts: [0, 16, 12, 4],
+  });
+  for (const { min, place } of offered) assert.ok(place.w >= min.w && place.h >= min.h);
+});
+
 /* A later widget, behind a flag. */
 
-const ALERTS = "alerts" as OverviewWidgetId;
+const ALERTS = "alerts" satisfies OverviewWidgetId;
 const FIVE: OfferedWidgets = [
   ...WIDGET_CATALOG,
   { id: ALERTS, min: { w: 3, h: 3 }, place: { x: 0, y: 16, w: 6, h: 4 } },

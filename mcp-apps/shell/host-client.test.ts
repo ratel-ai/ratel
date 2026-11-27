@@ -128,14 +128,14 @@ test("tools/call, open-link, message and model context go to the host", async ()
   };
 
   const result = await client.callServerTool({ name: "get_trace", arguments: { id: "t1" } });
-  await client.openLink({ url: "https://cloud.ratel.sh/projects" });
+  await client.openLink({ url: "https://app.ratel.sh/projects" });
   await client.sendMessage({ role: "user", content: [{ type: "text", text: "Why?" }] });
   await client.updateModelContext({ content: [{ type: "text", text: "Looking at t1" }] });
 
   assert.deepEqual(result.structuredContent, { ok: true, data: { id: "t1" } });
   assert.deepEqual(asked, [
     "call:get_trace",
-    "link:https://cloud.ratel.sh/projects",
+    "link:https://app.ratel.sh/projects",
     "message:user",
     "context",
   ]);
@@ -196,7 +196,7 @@ test("a host that does not handle tools/call or open-link reads as unsupported, 
     (cause: unknown) => cause,
   );
   assert.equal(toolCallFailure(call).code, "host_unsupported");
-  const link = await client.openLink({ url: "https://cloud.ratel.sh" }).then(
+  const link = await client.openLink({ url: "https://app.ratel.sh" }).then(
     () => null,
     (cause: unknown) => cause,
   );

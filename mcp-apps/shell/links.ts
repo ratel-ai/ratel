@@ -4,7 +4,8 @@
  * it is connected. Before that, or with no host (the harness), a new window.
  */
 
-export const CONSOLE_ORIGIN = "https://cloud.ratel.sh";
+/** The hosted console. cloud.ratel.sh is a legacy deployment: never link there. */
+export const CONSOLE_ORIGIN = "https://app.ratel.sh";
 
 /** Mirrors lib/mcp/server.ts CONSOLE_ORIGIN_META (a view cannot import server code). */
 const ORIGIN_META = "ratel-console-origin";
@@ -12,7 +13,7 @@ const ORIGIN_META = "ratel-console-origin";
 /**
  * The console this view's links open: the origin of the app that served it,
  * which the server writes into the view's head (a local run is localhost,
- * staging is staging), else cloud.ratel.sh.
+ * staging is staging), else the hosted console, app.ratel.sh.
  */
 export function consoleOrigin(
   doc: Pick<Document, "querySelector"> | undefined = typeof document === "undefined"

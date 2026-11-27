@@ -23,6 +23,8 @@ export interface TraceFilter {
   status?: "failed" | "ok";
   minCostUsd?: number;
   minTokens?: number;
+  /** More clauses that must match too, also on the same property. */
+  and?: readonly TraceFilter[];
 }
 
 export type TraceFilterFacetKey = "model" | "tool" | "service" | "environment";
@@ -75,6 +77,7 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
         : null,
     minCostUsd !== null ? sql`s.cost_usd >= ${minCostUsd}` : null,
     minTokens !== null ? sql`s.input_tokens + s.output_tokens >= ${minTokens}` : null,
+    ...(filter.and ?? []).map(traceFilterCondition),
   ].filter((part): part is SQL => part !== null);
   return parts.length > 0 ? sql.join(parts, sql` and `) : null;
 }

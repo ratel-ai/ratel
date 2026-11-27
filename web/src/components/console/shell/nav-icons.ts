@@ -1,15 +1,19 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Bell,
   Blocks,
   BookOpen,
   Building2,
   Cable,
+  Compass,
   CreditCard,
   Crosshair,
   Database,
+  Gauge,
   HeartPulse,
   House,
+  LayoutDashboard,
   ListChecks,
   Orbit,
   Plug,
@@ -24,6 +28,10 @@ import type { NavIconName } from "@/lib/console/navigation";
 /** One glyph per rail item, kept out of the navigation model so it stays testable. */
 export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   overview: House,
+  dashboards: LayoutDashboard,
+  explore: Compass,
+  scorers: Gauge,
+  alerts: Bell,
   health: HeartPulse,
   tasks: ListChecks,
   intents: Orbit,

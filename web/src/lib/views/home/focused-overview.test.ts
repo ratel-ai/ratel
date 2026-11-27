@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { PathParamsContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
+import { DashboardWidgetList } from "@/components/console/home/focused/DashboardWidgetPicker";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
 import { HistoryBody } from "@/components/console/home/focused/HistoryDialog";
 import type { LayoutActions } from "@/components/console/home/focused/OverviewLayout";
@@ -13,6 +14,7 @@ import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
 import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
 import { FocusedConsoleProvider } from "@/components/console/shell/focused-console-context";
 import { TOUR_STEPS, tourSteps } from "@/lib/console/onboarding/tour-steps";
+import { metricQuery } from "@/lib/contracts/query";
 import {
   HEALTH_SCORE_VERSION,
   healthScoreView,
@@ -21,6 +23,7 @@ import {
 import { type HealthPageModel, windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
 import { MOCK_HEALTH_MODEL } from "@/lib/views/health/mock-fixture";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
+import type { DashboardItem } from "@/lib/views/home/dashboard-items";
 import {
   type FocusedOverviewData,
   type FocusedReads,
@@ -31,6 +34,7 @@ import type { LayoutHistoryEntry } from "@/lib/views/overview-layout/actions";
 import {
   changeLayout,
   DEFAULT_LAYOUT,
+  dashboardItemId,
   OVERVIEW_WIDGETS,
   type OverviewLayout,
   type OverviewWidgetId,
@@ -107,6 +111,9 @@ function reads(over: Partial<FocusedReads> = {}) {
     intents: async () => null,
     tasks: async () => null,
     dailyAggregates: async () => [],
+    alerting: async () => [],
+    alertRules: async () => ({ total: 0, on: 0, noData: 0 }),
+    dashboards: async () => ({}),
     context: async () => ({ split: null, suggestions: [], promptCacheHitRate: null }),
     ...over,
   };
@@ -153,6 +160,7 @@ const ACTIONS: LayoutActions = {
   undo: SAVED,
   restore: SAVED,
   history: async () => ({ ok: true, entries: [], snapshot: SNAPSHOT }),
+  dashboardWidgets: null,
 };
 
 function page(
@@ -192,26 +200,26 @@ test("reads the context only for its Panel", async () => {
   assert.deepEqual(open.ran.sort(), [...closed.ran, "context"].sort());
 });
 
-const order = (html: string) =>
-  [...html.matchAll(/data-overview-widget="(\w+)"/g)].map((match) => match[1]);
+const order = (html: string) => [...html.matchAll(/data-card="(\w+)"/g)].map((match) => match[1]);
 const removed = (...ids: OverviewWidgetId[]) =>
   ids.reduce<OverviewLayout>(
     (layout, widget) => changeLayout(layout, { kind: "remove", widget }),
     DEFAULT_LAYOUT,
   );
 
-test("without a stored layout: Metrics, Topology, then Health with Needs attention beside it", async () => {
+test("without a stored layout: Metrics, Topology, then Health with Needs attention beside it, then Alerts", async () => {
   const html = page(await load());
-  assert.deepEqual(order(html), ["metrics", "topology", "health", "attention"]);
+  assert.deepEqual(order(html), ["metrics", "topology", "health", "attention", "alerts"]);
   const headings = [...html.matchAll(/<h2[^>]*>([^<]+)</g)].map((match) => match[1]);
   assert.deepEqual(headings, [
     "Metrics",
     "Agents and MCP servers",
     "Health score",
     "Needs attention",
+    "Alerts",
   ]);
   const places = [...html.matchAll(/--cell-column:([^;"]+);--cell-row:([^;"]+)/g)];
-  assert.equal(places.length, 4, "the server draws the places");
+  assert.equal(places.length, 5, "the server draws the places");
   assert.equal(places[2][2], places[3][2], "Health and Needs attention share their rows");
   const text = visibleText(html);
   assert.match(text, /Receiving data/);
@@ -231,6 +239,7 @@ test("the page is the person's layout: their order, and no removed widget", asyn
     "attention",
     "metrics",
     "health",
+    "alerts",
   ]);
   for (const id of OVERVIEW_WIDGETS) {
     const others = OVERVIEW_WIDGETS.filter((other) => other !== id);
@@ -253,8 +262,8 @@ const CONTROLS = /data-grid-handle|data-grid-surface|role="toolbar"|aria-label="
 test("view mode is quiet: no visible title, border or control on a widget", async () => {
   const html = page(await load());
   assert.doesNotMatch(html, CONTROLS);
-  assert.doesNotMatch(html, /Customize|data-overview-edit-bar/);
-  for (const section of html.matchAll(/<section[^>]*data-overview-widget[^>]*>/g))
+  assert.doesNotMatch(html, /Customize|data-edit-bar/);
+  for (const section of html.matchAll(/<section[^>]*data-card[^>]*>/g))
     assert.match(section[0], /border-transparent/);
   for (const heading of html.matchAll(/<h2[^>]*>/g)) assert.match(heading[0], /sr-only/);
   assert.match(visibleText(html), /Edit/);
@@ -263,12 +272,18 @@ test("view mode is quiet: no visible title, border or control on a widget", asyn
 test("edit mode: a toolbar per widget, and a body that takes no press", async () => {
   const data = await load();
   const html = page(data, { edit: true });
-  for (const title of ["Metrics", "Agents and MCP servers", "Health score", "Needs attention"]) {
+  for (const title of [
+    "Metrics",
+    "Agents and MCP servers",
+    "Health score",
+    "Needs attention",
+    "Alerts",
+  ]) {
     assert.match(html, new RegExp(`role="toolbar" aria-label="${title}"`));
     assert.match(html, new RegExp(`aria-label="Arrange ${title}"`));
     assert.match(html, new RegExp(`aria-label="Remove ${title}"`));
   }
-  assert.equal((html.match(/data-grid-body="" inert=""/g) ?? []).length, 4);
+  assert.equal((html.match(/data-grid-body="" inert=""/g) ?? []).length, 5);
   for (const words of ["Add widget", "Reset", "Done"])
     assert.match(visibleText(html), new RegExp(words));
   assert.deepEqual(order(html), order(page(data)));
@@ -374,7 +389,7 @@ test("the Add widget dialog lists what the server offers", () => {
   );
   assert.deepEqual(
     offeredTo(DEFAULT_LAYOUT.filter(({ id }) => id !== "health")).map(({ id }) => id),
-    ["metrics", "topology", "attention"],
+    ["metrics", "topology", "attention", "alerts"],
   );
 });
 
@@ -414,6 +429,117 @@ test("a plan that caps the health window says which window the score is for", as
   );
   assert.deepEqual(asked, [7]);
   assert.match(visibleText(page(data)), /Last 7 days, the most your plan reads/);
+});
+
+const emptyOf = (html: string) =>
+  [...html.matchAll(/data-widget-empty="([^"]+)"/g)].map((match) => match[1]);
+const TELEMETRY = (latestSpanAt: Date | null) => async () => ({
+  hasEvents: true,
+  hasSpans: latestSpanAt !== null,
+  latestEventAt: AT,
+  latestSpanAt,
+});
+const NO_MAP = topologyModel({
+  agents: [],
+  handoffs: [],
+  servers: [],
+  calls: [],
+  hidden: new Set(),
+  names: new Map(),
+});
+
+test("no traces: each widget says so, asks for traces, and none of them looks like a load", async () => {
+  const nothing = {
+    health: async () => ({ ...pendingHealthModel(7), turns: 0, floor: 50 }),
+    topology: async () => NO_MAP,
+  };
+  const none = page(await load({ ...nothing, telemetry: TELEMETRY(null) }));
+  assert.deepEqual(emptyOf(none), [
+    "metrics",
+    "topology-none",
+    "health-no_turns",
+    "attention-no-data",
+    "alerts-none",
+  ]);
+  assert.doesNotMatch(none, /animate-pulse|role="status"|score-beat|score-wave|data-calculating/);
+  assert.doesNotMatch(visibleText(none), /Nothing needs you|Calculating|of 100/);
+  assert.match(visibleText(none), /Runs 0.*Spend \$0\.00/, "a zero stays a zero");
+
+  const older = page(
+    await load({ ...nothing, telemetry: TELEMETRY(new Date("2026-11-01T00:00:00.000Z")) }),
+  );
+  assert.deepEqual(emptyOf(older).slice(0, 2), ["metrics", "topology-window"]);
+  assert.match(older, new RegExp(`href="/project/${PROJECT_ID}\\?range=30d"`));
+  assert.doesNotMatch(visibleText(older), /No traces yet/);
+});
+
+test("each reason for no score keeps its own words, and only a first reading is being calculated", async () => {
+  const health = async (over: Partial<HealthPageModel>) =>
+    page(
+      await load(
+        { health: async () => ({ ...MODEL, ...over }) },
+        { layout: removed("metrics", "topology", "attention", "alerts") },
+      ),
+    );
+  const workflows = MODEL.workflows ?? ({ items: [], unserved: [] } as never);
+  for (const [over, words] of [
+    [{ turns: 12, floor: 50 }, /not ready yet 12 of the 50 turns a score needs\. Send more traces/],
+    [{ turns: 0, floor: 50 }, /A score needs 50 turns, and the last 7 days have none/],
+    [{ computedAt: null }, /Calculating the score.*Send more traces/],
+    [{ workflows: { ...workflows, blocked: "no_tool_calls" as const } }, /traces with tool calls/],
+    [{ workflows: { ...workflows, blocked: "mixed_runs" as const } }, /traces with turn ids/],
+    [{ score: null }, /No score in this reading/],
+  ] as const) {
+    const html = await health(over);
+    const text = visibleText(html);
+    assert.match(text, words);
+    assert.match(html, /data-health-score-ring="empty"/);
+    assert.doesNotMatch(html, /data-ring-cell="(lit|tip|target)"|data-health-score="/);
+    assert.equal(/Calculating/.test(text), "computedAt" in over);
+    assert.match(html, /href="[^"]*\/health"/, "Agent health stays a click away");
+  }
+  const failed = page(
+    await load({ health: fail }, { layout: removed("metrics", "topology", "attention", "alerts") }),
+  );
+  assert.deepEqual(emptyOf(failed), []);
+  assert.match(visibleText(failed), /The Health score did not load\. Try again/);
+});
+
+test("alerts: no rule, all paused, no data and none firing are four states", async () => {
+  const alerts = async (counts: { total: number; on: number; noData: number }) =>
+    page(
+      await load(
+        { alertRules: async () => counts },
+        { layout: removed("metrics", "topology", "attention", "health") },
+      ),
+    );
+  const none = await alerts({ total: 0, on: 0, noData: 0 });
+  assert.match(visibleText(none), /No alerts yet.*Create alert/);
+  assert.match(none, /href="[^"]*\/alerts\/new"/);
+  assert.match(visibleText(await alerts({ total: 2, on: 0, noData: 0 })), /All alerts are paused/);
+  assert.match(visibleText(await alerts({ total: 2, on: 1, noData: 1 })), /No data to check yet/);
+  assert.match(visibleText(await alerts({ total: 2, on: 2, noData: 1 })), /No alert fires now/);
+  const unread = await load(
+    { alertRules: fail },
+    { layout: removed("metrics", "topology", "attention", "health") },
+  );
+  assert.match(visibleText(page(unread)), /No alert fires now/, "unread is not none");
+});
+
+test("a dashboard widget: a zero is drawn, no data says so, and a failed read is red", async () => {
+  const result = (samples: number) => ({
+    kind: "metric" as const,
+    bucket: "day" as const,
+    buckets: [],
+    series: [{ groups: [], total: 0, samples, values: [] }],
+  });
+  assert.match(visibleText(await withItem({ ...COST_ITEM, result: result(3) })), /\$0\.00/);
+  const empty = await withItem({ ...COST_ITEM, result: result(0) });
+  assert.ok(emptyOf(empty).includes("item-window"));
+  assert.match(
+    visibleText(await withItem({ ...COST_ITEM, result: null })),
+    /The numbers could not be read\. Try again/,
+  );
 });
 
 test("without a score, the card says why in one line", () => {
@@ -527,4 +653,81 @@ test("the skeleton and the tour say the recap with the flag, today's Overview wi
   assert.equal(tourSteps(false), TOUR_STEPS);
   assert.match(tourSteps(true)[0].body, /Edit to add, remove, move and resize the widgets/);
   assert.deepEqual(tourSteps(true).slice(1), TOUR_STEPS.slice(1));
+});
+
+const BOARD = "44444444-4444-4444-8444-444444444444";
+const ITEM = dashboardItemId(BOARD, "cost");
+const WITH_ITEM = changeLayout(removed("topology"), {
+  kind: "add",
+  widget: ITEM,
+  source: { title: "Cost", w: 6, h: 5 },
+});
+const COST_ITEM: Extract<DashboardItem, { kind: "widget" }> = {
+  kind: "widget",
+  title: "Cost now",
+  dashboard: { name: "Board", href: `/project/${PROJECT_ID}/dashboards/${BOARD}` },
+  widget: {
+    id: "cost",
+    title: "Cost now",
+    query: metricQuery("cost", "sum"),
+    chart: "number",
+    layout: { x: 0, y: 0, w: 6, h: 5 },
+  },
+  result: null,
+  filters: {},
+  range: { preset: "7d", from: "2026-11-18", to: "2026-11-24" },
+};
+const withItem = (item: DashboardItem, edit = false) =>
+  load({ dashboards: async () => ({ [ITEM]: item }) }, { layout: WITH_ITEM }).then((data) =>
+    page(data, { edit }),
+  );
+
+test("a dashboard widget is a card with its source's name now, and a link to its dashboard", async () => {
+  const view = await withItem(COST_ITEM);
+  const edit = await withItem(COST_ITEM, true);
+  for (const html of [view, edit]) {
+    assert.match(html, new RegExp(`data-card="${ITEM}"`));
+    assert.match(html, /<h2[^>]*>Cost now<\/h2>/);
+    assert.match(html, new RegExp(`href="/project/${PROJECT_ID}/dashboards/${BOARD}"[^>]*>Board<`));
+  }
+  assert.doesNotMatch(view, CONTROLS);
+  assert.match(edit, /aria-label="Arrange Cost now"/);
+  assert.match(edit, /aria-label="Remove Cost now"/);
+});
+
+test("a deleted source is a broken item with its old name, and a way out", async () => {
+  const broken: DashboardItem = {
+    kind: "broken",
+    title: null,
+    problem: "Its dashboard was deleted.",
+  };
+  const html = await withItem(broken);
+  assert.match(html, /<h2[^>]*>Cost<\/h2>/);
+  assert.match(visibleText(html), /This widget is broken .*Its dashboard was deleted\. .*Remove/);
+  const data = await load({ dashboards: async () => ({ [ITEM]: broken }) }, { layout: WITH_ITEM });
+  assert.doesNotMatch(visibleText(page(data, { save: null })), /Remove/);
+});
+
+test("the dashboard widgets that did not load say so, and cost no other widget", async () => {
+  const html = page(await load({ dashboards: fail }, { layout: WITH_ITEM }));
+  assert.match(visibleText(html), /This widget did not load\. Try again/);
+  assert.match(visibleText(html), /Median duration/);
+});
+
+test("the picker lists the widgets by dashboard; one that is there is added, and the limit is said", () => {
+  const dashboards = [
+    {
+      id: BOARD,
+      name: "Board",
+      widgets: ["Cost", "Speed"].map((title) => ({ id: title.toLowerCase(), title, w: 6, h: 5 })),
+    },
+  ];
+  const list = (room: boolean) =>
+    render(
+      createElement(DashboardWidgetList, { dashboards, there: new Set([ITEM]), room, onAdd() {} }),
+    );
+  assert.match(list(true), /aria-label="Cost is added"/);
+  assert.match(list(true), /aria-label="Add Speed of Board"/);
+  assert.doesNotMatch(list(true), /Remove one first/);
+  assert.match(list(false), /An Overview can have 12 dashboard widgets\. Remove one first\./);
 });

@@ -3,15 +3,12 @@ import {
   type PublishableIngestLimits,
   publishableIngestLimits,
 } from "@/lib/ingest/ingest-limits";
-import { type IngestLogDeps, logLogsIngested } from "@/lib/ingest/otlp/ingest-log";
+import type { IngestLogDeps } from "@/lib/ingest/otlp/ingest-log";
 import type { insertOtelLogs as insertOtelLogsFn } from "@/lib/ingest/otlp/queries";
 import { inflateBody, isGzipEncoding, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/route-handler";
-import {
-  type GenAiLogJoinDeps,
-  rejoinStoredModelCalls,
-} from "@/lib/ingest/otlp/semconv/gen-ai-log-join";
-import { distinctSpanKeys } from "@/lib/ingest/otlp/semconv/gen-ai-logs";
-import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import type { GenAiLogJoinDeps } from "@/lib/ingest/otlp/semconv/gen-ai-log-join";
+import type { OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import { enqueueOtlpBatch, type IngestQueueAcceptDeps } from "@/lib/ingest/queue/accept";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
 import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
@@ -25,7 +22,6 @@ import type {
 } from "@/lib/platform/projects/queries";
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { decodeOtlpLogs, OtlpDecodeError } from "./decode-logs";
 import { otlpSuccessResponse, transportFor } from "./http";
 import {
   type IngestObservabilityDeps,
@@ -33,10 +29,11 @@ import {
   rejectIngestRequest,
   trackAcceptedIngestRequest,
 } from "./ingest-observability";
-import { toOtelLogRows } from "./log-rows";
+import { decodeLogExport, storeLogExport } from "./logs-export";
 
 export const MAX_BODY_BYTES = 4_000_000;
-export const MAX_LOG_RECORDS = 5_000;
+export { MAX_LOG_RECORDS } from "./logs-export";
+
 const logger = getLogger("otlp/logs");
 const defaultLogError: LogError = (message, error, fields) =>
   logger.error({ ...fields, err: error }, message);
@@ -64,6 +61,8 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   genAiLogJoin?: GenAiLogJoinDeps;
   /** Where the Datadog ingest line goes; absent, the app log and the cached project lookup. */
   ingestLog?: IngestLogDeps;
+  /** The ingest queue (RTL-314); absent or off, every export is decoded and stored in the request. */
+  ingestQueue?: IngestQueueAcceptDeps;
 }
 
 export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Promise<Response> {
@@ -199,36 +198,48 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
   }
   const bytes = inflated.bytes;
 
-  let records: ReturnType<typeof decodeOtlpLogs>;
-  try {
-    records = decodeOtlpLogs(
-      transport === "json" ? "application/json" : "application/x-protobuf",
-      bytes,
+  // The ingest queue (RTL-314): keep the body and answer; a worker decodes and stores it. An
+  // ingest-only key stays inline: its budget counts decoded records.
+  if (deps.ingestQueue?.enabled() && !auth.policy.sharedKeyLimits) {
+    const queued = await enqueueOtlpBatch(
+      {
+        projectId: apiKey.projectId,
+        signal: "logs",
+        transport,
+        received: read.bytes,
+        contentEncoding: req.headers.get("content-encoding"),
+        appendOnly: auth.policy.appendOnlyIngest,
+      },
+      deps.ingestQueue,
+      { logError, captureFailure: (error) => captureInsertFailure(error, apiKey.projectId, deps) },
     );
-  } catch (error) {
-    if (error instanceof OtlpDecodeError) {
+    if (!queued.ok) {
       return rejectLogsRequest(
-        json({ error: `Malformed OTLP payload: ${error.message}` }, 400),
-        "malformed",
+        json({ error: "Failed to store telemetry." }, 500),
+        "storage",
         startedAt,
         deps,
         apiKey.projectId,
         organization?.id,
       );
     }
-    throw error;
+    await deps.touchApiKey(apiKey.id).catch(() => {});
+    await trackAcceptedLogs({ queued: 1 }, apiKey.projectId, organization?.id, startedAt, deps);
+    return otlpSuccessResponse(transport, { queued: 1 });
   }
 
-  if (records.length > MAX_LOG_RECORDS) {
+  const decoded = decodeLogExport(transport, bytes);
+  if (!decoded.ok) {
     return rejectLogsRequest(
-      json({ error: `Too many log records in one export (max ${MAX_LOG_RECORDS}).` }, 413),
-      "oversized",
+      json({ error: decoded.error }, decoded.status),
+      decoded.reason,
       startedAt,
       deps,
       apiKey.projectId,
       organization?.id,
     );
   }
+  const records = decoded.records;
 
   // An ingest-only key's budget counts log records too, not only requests (RC-585).
   if (auth.policy.sharedKeyLimits) {
@@ -249,88 +260,66 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
     }
   }
 
-  const { rows, dropped } = toOtelLogRows(apiKey.projectId, records);
   // An append-only key (RC-590) stores its records as logs, but they never
-  // rewrite the project's runtime catalog definitions.
-  const appendOnly = auth.policy.appendOnlyIngest;
-  const stored = appendOnly ? rows.map(({ catalogDefinition: _definition, ...row }) => row) : rows;
-  let accepted = 0;
-  if (stored.length > 0) {
-    try {
-      ({ accepted } = await deps.insertOtelLogs(apiKey.projectId, stored));
-    } catch (error) {
-      logError("log record insert failed", error, { project_id: apiKey.projectId });
-      captureInsertFailure(error, apiKey.projectId, deps);
-      return rejectLogsRequest(
-        json({ error: "Failed to store telemetry." }, 500),
-        "storage",
-        startedAt,
-        deps,
-        apiKey.projectId,
-        organization?.id,
-      );
-    }
-  }
-
-  // Spans before logs: restate the model calls these records belong to.
-  // Fails open: the logs are stored, and a retry of the export joins again.
-  // An append-only key never restates a stored call (RC-590).
-  if (deps.genAiLogJoin && !appendOnly) {
-    const keys = distinctSpanKeys(rows.filter((row) => row.eventName.startsWith("gen_ai.")));
-    try {
-      await rejoinStoredModelCalls(apiKey.projectId, organization, keys, {
-        ...deps.genAiLogJoin,
-        captureFailure: (failure) => captureInsertFailure(failure, apiKey.projectId, deps),
-      });
-    } catch (error) {
-      logError("gen_ai log join failed", error, { project_id: apiKey.projectId });
-      captureInsertFailure(error, apiKey.projectId, deps);
-    }
-  }
-
-  // Raw capture after a stored export; fails open, never changes the response.
-  await captureOtlpRawExport(
+  // rewrite the project's runtime catalog definitions or restate a stored call.
+  const stored = await storeLogExport(
+    records,
     {
       projectId: apiKey.projectId,
-      signal: "logs",
-      contentType: transport === "json" ? "application/json" : "application/x-protobuf",
+      organization,
+      appendOnly: auth.policy.appendOnlyIngest,
+      transport,
       body: bytes,
       gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
-      itemCount: records.length,
-      traceIds: [...new Set(records.flatMap((record) => (record.traceId ? [record.traceId] : [])))],
     },
-    organization,
-    deps.otlpRawCapture,
+    deps,
     {
       logError,
       logWarn: deps.logWarn ?? defaultLogWarn,
       captureFailure: (error) => captureInsertFailure(error, apiKey.projectId, deps),
-      trackServerEvent: deps.trackServerEvent,
     },
   );
-
-  await deps.touchApiKey(apiKey.id).catch(() => {});
-
-  await logLogsIngested(
-    apiKey.projectId,
-    { records: records.length, accepted, dropped },
-    deps.ingestLog,
-  );
-  await trackAcceptedIngestRequest(
-    { accepted, records: records.length, dropped },
-    {
-      endpoint: "/v1/logs",
-      projectId: apiKey.projectId,
-      organizationId: organization?.id,
+  if (!stored.ok) {
+    return rejectLogsRequest(
+      json({ error: "Failed to store telemetry." }, 500),
+      "storage",
       startedAt,
       deps,
-    },
+      apiKey.projectId,
+      organization?.id,
+    );
+  }
+  const { accepted, dropped } = stored;
+
+  await deps.touchApiKey(apiKey.id).catch(() => {});
+  await trackAcceptedLogs(
+    { accepted, records: records.length, dropped },
+    apiKey.projectId,
+    organization?.id,
+    startedAt,
+    deps,
   );
 
   return otlpSuccessResponse(transport, {
     accepted,
     records: records.length,
     dropped,
+  });
+}
+
+async function trackAcceptedLogs(
+  counts: Record<string, number>,
+  projectId: string,
+  organizationId: string | undefined,
+  startedAt: number,
+  deps: LogsHandlerDeps,
+): Promise<void> {
+  await trackAcceptedIngestRequest(counts, {
+    endpoint: "/v1/logs",
+    projectId,
+    organizationId,
+    startedAt,
+    deps,
   });
 }
 

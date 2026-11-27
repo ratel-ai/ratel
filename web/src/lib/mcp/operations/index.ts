@@ -21,6 +21,20 @@ import {
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
 import { mcpServersOperations } from "@/lib/mcp/operations/mcp-servers";
+import { alertReadOperations, alertWriteOperations } from "@/lib/mcp/operations/monitoring/alerts";
+import {
+  dashboardReadOperations,
+  dashboardWriteOperations,
+} from "@/lib/mcp/operations/monitoring/dashboards";
+import {
+  locationReadOperations,
+  locationWriteOperations,
+} from "@/lib/mcp/operations/monitoring/locations";
+import { rqlOperations } from "@/lib/mcp/operations/monitoring/rql";
+import {
+  scorerReadOperations,
+  scorerWriteOperations,
+} from "@/lib/mcp/operations/monitoring/scorers";
 import { observabilityOperations } from "@/lib/mcp/operations/observability";
 import { overviewOperations, overviewWriteOperations } from "@/lib/mcp/operations/overview";
 import { playgroundOperations } from "@/lib/mcp/operations/playground";
@@ -43,6 +57,8 @@ export interface AssembleOptions {
   includeWrites?: boolean;
   /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
   focusedConsole?: boolean;
+  /** List the RQL tools too (`customMonitoring`). Off, they do not exist. */
+  customMonitoring?: boolean;
 }
 
 /**
@@ -84,6 +100,11 @@ export function assembleOperations(
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),
+    ...scorerReadOperations(),
+    ...alertReadOperations(),
+    ...dashboardReadOperations(),
+    ...(options.customMonitoring ? rqlOperations() : []),
+    ...locationReadOperations(),
     ...writeOperations(),
     ...(options.focusedConsole ? overviewWriteOperations() : []),
     ...runtimeWriteOperations(),
@@ -91,6 +112,10 @@ export function assembleOperations(
     ...loopWriteOperations(),
     ...loopTaskWriteOperations(),
     ...loopEvalSetWriteOperations(),
+    ...scorerWriteOperations(),
+    ...alertWriteOperations(),
+    ...dashboardWriteOperations(),
+    ...locationWriteOperations(),
   ];
   const operations = placeEditionOperations(core, adaptEditionOperations(registrations, core));
   return includeWrites ? operations : operations.filter((operation) => !operation.mutates);

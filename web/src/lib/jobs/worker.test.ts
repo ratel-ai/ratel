@@ -210,3 +210,73 @@ test("a long build in its own lane does not hold up an import", async () => {
   assert.ok(builds >= 1, "the build started");
   assert.ok(during > 5, `imports kept going while it ran (${during} steps)`);
 });
+
+/** Run a worker until `until` says stop, with every lane's steps counted by name. */
+async function runLanes(
+  deps: Partial<WorkerDeps>,
+  until: (counts: Map<string, number>) => boolean,
+) {
+  const counts = new Map<string, number>();
+  const bump = (name: string) => counts.set(name, (counts.get(name) ?? 0) + 1);
+  const handle = startWorker({
+    now: () => 0,
+    // A macrotask, so an idle loop cannot starve this test's own timers.
+    sleep: () => new Promise((resolve) => setImmediate(resolve)),
+    sweep: async () => {
+      bump("sweep");
+    },
+    drain: async () => {
+      bump("drain");
+      return { done: 0, failed: 0 };
+    },
+    ...deps,
+    extraLanes: (deps.extraLanes ?? []).map((lane) => ({
+      ...lane,
+      step: async () => {
+        bump(lane.name);
+        return lane.step();
+      },
+    })),
+  });
+  for (let i = 0; i < 1000 && !until(counts); i++) await new Promise((r) => setTimeout(r, 2));
+  await handle.stop();
+  return counts;
+}
+
+test("a registered lane runs beside the analysis lane, once per unit of its concurrency", async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const counts = await runLanes(
+    {
+      extraLanes: [
+        {
+          name: "ingest",
+          concurrency: 3,
+          step: async () => {
+            inFlight++;
+            peak = Math.max(peak, inFlight);
+            await new Promise((r) => setTimeout(r, 5));
+            inFlight--;
+            return { done: 1, failed: 0 };
+          },
+        },
+      ],
+    },
+    (c) => (c.get("ingest") ?? 0) >= 9 && (c.get("drain") ?? 0) > 0,
+  );
+  assert.ok((counts.get("sweep") ?? 0) >= 1, "the analysis lane still runs");
+  assert.equal(peak, 3, "three copies of the lane at once");
+});
+
+test("a persist-only worker runs its lanes and no analysis, sweep or import", async () => {
+  const counts = await runLanes(
+    {
+      analysis: false,
+      drainImports: async () => assert.fail("no imports"),
+      extraLanes: [{ name: "ingest", concurrency: 1, step: async () => ({ done: 0, failed: 0 }) }],
+    },
+    (c) => (c.get("ingest") ?? 0) >= 3,
+  );
+  assert.equal(counts.get("sweep"), undefined);
+  assert.equal(counts.get("drain"), undefined);
+});

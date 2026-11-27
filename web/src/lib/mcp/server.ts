@@ -77,7 +77,7 @@ export interface McpServerDeps {
   /**
    * This app's public origin, written into each view so its console links
    * open here (a local run links to localhost, staging to staging). Absent,
-   * views link to cloud.ratel.sh.
+   * views link to the hosted console (mcp-apps/shell/links.ts CONSOLE_ORIGIN).
    */
   consoleOrigin?: string;
   /**

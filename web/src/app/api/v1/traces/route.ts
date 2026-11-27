@@ -1,4 +1,6 @@
 import { composition } from "@/lib/composition/ports";
+import { ingestQueueRouteDeps } from "@/lib/composition/registry";
+import { geoIngest } from "@/lib/ingest/geo/ingest";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import {
   findStoredOtelSpans,
@@ -83,9 +85,15 @@ async function handlePost(req: Request) {
     genAiLogs: createGenAiLogStore(),
     // Raw request bodies, within the daily byte cap.
     otlpRawCapture: { store: createOtlpRawStore() },
+    // The country and region of each trace (customMonitoring).
+    locate: geoIngest.locate,
+    // The same before a batch is queued, so that no address waits in the queue.
+    redact: geoIngest.redact,
     // The project's own prices, read once per batch (RC-482).
     modelPricing: {
       loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
     },
+    // Queue the batch for a worker when EXPERIMENTAL_INGEST_QUEUE=1 (RTL-314).
+    ingestQueue: ingestQueueRouteDeps(),
   });
 }
