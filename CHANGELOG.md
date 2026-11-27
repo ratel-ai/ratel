@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/ratel-ai/ratel/compare/v0.6.0...v0.7.0) (2026-11-27)
+
+
+### Features
+
+* **ingest:** Kafka queue path on top of the Postgres ingest queue ([#523](https://github.com/ratel-ai/ratel/issues/523)) ([450192a](https://github.com/ratel-ai/ratel/commit/450192a51b78f085dcd6b874bf1ff6c86d61795c))
+* **web:** API-key CTAs view the existing key instead of asking for a new one ([#489](https://github.com/ratel-ai/ratel/issues/489)) ([0dff57c](https://github.com/ratel-ai/ratel/commit/0dff57ce4a8fe6ad9fdef2df4bac6dd1acfbff18))
+* **web:** one unlock rule for Agent health and the Overview's Needs attention ([#494](https://github.com/ratel-ai/ratel/issues/494)) ([d611c7b](https://github.com/ratel-ai/ratel/commit/d611c7b7124c065e0ad87d80410d59e62f40b9bb))
+
+
+### Bug Fixes
+
+* **tasks:** self-corrections per 100 turns everywhere; tile shows the page's number ([#497](https://github.com/ratel-ai/ratel/issues/497)) ([e9cf3de](https://github.com/ratel-ai/ratel/commit/e9cf3de9fefe29aab4d25de129a410a75f0b3b3d))
+* **web:** keep the session replay responsive while scrubbing fast ([#496](https://github.com/ratel-ai/ratel/issues/496)) ([e1a0f5c](https://github.com/ratel-ai/ratel/commit/e1a0f5c66a470087350f7cb49742ddc616d12056))
+
 ## [0.6.0](https://github.com/ratel-ai/ratel/compare/v0.5.0...v0.6.0) (2026-11-27)
 
 
