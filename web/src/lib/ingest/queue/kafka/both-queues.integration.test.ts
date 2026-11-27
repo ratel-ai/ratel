@@ -127,6 +127,20 @@ async function broker(servers: string[]) {
     ],
   });
   const high = async (name: string) => Number((await admin.fetchTopicOffsets(name))[0]?.high ?? 0);
+  // On a broker that just started, the group's coordinator is still being placed: the first fetch can
+  // be answered NOT_COORDINATOR or COORDINATOR_NOT_AVAILABLE, which kafkajs marks retriable.
+  const committed = async () => {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return Number(
+          (await admin.fetchOffsets({ groupId, topics: [topic] }))[0].partitions[0].offset,
+        );
+      } catch (error) {
+        if (attempt >= 40 || !(error as { retriable?: boolean }).retriable) throw error;
+        await wait(250);
+      }
+    }
+  };
   return {
     admin,
     open: () =>
@@ -138,12 +152,7 @@ async function broker(servers: string[]) {
         policy: FAST_POLICY,
       }),
     dead: () => high(deadLetterTopic),
-    left: async () =>
-      (await high(topic)) -
-      Math.max(
-        0,
-        Number((await admin.fetchOffsets({ groupId, topics: [topic] }))[0].partitions[0].offset),
-      ),
+    left: async () => (await high(topic)) - Math.max(0, await committed()),
   };
 }
 
