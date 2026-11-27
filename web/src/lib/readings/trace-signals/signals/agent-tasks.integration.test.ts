@@ -164,6 +164,7 @@ async function tasksAfterReading(flag: boolean): Promise<TaskListModel> {
     insights: null,
     fixes: [],
     recorded: null,
+    projectCorrections: null,
     topics: null,
     price: null,
   });

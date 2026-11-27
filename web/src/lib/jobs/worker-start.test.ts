@@ -353,6 +353,48 @@ test("the watchdog limit reads CRON_DRAIN_TIMEOUT_MS: ten minutes by default, 0 
   assert.throws(() => config({ CRON_DRAIN_TIMEOUT_MS: "-1" }), /CRON_DRAIN_TIMEOUT_MS/);
 });
 
+test("what runs beside the loop is stopped with it, before the flush and the exit", async () => {
+  const h = harness();
+  const order: string[] = [];
+  let finishMessage: () => void = () => {};
+  const message = new Promise<void>((resolve) => {
+    finishMessage = resolve;
+  });
+  startBackgroundWorker(h.deps, {
+    beforeExit: async () => {
+      order.push("flush");
+    },
+    beside: {
+      stop: async () => {
+        order.push("stop");
+        await message;
+        order.push("stopped");
+      },
+    },
+  });
+  h.listeners.SIGTERM?.();
+  h.finishStep();
+  await settle();
+  assert.deepEqual(order, ["stop"]);
+  assert.deepEqual(h.exits, []);
+  finishMessage();
+  await settle();
+  await settle();
+  assert.deepEqual(order, ["stop", "stopped", "flush"]);
+  assert.deepEqual(h.exits, [0]);
+});
+
+test("a failed stop beside the loop does not keep the process alive", async () => {
+  const h = harness();
+  startBackgroundWorker(h.deps, { beside: { stop: () => Promise.reject(new Error("gone")) } });
+  h.listeners.SIGTERM?.();
+  h.finishStep();
+  await settle();
+  await settle();
+  assert.deepEqual(h.exits, [0]);
+  assert.equal(h.warnings.length, 1);
+});
+
 test("the worker runs the registered lanes; a persist-only process runs only them", async () => {
   const lane = { name: "ingest", concurrency: 2, step: async () => ({ done: 0, failed: 0 }) };
   const worker = harness({ lanes: () => [lane] });

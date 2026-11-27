@@ -17,6 +17,7 @@ import { traceEventHits, traceEvents } from "@/lib/ingest/trace-events/schema";
 import { jobs } from "@/lib/jobs/schema";
 import { analyzedTraceCondition } from "@/lib/platform/analysis-filter";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import {
   AGENT_RUN_EVENT_TYPE,
@@ -672,6 +673,7 @@ export async function listProjectsDueTraceTurnBuild(
     .from(projects)
     .where(
       and(
+        notOnHold(projects.id),
         or(unbuiltEvents, idleOpenTurns),
         notExists(
           db

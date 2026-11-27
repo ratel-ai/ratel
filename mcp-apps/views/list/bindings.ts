@@ -167,7 +167,7 @@ export const listBindings: ListBinding[] = [
         { key: "finishRate", label: "Finish rate", format: "share", width: "6.5rem" },
         {
           key: "correctionsPer100",
-          label: "Self-corrections per 100 runs",
+          label: "Self-corrections per 100 turns",
           format: "per100",
           width: "8rem",
           hiddenBelow: "md",

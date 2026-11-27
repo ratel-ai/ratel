@@ -10,6 +10,8 @@ import type { TaskFixLike } from "@/lib/views/tasks/issues";
 import {
   buildTaskDetail,
   buildTaskList,
+  correctionsWindowFor,
+  statusLine,
   type TasksInputs,
   weakestStep,
 } from "@/lib/views/tasks/model";
@@ -156,6 +158,7 @@ function inputs(over: Partial<TasksInputs> = {}): TasksInputs {
       },
     ],
     recorded: null,
+    projectCorrections: null,
     topics: null,
     price: null,
     ...over,
@@ -185,7 +188,11 @@ test("the list: one row per task, busiest first, with its status, finish rate an
     calls: 30,
     failureShare: 0.4,
   });
-  assert.equal(release.correctionsPer100, 40, "12 give-ups over 30 runs, read from the steps");
+  assert.equal(
+    release.correctionsPer100,
+    40,
+    "12 give-ups over its 30 turns (a run is one turn), read from the steps",
+  );
   assert.equal(release.issues, 1, "its own issue; the project-wide one is no task's");
   assert.equal(release.fixes, 2, "the schema fix on its tool and the fix that composes it");
   assert.equal(release.fixesHref, `/project/${PROJECT}/improvement/fixes?task=wf-release`);
@@ -203,7 +210,8 @@ test("the list: one row per task, busiest first, with its status, finish rate an
     runsInTasks: 60,
     allRuns: 80,
     finishRate: 48 / 60,
-    correctionsPer100: 20,
+    correctionsPer100: null,
+    correctionsWindowDays: null,
     correctionsRecorded: false,
   });
   assert.deepEqual(model.unserved, { measured: false, asks: [], runs: 0 });
@@ -216,7 +224,23 @@ test("recorded self-corrections win over the ones read from steps, for every tas
   const byId = new Map(model.rows.map((row) => [row.id, row]));
   assert.equal(byId.get("wf-browse")?.correctionsPer100, 20);
   assert.equal(byId.get("wf-release")?.correctionsPer100, 0, "recorded and none for it");
-  assert.equal(model.stats.correctionsPer100, 10);
+  assert.equal(model.stats.correctionsPer100, null, "the tile reads only the page's own count");
+});
+
+test("the tile's rate is the Self-corrections page's: every turn in its window, not only the tasks' runs", () => {
+  const model = buildTaskList(
+    inputs({
+      recorded: { byTask: new Map([["wf-browse", { asked_again: 3, phrase: 3 }]]) },
+      projectCorrections: { windowDays: 30, turns: 400, events: 94 },
+    }),
+  );
+  assert.equal(model.stats.correctionsPer100, 23.5, "94 over 400 turns, unplaced ones included");
+  assert.equal(model.stats.correctionsWindowDays, 30, "the window the page opens on");
+  const none = buildTaskList(
+    inputs({ projectCorrections: { windowDays: 7, turns: 0, events: 0 } }),
+  );
+  assert.equal(none.stats.correctionsPer100, null, "no turn in the window: no rate");
+  assert.equal(none.stats.correctionsWindowDays, 7);
 });
 
 test("intents served, top two on the list, with how many in all", () => {
@@ -574,4 +598,30 @@ test("a model-written label still names an agent task", () => {
     inputs({ stored: agentStored(), labels, names: new Map(), issues: [], fixes: [] }),
   );
   assert.equal(list.rows.find((row) => row.id === "wf-fix")?.name, "Drafting a fix");
+});
+
+test("a task watched for its self-corrections says so per 100 turns", () => {
+  const line = statusLine(
+    {
+      id: "wf-a",
+      status: "watch",
+      watch: "corrections",
+      finishRate: 0.95,
+      weakest: null,
+      correctionsPer100: 31.4,
+      issues: [],
+    },
+    30,
+    new Map(),
+    new Map(),
+  );
+  assert.equal(line, "The agent corrects itself 31 times per 100 turns.");
+});
+
+test("the tile's window: the longest page window inside the reading's, within the plan", () => {
+  assert.equal(correctionsWindowFor(30, 90), 30);
+  assert.equal(correctionsWindowFor(45, 90), 30, "the page offers 7, 30 and 90 days");
+  assert.equal(correctionsWindowFor(90, 90), 90);
+  assert.equal(correctionsWindowFor(30, 7), 7, "a plan's page shows no more than its window");
+  assert.equal(correctionsWindowFor(3, 90), 7, "shorter than any: the page's own default");
 });

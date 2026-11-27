@@ -79,6 +79,8 @@ export interface RunsViewProps {
   paged: boolean;
   /** Why the list is empty, or null when it has runs. */
   empty: TracesEmptyKind | null;
+  /** The project has a usable API key: the "no-telemetry" state then sends the first trace. */
+  hasApiKey?: boolean;
   latestRunAt: string | null;
   /** A wider preset to offer when nothing is in the window. */
   widerPreset: { id: RangePreset; label: string } | null;
@@ -185,6 +187,7 @@ export function RunsView(props: RunsViewProps) {
               kind={empty}
               unit="runs"
               projectId={projectId}
+              hasApiKey={props.hasApiKey}
               latestAt={props.latestRunAt}
               onClearFilters={() =>
                 go((current) => {

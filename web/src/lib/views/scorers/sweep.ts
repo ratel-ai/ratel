@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { CLOSED_SINCE_SLACK_MS } from "@/lib/readings/trace-signals/sweep";
 import { settledBefore } from "@/lib/synthesis/traces/summary-refresh";
 import type { EvalDb } from "@/lib/views/eval-gate/runs";
@@ -358,6 +359,7 @@ async function activeScorers(
     .where(
       and(
         eq(traceScorers.enabled, true),
+        notOnHold(traceScorers.projectId),
         or(isNull(traceScorers.judgeRetryAt), lte(traceScorers.judgeRetryAt, now)),
       ),
     )

@@ -60,6 +60,16 @@ const ISSUE: AttentionItem = {
   target: { kind: "link", href: `${ROOT}/health?peek=issue%3Aa#signal-a` },
 };
 
+const ERRORS: AttentionItem = {
+  key: "errors",
+  tone: "danger",
+  mark: "run",
+  title: "Failed runs",
+  subject: null,
+  figure: { value: "15%", caption: "9 of 60" },
+  target: { kind: "link", href: `${ROOT}/traces?errorOnly=1` },
+};
+
 function glance(overrides: Partial<Glance> = {}): Glance {
   return {
     intents: {
@@ -106,7 +116,7 @@ function glance(overrides: Partial<Glance> = {}): Glance {
 }
 
 function data(overrides: Partial<OverviewData> = {}): OverviewData {
-  const attention: Attention = { items: [ISSUE], moreIssues: 2 };
+  const attention: Attention = { items: [ISSUE], moreIssues: 2, healthLock: null };
   return {
     project: { id: "p1", name: "Support bot", slug: "support-bot", isDemo: false },
     root: ROOT,
@@ -360,6 +370,7 @@ test("rows about a task or an intent carry its pin", () => {
           },
         ],
         moreIssues: 0,
+        healthLock: null,
       },
     }),
   );
@@ -378,8 +389,24 @@ test("rows about a task or an intent carry its pin", () => {
 });
 
 test("an empty list says nothing needs you", () => {
-  const html = render(data({ attention: { items: [], moreIssues: 0 } }));
+  const html = render(data({ attention: { items: [], moreIssues: 0, healthLock: null } }));
   assert.match(html, /Nothing needs you right now/);
+});
+
+test("while Agent health is locked, its progress stands where its issues would, opening it", () => {
+  const healthLock = { unlocked: false as const, turns: 36, floor: 50 };
+  const health = { href: `${ROOT}/health`, windowDays: 7 as const, firstTry: null };
+  const alone = render(data({ health, attention: { items: [], moreIssues: 0, healthLock } }));
+  assert.doesNotMatch(alone, /Nothing needs you right now/);
+  assert.match(
+    alone,
+    /<a (?=[^>]*href="\/project\/p1\/health")[^>]*data-health-unlock=""[^>]*>.*Agent health unlocks at 50 turns · 36\/50/,
+  );
+  const withRows = render(
+    data({ health, attention: { items: [ERRORS], moreIssues: 0, healthLock } }),
+  );
+  assert.match(withRows, />Failed runs<\/span>.*Agent health unlocks at 50 turns · 36\/50/);
+  assert.doesNotMatch(withRows, /more in Agent health/);
 });
 
 test("recent runs sit to the side: links to their trace, failures said in words", () => {
@@ -572,6 +599,7 @@ test("the Spend stat and context rows open the panel in place, as real links", (
           },
         ],
         moreIssues: 0,
+        healthLock: null,
       },
     }),
   );
@@ -697,6 +725,7 @@ test("names written from people's asks never sit in an attribute", () => {
           },
         ],
         moreIssues: 0,
+        healthLock: null,
       },
     }),
   );

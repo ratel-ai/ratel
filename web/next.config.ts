@@ -92,6 +92,8 @@ const nextConfig: NextConfig = {
     "@ratel-ai/sdk-linux-arm64-gnu",
     "@ratel-ai/sdk-linux-x64-gnu",
     "@ratel-ai/sdk-win32-x64-msvc",
+    "aws-msk-iam-sasl-signer-js",
+    "kafkajs",
     "@opentelemetry/context-async-hooks",
     "@opentelemetry/core",
     "@opentelemetry/exporter-logs-otlp-http",

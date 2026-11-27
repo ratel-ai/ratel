@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { RUNTIME_EVENT_RETENTION_DAYS } from "@/lib/ingest/trace-events/maintenance";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import {
   getIntentGraph,
   type IntentGraphDb,
@@ -42,6 +43,7 @@ export async function pruneIntentGraphRevisions(
       select r.project_id, r.graph_key, r.rev,
              row_number() over (partition by r.project_id, r.graph_key order by r.rev desc) as rn
       from intent_graph_revisions r
+      where ${notOnHold(sql`r.project_id`)}
     ),
     victims as (
       select ranked.project_id, ranked.graph_key, ranked.rev
@@ -79,7 +81,7 @@ export async function pruneIntentGraphShadowTurns(
     with victims as (
       select project_id, graph_key, search_event_id
       from intent_graph_shadow_turns
-      where occurred_at < ${cutoff}
+      where occurred_at < ${cutoff} and ${notOnHold(sql`project_id`)}
       limit ${batchSize}
     )
     delete from intent_graph_shadow_turns t
@@ -109,7 +111,7 @@ export async function expireIntentGraphClusterMembers(
   const stale = await db.execute<{ project_id: string; graph_key: string }>(sql`
     select project_id, graph_key
     from intent_graphs
-    where producer = 'cloud'
+    where producer = 'cloud' and ${notOnHold(sql`project_id`)}
       and jsonb_path_exists(document, '$.intents[*] ? (@.last_ts < $cutoff)', jsonb_build_object('cutoff', ${cutoffMs}::bigint))
     order by updated_at asc
     limit ${batchSize}

@@ -18,6 +18,7 @@ import {
 import { type Variant, variantKey } from "@/lib/views/session-replay/variant";
 // What-if's spend reader: this request's budget check counts What-if runs (owned, ADR-0004).
 import "@/lib/views/session-replay/spend";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 
 /**
  * Saved What-if runs (RC-176). `requestWhatIf` checks the flag, the project,
@@ -208,6 +209,7 @@ export async function pruneWhatIfRuns(
     })
     .where(
       and(
+        notOnHold(sessionReplayRuns.projectId),
         inArray(sessionReplayRuns.status, [...LIVE]),
         lt(sql`coalesce(${sessionReplayRuns.startedAt}, ${sessionReplayRuns.createdAt})`, stale),
       ),
@@ -220,7 +222,12 @@ export async function pruneWhatIfRuns(
     );
   const pruned = await db
     .delete(sessionReplayRuns)
-    .where(lt(sessionReplayRuns.createdAt, new Date(now.getTime() - WHAT_IF_TTL_DAYS * DAY_MS)))
+    .where(
+      and(
+        notOnHold(sessionReplayRuns.projectId),
+        lt(sessionReplayRuns.createdAt, new Date(now.getTime() - WHAT_IF_TTL_DAYS * DAY_MS)),
+      ),
+    )
     .returning({ id: sessionReplayRuns.id });
   return { pruned: pruned.length, timedOut: timedOut.length };
 }
