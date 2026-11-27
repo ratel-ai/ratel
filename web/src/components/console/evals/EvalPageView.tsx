@@ -49,7 +49,10 @@ export function EvalPageView({
             {row.running ? <Badge tone="info">Running</Badge> : null}
           </span>
           {row.changed.length > 0 ? (
-            <span className="truncate text-xs text-fg-subtle" title={row.changed.join(", ")}>
+            <span
+              className="block max-w-[24rem] truncate text-xs text-fg-subtle"
+              title={row.changed.join(", ")}
+            >
               Changed: {row.changed.join(", ")}
             </span>
           ) : null}

@@ -10,7 +10,13 @@ import { storable } from "@/lib/platform/storable";
 import { inputText } from "./dataset-pages";
 import { type ResolveRefusal, resolveDataset } from "./datasets";
 import { caseContentSchema, inputProblem } from "./domain/case";
-import { type Dataset, datasetDetailsSchema, datasetQuerySchema } from "./domain/dataset";
+import {
+  type Dataset,
+  datasetDetailsSchema,
+  datasetQuerySchema,
+  type ValueRow,
+  valueRowSchema,
+} from "./domain/dataset";
 import { caseFromTurn } from "./domain/from-turn";
 import type { DatasetStore, NewRow } from "./ports/dataset-store";
 import type { TraceSource } from "./ports/trace-source";
@@ -128,7 +134,9 @@ export function handleAddDatasetRows(
       rows = [savedRow(body.data.case)];
     } else if ("row" in body.data) {
       const { name, input, expectedOutput } = body.data.row;
-      rows = [{ kind: "values", name, row: { values: { input }, expectedOutput } }];
+      const row = valueRowSchema.safeParse({ values: typedValues(input), expectedOutput });
+      if (!row.success) return invalid(row.error);
+      rows = [{ kind: "values", name, row: row.data }];
     } else {
       const fromTurns = await rowsOfTurns(member.projectId, body.data.turnIds, deps.source());
       if (!fromTurns.ok) return fromTurns.response;
@@ -229,6 +237,27 @@ export async function rowsOfTurns(
     });
   }
   return { ok: true, rows };
+}
+
+/**
+ * The values of a typed input: a JSON object as it is, else the text as the message of the agent,
+ * the shape that a row from a trace turn has (`{ "message": text }`).
+ */
+function typedValues(text: string): ValueRow["values"] {
+  try {
+    const value: unknown = JSON.parse(text);
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.keys(value).length > 0
+    ) {
+      return value as ValueRow["values"];
+    }
+  } catch {
+    // Plain text.
+  }
+  return { message: text };
 }
 
 function savedRow({ name, content }: z.output<typeof savedCaseSchema>): NewRow {

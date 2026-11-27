@@ -124,10 +124,10 @@ function FixedRows({
       header: "Input",
       cell: (row) => (
         <span className="flex min-w-0 flex-col">
-          <span className="truncate text-fg" title={row.input}>
+          <span className="block max-w-[34rem] truncate text-fg" title={row.input}>
             {shortText(row.input)}
           </span>
-          <span className="truncate text-xs text-fg-subtle">{row.name}</span>
+          <span className="block max-w-[34rem] truncate text-xs text-fg-subtle">{row.name}</span>
         </span>
       ),
     },
@@ -138,7 +138,7 @@ function FixedRows({
       hiddenBelow: "md",
       cell: (row) =>
         row.expectedOutput ? (
-          <span className="block truncate text-fg-muted" title={row.expectedOutput}>
+          <span className="block max-w-[22rem] truncate text-fg-muted" title={row.expectedOutput}>
             {shortText(row.expectedOutput)}
           </span>
         ) : (
@@ -330,7 +330,10 @@ function AddRowsDialog({
                     />
                   )}
                 </Field>
-                <Field label="Input">
+                <Field
+                  label="Input"
+                  description="Text goes to the agent as its message. A JSON object goes as it is."
+                >
                   {(control) => (
                     <Textarea
                       {...control}

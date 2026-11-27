@@ -457,7 +457,7 @@ function TrialOutput({ trial }: { trial: GridTrial }) {
     <span className="line-clamp-4 text-fg" title={trial.output ?? undefined}>
       {trial.output ?? <span className="text-xs text-fg-faint">No output</span>}
       {trial.result === "fail" && trial.reason && trial.output === null ? (
-        <span className="text-xs text-danger">{trial.reason}</span>
+        <span className="block text-xs text-danger">{trial.reason}</span>
       ) : null}
     </span>
   );

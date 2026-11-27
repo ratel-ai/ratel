@@ -144,8 +144,20 @@ test("rows are added from turns or typed values, and removed", async () => {
   const rows = await datasets.rows(PROJECT_ID, id);
   assert.equal(rows.length, 2);
   const value = rows.find(({ name }) => name === "Typed");
-  assert.deepEqual(value && currentVersion(value)?.input, { input: "cancel B1" });
+  // Text is the message of the agent, as a row from a trace turn has it.
+  assert.deepEqual(value && currentVersion(value)?.input, { message: "cancel B1" });
   assert.equal(value && currentVersion(value)?.expectedOutput, "Cancelled.");
+  const json = await answer(
+    handleAddDatasetRows(
+      request({ row: { name: "JSON", input: '{"order": "A1", "amount": 3}' } }),
+      PROJECT_ID,
+      id,
+      deps(),
+    ),
+  );
+  assert.equal(json.status, 201);
+  const jsonRow = (await datasets.rows(PROJECT_ID, id)).find(({ name }) => name === "JSON");
+  assert.deepEqual(jsonRow && currentVersion(jsonRow)?.input, { order: "A1", amount: 3 });
   const noInput = await answer(
     handleAddDatasetRows(request({ turnIds: [NO_INPUT] }), PROJECT_ID, id, deps()),
   );
@@ -158,7 +170,7 @@ test("rows are added from turns or typed values, and removed", async () => {
   assert.ok(value);
   const removed = await handleRemoveDatasetRow(PROJECT_ID, id, value.id, deps());
   assert.equal(removed.status, 200);
-  assert.equal((await datasets.rows(PROJECT_ID, id)).length, 1);
+  assert.equal((await datasets.rows(PROJECT_ID, id)).length, 2);
   const again = await handleRemoveDatasetRow(PROJECT_ID, id, value.id, deps());
   assert.equal(again.status, 404);
   const query = await answer(

@@ -108,7 +108,7 @@ export function NewRunDialog({
         <DialogContent
           title="New run"
           description="The defaults of the eval. A change here is for this run only, and the run records it."
-          className="max-h-[90vh] max-w-3xl overflow-y-auto"
+          className="max-w-3xl"
           footer={
             <>
               <DialogClose render={<Button />}>Cancel</DialogClose>
@@ -157,7 +157,7 @@ export function NewRunDialog({
                       { value: LATEST, label: "Newest ready version" },
                       ...options.versions.map(({ id, commit }) => ({
                         value: id,
-                        label: `Pinned: ${commit ? commit.slice(0, 12) : id.slice(0, 8)}`,
+                        label: `Pinned: ${id.slice(0, 8)}${commit ? ` · ${commit.slice(0, 12)}` : ""}`,
                       })),
                     ]}
                     value={draft.versionId}
