@@ -17,10 +17,10 @@ import { getConfig } from "@/config";
 import { configuredHandler } from "@/ingest-consumer";
 import {
   addToRange,
+  describeError,
   emptyRange,
-  keepPartialTraces,
   rebuildHandler,
-  removeRange,
+  rebuildRange,
   type ReplayRange,
 } from "@/ingest-replay";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
@@ -58,13 +58,10 @@ async function main(): Promise<void> {
   let handler = configuredHandler({ traceMetering: loadMetering() });
   if (mode === "rebuild") {
     const range = await scan(kafka, topic, expected, isMargin);
-    await getDb().transaction(
-      async (tx) => {
-        keptTraces = await keepPartialTraces(tx, range);
-        await removeRange(tx, range);
-      },
-      { isolationLevel: "repeatable read" },
-    );
+    ({ keptTraces } = await rebuildRange(getDb(), range, {
+      onRetry: (attempt, error) =>
+        console.error(JSON.stringify({ event: "removal_retried", attempt, error: describeError(error) })),
+    }));
     handler = rebuildHandler(handler, range, isMargin);
   }
 
@@ -142,6 +139,6 @@ async function scan(
 }
 
 main().catch((error) => {
-  console.error(`replay failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`replay failed: ${describeError(error)}`);
   process.exit(1);
 });

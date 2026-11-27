@@ -138,8 +138,8 @@ export async function keepPartialTraces(db: ReplayDb, range: ReplayRange): Promi
 }
 
 /**
- * Run it with `keepPartialTraces` in one repeatable read: a span that comes meanwhile is not seen, and
- * stays. Removes the range's rows and what was derived from them: spans and their calls, the events lifted from
+ * Run it with `keepPartialTraces` in one repeatable read (`rebuildRange`): a span that comes meanwhile is
+ * not seen, and stays. Removes the range's rows and what was derived from them: spans and their calls, the events lifted from
  * spans, the trace's summary and turns, log records, runtime events and the raw captures. What a removed
  * runtime event had counted in `tool_usage_counters` is taken back, because storing it again counts it
  * again. Readings that jobs make over the whole window (intents, health) follow when those jobs run.
@@ -211,6 +211,89 @@ async function removeRuntimeEvents(
       total_duration_ms = greatest(0, c.total_duration_ms - n.took)
     from counted n
     where c.project_id = ${projectId} and c.source_id = n.source_id and c.tool_id = n.tool_id`);
+}
+
+export type RebuildDb = Pick<ReturnType<typeof getDb>, "transaction">;
+
+/** SQLSTATE of a transaction Postgres ended so that it can be run again: a serialization failure, a deadlock. */
+const RETRYABLE = new Set(["40001", "40P01"]);
+
+export interface RebuildOptions {
+  /** Tries in all, the first included. */
+  attempts?: number;
+  /** Before the second try; doubled before each next one. */
+  backoffMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+  onRetry?: (attempt: number, error: unknown) => void;
+}
+
+/**
+ * `keepPartialTraces` and `removeRange` in one repeatable read. While the organization sends, its worker
+ * changes the same rows (a tool's counter, above all) and Postgres ends the removal with a serialization
+ * failure. Nothing was removed then, so it runs again on a new snapshot, a few times with a backoff.
+ * Leaves in `range` the traces it removed.
+ */
+export async function rebuildRange(
+  db: RebuildDb,
+  range: ReplayRange,
+  options: RebuildOptions = {},
+): Promise<{ keptTraces: number; attempts: number }> {
+  const { attempts = 5, backoffMs = 250, sleep = wait, onRetry } = options;
+  for (let attempt = 1; ; attempt += 1) {
+    // `keepPartialTraces` takes traces out of the range: of a try that rolled back, none.
+    const tried = { ...range, traceIds: copyIds(range.traceIds) };
+    try {
+      let keptTraces = 0;
+      await db.transaction(
+        async (tx) => {
+          keptTraces = await keepPartialTraces(tx, tried);
+          await removeRange(tx, tried);
+        },
+        { isolationLevel: "repeatable read" },
+      );
+      range.traceIds = tried.traceIds;
+      return { keptTraces, attempts: attempt };
+    } catch (error) {
+      if (attempt >= attempts || !RETRYABLE.has(sqlStateOf(error) ?? "")) throw error;
+      onRetry?.(attempt, error);
+      await sleep(backoffMs * 2 ** (attempt - 1) * (1 + Math.random() / 2));
+    }
+  }
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+const copyIds = (map: Map<string, Set<string>>) =>
+  new Map([...map].map(([key, ids]) => [key, new Set(ids)]));
+
+/** Errors wrap the driver's: the SQLSTATE is on the first one in the chain that has it. */
+export function sqlStateOf(error: unknown): string | undefined {
+  for (let e = error; e instanceof Object; e = (e as { cause?: unknown }).cause) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
+  }
+  return undefined;
+}
+
+/**
+ * One line for a failed query: its statement and why Postgres refused it. Drizzle's own message has the
+ * statement and every parameter, and not the cause. The parameters are ids, left out.
+ */
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const query = (error as { query?: unknown }).query;
+  const parts: string[] = [];
+  if (typeof query === "string") {
+    parts.push(`failed query: ${query.replace(/\s+/g, " ").trim().slice(0, 300)}`);
+  } else {
+    parts.push(error.message);
+  }
+  for (let e = error.cause; e instanceof Object; e = (e as { cause?: unknown }).cause) {
+    const message = e instanceof Error ? e.message : String(e);
+    const code = (e as { code?: unknown }).code;
+    parts.push(typeof code === "string" ? `${message} (SQLSTATE ${code})` : message);
+  }
+  return parts.join(": ");
 }
 
 function* chunks(ids: Set<string>): Generator<string[]> {
