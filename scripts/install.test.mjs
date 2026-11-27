@@ -370,7 +370,7 @@ test("write_env fills every server secret with a fresh random value and prints n
   const dir = checkout();
   const { stdout } = await sh(`write_env "${dir}"`);
   const text = envFile(dir);
-  const secrets = ["POSTGRES_PASSWORD", "TRACE_SIGNALS_HASH_SALT", "CRON_SECRET"].map((name) => {
+  const secrets = ["POSTGRES_PASSWORD", "TRACE_SIGNALS_HASH_SALT", "RATEL_SECRET_KEY", "CRON_SECRET"].map((name) => {
     const secret = value(text, name);
     assert.match(secret ?? "", /^[0-9a-f]{64}$/, name);
     assert.ok(!stdout.includes(secret), `${name} is not printed`);

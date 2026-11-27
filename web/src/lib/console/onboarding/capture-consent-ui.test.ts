@@ -94,7 +94,7 @@ test("the copy stays in plain language: no engine names", () => {
 
 test("the snippet carries the capture switch only when the customer opts in", () => {
   const props = {
-    endpoint: "https://cloud.ratel.sh/api/v1/traces",
+    endpoint: "https://app.ratel.sh/api/v1/traces",
     serviceName: "support-copilot",
   };
   const off = renderToStaticMarkup(createElement(SdkQuickstart, props));

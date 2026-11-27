@@ -108,6 +108,16 @@ test("a tick without the cron secret is refused and schedules nothing", async ()
   await run;
 });
 
+test("ingest-only and persist-only tasks answer the tick and run nothing, like an API-only one", async () => {
+  for (const role of ["ingest", "persist"] as const) {
+    const h = harness(SECRET, { role: () => role });
+    const response = await startBackgroundDrain(tick(), h.deps);
+    assert.equal(response.status, 202, role);
+    assert.deepEqual(await response.json(), { ok: true, skipped: "worker" }, role);
+    assert.equal(h.drains(), 0, role);
+  }
+});
+
 test("an API-only task answers the tick and leaves the drain and its heartbeat to the worker", async () => {
   const h = harness(SECRET, { role: () => "api" });
   const response = await startBackgroundDrain(tick(), h.deps);

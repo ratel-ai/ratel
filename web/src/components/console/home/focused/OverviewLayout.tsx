@@ -20,16 +20,21 @@ import {
 } from "@/components/console/home/focused/layout-queue";
 import { offeredTo } from "@/components/console/home/focused/widgets";
 import type { LayoutHistoryEntry, LayoutSnapshot } from "@/lib/views/overview-layout/actions";
+import type { OfferedDashboard } from "@/lib/views/overview-layout/dashboard-widgets";
 import {
   changeLayout,
+  type OverviewItemId,
   type OverviewLayout,
   type OverviewLayoutChange,
-  type OverviewWidgetId,
 } from "@/lib/views/overview-layout/domain/layout";
 
 export type LayoutHistory =
   | { ok: true; entries: LayoutHistoryEntry[]; snapshot: LayoutSnapshot }
   | Refused;
+
+export type DashboardWidgetsRead =
+  | { ok: true; dashboards: OfferedDashboard[] }
+  | { ok: false; message: string };
 
 /** The server actions, bound to the project. `base` is the revision that the page shows. */
 export interface LayoutActions {
@@ -37,6 +42,8 @@ export interface LayoutActions {
   undo: (base: string) => Promise<Saved>;
   restore: (entryId: number, base: string) => Promise<Saved>;
   history: () => Promise<LayoutHistory>;
+  /** What the dashboards offer; null while they are off. */
+  dashboardWidgets: (() => Promise<DashboardWidgetsRead>) | null;
 }
 
 interface LayoutState {
@@ -49,8 +56,8 @@ interface LayoutState {
   adding: boolean;
   setAdding: (adding: boolean) => void;
   /** The widgets of the last visit to the dialog, until the page has shown them. */
-  added: readonly OverviewWidgetId[];
-  setAdded: (added: readonly OverviewWidgetId[]) => void;
+  added: readonly OverviewItemId[];
+  setAdded: (added: readonly OverviewItemId[]) => void;
   /** A save is on its way. */
   saving: boolean;
   /** Applies at once, then saves. `said` is for a screen reader. The number names this change. */
@@ -62,6 +69,8 @@ interface LayoutState {
   restore: (entryId: number) => Promise<Saved>;
   /** After the changes that wait. */
   readHistory: () => Promise<LayoutHistory>;
+  /** Null where the Overview takes no dashboard widget. */
+  readDashboardWidgets: LayoutActions["dashboardWidgets"];
   /** The History dialog. */
   browsing: boolean;
   setBrowsing: (browsing: boolean) => void;
@@ -96,7 +105,7 @@ export function OverviewLayoutProvider({
   const [editing, setEditMode] = useState(startEditing);
   const [adding, setAdding] = useState(false);
   const [browsing, setBrowsing] = useState(false);
-  const [added, setAdded] = useState<readonly OverviewWidgetId[]>([]);
+  const [added, setAdded] = useState<readonly OverviewItemId[]>([]);
   const [said, setSaid] = useState("");
   const [pending, setPending] = useState(0);
   const [queue] = useState(() =>
@@ -178,6 +187,7 @@ export function OverviewLayoutProvider({
   }, [actions, queue]);
 
   const editable = actions !== null;
+  const readDashboardWidgets = actions?.dashboardWidgets ?? null;
   const state = useMemo(
     () => ({
       layout,
@@ -196,6 +206,7 @@ export function OverviewLayoutProvider({
       undo,
       restore,
       readHistory,
+      readDashboardWidgets,
       said,
     }),
     [
@@ -212,6 +223,7 @@ export function OverviewLayoutProvider({
       undo,
       restore,
       readHistory,
+      readDashboardWidgets,
       said,
     ],
   );

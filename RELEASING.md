@@ -46,13 +46,15 @@ A release PR that `GITHUB_TOKEN` opens starts no CI, so its required `ci-gate` a
 `pr-title` checks never report. Store a fine-grained token (contents and pull requests: read and write) or a GitHub App
 token in the `RELEASE_PLEASE_TOKEN` secret, and the workflow uses it. Until then, close and reopen
 the release PR to start CI. With that token, the release tag push also starts `image.yml`: the
-second run pushes the same tags again from the build cache.
+second run builds again and moves the same tags to its own digests.
 
 ### Images
 
 `.github/workflows/image.yml` builds the `oss` target of `web/Dockerfile` for linux/amd64 and
-linux/arm64 (arm64 under QEMU) and pushes `docker.io/ratelai/ratel`. It builds the `demo` target
-and pushes `docker.io/ratelai/ratel-demo` with the same tags:
+linux/arm64 and pushes `docker.io/ratelai/ratel`. It builds the `demo` target and pushes
+`docker.io/ratelai/ratel-demo` with the same tags. Each platform builds on a native runner, without
+a layer cache, and pushes by digest. When all four builds pass, the `merge` job joins the two
+platforms of each image under its tags, so no tag names one platform only:
 
 | Trigger | Tags |
 | --- | --- |
@@ -62,13 +64,17 @@ and pushes `docker.io/ratelai/ratel-demo` with the same tags:
 | A push to `main` | `edge` |
 | A manual run (`gh workflow run image.yml -f tag=<tag>`) | `<tag>` only |
 
+The merge of a release PR cancels the older `edge` runs that are still in progress, because its own
+`edge` run replaces them. An ordinary push to `main` waits for the run in progress. That merge
+never cancels a release build, a tag build, a manual run or a `release-please.yml` run in progress.
+
 Each image has OCI labels and annotations (source, revision, version, created, licenses), a
 provenance attestation (`mode=max`) and an SBOM. Read them with
 `docker buildx imagetools inspect ratelai/ratel:<tag> --format '{{ json .Provenance }}'` (or
-`.SBOM`). After the push, the `smoke` job pulls the image, runs it on Postgres and waits for
-`/api/health`.
+`.SBOM`). After the push, the `smoke` job pulls the app image on each platform, runs it on Postgres and
+waits for `/api/health`.
 
-The job logs in with the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets: a Docker Hub
+The `build` and `merge` jobs log in with the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets: a Docker Hub
 access token with Read & Write on the `ratelai` namespace. The repositories `ratelai/ratel` and
 `ratelai/ratel-demo` must be public.
 

@@ -1,4 +1,5 @@
 import {
+  loadOverviewDashboardWidgets,
   loadOverviewHistory,
   restoreOverviewLayoutEntry,
   saveOverviewLayout,
@@ -10,6 +11,7 @@ import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOv
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
 import { BASE_URL } from "@/lib/platform/app-config";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import { CONTEXT_PEEK, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
@@ -37,7 +39,7 @@ export async function FocusedOverviewPage({
   const window = parseOverviewWindow(range);
   const now = new Date();
   const { layout, revision, undo, read } = await pageLayout(project.id);
-  const [data, linked] = await Promise.all([
+  const [data, linked, dashboardsOn] = await Promise.all([
     loadFocusedOverview({
       project,
       organization,
@@ -47,6 +49,7 @@ export async function FocusedOverviewPage({
       contextOpen: peek === CONTEXT_PEEK,
     }),
     projectEntitiesEnabled(organization),
+    featureEnabled("customMonitoring", { projectId: project.id, organizationId: organization.id }),
   ]);
   return (
     <FocusedOverviewView
@@ -62,6 +65,9 @@ export async function FocusedOverviewPage({
               undo: undoOverviewLayout.bind(null, project.id),
               restore: restoreOverviewLayoutEntry.bind(null, project.id),
               history: loadOverviewHistory.bind(null, project.id),
+              dashboardWidgets: dashboardsOn
+                ? loadOverviewDashboardWidgets.bind(null, project.id)
+                : null,
             }
       }
       actions={

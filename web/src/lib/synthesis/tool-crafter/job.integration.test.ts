@@ -216,8 +216,9 @@ test("a craft run reads the explorer's always-together pair and stores a rule-dr
     (await latestExplorerRun(PROJECT_ID, db, "completed"))?.id,
     "the run names the explorer reading it read",
   );
+  assert.ok(run);
   assert.deepEqual(
-    (run?.candidates as { kind: string; outcome: string }[]).map((c) => [c.kind, c.outcome]),
+    (run.candidates as { kind: string; outcome: string }[]).map((c) => [c.kind, c.outcome]),
     [
       ["merge_tools", "proposed"],
       ["deprecate_tool", "proposed"],
@@ -387,7 +388,8 @@ test("a craft run merges an intent's own two-tool pattern, read from the stored 
   const [merge] = await listCraftProposals(PROJECT_ID, { statuses: ["pending"] }, db);
   assert.equal(merge?.kind, "merge_tools");
   assert.deepEqual(merge?.sourceToolIds, ["find_task", "assign_task"]);
-  assert.deepEqual((merge?.evidence as { merge?: { intent?: unknown } }).merge?.intent, {
+  assert.ok(merge);
+  assert.deepEqual((merge.evidence as { merge?: { intent?: unknown } }).merge?.intent, {
     topicId: "t_assign",
     turns: 54,
     runs: 36,

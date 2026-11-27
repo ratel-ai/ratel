@@ -1,4 +1,5 @@
 import { and, asc, eq, lt, sql } from "drizzle-orm";
+import { GEO_COUNTRY_KEY, GEO_REGION_KEY } from "@/lib/ingest/geo/locate";
 import { otelSpans } from "@/lib/ingest/otlp/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { traceSummaryCursor } from "@/lib/synthesis/traces/schema";
@@ -68,12 +69,27 @@ const TRACE_SUMMARY_ADVISORY_LOCK_KEY = 823_100_023;
  * A tool span's tool name, as the runs list shows it (`listRunTools` with
  * `toolNameFromSpanName`): `gen_ai.tool.name`, else the span name without its
  * "execute_tool " operation prefix or "tool." namespace.
+ * Reads the span row aliased `s`.
  */
-const TOOL_NAME = sql.raw(`btrim(regexp_replace(regexp_replace(
+export const TOOL_NAME = sql.raw(`btrim(regexp_replace(regexp_replace(
   btrim(case when left(s.name, 13) = 'execute_tool ' then s.name
     else coalesce(nullif(btrim(s.attributes ->> 'gen_ai.tool.name'), ''), s.name) end),
   '^(?:chat|text_completion|generate_content|embeddings|execute_tool|invoke_agent|create_agent)\\s+(\\S.*)$', '\\1'),
   '^tool\\.(.+)$', '\\1'))`);
+/** The codes ingest marked a span with (`lib/ingest/geo/locate`); anything else is no code. */
+const GEO_COUNTRY = sql.raw(`(s.attributes ->> '${GEO_COUNTRY_KEY}')`);
+const GEO_REGION = sql.raw(`(s.attributes ->> '${GEO_REGION_KEY}')`);
+const LOCATED = sql`${GEO_COUNTRY} ~ '^[A-Z]{2}$'`;
+/** The order the canonical representative is chosen in: its location is the trace's. */
+const CANONICAL = sql.raw("(s.parent_span_id is null) desc, s.started_at, s.span_id");
+/**
+ * A trace's session and end user (RTL-321): the first non-null value of its
+ * spans in canonical order. Aggregates over the span rows aliased `s`.
+ */
+export const TRACE_SESSION_ID = sql`(array_agg(s.session_id order by ${CANONICAL})
+          filter (where s.session_id is not null))[1]`;
+export const TRACE_END_USER_ID = sql`(array_agg(s.end_user_id order by ${CANONICAL})
+          filter (where s.end_user_id is not null))[1]`;
 const EPOCH = "1970-01-01 00:00:00+00";
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_INTERVAL_MS = 2_000_000_000;
@@ -245,7 +261,13 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
         coalesce(
           array_agg(distinct s.mcp_server order by s.mcp_server) filter (where s.mcp_server is not null),
           '{}'
-        ) as mcp_servers
+        ) as mcp_servers,
+        (array_agg(${GEO_COUNTRY} order by ${CANONICAL})
+          filter (where ${LOCATED}))[1] as geo_country,
+        (array_agg(${GEO_REGION} order by ${CANONICAL})
+          filter (where ${LOCATED}))[1] as geo_region,
+        ${TRACE_SESSION_ID} as session_id,
+        ${TRACE_END_USER_ID} as end_user_id
       from otel_spans s
       join changed c
         on c.project_id = s.project_id and c.trace_id = s.trace_id
@@ -254,7 +276,8 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
     insert into otel_trace_summaries (
       project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
-      models, tools, service_name, environment, agents, mcp_servers, root_error
+      models, tools, service_name, environment, agents, mcp_servers, root_error, geo_country, geo_region,
+      session_id, end_user_id
     )
     select
       r.project_id,
@@ -273,7 +296,11 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       r.environment,
       a.agents,
       a.mcp_servers,
-      r.root_error
+      r.root_error,
+      a.geo_country,
+      a.geo_region,
+      a.session_id,
+      a.end_user_id
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
@@ -292,7 +319,11 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       environment = excluded.environment,
       agents = excluded.agents,
       mcp_servers = excluded.mcp_servers,
-      root_error = excluded.root_error
+      root_error = excluded.root_error,
+      geo_country = excluded.geo_country,
+      geo_region = excluded.geo_region,
+      session_id = excluded.session_id,
+      end_user_id = excluded.end_user_id
   `);
 }
 
@@ -361,7 +392,7 @@ function distinctTraces(spans: ReadonlyArray<ChangedTrace>): ChangedTrace[] {
  * every connection uses the same role), those rows read NULL and drop out of the
  * `min`, leaving the lag as the bound.
  */
-function settledBefore(visibilityLagMs: number) {
+export function settledBefore(visibilityLagMs: number) {
   // Lag inlined rather than bound: an integer we just validated, and a literal
   // keeps the interval's type unambiguous.
   return sql`least(

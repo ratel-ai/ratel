@@ -2,7 +2,7 @@
 
 The composition root. `RATEL_COMPOSITION` (`oss`, the default, or `cloud`) selects which set of
 port implementations is mounted; a missing port stops the process at startup
-(`instrumentation.node.ts`), never on the first request.
+(`instrumentation-node.ts`), never on the first request.
 
 - `index.ts` — `createComposition` and the `composition` singleton the core reads.
 - `ui`, optional on a composition: what an edition adds to the root layout and the account menu, and
@@ -11,7 +11,7 @@ port implementations is mounted; a missing port stops the process at startup
   the boundary around each page, and the access gate around the console and `/onboarding`, which
   decides before the shell resolves its data, and the Agent health importer (`HealthImports`) and public share link (`HealthShare`). A loader, so the boot path never imports it. Absent
   in the open-source edition.
-- `connect`, optional on a composition: `instrumentation.node.ts` calls it at startup with the
+- `connect`, optional on a composition: `instrumentation-node.ts` calls it at startup with the
   core services (`CoreServices`: `toolCorpus`, `importedRuns`, `onboarding`), so the edition reads
   core data, stores imported runs and creates a project from its own page without importing a core
   module.

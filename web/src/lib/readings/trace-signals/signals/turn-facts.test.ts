@@ -3,8 +3,10 @@ import { test } from "node:test";
 import { detectInTurn } from "@/lib/readings/trace-signals/self-corrections/detect";
 import { fresh, signalTurns, statsOf } from "@/lib/readings/trace-signals/signals/test-fixtures";
 import {
+  callRounds,
   classifyOtelTurnShape,
   classifyTurnShape,
+  isInvoke,
   turnWaste,
 } from "@/lib/readings/trace-signals/signals/turn-facts";
 
@@ -50,6 +52,23 @@ test("wasted-call retries are the module's retries after an error; the other cal
     { repeats: 1, retries: 0, noFollow: 0 },
     "an ok call repeated is a repeat",
   );
+});
+
+test("calls of one tool issued together are one round, not repeats", () => {
+  // One agent records each worker's hours with its own call, all in one
+  // model step: back to back, with no model round trip between them.
+  const [fanOut, rounds] = signalTurns([
+    fresh({ stepMs: 50 }).invoke("upsert").invoke("upsert").invoke("upsert"),
+    fresh().invoke("upsert").invoke("upsert").invoke("upsert"),
+  ]);
+  assert.deepEqual(turnWaste(fanOut!, 0), { repeats: 0, retries: 0, noFollow: 0 }, "one batch");
+  assert.deepEqual(
+    turnWaste(rounds!, 0),
+    { repeats: 2, retries: 0, noFollow: 0 },
+    "three rounds, a second apart",
+  );
+  assert.equal(callRounds(fanOut!.steps.filter(isInvoke)), 1);
+  assert.equal(callRounds(rounds!.steps.filter(isInvoke)), 3);
 });
 
 test("the retry shape is a turn with a retry after an error", () => {

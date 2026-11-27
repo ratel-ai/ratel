@@ -3,6 +3,7 @@ import {
   type PublishableIngestLimits,
   publishableIngestLimits,
 } from "@/lib/ingest/ingest-limits";
+import { enqueueBatch, type IngestQueueAcceptDeps } from "@/lib/ingest/queue/accept";
 import {
   FOLD_TRIGGER_TYPES,
   type IntentGraphFoldScheduleDeps,
@@ -21,7 +22,10 @@ import type { resolveProjectFromBearer as resolveProjectFromBearerFn } from "@/l
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { getLogger, type LogError } from "@/lib/platform/logger";
-import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
+import type {
+  getOrganizationByProjectId as getOrganizationByProjectIdFn,
+  Organization,
+} from "@/lib/platform/organizations";
 import type { TokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import type { trackServerEvent as trackServerEventFn } from "@/lib/platform/telemetry";
@@ -45,6 +49,8 @@ export interface RuntimeEventsHandlerDeps extends IntentGraphFoldScheduleDeps {
   traceTurns?: TraceTurnsIngestDeps;
   setRequestLogContext?: typeof setRequestLogContextFn;
   trackServerEvent?: typeof trackServerEventFn;
+  /** The ingest queue (RTL-314); absent or off, every batch is stored in the request. */
+  ingestQueue?: IngestQueueAcceptDeps;
 }
 
 type RuntimeEventsBody = { events: unknown[] };
@@ -125,9 +131,87 @@ export async function handleRuntimeEventsRequest(
     if (!items.allowed) return ingestRateLimitedResponse(items);
   }
 
-  const parsed = parseTraceEvents(body.events);
+  // The ingest queue (RTL-314): keep the body and answer; a worker stores the events. An
+  // ingest-only key stays inline, as for the OTLP routes.
+  if (deps.ingestQueue?.enabled() && !resolved.policy.sharedKeyLimits) {
+    const queued = await enqueueBatch(
+      {
+        projectId: resolved.projectId,
+        signal: "events",
+        contentType: "application/json",
+        contentEncoding: null,
+        body: read.bytes,
+        context: { appendOnly: resolved.policy.appendOnlyIngest },
+      },
+      deps.ingestQueue,
+      {
+        logError: deps.logError ?? defaultLogError,
+        captureFailure: (error) =>
+          (deps.reportServerException ?? reportServerException)(
+            error,
+            `project:${resolved.projectId}`,
+            { endpoint: "/api/v1/events" },
+          ),
+      },
+    );
+    if (!queued.ok) return json({ error: "Failed to store runtime events." }, 500);
+    // The body's shape is kept, so a client reading it still parses: nothing is stored yet.
+    return json({ accepted: 0, duplicates: 0, rejected: [], queued: body.events.length }, 202);
+  }
+
+  try {
+    const stored = await storeRuntimeEvents(
+      body.events,
+      {
+        projectId: resolved.projectId,
+        organization,
+        appendOnly: resolved.policy.appendOnlyIngest,
+      },
+      deps,
+    );
+    return acceptedResponse(stored.accepted, stored.duplicates, stored.rejected);
+  } catch (error) {
+    (deps.logError ?? defaultLogError)("runtime event insert failed", error, {
+      project_id: resolved.projectId,
+    });
+    (deps.reportServerException ?? reportServerException)(error, `project:${resolved.projectId}`, {
+      endpoint: "/api/v1/events",
+    });
+    return json({ error: "Failed to store runtime events." }, 500);
+  }
+}
+
+export type StoreRuntimeEventsDeps = Pick<
+  RuntimeEventsHandlerDeps,
+  | "insertTraceEvents"
+  | "insertTraceEventRejects"
+  | "traceTurns"
+  | "trackServerEvent"
+  | "logError"
+  | "reportServerException"
+  | keyof IntentGraphFoldScheduleDeps
+>;
+
+export interface StoredRuntimeEvents {
+  accepted: number;
+  duplicates: number;
+  rejected: Array<{ index: number; event_id: string | null; reason: string }>;
+}
+
+/**
+ * Validate and store a batch of runtime events, report its rejects, and kick the fold and the turn
+ * build: the write half of `/api/v1/events`, shared by the route and the ingest queue's worker
+ * (RTL-314). Throws when the write fails.
+ */
+export async function storeRuntimeEvents(
+  events: unknown[],
+  context: { projectId: string; organization: Organization | null; appendOnly: boolean },
+  deps: StoreRuntimeEventsDeps,
+): Promise<StoredRuntimeEvents> {
+  const { projectId, organization } = context;
+  const parsed = parseTraceEvents(events);
   const rejected = parsed.rejected.map(({ index, error }) => {
-    const raw = body.events[index];
+    const raw = events[index];
     return {
       index,
       event_id: metadataString(raw, "event_id"),
@@ -135,7 +219,7 @@ export async function handleRuntimeEventsRequest(
     };
   });
   const rejectRows = parsed.rejected.map(({ index, error }) => {
-    const raw = body.events[index];
+    const raw = events[index];
     return {
       eventId: metadataString(raw, "event_id"),
       type: metadataString(raw, "type"),
@@ -147,56 +231,51 @@ export async function handleRuntimeEventsRequest(
     };
   });
 
-  try {
-    const { accepted } = await deps.insertTraceEvents(
-      resolved.projectId,
-      parsed.valid.map((event) => ({ ...event, ingestSource: "runtime" })),
-      undefined,
-      // The ranking-status row and the live sync serve the Cloud-built graph.
-      {
-        intentGraphRuntimeStatus: parsed.valid.some(
-          (event) => event.type === "usage_ranking_status",
-        ),
-        // A shippable key only adds rows (RC-590): see ApiKeyPolicy.appendOnlyIngest.
-        appendOnly: resolved.policy.appendOnlyIngest,
-      },
-    );
-    await deps.insertTraceEventRejects(resolved.projectId, rejectRows);
-    const duplicates = parsed.valid.length - accepted;
-    if (accepted > 0 && parsed.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
-      await scheduleIntentGraphFold(deps, resolved.projectId, "/api/v1/events");
-    }
-    await deps.trackServerEvent?.(
-      "runtime_events_ingested",
-      {
-        projectId: resolved.projectId,
-        ...(organization ? { orgId: organization.id } : {}),
-      },
-      {
-        object_action: "runtime_events_ingested",
-        received: body.events.length,
-        accepted,
-        duplicates,
-        rejected: rejected.length,
-      },
-    );
-    await scheduleTraceTurnBuild(deps.traceTurns, {
-      projectId: resolved.projectId,
-      organization,
-      eventTypes: parsed.valid.map((event) => event.type),
+  const { accepted } = await deps.insertTraceEvents(
+    projectId,
+    parsed.valid.map((event) => ({ ...event, ingestSource: "runtime" })),
+    undefined,
+    // The ranking-status row and the live sync serve the Cloud-built graph.
+    {
+      intentGraphRuntimeStatus: parsed.valid.some((event) => event.type === "usage_ranking_status"),
+      // A shippable key only adds rows (RC-590): see ApiKeyPolicy.appendOnlyIngest.
+      appendOnly: context.appendOnly,
+    },
+  );
+  await deps.insertTraceEventRejects(projectId, rejectRows);
+  const duplicates = parsed.valid.length - accepted;
+  if (accepted > 0 && parsed.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
+    await scheduleIntentGraphFold(deps, projectId, "/api/v1/events");
+  }
+  await deps.trackServerEvent?.(
+    "runtime_events_ingested",
+    { projectId, ...(organization ? { orgId: organization.id } : {}) },
+    {
+      object_action: "runtime_events_ingested",
+      received: events.length,
       accepted,
-      logError: deps.logError,
-      reportServerException: deps.reportServerException,
-    });
-    return acceptedResponse(accepted, duplicates, rejected);
-  } catch (error) {
-    (deps.logError ?? defaultLogError)("runtime event insert failed", error, {
-      project_id: resolved.projectId,
-    });
-    (deps.reportServerException ?? reportServerException)(error, `project:${resolved.projectId}`, {
-      endpoint: "/api/v1/events",
-    });
-    return json({ error: "Failed to store runtime events." }, 500);
+      duplicates,
+      rejected: rejected.length,
+    },
+  );
+  await scheduleTraceTurnBuild(deps.traceTurns, {
+    projectId,
+    organization,
+    eventTypes: parsed.valid.map((event) => event.type),
+    accepted,
+    logError: deps.logError,
+    reportServerException: deps.reportServerException,
+  });
+  return { accepted, duplicates, rejected };
+}
+
+/** A queued events body, parsed again by the worker; null when it is not `{ events: [] }`. */
+export function parseRuntimeEventsBody(bytes: Uint8Array): unknown[] | null {
+  try {
+    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    return isRuntimeEventsBody(decoded) ? decoded.events : null;
+  } catch {
+    return null;
   }
 }
 

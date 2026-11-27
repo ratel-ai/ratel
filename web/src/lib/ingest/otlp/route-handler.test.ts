@@ -1107,6 +1107,27 @@ test("raw capture on: one stored export whose body decodes back to the same span
   );
 });
 
+test("a body that holds an IP address, or may, is not kept", async () => {
+  for (const locate of [
+    async () => ({ addressed: true }),
+    async () => {
+      throw new Error("location failed");
+    },
+  ]) {
+    const { capture, stored } = rawCapture();
+    const { deps } = makeDeps({ otlpRawCapture: capture, locate });
+    assert.equal((await handleTracesRequest(req(otlpJson(1), auth), deps)).status, 202);
+    assert.equal(stored.length, 0);
+  }
+  const { capture, stored } = rawCapture();
+  const { deps } = makeDeps({
+    otlpRawCapture: capture,
+    locate: async () => ({ addressed: false }),
+  });
+  await handleTracesRequest(req(otlpJson(1), auth), deps);
+  assert.equal(stored.length, 1);
+});
+
 test("raw capture is not attempted for a rejected export", async () => {
   const { capture, stored } = rawCapture();
   const { deps } = makeDeps({ otlpRawCapture: capture });

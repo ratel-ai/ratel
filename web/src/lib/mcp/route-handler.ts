@@ -20,6 +20,7 @@ import {
   loopEvalSetWriteOperations,
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
+import { customMonitoringForCaller } from "@/lib/mcp/operations/monitoring/rql";
 import { focusedConsoleForCaller } from "@/lib/mcp/operations/overview";
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpOrigin, mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
@@ -114,6 +115,8 @@ export interface McpRouteDeps {
   mcpApps?: (auth: McpAuthContext, options?: McpAppsFlagOptions) => Promise<boolean>;
   /** `focusedConsole`, for this caller: whether the recap Overview's tools exist. */
   focusedConsole?: (auth: McpAuthContext) => Promise<boolean>;
+  /** `customMonitoring`, for this caller: whether the RQL tools exist. */
+  customMonitoring?: (auth: McpAuthContext) => Promise<boolean>;
   /** `evals`, for this caller: whether the Ratel sandbox tools and the eval tools exist. */
   evals?: (auth: McpAuthContext) => Promise<boolean>;
   /** The built views, checked against the registry (lib/mcp/apps/load.ts). */
@@ -416,7 +419,8 @@ function logResourceReads(
 /**
  * The origin views link to: the one this request reached (mcpOrigin). A
  * deployment without APP_PUBLIC_URL has none to give, and the views fall back
- * to cloud.ratel.sh rather than the request failing.
+ * to the hosted console (mcp-apps/shell/links.ts CONSOLE_ORIGIN) rather than
+ * the request failing.
  */
 function viewConsoleOrigin(request: Request): string | undefined {
   try {
@@ -438,11 +442,12 @@ async function runMessages(
   /** The client shows views: the model is told the person already sees the data. */
   clientRendersViews: boolean,
 ): Promise<JSONRPCMessage[]> {
-  const [focusedConsole, evals] = await Promise.all([
+  const [focusedConsole, customMonitoring, evals] = await Promise.all([
     (deps.focusedConsole ?? focusedConsoleForCaller)(auth),
+    (deps.customMonitoring ?? customMonitoringForCaller)(auth),
     (deps.evals ?? evalsForCaller)(auth),
   ]);
-  const registry = buildRequestRegistry({ focusedConsole, evals });
+  const registry = buildRequestRegistry({ focusedConsole, customMonitoring, evals });
   const apps = built && viewsFor(built, (tool) => tool === "whoami" || registry.has(tool));
   const server = createRatelMcpServer({
     auth,

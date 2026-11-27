@@ -119,6 +119,27 @@ function failing(entry: WorkflowWithHealth, t: WorkflowThresholds["failing"]): W
   ];
 }
 
+/** Below this share of run time in timed tool calls, with no model calls linked, a run's length is not the tools'. */
+export const MIN_EXPLAINED_SHARE = 0.2;
+/** The share of a run's tool calls that must carry a duration before their time can explain it. */
+const MIN_TIMED_CALL_SHARE = 0.5;
+
+/**
+ * Whether the runs' time is spent where the project sends nothing: their
+ * tool calls are timed (most of them) yet cover under
+ * {@link MIN_EXPLAINED_SHARE} of it, and no model calls are linked. One MCP
+ * server saw whole coding sessions as runs, 1.3% of them in its tools.
+ */
+function unexplainedTime(health: WorkflowWithHealth["health"]): boolean {
+  if (health.model) return false;
+  if ((health.timedCallShare ?? 0) < MIN_TIMED_CALL_SHARE) return false;
+  return (
+    health.toolTimeShare !== null &&
+    health.toolTimeShare !== undefined &&
+    health.toolTimeShare < MIN_EXPLAINED_SHARE
+  );
+}
+
 function slow(
   entry: WorkflowWithHealth,
   baselineMs: number | null,
@@ -129,6 +150,7 @@ function slow(
   if (health.runs < t.minRuns || medianMs === null || baselineMs === null || baselineMs <= 0)
     return [];
   if (medianMs < t.minMedianMs || medianMs < t.minRatio * baselineMs) return [];
+  if (unexplainedTime(health)) return [];
   return [
     {
       kind: "workflow_slow",

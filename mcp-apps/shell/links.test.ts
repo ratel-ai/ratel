@@ -20,15 +20,17 @@ test("the server writes the origin under the name the view reads", () => {
 
 test("withConsoleOrigin keeps only an http(s) origin, and leaves the HTML alone otherwise", () => {
   assert.equal(
-    withConsoleOrigin("<head></head>", "https://staging.cloud.ratel.sh/api/mcp?x=1"),
-    '<head><meta name="ratel-console-origin" content="https://staging.cloud.ratel.sh"></head>',
+    withConsoleOrigin("<head></head>", "https://staging.app.ratel.sh/api/mcp?x=1"),
+    '<head><meta name="ratel-console-origin" content="https://staging.app.ratel.sh"></head>',
   );
   assert.equal(withConsoleOrigin("<head></head>", undefined), "<head></head>");
   assert.equal(withConsoleOrigin("<head></head>", "javascript:alert(1)"), "<head></head>");
   assert.equal(withConsoleOrigin("<head></head>", "not a url"), "<head></head>");
 });
 
-test("console links open the served origin, else cloud.ratel.sh", () => {
+test("console links open the served origin, else app.ratel.sh", () => {
+  // cloud.ratel.sh is a legacy deployment; the hosted console is app.ratel.sh.
+  assert.equal(CONSOLE_ORIGIN, "https://app.ratel.sh");
   assert.equal(
     consoleOrigin(docWith(CONSOLE_ORIGIN_META, "http://localhost:3100")),
     "http://localhost:3100",
@@ -48,7 +50,7 @@ test("console links open the served origin, else cloud.ratel.sh", () => {
 
 test("only http(s) leaves a view: other schemes are dropped, not opened", async () => {
   const { webUrl, openExternal, setLinkOpener } = await import("./links");
-  assert.equal(webUrl("https://cloud.ratel.sh/x"), "https://cloud.ratel.sh/x");
+  assert.equal(webUrl("https://app.ratel.sh/x"), "https://app.ratel.sh/x");
   assert.equal(webUrl("http://127.0.0.1:3100/"), "http://127.0.0.1:3100/");
   for (const bad of [
     "javascript:alert(1)",
@@ -61,9 +63,9 @@ test("only http(s) leaves a view: other schemes are dropped, not opened", async 
   const opened: string[] = [];
   setLinkOpener((url) => opened.push(url));
   openExternal("javascript:alert(1)");
-  openExternal("https://cloud.ratel.sh/project/p1");
+  openExternal("https://app.ratel.sh/project/p1");
   setLinkOpener(null);
-  assert.deepEqual(opened, ["https://cloud.ratel.sh/project/p1"]);
+  assert.deepEqual(opened, ["https://app.ratel.sh/project/p1"]);
 });
 
 test("a link through the host: a new window only when the host has no open-link, never on a timeout", async () => {
@@ -73,17 +75,17 @@ test("a link through the host: a new window only when the host has no open-link,
   const host = (error: unknown) => ({ openLink: async () => Promise.reject(error) });
   await openThroughHost(
     host(new HostRequestError(-32601, "Method not found")),
-    "https://cloud.ratel.sh/a",
+    "https://app.ratel.sh/a",
     (url) => fallback.push(url),
   );
   await openThroughHost(
     host(new HostRequestError(-32001, "Request timed out")),
-    "https://cloud.ratel.sh/b",
+    "https://app.ratel.sh/b",
     (url) => fallback.push(url),
   );
   assert.deepEqual(
     fallback,
-    ["https://cloud.ratel.sh/a"],
+    ["https://app.ratel.sh/a"],
     "a timeout may still be the host asking the person",
   );
   let asked = 0;
@@ -104,6 +106,6 @@ test("the Link shim renders a non-http(s) href without a destination", async () 
   );
   assert.match(
     renderToStaticMarkup(createElement(Link, { href: "/project/p1" }, "x")),
-    /href="https:\/\/cloud\.ratel\.sh\/project\/p1"/,
+    /href="https:\/\/app\.ratel\.sh\/project\/p1"/,
   );
 });
