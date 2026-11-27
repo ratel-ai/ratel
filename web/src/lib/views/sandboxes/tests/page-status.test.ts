@@ -21,7 +21,7 @@ type Layout = (props: {
 }) => ReactNode | Promise<ReactNode>;
 
 test("with the flag off the page answers 404: nothing streams before the flag is read", async () => {
-  delete process.env.FF_SANDBOXES;
+  delete process.env.FF_EVALS;
   const error = await streamPage().then(
     () => null,
     (reason: { digest?: string }) => reason,
@@ -32,7 +32,7 @@ test("with the flag off the page answers 404: nothing streams before the flag is
 });
 
 test("with the flag off the page itself loads nothing: Next renders it next to its layout", async () => {
-  delete process.env.FF_SANDBOXES;
+  delete process.env.FF_EVALS;
   const { default: Page } = (await import(pathToFileURL(findPage()).href)) as {
     default: (props: { params: Promise<{ projectId: string }> }) => Promise<ReactNode>;
   };

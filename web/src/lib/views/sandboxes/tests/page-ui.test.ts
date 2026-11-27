@@ -259,7 +259,7 @@ test("the rail shows Ratel sandbox with the flag on only", async () => {
       edition: "Ratel OSS",
     });
   assert.deepEqual(await ids({}), []);
-  assert.deepEqual(await ids({ FF_SANDBOXES: "1" }), ["org-1"]);
+  assert.deepEqual(await ids({ FF_EVALS: "1" }), ["org-1"]);
   const nav = (sandboxPage?: boolean) =>
     consoleNav({ projectId: "p1", additions: [], ...(sandboxPage ? { sandboxPage } : {}) });
   const ofOff = flattenNav(nav()).map((item) => item.id);

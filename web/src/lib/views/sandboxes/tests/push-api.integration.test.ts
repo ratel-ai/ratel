@@ -49,7 +49,7 @@ const KEYS: Record<string, { projectId: string; scopes: string[] }> = {
   ingest: { projectId: PROJECT_ID, scopes: ["ingest:traces"] },
   other: { projectId: OTHER_PROJECT_ID, scopes: ["*"] },
 };
-const ON = resolveConfig({ env: { FF_SANDBOXES: "1" } });
+const ON = resolveConfig({ env: { FF_EVALS: "1" } });
 const GET = new Request("http://10.0.0.7:3000/x");
 
 type Over = {

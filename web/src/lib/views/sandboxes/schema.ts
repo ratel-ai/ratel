@@ -17,7 +17,7 @@ import type { RatelYaml } from "./domain/config";
 import type { RunResponse, SmokeResult } from "./domain/contract";
 import type { RunRequest } from "./domain/run";
 
-/** The tables of Ratel sandboxes (the `sandboxes` flag). */
+/** The tables of Ratel sandboxes (the `evals` flag). */
 
 /** A sandbox: the name that the pushes of a project share. */
 export const sandboxes = pgTable(

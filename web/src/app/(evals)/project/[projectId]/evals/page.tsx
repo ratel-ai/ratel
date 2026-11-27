@@ -13,7 +13,7 @@ import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle
 import { emptyCounts } from "@/lib/views/evals/domain/experiment";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { caseRow, experimentRow, readyVersions } from "@/lib/views/evals/page-model";
-import { listSandboxVersions, sandboxesEnabledForProject } from "@/lib/views/sandboxes";
+import { listSandboxVersions } from "@/lib/views/sandboxes";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Evals" };
@@ -49,9 +49,7 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
       return Promise.all([
         createDrizzleCaseStore(db).list(project.id),
         experimentRows(),
-        (await sandboxesEnabledForProject(project.id))
-          ? listSandboxVersions(project.id, VERSIONS)
-          : [],
+        listSandboxVersions(project.id, VERSIONS),
         createDrizzleBaselineStore(db).get(project.id),
       ]);
     },

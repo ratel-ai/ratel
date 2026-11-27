@@ -151,7 +151,6 @@ test("each flag has its own env var and file key", () => {
     FF_AGENTS_PAGES: "1",
     FF_TOOL_RUN_INSIGHTS: "1",
     FF_FOCUSED_CONSOLE: "1",
-    FF_SANDBOXES: "1",
     FF_EVALS: "1",
   };
   const fromEnv = resolveConfig({ env }).flags;
@@ -164,6 +163,22 @@ test("each flag has its own env var and file key", () => {
     assert.equal(fromEnv[flag], true, flag);
     assert.equal(fromFile[flag], false, flag);
   }
+});
+
+test("one flag, evals, gates Ratel sandboxes and evals: no other flag is theirs", () => {
+  assert.deepEqual(
+    [...CORE_FLAGS],
+    [
+      "evalGate",
+      "rankingCatalogDrift",
+      "mcpApps",
+      "agentsPages",
+      "toolRunInsights",
+      "focusedConsole",
+      "evals",
+    ],
+  );
+  assert.deepEqual(Object.keys(resolveConfig().flags).sort(), [...CORE_FLAGS].sort());
 });
 
 test("any other flag value fails with a clear ConfigError", () => {
