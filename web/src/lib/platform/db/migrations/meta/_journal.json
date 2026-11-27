@@ -470,6 +470,13 @@
       "when": 1795755412107,
       "tag": "0066_rows_count_at_once",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1795794954834,
+      "tag": "0067_github_repositories",
+      "breakpoints": true
     }
   ]
 }

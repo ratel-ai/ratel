@@ -1,0 +1,25 @@
+diff --git a/src/old_name.ts b/src/new_name.ts
+similarity index 90%
+rename from src/old_name.ts
+rename to src/new_name.ts
+index 1234567..89abcde 100644
+--- a/src/old_name.ts
++++ b/src/new_name.ts
+@@ -1,1 +1,1 @@
+-export const a = 1;
++export const a = 2;
+diff --git a/src/gone.ts b/src/gone.ts
+deleted file mode 100644
+index 1234567..0000000
+--- a/src/gone.ts
++++ /dev/null
+@@ -1,1 +0,0 @@
+-export const gone = true;
+diff --git a/assets/logo.png b/assets/logo.png
+new file mode 100644
+index 0000000..1234567
+Binary files /dev/null and b/assets/logo.png differ
+diff --git a/src/moved.ts b/src/also_moved.ts
+similarity index 100%
+rename from src/moved.ts
+rename to src/also_moved.ts

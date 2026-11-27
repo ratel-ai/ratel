@@ -1,0 +1,13 @@
+diff --git a/ratel.yaml b/ratel.yaml
+index 5d1e2f3..6a7b8c9 100644
+--- a/ratel.yaml
++++ b/ratel.yaml
+@@ -1,8 +1,8 @@
+ name: support-demo
+ params:
+-  model: claude-sonnet-5-5
++  model: claude-haiku-5-5
+   tone: friendly
+ tools:
+   lookup_order: { mode: live }
+   refund_order: { mode: simulated }

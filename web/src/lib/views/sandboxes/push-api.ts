@@ -28,6 +28,17 @@ export type PushApiDeps = {
   onUploaded: (version: SandboxVersion) => Promise<void>;
   /** The configured public origin of this deployment, or null when none is configured. */
   publicOrigin: () => string | null;
+  /**
+   * The commit a version was built from, as `ratel push --ci` describes it in `git` (RTL-414):
+   * `lib/views/repositories/push.ts`, behind `githubRepositories`. It gets the body's whole `git`,
+   * since the version keeps only `commit` and `dirty`. A failure is logged and never fails the push.
+   */
+  recordCommit: (commit: {
+    organizationId: string;
+    projectId: string;
+    versionId: string;
+    git: unknown;
+  }) => Promise<void>;
 };
 
 type Project = { projectId: string; apiKeyId: string };
@@ -44,7 +55,8 @@ export function handleCreateVersion(req: Request, deps: PushApiDeps): Promise<Re
   return forProject(deps, "create_version", async ({ projectId, apiKeyId }) => {
     if (!deps.providerConfigured())
       return json(503, refusal("not_configured", NOT_CONFIGURED_MESSAGE));
-    const input = createVersionSchema.safeParse(await readJson(req));
+    const body = await readJson(req);
+    const input = createVersionSchema.safeParse(body);
     if (!input.success) return json(400, refusal("invalid", issueText(input.error.issues[0])));
     const organizationId = await deps.organizationIdOf(projectId);
     if (!organizationId) return notFound();
@@ -68,6 +80,17 @@ export function handleCreateVersion(req: Request, deps: PushApiDeps): Promise<Re
       { project_id: projectId, version_id: version.id, bundle_bytes: version.bundle.bytes },
       "sandbox version created",
     );
+    const git = body && typeof body === "object" && "git" in body ? body.git : undefined;
+    if (git !== undefined) {
+      await deps
+        .recordCommit({ organizationId, projectId, versionId: version.id, git })
+        .catch((error: unknown) =>
+          logger.warn(
+            { project_id: projectId, version_id: version.id, err: error },
+            "sandbox version commit not recorded",
+          ),
+        );
+    }
     const target = await deps.bundles().uploadTarget(bundleKey(version), version.bundle);
     const upload = target ?? {
       url: `${originOf(req, deps)}/api/v1/sandboxes/versions/${version.id}/bundle`,

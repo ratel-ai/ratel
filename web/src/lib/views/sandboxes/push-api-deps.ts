@@ -5,9 +5,12 @@ import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { getDb } from "@/lib/platform/db/client";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { usageLimits } from "@/lib/platform/usage-limits";
+import { recordPush } from "@/lib/views/repositories/push";
+import { recordPushedCommit } from "@/lib/views/repositories/store";
 import { bundleStore } from "./adapters/bundle-store-from-env";
 import { createDrizzleVersionStore } from "./adapters/drizzle-version-store";
 import { sandboxProviderConfigured } from "./adapters/provider-from-env";
@@ -40,5 +43,11 @@ export function pushApiDeps(req: Request, scope: ApiKeyScope): PushApiDeps {
       );
     },
     publicOrigin: () => getConfig().app.publicUrl || null,
+    recordCommit: async (commit) => {
+      await recordPush(commit, {
+        enabled: (subject) => featureEnabled("githubRepositories", subject),
+        recordPushedCommit: (row) => recordPushedCommit(row),
+      });
+    },
   };
 }

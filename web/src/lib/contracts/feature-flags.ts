@@ -22,6 +22,9 @@ export const CORE_FLAGS = [
   // Ratel sandboxes and evals on them, together. Owner: rstagi. Remove once `evals` is on for every
   // organization.
   "evals",
+  // Owner: marcelloghiozzi (RTL-408). A project links its GitHub repository: each new commit is a
+  // version, and only the evals a change touches run. See docs/github-repositories.md.
+  "githubRepositories",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

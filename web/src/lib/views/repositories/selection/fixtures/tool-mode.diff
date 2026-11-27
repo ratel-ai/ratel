@@ -1,0 +1,10 @@
+diff --git a/ratel.yaml b/ratel.yaml
+index 5d1e2f3..6a7b8c9 100644
+--- a/ratel.yaml
++++ b/ratel.yaml
+@@ -4,5 +4,5 @@ params:
+   tone: friendly
+ tools:
+-  lookup_order: { mode: live }
++  lookup_order: { mode: recorded }
+   refund_order: { mode: simulated }

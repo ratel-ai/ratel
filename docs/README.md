@@ -10,6 +10,7 @@ assets/                           Images and other static assets
 schemas/                          JSON Schemas of the platform's documents
 geography.md                      Where traces come from: the map widget and its data
 baseline-capture-distributed.md   Collecting seeding evidence from a multi-instance host
+github-repositories.md            Design note: a project linked to its GitHub repository (proposed)
 ```
 
 ## Guides
@@ -17,6 +18,8 @@ baseline-capture-distributed.md   Collecting seeding evidence from a multi-insta
 [Geography](geography.md) — the map widget: the attributes a location is read from, how to resolve IP addresses with DB-IP Lite, what is stored, and the licences of the data.
 
 [Baseline capture in a distributed host](baseline-capture-distributed.md) — how to collect the evidence for [adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/97282f939824622e652322b31e10a865fa6c6764/docs/adr/0014-adaptive-usage-ranking.md) (an SDK decision; the record is in this repository's history) when the search and the invocation that follows land in different processes. The single-process path is [`examples/configurable-adaptive-ranking-ts`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/configurable-adaptive-ranking-ts/README.md) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository.
+
+[Connect a GitHub repository](github-repositories.md): the proposed design (RTL-408, behind `githubRepositories`). It covers how Ratel reaches a repository, how it builds the agent from source, how a change picks the evals to run, where the results go and the security rules. It also lists the open questions. It becomes an ADR once agreed.
 
 ## `schemas/` — JSON Schemas
 

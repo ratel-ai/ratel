@@ -59,6 +59,8 @@ type Over = {
   on?: boolean;
   provider?: boolean;
   origin?: string | null;
+  /** The commit record (RTL-414): the default keeps what it is handed; a function replaces it. */
+  recordCommit?: PushApiDeps["recordCommit"];
 };
 
 async function setup() {
@@ -66,6 +68,7 @@ async function setup() {
   const bundles = createLocalBundleStore(mkdtempSync(join(tmpdir(), "bundles-")));
   const uploaded: string[] = [];
   const records: unknown[] = [];
+  const commits: unknown[] = [];
   const secrets = createDrizzleSecretStore(db);
   const sealed = sealSecret(SEALING, { projectId: PROJECT_ID, name: "OPENAI_API_KEY" }, "sk-1");
   await secrets.set(PROJECT_ID, "OPENAI_API_KEY", sealed, "user_1");
@@ -100,6 +103,7 @@ async function setup() {
     on = true,
     provider = true,
     origin = "https://ratel.example",
+    recordCommit,
   }: Over = {}) => {
     const usage = createInMemoryUsageLimits(limits);
     const config = on ? ON : resolveConfig();
@@ -137,6 +141,11 @@ async function setup() {
         uploaded.push(version.id);
       },
       publicOrigin: () => origin,
+      recordCommit:
+        recordCommit ??
+        (async (commit) => {
+          commits.push(commit);
+        }),
     } satisfies PushApiDeps;
   };
   const create = (over?: Over, body: unknown = input()) =>
@@ -166,6 +175,8 @@ async function setup() {
     vms,
     uploaded,
     records,
+    commits,
+    db,
   };
 }
 
@@ -502,3 +513,73 @@ function post(body: string | Buffer): Request {
 async function read(response: Response): Promise<any> {
   return response.json();
 }
+
+// RTL-414: `ratel push --ci` sends where the commit came from and its diff, inside `git`.
+const CI_GIT = {
+  commit: COMMIT,
+  dirty: false,
+  repository: { id: 4242, fullName: "acme/support-agent" },
+  branch: "fix/refund-once",
+  pullRequest: 12,
+  baseCommit: "b".repeat(40),
+  title: "Never refund an order twice",
+  author: "octo",
+  diff: "diff --git a/src/tools/refund_order.ts b/src/tools/refund_order.ts\n",
+};
+
+test("a push from CI hands its whole git, diff included, to the commit record", async () => {
+  const t = await setup();
+  const created = await t.create({}, { ...input(), git: CI_GIT });
+  assert.equal(created.status, 201);
+  const { versionId } = await read(created);
+  assert.deepEqual(t.commits, [
+    { organizationId: ORGANIZATION_ID, projectId: PROJECT_ID, versionId, git: CI_GIT },
+  ]);
+  // The version keeps only what it always kept.
+  assert.deepEqual((await read(await t.get(versionId))).git, { commit: COMMIT, dirty: false });
+});
+
+test("a commit record that fails never fails the push", async () => {
+  const t = await setup();
+  const created = await t.create(
+    {
+      recordCommit: async () => {
+        throw new Error("repository store down");
+      },
+    },
+    { ...input(), git: CI_GIT },
+  );
+  assert.equal(created.status, 201);
+});
+
+test("a push with no git, or a refused push, hands nothing to the commit record", async () => {
+  const t = await setup();
+  const { git: _, ...noGit } = input();
+  await t.create({}, noGit);
+  await t.create({}, { ...input(), git: CI_GIT, image: { digest: "nope" } });
+  await t.create({ limits: { sandbox_versions_per_day: 0 } }, { ...input(), git: CI_GIT });
+  assert.deepEqual(t.commits, []);
+});
+
+test("with the repository record wired, the commit row points at the pushed version", async () => {
+  const t = await setup();
+  const { recordPush } = await import("@/lib/views/repositories/push");
+  const store = await import("@/lib/views/repositories/store");
+  const created = await t.create(
+    {
+      recordCommit: async (commit) => {
+        await recordPush(commit, {
+          enabled: async () => true,
+          recordPushedCommit: (row) => store.recordPushedCommit(row, t.db),
+        });
+      },
+    },
+    { ...input(), git: CI_GIT },
+  );
+  const { versionId } = await read(created);
+  const [row] = await store.listCommits(PROJECT_ID, 10, t.db);
+  assert.deepEqual(
+    [row.sha, row.branch, row.pullRequest, row.source, row.sandboxVersionId, row.diff],
+    [COMMIT, "fix/refund-once", 12, "push", versionId, CI_GIT.diff],
+  );
+});
