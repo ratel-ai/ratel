@@ -56,8 +56,8 @@ export const HEARTBEAT_MS = 30_000;
 export const BUILD_STOPPED_MS = 5 * 60_000;
 /** A little more than the provider's own limits: a call that never answers must not hold the lane. */
 export const BUILD_DEADLINE_MS = 40 * 60_000;
-export const NOT_CONFIGURED_REASON = "Ratel sandbox is not configured on this deployment.";
-export const OFF_REASON = "Ratel sandbox is off for this project.";
+export const NOT_CONFIGURED_REASON = "Sandboxes are not configured on this deployment.";
+export const OFF_REASON = "Sandboxes are off for this project.";
 export const STOPPED_REASON = "The build was interrupted. Push again.";
 const TOO_LONG_REASON = "The build took too long. Push again.";
 const SERVICE_REASON = "The build service did not work. Push again.";
@@ -148,7 +148,11 @@ async function build(
   // The smoke result, also when the build fails after it.
   const seen: { smoke: SmokeResult | null; abandoned: boolean } = { smoke: null, abandoned: false };
   try {
-    const secrets = await openSecretValues(projectId, secretNamesOf(version.config), deps);
+    const secrets = await openSecretValues(
+      { projectId, sandboxName: version.name },
+      secretNamesOf(version.config),
+      deps,
+    );
     if (!secrets.ok) throw new BuildFailed(secrets.message);
     const current: Build = {
       version,
@@ -372,7 +376,7 @@ function reasonOf(error: unknown): string | null {
     return `The sandbox service has too many requests now. Push again in ${wait}.`;
   }
   if (error instanceof ProviderAtCapacity) {
-    return "Ratel sandbox runs as many machines as it can now. Push again in a few minutes.";
+    return "Sandboxes run as many machines as they can now. Push again in a few minutes.";
   }
   if (error instanceof ProviderUnavailable) {
     return "The sandbox service did not answer. Push again later.";

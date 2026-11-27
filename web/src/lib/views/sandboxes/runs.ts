@@ -123,7 +123,11 @@ export async function startRun(
   if (Buffer.byteLength(JSON.stringify(request)) > MAX_REQUEST_BYTES) {
     return refused("input_too_large", "The input, the params and the fixtures are too large.");
   }
-  const secrets = await openSecretValues(projectId, secretNamesOf(version.config), deps);
+  const secrets = await openSecretValues(
+    { projectId, sandboxName: version.name },
+    secretNamesOf(version.config),
+    deps,
+  );
   if (!secrets.ok) return secrets;
 
   const token = `rtl_run_${randomBytes(32).toString("base64url")}`;
@@ -379,7 +383,7 @@ function infraReason(error: unknown): string {
     return `The sandbox service has too many requests now. Run again in ${wait}.`;
   }
   if (error instanceof ProviderAtCapacity) {
-    return "Ratel sandbox runs as many machines as it can now. Run again in a few minutes.";
+    return "Sandboxes run as many machines as they can now. Run again in a few minutes.";
   }
   if (error instanceof ProviderUnavailable) {
     return "The sandbox service did not answer. Run again later.";

@@ -164,7 +164,10 @@ test("POST /api/v1/sandbox-runs runs the newest ready version of a name; GET ans
   assert.equal(started.body.status, "queued");
   assert.deepEqual(started.body.input, { message: "hi" });
   assert.equal(started.body.params.model, "large");
-  assert.equal(started.body.url, "https://ratel.example/project/" + PROJECT_ID + "/sandbox");
+  assert.equal(
+    started.body.url,
+    `https://ratel.example/project/${PROJECT_ID}/sandboxes/${CONFIG.name}`,
+  );
   await t.settle();
   const read = await t.get(started.body.runId);
   assert.equal(read.status, 200);
@@ -205,7 +208,7 @@ test("a refusal of the sandbox service is a failed run with provider_refused and
   assert.equal(read.body.status, "failed");
   assert.deepEqual(read.body.error, {
     code: "provider_refused",
-    message: "The sandbox service refused the request: the Ratel sandbox account is not active.",
+    message: "The sandbox service refused the request: the sandbox account is not active.",
   });
   assert.doesNotMatch(JSON.stringify(read.body), /boat|again/i);
 });

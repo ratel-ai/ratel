@@ -3,12 +3,17 @@ import { type Config, getConfig } from "@/config";
 
 /**
  * Secrets that a project gives to Ratel, sealed with AES-256-GCM under `SANDBOX_SECRETS_KEY`. A
- * sealed value is bound to its project and name, so a value copied onto another row does not
- * open. Never log what goes in or comes out.
+ * sealed value is bound to its project, its name and its level (the project, or one sandbox of
+ * the project), so a value copied onto another row, level or sandbox does not open. Never log what goes in or comes out.
  *
  * The text is `v1.<nonce>.<ciphertext and tag>`, each part in base64.
  */
-export type SecretOwner = { projectId: string; name: string };
+export type SecretOwner = {
+  projectId: string;
+  name: string;
+  /** The sandbox of a sandbox secret. Absent or null for a project secret. */
+  sandboxName?: string | null;
+};
 
 export type SealedSecretsKey =
   | { ok: true; key: Buffer }
@@ -76,6 +81,12 @@ export function unsealSecret(key: Buffer, owner: SecretOwner, sealed: string): s
   }
 }
 
-function boundTo({ projectId, name }: SecretOwner): Buffer {
-  return Buffer.from(JSON.stringify(["ratel sandbox secret", projectId, name]), "utf8");
+/**
+ * A project secret keeps the bound data of the time before levels, so its sealed values still
+ * open. A sandbox secret adds the level and the sandbox name.
+ */
+function boundTo({ projectId, name, sandboxName }: SecretOwner): Buffer {
+  const parts = ["ratel sandbox secret", projectId, name];
+  if (sandboxName != null) parts.push("sandbox", sandboxName);
+  return Buffer.from(JSON.stringify(parts), "utf8");
 }

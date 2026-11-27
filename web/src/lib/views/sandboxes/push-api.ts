@@ -6,6 +6,7 @@ import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
 import { getLogger } from "@/lib/platform/logger";
 import { createVersionSchema } from "./domain/config";
 import { bundleKey, type SandboxVersion, versionView } from "./domain/version";
+import { sandboxHref } from "./paths";
 import type { VersionStore } from "./ports/version-store";
 
 /**
@@ -36,7 +37,7 @@ const MAX_JSON_BYTES = 1024 * 1024;
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 export const NOT_CONFIGURED_MESSAGE =
-  "Ratel sandbox is not configured on this deployment. An operator must set it up.";
+  "Sandboxes are not configured on this deployment. An operator must set it up.";
 
 const logger = getLogger("sandboxes/push-api");
 
@@ -154,7 +155,8 @@ async function forProject(
 }
 
 function view(req: Request, version: SandboxVersion, deps: PushApiDeps) {
-  return versionView(version, `${originOf(req, deps)}/project/${version.projectId}/sandbox`);
+  const page = sandboxHref(version.projectId, version.name, "versions");
+  return versionView(version, `${originOf(req, deps)}${page}`);
 }
 
 function originOf(req: Request, deps: PushApiDeps): string {

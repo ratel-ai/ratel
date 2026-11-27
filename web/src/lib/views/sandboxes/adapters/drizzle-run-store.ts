@@ -3,7 +3,7 @@ import type { getDb } from "@/lib/platform/db/client";
 import { EVAL_TRIAL_PREFIX, type RunStatus, resultOf, type SandboxRun } from "../domain/run";
 import type { VersionStatus } from "../domain/version";
 import type { RunStore } from "../ports/run-store";
-import { sandboxRuns, sandboxVersions } from "../schema";
+import { sandboxes, sandboxRuns, sandboxVersions } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "delete" | "transaction">;
 
@@ -72,6 +72,19 @@ export function createDrizzleRunStore(db: Db): RunStore {
     },
 
     async list(projectId, limit, options = {}) {
+      const ofSandbox =
+        options.sandboxName === undefined
+          ? undefined
+          : inArray(
+              sandboxRuns.versionId,
+              db
+                .select({ id: sandboxVersions.id })
+                .from(sandboxVersions)
+                .innerJoin(sandboxes, eq(sandboxes.id, sandboxVersions.sandboxId))
+                .where(
+                  and(eq(sandboxes.projectId, projectId), eq(sandboxes.name, options.sandboxName)),
+                ),
+            );
       const rows = await db
         .select()
         .from(sandboxRuns)
@@ -81,6 +94,7 @@ export function createDrizzleRunStore(db: Db): RunStore {
             options.excludeEvalTrials
               ? notLike(sandboxRuns.requestedBy, `${EVAL_TRIAL_PREFIX}%`)
               : undefined,
+            ofSandbox,
           ),
         )
         .orderBy(desc(sandboxRuns.createdAt))

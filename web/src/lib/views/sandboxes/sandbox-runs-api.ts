@@ -3,6 +3,7 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
 import { type SandboxRun, sandboxRunView, startRunRequestSchema } from "./domain/run";
 import type { SandboxVersion } from "./domain/version";
+import { sandboxesHref, sandboxHref } from "./paths";
 import type { VersionStore } from "./ports/version-store";
 import { requestOrigin } from "./push-api";
 import { getRun, type RunDeps, type StartRunResult, startRun } from "./runs";
@@ -64,7 +65,7 @@ export function handleStartSandboxRun(req: Request, deps: SandboxRunsApiDeps): P
       },
       deps.runDeps(),
     );
-    if (started.ok) return json(202, view(req, started.run, deps));
+    if (started.ok) return json(202, view(req, started.run, version.name, deps));
     return refused(started);
   });
 }
@@ -76,9 +77,9 @@ export function handleGetSandboxRun(
 ): Promise<Response> {
   return forProject(deps, "get_sandbox_run", async ({ projectId }) => {
     const run = UUID.test(runId) ? await getRun(projectId, runId, deps.runDeps()) : null;
-    return run
-      ? json(200, view(req, run, deps))
-      : json(404, refusal("not_found", "There is no such run."));
+    if (!run) return json(404, refusal("not_found", "There is no such run."));
+    const version = await deps.versions().get(projectId, run.versionId);
+    return json(200, view(req, run, version?.name ?? null, deps));
   });
 }
 
@@ -109,9 +110,11 @@ async function findVersion(
   return name ? deps.versions().newestReady(projectId, name) : null;
 }
 
-function view(req: Request, run: SandboxRun, deps: SandboxRunsApiDeps) {
+/** The run, with the address of the Playground of its sandbox (the list when the version is gone). */
+function view(req: Request, run: SandboxRun, sandboxName: string | null, deps: SandboxRunsApiDeps) {
   const origin = requestOrigin(req, deps.publicOrigin());
-  return sandboxRunView(run, `${origin}/project/${run.projectId}/sandbox`);
+  const page = sandboxName ? sandboxHref(run.projectId, sandboxName) : sandboxesHref(run.projectId);
+  return sandboxRunView(run, `${origin}${page}`);
 }
 
 function refused(started: Refusal): Response {

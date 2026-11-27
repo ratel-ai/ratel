@@ -75,3 +75,22 @@ test("32 random bytes in base64 are a key, and a Terraform placeholder is not on
   const placeholder = resolveConfig({ env: { SANDBOX_SECRETS_KEY: "REPLACE_ME" } });
   assert.deepEqual(sealedSecretsKey(placeholder).ok, false);
 });
+
+test("a sandbox value opens for its sandbox only, and never at the project level", () => {
+  const atSandbox = { ...OWNER, sandboxName: "support-bot" };
+  const sealed = sealSecret(KEY, atSandbox, "v");
+  assert.equal(unsealSecret(KEY, atSandbox, sealed), "v");
+  assert.throws(() => unsealSecret(KEY, OWNER, sealed), /does not open/);
+  assert.throws(() => unsealSecret(KEY, { ...OWNER, sandboxName: null }, sealed), /does not open/);
+  assert.throws(
+    () => unsealSecret(KEY, { ...atSandbox, sandboxName: "other" }, sealed),
+    /does not open/,
+  );
+  const atProject = sealSecret(KEY, OWNER, "v");
+  assert.throws(() => unsealSecret(KEY, atSandbox, atProject), /does not open/);
+});
+
+test("a project value sealed before sandbox levels still opens with a null sandbox", () => {
+  const sealed = sealSecret(KEY, OWNER, "v");
+  assert.equal(unsealSecret(KEY, { ...OWNER, sandboxName: null }, sealed), "v");
+});

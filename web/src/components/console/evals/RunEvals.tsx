@@ -10,6 +10,7 @@ import { useState } from "react";
 import { ParamControl } from "@/components/console/sandboxes/ParamControl";
 import type { ReadyVersion } from "@/lib/views/evals/page-model";
 import { experimentHref } from "@/lib/views/evals/paths";
+import { sandboxesHref } from "@/lib/views/sandboxes/paths";
 import { type ParamDraft, paramDraftOf, paramsOfDraft } from "@/lib/views/sandboxes/run-form";
 
 const SUITE = "__suite__";
@@ -82,10 +83,10 @@ export function RunEvals({
         <p className="text-ui text-fg-muted">
           A run needs a sandbox version that is ready.{" "}
           <Link
-            href={`/project/${projectId}/sandbox`}
+            href={sandboxesHref(projectId)}
             className="text-accent-fg underline-offset-2 hover:underline"
           >
-            Open Ratel sandbox
+            Open Sandboxes
           </Link>
         </p>
       )}

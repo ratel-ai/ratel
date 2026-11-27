@@ -5,9 +5,9 @@ import ProjectLayout from "@/app/(console)/project/[projectId]/layout";
 import { sandboxesEnabledForProject } from "@/lib/views/sandboxes/gate";
 
 /**
- * The Ratel sandbox page: the console behind the flag. It is not in the `(console)` group: the
+ * The Sandboxes pages: the console behind the flag. It is not in the `(console)` group: the
  * console layout streams its shell at once, and a status cannot change after that. Here the flag
- * is read above the shell, so with the flag off the page answers 404.
+ * is read above the shell, so with the flag off each page answers 404.
  */
 export default async function GatedProjectLayout({
   children,

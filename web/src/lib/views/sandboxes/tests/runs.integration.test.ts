@@ -169,6 +169,7 @@ async function setup(over: Setup = {}) {
   return {
     client,
     deps,
+    secrets,
     runs,
     vms,
     provider,
@@ -432,7 +433,7 @@ for (const [what, agent, code, status, message] of ERRORS) {
 test("a rate limit, a full account or a broken service at the VM start fails the run with a reason to run again, with no provider name", async () => {
   const cases: Array<[Error, RegExp]> = [
     [new ProviderRateLimited("boat: 429 too many", 30), /again in 30 s/],
-    [new ProviderAtCapacity("boat is full"), /as many machines as it can/],
+    [new ProviderAtCapacity("boat is full"), /as many machines as they can/],
     [new ProviderUnavailable("boat 503"), /did not answer/],
     [new Error("boat broke"), /did not work/],
   ];
@@ -459,8 +460,8 @@ test("a rate limit, a full account or a broken service at the VM start fails the
 
 test("a refusal of the sandbox service fails the run with provider_refused, no provider name and no retry advice", async () => {
   const cases: Array<[number, string]> = [
-    [402, "The sandbox service refused the request: the Ratel sandbox account is not active."],
-    [403, "The sandbox service refused the request: the Ratel sandbox account lacks a permission."],
+    [402, "The sandbox service refused the request: the sandbox account is not active."],
+    [403, "The sandbox service refused the request: the sandbox account lacks a permission."],
   ];
   for (const [status, reason] of cases) {
     const t = await setup();
@@ -694,6 +695,46 @@ test("a start that cannot run is refused with the reason", async () => {
   assert.ok(!missing.ok && missing.reason === "missing_secrets");
   assert.match(missing.message, /OPENAI_API_KEY/);
   assert.equal(t.provider.starts.length, 0);
+});
+
+test("a sandbox value wins over the project value, a value of another sandbox does not apply, and a missing name is refused with its name", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const setAt = async (sandboxName: string, value: string) => {
+    const owner = { projectId: PROJECT_ID, name: "OPENAI_API_KEY", sandboxName };
+    await t.secrets.set(PROJECT_ID, owner.name, sealSecret(KEY, owner, value), "u", sandboxName);
+  };
+  await setAt("other-agent", "other-sandbox-value");
+  const atProject = await t.ran();
+  assert.equal(
+    t.envOf(atProject.instanceRef ?? "", atProject.id).OPENAI_API_KEY,
+    `${SECRET}-OPENAI_API_KEY`,
+  );
+  await setAt(CONFIG.name, "sandbox-value");
+  const atSandbox = await t.ran();
+  assert.equal(t.envOf(atSandbox.instanceRef ?? "", atSandbox.id).OPENAI_API_KEY, "sandbox-value");
+  await t.client.exec("delete from sandbox_secrets where sandbox_name is null");
+  const onlySandbox = await t.ran();
+  assert.equal(
+    t.envOf(onlySandbox.instanceRef ?? "", onlySandbox.id).OPENAI_API_KEY,
+    "sandbox-value",
+  );
+  await t.secrets.remove(PROJECT_ID, "OPENAI_API_KEY", CONFIG.name);
+  const missing = await t.start();
+  assert.ok(!missing.ok && missing.reason === "missing_secrets");
+  assert.equal(missing.message, "Set these secrets first: OPENAI_API_KEY.");
+});
+
+test("a project value copied onto the sandbox level does not open", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const { rows } = await t.client.query<{ sealed_value: string }>(
+    "select sealed_value from sandbox_secrets where name = 'OPENAI_API_KEY'",
+  );
+  await t.secrets.set(PROJECT_ID, "OPENAI_API_KEY", rows[0]?.sealed_value ?? "", "u", CONFIG.name);
+  const moved = await t.start();
+  assert.ok(!moved.ok && moved.reason === "missing_secrets");
+  assert.match(moved.message, /OPENAI_API_KEY does not open/);
 });
 
 test("a strict start refuses params and tools that ratel.yaml does not declare, and names them", async () => {

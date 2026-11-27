@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/platform/db/client";
+import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "./adapters/drizzle-version-store";
 import type { SandboxRun } from "./domain/run";
 import type { SandboxVersion } from "./domain/version";
@@ -6,6 +7,7 @@ import { versionSpec } from "./page-model";
 import { runDeps } from "./run-deps";
 import type { ParamSpec } from "./run-form";
 import * as runs from "./runs";
+import { type SecretSource, secretSources } from "./secret-values";
 
 /** The public interface of the module: other modules import only this file. */
 export type { RatelYaml } from "./domain/config";
@@ -14,6 +16,7 @@ export type { RunStatus, SandboxRun, ToolFixture } from "./domain/run";
 export { apiStatus as sandboxRunStatus } from "./domain/run";
 export { sandboxesEnabledForProject, sandboxOrganizationIds } from "./gate";
 export type { StartRunOptions, StartRunResult } from "./runs";
+export type { SecretSource as SandboxSecretSource } from "./secret-values";
 
 /** A version as another module reads it. */
 export type SandboxVersionSummary = Pick<
@@ -113,4 +116,25 @@ function summary(version: SandboxVersion): SandboxVersionSummary {
 function detail(version: SandboxVersion): SandboxVersionDetail {
   const { id, projectId, sandboxId, name, git, status, reason, config, smoke, createdAt } = version;
   return { id, projectId, sandboxId, name, git, status, reason, config, smoke, createdAt };
+}
+
+/**
+ * Where the value of each name comes from for this sandbox: its own value, the project value, or
+ * none. It reads names and levels only, never a value.
+ */
+export async function sandboxSecretSources(
+  projectId: string,
+  sandboxName: string,
+  names: readonly string[],
+): Promise<Array<{ name: string; source: SecretSource }>> {
+  if (names.length === 0) return [];
+  const store = createDrizzleSecretStore(getDb());
+  const [atProject, atSandbox] = await Promise.all([
+    store.list(projectId, null),
+    store.list(projectId, sandboxName),
+  ]);
+  return secretSources(names, [
+    ...atProject.map(({ name }) => ({ name, sandboxName: null })),
+    ...atSandbox.map(({ name }) => ({ name, sandboxName })),
+  ]);
 }

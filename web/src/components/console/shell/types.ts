@@ -30,7 +30,7 @@ export type ShellData = {
   entityPagesOrganizations?: readonly string[];
   /** The organizations with `focusedConsole` on (`lib/console/focused-console`). */
   focusedConsoleOrganizations?: readonly string[];
-  /** The organizations with `sandboxes` on: their rail shows Ratel sandbox. */
+  /** The organizations with `sandboxes` on: their rail shows Sandboxes. */
   sandboxOrganizations?: readonly string[];
   /** The organizations with `customMonitoring` on: their rail shows Dashboards, Explore and Alerts. */
   customMonitoringOrganizations?: readonly string[];
