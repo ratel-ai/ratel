@@ -265,7 +265,11 @@ function NoTask({
 }) {
   return (
     <>
-      <p className="text-ui text-fg-muted">No task matched this run. Choose or name its eval.</p>
+      <p className="text-ui text-fg-muted">
+        No task matched this run. Ratel finds a task in many runs that call the same tools. A run on
+        a Ratel sandbox gets the task of its sandbox about a minute after its trace arrives. Choose
+        or name its eval.
+      </p>
       <Field label="Eval">
         {() => (
           <Select

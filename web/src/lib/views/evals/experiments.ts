@@ -50,8 +50,13 @@ export type ExperimentDeps = {
 };
 
 export type StartExperiment = {
-  /** A version id, or `latest`: the newest version that is ready. */
+  /**
+   * A version id, or `latest`: the newest ready version of the sandbox of the run. That sandbox is
+   * `sandbox`, else the sandbox of the evals named, else the sandbox of the newest ready version.
+   */
   sandboxVersion: string;
+  /** The name of the sandbox of the run (the `name` of its ratel.yaml). */
+  sandbox?: string;
   /** The trials of each case. Absent: the trials of its eval. */
   trialsPerCase?: number;
   /** The params of the run. They go over the default params of each eval. */
@@ -95,28 +100,34 @@ const logger = getLogger("evals/experiments");
  */
 export async function startExperiment(
   subject: UsageSubject,
-  { sandboxVersion, trialsPerCase, params, startedBy, label, name, evals }: StartExperiment,
+  {
+    sandboxVersion,
+    sandbox,
+    trialsPerCase,
+    params,
+    startedBy,
+    label,
+    name,
+    evals,
+  }: StartExperiment,
   deps: ExperimentDeps,
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
     return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
   }
-  const version = await findVersion(projectId, sandboxVersion, deps);
-  if (!version) {
-    return sandboxVersion === "latest"
-      ? refused("not_ready", "No sandbox version is ready. Push one first.")
-      : refused("not_found", "There is no such sandbox version.");
-  }
+  const [allEvals, allCases] = await Promise.all([
+    deps.evals.list(projectId),
+    deps.cases.list(projectId),
+  ]);
+  const found = await findVersion(projectId, sandboxVersion, sandbox, allEvals, evals, deps);
+  if (!found.ok) return found;
+  const { version } = found;
   if (version.status !== "ready") {
     return refused("not_ready", `The sandbox version is ${version.status}. Use one that is ready.`);
   }
   const runRefusal = refusedParam(version.params, params);
   if (runRefusal) return refused("invalid_params", runRefusal);
-  const [allEvals, allCases] = await Promise.all([
-    deps.evals.list(projectId),
-    deps.cases.list(projectId),
-  ]);
   const chosen = chooseEvals(allEvals, evals, version.name);
   if (!chosen.ok) return chosen;
   const frozen = freezeSuite(chosen.evals, allCases, label ?? null, {
@@ -420,10 +431,56 @@ function totalTrials({ caseVersions, evalVersions }: FrozenSuite): number {
   return caseVersions.reduce((sum, { evalId }) => sum + (trials.get(evalId ?? "") ?? 0), 0);
 }
 
-async function findVersion(projectId: string, wanted: string, { sandboxes }: ExperimentDeps) {
-  if (wanted !== "latest") return sandboxes.getVersion(projectId, wanted);
+/**
+ * The version of the run. `latest` is the newest ready version of the sandbox of the run, never of
+ * another sandbox: a project can have more than one sandbox.
+ */
+async function findVersion(
+  projectId: string,
+  wanted: string,
+  sandbox: string | undefined,
+  all: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+  { sandboxes }: ExperimentDeps,
+): Promise<
+  { ok: true; version: SandboxVersionSummary } | Extract<StartExperimentResult, { ok: false }>
+> {
+  if (wanted !== "latest") {
+    const version = await sandboxes.getVersion(projectId, wanted);
+    if (!version) return refused("not_found", "There is no such sandbox version.");
+    if (sandbox !== undefined && version.name !== sandbox) {
+      return refused(
+        "wrong_sandbox",
+        `The version is of the sandbox ${version.name}, not of ${sandbox}.`,
+      );
+    }
+    return { ok: true, version };
+  }
+  const ofRun = sandbox ?? sandboxOfEvals(all, names);
+  if (ofRun !== null && typeof ofRun === "object") return ofRun;
   const versions = await sandboxes.listVersions(projectId, LATEST_OF);
-  return versions.find(({ status }) => status === "ready") ?? null;
+  const version = versions.find(
+    ({ status, name }) => status === "ready" && (ofRun === null || name === ofRun),
+  );
+  if (version) return { ok: true, version };
+  return ofRun === null
+    ? refused("not_ready", "No sandbox version is ready. Push one first.")
+    : refused("not_ready", `No version of the sandbox ${ofRun} is ready. Push one first.`);
+}
+
+/** The one sandbox of the evals named, null when they name none, or a refusal for two or more. */
+function sandboxOfEvals(
+  all: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+): string | null | Extract<StartExperimentResult, { ok: false }> {
+  if (names === undefined) return null;
+  const named = all.filter((one) => names.includes(one.name) || names.includes(one.id));
+  const found = new Set(named.flatMap((one) => currentVersion(one).sandboxName ?? []));
+  if (found.size <= 1) return [...found][0] ?? null;
+  return refused(
+    "wrong_sandbox",
+    `The evals run on more than one sandbox (${[...found].sort().join(", ")}). Run the evals of one sandbox at a time.`,
+  );
 }
 
 async function inParallel<T>(items: T[], work: (item: T) => Promise<unknown>): Promise<void> {

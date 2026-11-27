@@ -100,3 +100,18 @@ test("thousands of runs are written in chunks, and another project's runs are ne
     { workflow_id: "theirs", n: 1 },
   ]);
 });
+
+test("a run of a Ratel sandbox keeps the task of its sandbox: a signal run never moves or clears it", async () => {
+  const { client, db } = await setupDb();
+  await seedTurns(client, [
+    { id: id(1), endedAt: "2026-09-10T00:00:00Z", workflowId: "sandbox:support-demo" },
+    { id: id(2), endedAt: "2026-09-11T00:00:00Z", workflowId: "sandbox:support-demo" },
+  ]);
+  const placement = new Map<string, string | null>([[id(1), "task-a"]]);
+  const result = await writeTaskPlacement(PROJECT_ID, { window: WINDOW, placement }, db);
+  assert.deepEqual(result, { placed: 1, set: 0, cleared: 0 });
+  assert.deepEqual(await placements(client), {
+    [id(1)]: "sandbox:support-demo",
+    [id(2)]: "sandbox:support-demo",
+  });
+});

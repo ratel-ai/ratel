@@ -1,6 +1,7 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { sandboxOfTask } from "@/lib/readings/trace-signals/workflows/sandbox-tasks";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
 import { scorersFor } from "@/lib/views/task-scorers/store";
 import { taskNames } from "@/lib/views/tasks/model";
@@ -21,7 +22,8 @@ export function createTaskLinks(db: Db = getDb()): TaskLinks {
     if (wanted.length === 0) return [];
     const { stored, labels, names } = await loadTasksInputs(projectId);
     const known = taskNames(stored, labels, names);
-    return wanted.map((id): TaskRef => ({ id, name: known.get(id) ?? id }));
+    // The task of a sandbox is named by its sandbox until a signal run names it.
+    return wanted.map((id): TaskRef => ({ id, name: known.get(id) ?? sandboxOfTask(id) ?? id }));
   };
   return {
     async tasksOfTurn(projectId, turnId) {

@@ -17,7 +17,7 @@ import type { ScorerDefinition } from "@/lib/views/scorers/types";
 
 export const MAX_EVAL_NAME_CHARS = 100;
 const MAX_TASK_ID_CHARS = 200;
-const MAX_SANDBOX_NAME_CHARS = 200;
+export const MAX_SANDBOX_NAME_CHARS = 200;
 const MAX_QUESTION_CHARS = 5_000;
 const MAX_SCORERS = 50;
 /** The judges of a trial run at the same time, and each one costs a call. */

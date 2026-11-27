@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chosenTargets, type SaveOptions } from "../save-target";
+import { chosenTargets, type SaveOptions, saveOptions } from "../save-target";
 import { evalContent } from "./support";
 
 const OPTIONS: SaveOptions = {
@@ -50,4 +50,22 @@ test("with no task, the eval that the person chose or named", () => {
     { newEval: { name: "Smoke", taskId: null } },
   ]);
   assert.equal(chosenTargets(none, { taskIds: [], evalOfTask: {}, newName: " " }), null);
+});
+
+test("a run of a Ratel sandbox saves into a new eval of the task of its sandbox, on that sandbox", async () => {
+  const options = await saveOptions("p1", { traceId: "abc" }, null, {
+    taskLinks: {
+      tasksOfTurn: async () => [],
+      tasksOfTrace: async () => [{ id: "sandbox:support-demo", name: "support-demo" }],
+      defaultScorers: async () => [],
+      // The newest ready version is of another sandbox of the project.
+      lastSandbox: async () => "command-demo",
+    },
+    evals: { list: async () => [] },
+  });
+  assert.equal(options.defaultTaskId, "sandbox:support-demo");
+  const target = options.targets["sandbox:support-demo"];
+  assert.equal(target?.kind, "new");
+  assert.equal(target?.kind === "new" ? target.name : null, "support-demo");
+  assert.equal(target?.kind === "new" ? target.content.sandboxName : null, "support-demo");
 });

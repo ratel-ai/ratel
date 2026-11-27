@@ -11,6 +11,7 @@ import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
 import { storable } from "@/lib/platform/storable";
 import type { Compared } from "./baseline";
+import { MAX_SANDBOX_NAME_CHARS } from "./domain/eval";
 import { type Experiment, MAX_TRIALS } from "./domain/experiment";
 import { experimentView } from "./experiment-view";
 import { type ExperimentDeps, type StartRefusal, startExperiment } from "./experiments";
@@ -47,6 +48,8 @@ const MAX_BODY_CHARS = 64 * 1024;
 const LIST_LIMIT = 50;
 const startSchema = z.object({
   sandboxVersion: z.union([z.literal("latest"), z.uuid()]),
+  /** The sandbox of the run. `latest` is its newest ready version. */
+  sandbox: z.string().trim().min(1).max(MAX_SANDBOX_NAME_CHARS).optional(),
   /** Absent: the trials of each eval. */
   trials: z.number().int().min(1).max(MAX_TRIALS).optional(),
   params: z.record(z.string(), z.unknown()).default({}),
@@ -139,11 +142,12 @@ async function start(
     const where = issue?.path.join(".");
     return refuse(400, "invalid", `${where ? `${where}: ` : ""}${issue?.message ?? "Invalid."}`);
   }
-  const { sandboxVersion, trials, params, label, name, evals } = body.data;
+  const { sandboxVersion, sandbox, trials, params, label, name, evals } = body.data;
   const result = await startExperiment(
     { projectId, organizationId },
     {
       sandboxVersion,
+      ...(sandbox ? { sandbox } : {}),
       ...(trials === undefined ? {} : { trialsPerCase: trials }),
       ...(evals ? { evals } : {}),
       params,

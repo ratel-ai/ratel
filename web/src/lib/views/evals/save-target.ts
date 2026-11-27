@@ -1,3 +1,4 @@
+import { sandboxOfTask } from "@/lib/readings/trace-signals/workflows/sandbox-tasks";
 import type { EvalContent } from "./domain/eval";
 import { defaultTask, type SaveTarget, saveTarget, type TaskRef } from "./domain/eval-target";
 import type { EvalStore } from "./ports/eval-store";
@@ -55,7 +56,12 @@ export async function saveOptions(
     tasks.map(async (task) => {
       const hasEval = all.some(({ taskId }) => taskId === task.id);
       const scorers = hasEval ? [] : await taskLinks.defaultScorers(projectId, task.id);
-      return [task.id, saveTarget(task, all, { scorers, sandboxName })] as const;
+      // The task of a sandbox runs on its sandbox, whatever the newest version of the project is.
+      const target = saveTarget(task, all, {
+        scorers,
+        sandboxName: sandboxOfTask(task.id) ?? sandboxName,
+      });
+      return [task.id, target] as const;
     }),
   );
   return {

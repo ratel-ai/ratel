@@ -679,7 +679,11 @@ test("one eval runs alone by name. An unknown eval, another sandbox and an eval 
     return [result.reason, result.message];
   };
   assert.deepEqual(await refusal(["Nope"]), ["not_found", 'There is no eval named "Nope".']);
-  assert.equal((await refusal(["Other sandbox"]))[0], "wrong_sandbox");
+  // `latest` is the newest ready version of the sandbox of the eval, and billing-agent has none.
+  assert.deepEqual(await refusal(["Other sandbox"]), [
+    "not_ready",
+    "No version of the sandbox billing-agent is ready. Push one first.",
+  ]);
   const [reason, message] = await refusal(["Status", "Advisory"]);
   assert.equal(reason, "no_cases");
   assert.match(message ?? "", /Advisory.*gating/);
@@ -689,6 +693,76 @@ test("one eval runs alone by name. An unknown eval, another sandbox and an eval 
     suite.evalVersions.map(({ name }) => name),
     ["Refunds", "Status"],
   );
+});
+
+test("latest is the newest ready version of the sandbox of the run, never of another sandbox", async () => {
+  const t = await setup();
+  // The project has two sandboxes. The newest version is of command-demo, which has no param model.
+  const command: SandboxVersionSummary = {
+    ...VERSION,
+    id: "88888888-8888-4888-8888-888888888888",
+    sandboxId: "99999999-9999-4999-8999-999999999999",
+    name: "command-demo",
+    params: [],
+  };
+  t.setVersions([command, VERSION]);
+  const support = await t.evalOf("Support", {
+    sandboxName: "support-demo",
+    params: { model: "m" },
+  });
+  const commands = await t.evalOf("Commands", { sandboxName: "command-demo" });
+  await t.addCase("refund", {}, [], support);
+  await t.addCase("list", {}, [], commands);
+  // The CLI gives the sandbox of its ratel.yaml, and the params that ratel.yaml declares.
+  const suite = await t.start({ sandbox: "support-demo", params: { model: "m" } });
+  assert.equal(suite.sandboxVersionId, VERSION.id);
+  assert.deepEqual(
+    suite.evalVersions.map(({ name }) => name),
+    ["Support"],
+  );
+  // With no sandbox, the evals named give it.
+  const named = await t.start({ evals: ["Support"] });
+  assert.equal(named.sandboxVersionId, VERSION.id);
+  const other = await t.start({ evals: ["Commands"] });
+  assert.equal(other.sandboxVersionId, command.id);
+  // Evals of two sandboxes do not run in one experiment.
+  const mixed = await startExperiment(
+    SUBJECT,
+    { sandboxVersion: "latest", params: {}, startedBy: "u", evals: ["Support", "Commands"] },
+    t.deps,
+  );
+  assert.deepEqual(mixed.ok ? null : [mixed.reason, mixed.message], [
+    "wrong_sandbox",
+    "The evals run on more than one sandbox (command-demo, support-demo). Run the evals of one sandbox at a time.",
+  ]);
+  // A version id of another sandbox is refused.
+  const wrong = await startExperiment(
+    SUBJECT,
+    { sandboxVersion: command.id, sandbox: "support-demo", params: {}, startedBy: "u" },
+    t.deps,
+  );
+  assert.deepEqual(wrong.ok ? null : [wrong.reason, wrong.message], [
+    "wrong_sandbox",
+    "The version is of the sandbox command-demo, not of support-demo.",
+  ]);
+  // A sandbox with no ready version.
+  const none = await startExperiment(
+    SUBJECT,
+    { sandboxVersion: "latest", sandbox: "nope", params: {}, startedBy: "u" },
+    t.deps,
+  );
+  assert.deepEqual(none.ok ? null : [none.reason, none.message], [
+    "not_ready",
+    "No version of the sandbox nope is ready. Push one first.",
+  ]);
+  // A key gives the sandbox in the body.
+  const response = await handleStartByKey(
+    request({ sandboxVersion: "latest", sandbox: "support-demo", params: { model: "m" } }),
+    keyDeps(t),
+  );
+  assert.equal(response.status, 201);
+  const started = await t.deps.experiments.get(PROJECT_ID, (await response.json()).experimentId);
+  assert.equal(started?.sandboxVersionId, VERSION.id);
 });
 
 test("a key runs one eval, and the read of the run has each eval with its score and its delta", async () => {
