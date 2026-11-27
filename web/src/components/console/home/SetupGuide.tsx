@@ -2,8 +2,8 @@ import { buttonVariants } from "@ratel/design-system/button-variants";
 import { CodeBlock } from "@ratel/design-system/code";
 import { DotLoader } from "@ratel/design-system/dot-matrix";
 import { Section } from "@ratel/design-system/section";
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { ApiKeyCta } from "@/components/console/settings/ApiKeyCta";
 import {
   buildQuickstartSet,
   QUICKSTART_LANG_LABELS,
@@ -15,14 +15,17 @@ const DOCS_URL = "https://docs.ratel.sh";
 /**
  * Before the first event, Overview is a checklist (DESIGN.md, Empty states):
  * a key, the snippet, and a live wait for the first run. The page replaces it
- * with the numbers as soon as anything arrives.
+ * with the numbers as soon as anything arrives. A project that already has a
+ * key (onboarding issues one) is not asked for another: step 1 points at it.
  */
 export function SetupGuide({
-  root,
+  projectId,
+  hasApiKey,
   endpoint,
   serviceName,
 }: {
-  root: string;
+  projectId: string;
+  hasApiKey: boolean;
   /** Absolute OTLP traces URL for this deployment. */
   endpoint: string;
   /** Project slug, sent as the OpenTelemetry `service.name`. */
@@ -52,15 +55,17 @@ export function SetupGuide({
       }
     >
       <ol className="flex flex-col">
-        <Step number={1} title="Create an API key">
-          <Link
-            href={`${root}/settings/api-keys`}
-            className={buttonVariants({ variant: "primary", size: "sm" })}
-          >
-            Create an API key
-          </Link>
+        <Step number={1} title={hasApiKey ? "Your API key is ready" : "Create an API key"}>
+          <ApiKeyCta
+            projectId={projectId}
+            hasApiKey={hasApiKey}
+            className={buttonVariants({ variant: hasApiKey ? "secondary" : "primary", size: "sm" })}
+          />
         </Step>
-        <Step number={2} title="Add the SDK and send a run">
+        <Step
+          number={2}
+          title={hasApiKey ? "Add the SDK and send your first trace" : "Add the SDK and send a run"}
+        >
           <div className="flex w-full flex-col gap-3">
             {install ? (
               <CodeBlock caption="Install" samples={[{ label: "Shell", code: install }]} />

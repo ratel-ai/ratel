@@ -13,11 +13,11 @@ import { currentVersion, datasetOf } from "../domain/eval";
 import { ORGANIZATION_ID, PROJECT_ID } from "./support";
 
 /**
- * Migration 0068 (decision `runs-per-eval`): each eval version gets the dataset of its eval, and
+ * Migration 0069 (decision `runs-per-eval`): each eval version gets the dataset of its eval, and
  * the scorers of an eval stay in it (no scorer joins the project's library). The pin of a project
  * stays as the pin of the suite runs. A run from before still opens.
  */
-const MIGRATION = "0068_eval_runs_per_eval.sql";
+const MIGRATION = "0069_eval_runs_per_eval.sql";
 const REFUNDS = "e0000000-0000-4000-8000-000000000000";
 const CASE = "a0000000-0000-4000-8000-000000000000";
 const VERSION = "b0000000-0000-4000-8000-000000000000";

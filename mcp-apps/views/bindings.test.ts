@@ -198,3 +198,9 @@ test("a tool is bound to one view only", () => {
   );
   assert.equal(new Set(tools).size, tools.length);
 });
+
+test("self-corrections are per 100 turns in every view, as on every console surface", () => {
+  const labels = JSON.stringify([detailView, listView, seriesView]);
+  assert.doesNotMatch(labels, /per 100 runs/i);
+  assert.match(labels, /Self-corrections per 100 turns/);
+});

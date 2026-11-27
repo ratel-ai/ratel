@@ -11,6 +11,8 @@ import { CONFIG_DEFAULTS } from "@/config-defaults";
 export type OtlpRawSignal = "traces" | "logs";
 
 export interface OtlpRawExportInput {
+  /** The row's id, for an export that can be stored again: the second time adds no row. */
+  id?: string;
   projectId: string;
   signal: OtlpRawSignal;
   contentType: string;

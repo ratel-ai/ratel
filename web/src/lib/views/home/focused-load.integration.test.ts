@@ -115,10 +115,10 @@ test("the four values and the attention rows are the old Overview's", async () =
     assert.deepEqual(focusedStats(after.metrics), old);
 
     assert.ok(after.attention);
-    const { items, moreIssues, healthHref, partial } = after.attention;
+    const { items, moreIssues, healthLock, healthHref, partial } = after.attention;
     assert.ok(items.some(({ key }) => key === "errors"));
     assert.ok(items.some(({ key }) => key.startsWith("issue:")));
-    assert.deepEqual({ items, moreIssues }, before.attention);
+    assert.deepEqual({ items, moreIssues, healthLock }, before.attention);
     assert.equal(healthHref, before.health?.href);
     assert.equal(partial, false);
   }
@@ -151,7 +151,7 @@ async function small(runs: boolean): Promise<Db> {
 }
 
 for (const insights of ["1", "0"]) {
-  test(`a small project, toolRunInsights=${insights}: the attention rows and the stats are the old Overview's`, async () => {
+  test(`a small project, toolRunInsights=${insights}: the attention rows and the stats are the old Overview's, opened by Agent health's rule`, async () => {
     setInsights(insights);
     for (const runs of [true, false]) {
       const db = await small(runs);
@@ -160,9 +160,17 @@ for (const insights of ["1", "0"]) {
         const before = await loadOverview(input);
         const after = await loadFocusedOverview(input);
         assert.ok(after.attention && after.health && after.metrics && after.metrics !== "failed");
-        const { items, moreIssues } = after.attention;
-        assert.ok(items.some(({ key }) => key.startsWith("issue:")));
-        assert.deepEqual({ items, moreIssues }, before.attention);
+        const { items, moreIssues, healthLock } = after.attention;
+        // 24 turns: Agent health opens at the low-confidence floor with toolRunInsights, else at 50.
+        assert.equal(
+          items.some(({ key }) => key.startsWith("issue:")),
+          insights === "1",
+        );
+        assert.deepEqual(
+          healthLock,
+          insights === "1" ? null : { unlocked: false, turns: 24, floor: 50 },
+        );
+        assert.deepEqual({ items, moreIssues, healthLock }, before.attention);
         assert.equal(after.health.card.kind, insights === "1" ? "score" : "state");
         assert.ok(before.traces);
         assert.deepEqual(

@@ -119,6 +119,7 @@ export async function readTasks(db: BoundReadDb, projectId: string): Promise<Tas
       : null,
     fixes: [],
     recorded: null,
+    projectCorrections: null,
     topics: null,
     price: null,
   });

@@ -20,7 +20,7 @@ export default async function TasksPage({ params }: { params: Promise<{ projectI
   const { projectId } = await params;
   const { project, organization, user } = await requireProjectScope(projectId);
   const [inputs, fixes, evalGate, scorersOn, progress] = await Promise.all([
-    loadTasksInputs(project.id),
+    loadTasksInputs(project.id, { selfCorrectionsTile: true }),
     loadTaskFixes(project.id, organization),
     evalGateEnabledFor(organization),
     featureEnabled("customMonitoring", {

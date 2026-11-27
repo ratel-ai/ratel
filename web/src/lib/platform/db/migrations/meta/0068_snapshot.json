@@ -1,6 +1,6 @@
 {
-  "id": "56158761-67ed-4a77-89e0-5fadd2e7e8ff",
-  "prevId": "3f65a623-75a1-4363-bc71-6fd942c532cf",
+  "id": "3f65a623-75a1-4363-bc71-6fd942c532cf",
+  "prevId": "70708a52-e5bd-4283-8233-ce73a3975e54",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4669,6 +4669,97 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.org_holds": {
+      "name": "org_holds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "since": {
+          "name": "since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "org_holds_organization_idx": {
+          "name": "org_holds_organization_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"org_holds\".\"organization_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "org_holds_project_idx": {
+          "name": "org_holds_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"org_holds\".\"project_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "org_holds_project_id_projects_id_fk": {
+          "name": "org_holds_project_id_projects_id_fk",
+          "tableFrom": "org_holds",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "org_holds_one_scope": {
+          "name": "org_holds_one_scope",
+          "value": "num_nonnulls(\"org_holds\".\"organization_id\", \"org_holds\".\"project_id\") = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.api_keys": {
@@ -11384,14 +11475,8 @@
         "project_id": {
           "name": "project_id",
           "type": "uuid",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true
-        },
-        "eval_id": {
-          "name": "eval_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         },
         "experiment_id": {
           "name": "experiment_id",
@@ -11427,19 +11512,6 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "eval_baselines_eval_id_eval_definitions_id_fk": {
-          "name": "eval_baselines_eval_id_eval_definitions_id_fk",
-          "tableFrom": "eval_baselines",
-          "tableTo": "eval_definitions",
-          "columnsFrom": [
-            "eval_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "eval_baselines_experiment_id_eval_experiments_id_fk": {
           "name": "eval_baselines_experiment_id_eval_experiments_id_fk",
           "tableFrom": "eval_baselines",
@@ -11455,16 +11527,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "eval_baselines_project_eval_key": {
-          "name": "eval_baselines_project_eval_key",
-          "nullsNotDistinct": true,
-          "columns": [
-            "project_id",
-            "eval_id"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -11621,13 +11684,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "run_only": {
-          "name": "run_only",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "name": {
           "name": "name",
@@ -11908,21 +11964,9 @@
           "primaryKey": false,
           "notNull": true
         },
-        "dataset_id": {
-          "name": "dataset_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "sandbox_name": {
           "name": "sandbox_name",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sandbox_version_id": {
-          "name": "sandbox_version_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -11931,13 +11975,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
-        },
-        "matrix": {
-          "name": "matrix",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
         },
         "trials": {
           "name": "trials",
@@ -11986,21 +12023,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "eval_definition_versions_dataset_idx": {
-          "name": "eval_definition_versions_dataset_idx",
-          "columns": [
-            {
-              "expression": "dataset_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -12015,19 +12037,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "eval_definition_versions_dataset_id_eval_datasets_id_fk": {
-          "name": "eval_definition_versions_dataset_id_eval_datasets_id_fk",
-          "tableFrom": "eval_definition_versions",
-          "tableTo": "eval_datasets",
-          "columnsFrom": [
-            "dataset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -12066,6 +12075,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "dataset_id": {
+          "name": "dataset_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -12101,6 +12116,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "eval_definitions_dataset_idx": {
+          "name": "eval_definitions_dataset_idx",
+          "columns": [
+            {
+              "expression": "dataset_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -12115,6 +12145,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "eval_definitions_dataset_id_eval_datasets_id_fk": {
+          "name": "eval_definitions_dataset_id_eval_datasets_id_fk",
+          "tableFrom": "eval_definitions",
+          "tableTo": "eval_datasets",
+          "columnsFrom": [
+            "dataset_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -12146,32 +12189,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "eval_id": {
-          "name": "eval_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dataset_id": {
-          "name": "dataset_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "variants": {
-          "name": "variants",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "changes": {
-          "name": "changes",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
         },
         "sandbox_version_id": {
           "name": "sandbox_version_id",
@@ -12388,13 +12405,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "variant": {
-          "name": "variant",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "position": {
           "name": "position",

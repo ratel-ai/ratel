@@ -1,16 +1,15 @@
 import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { RememberProject } from "@/components/console/shell/RememberProject";
 import { composition } from "@/lib/composition/ports";
 import { LAST_PROJECT_COOKIE } from "@/lib/console/scope/cookie";
-import { findProjectScope } from "@/lib/console/scope/project-scope";
+import { closedOrNotFound, findProjectScope } from "@/lib/console/scope/project-scope";
 import { lastProjectDiffers, openProject } from "@/lib/console/scope/remember-project";
 import { isDbConfigured } from "@/lib/platform/db/client";
 
 /**
  * Fails closed: a project of an organization the reader does not belong to is a 404, never a
- * page. Any organization they belong to opens, active or not, as upstream. Without a database
+ * page (the maintenance page while the workspace is on hold). Any organization they belong to opens, active or not, as upstream. Without a database
  * there is nothing to guard, and each page renders its own no-database state.
  *
  * Once the reader may see the project, the edition remembers it (`SessionPort.rememberProject`;
@@ -34,7 +33,7 @@ export default async function ProjectLayout({
     find: (id) => findProjectScope(id),
     remember: rememberProject ? (id) => rememberProject.call(composition.session, id) : undefined,
   });
-  if (!scope) notFound();
+  if (!scope) return closedOrNotFound(projectId);
   const remembered = (await cookies()).get(LAST_PROJECT_COOKIE)?.value;
   return (
     <>

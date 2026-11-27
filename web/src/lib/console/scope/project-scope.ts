@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import type { Session, SessionUser } from "@/lib/contracts/session";
+import { consoleClosed, requireConsoleOpen } from "@/lib/platform/org-hold/console";
 import type { Organization } from "@/lib/platform/organizations";
 import { getProjectById, parseProjectUuid } from "@/lib/platform/projects/queries";
 import type { Project } from "@/lib/platform/projects/schema";
@@ -53,18 +54,33 @@ export async function resolveProjectScope(
   };
 }
 
-/** Null when nobody is signed in, or under `resolveProjectScope`'s rule. */
-export const findProjectScope = cache(async (projectId: string): Promise<ProjectScope | null> => {
+/** The reader's scope by membership alone, before a hold is considered. */
+const findMemberProjectScope = cache(async (projectId: string): Promise<ProjectScope | null> => {
   const session = await getSessionContext();
   if (!session) return null;
   return resolveProjectScope(projectId, session, (id) => getProjectById(id));
 });
 
-/** What a page calls: the scope, or a 404. */
+/**
+ * Null when nobody is signed in, under `resolveProjectScope`'s rule, or while the workspace is on
+ * hold: every action and API route then answers as for a project the reader may not see, and a
+ * landing goes to another one.
+ */
+export const findProjectScope = cache(async (projectId: string): Promise<ProjectScope | null> => {
+  const scope = await findMemberProjectScope(projectId);
+  return scope && !(await consoleClosed({ project: scope.project })) ? scope : null;
+});
+
+/** For a page with no scope: the maintenance page while the workspace is on hold, else a 404. */
+export async function closedOrNotFound(projectId: string): Promise<never> {
+  const scope = await findMemberProjectScope(projectId);
+  if (scope) await requireConsoleOpen({ project: scope.project });
+  notFound();
+}
+
+/** What a page calls: the scope, the maintenance page, or a 404. */
 export async function requireProjectScope(projectId: string): Promise<ProjectScope> {
-  const scope = await findProjectScope(projectId);
-  if (!scope) notFound();
-  return scope;
+  return (await findProjectScope(projectId)) ?? closedOrNotFound(projectId);
 }
 
 /** Upstream's name for the same read, kept so copied call sites stay identical. */

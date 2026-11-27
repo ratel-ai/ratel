@@ -11,10 +11,10 @@ import { currentVersion } from "../domain/case";
 import { ORGANIZATION_ID, PROJECT_ID } from "./support";
 
 /**
- * Migration 0066 (decision `rows-count-at-once`): a row version has no state. A draft becomes a
+ * Migration 0067 (decision `rows-count-at-once`): a row version has no state. A draft becomes a
  * version that counts, and the newest version of a row counts.
  */
-const MIGRATION = "0066_rows_count_at_once.sql";
+const MIGRATION = "0067_rows_count_at_once.sql";
 const EVAL = "e0000000-0000-4000-8000-000000000000";
 const BOTH = "a0000000-0000-4000-8000-000000000000";
 const DRAFT = "b0000000-0000-4000-8000-000000000000";

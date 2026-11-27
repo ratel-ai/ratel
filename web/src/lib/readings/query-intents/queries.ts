@@ -4,6 +4,7 @@ import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { enqueueJob, type JobsDb } from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import { mergeMemberText } from "./member-text";
 import { type NewQueryIntentOccurrence, queryIntentOccurrences, queryIntents } from "./schema";
@@ -319,17 +320,20 @@ export async function enqueueDueQueryCategorizations(
       ),
     )
     .where(
-      notExists(
-        db
-          .select({ one: sql`1` })
-          .from(jobs)
-          .where(
-            and(
-              eq(jobs.projectId, projects.id),
-              eq(jobs.kind, "categorize_queries"),
-              inArray(jobs.status, ["queued", "running"]),
+      and(
+        notOnHold(projects.id),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(jobs)
+            .where(
+              and(
+                eq(jobs.projectId, projects.id),
+                eq(jobs.kind, "categorize_queries"),
+                inArray(jobs.status, ["queued", "running"]),
+              ),
             ),
-          ),
+        ),
       ),
     )
     .groupBy(projects.id)

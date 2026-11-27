@@ -3,7 +3,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { test } from "node:test";
 import { assembleOperations } from "@/lib/mcp/operations";
-import { BEARER_ROUTE_SCOPES, MCP_ROUTE, mcpOperationScope } from "@/lib/platform/api-keys/routes";
+import {
+  BEARER_ROUTE_SCOPES,
+  INTERNAL_KEY_LOOKUP_ROUTE,
+  MCP_ROUTE,
+  mcpOperationScope,
+} from "@/lib/platform/api-keys/routes";
 import { API_KEY_SCOPES } from "@/lib/platform/api-keys/scopes";
 
 /**
@@ -91,7 +96,7 @@ test("every route that authenticates with an API key declares a scope for every 
   const missing: string[] = [];
   const unwired: string[] = [];
   for (const route of routeFiles) {
-    if (`POST ${route.path}` === MCP_ROUTE) continue;
+    if ([MCP_ROUTE, INTERNAL_KEY_LOOKUP_ROUTE].includes(`POST ${route.path}`)) continue;
     if (!authenticatesWithKey(route.source)) continue;
     for (const method of exportedMethods(route.source)) {
       const key = `${method} ${route.path}`;
@@ -148,6 +153,9 @@ test("only the shared resolver looks a key up, so no route can authenticate arou
     // The Site Copilot seed hands the real traces handler its own key store; upstream keeps its
     // seeds under scripts/, outside the scan.
     "lib/console/seed/site-copilot-seed.ts",
+    // A gateway's lookup: the shared value is checked before any key is read.
+    "lib/platform/internal-auth/key-resolve.ts",
+    "app/api/internal/keys/resolve/route.ts",
   ]);
   const offenders = [
     ...libSources,
@@ -159,6 +167,14 @@ test("only the shared resolver looks a key up, so no route can authenticate arou
     .filter(({ file, source }) => !allowed.has(file) && /findActiveApiKeyByHash\(/.test(source))
     .map(({ file }) => file);
   assert.deepEqual(offenders, [], "use authenticateApiKey or resolveProjectFromBearer instead");
+});
+
+test("the internal key lookup refuses an unproven caller before it looks a key up", () => {
+  const file = join(WEB_ROOT, "lib", "platform", "internal-auth", "key-resolve.ts");
+  const source = readFileSync(file, "utf8");
+  const body = source.slice(source.indexOf("export async function handleKeyResolve"));
+  assert.ok(body.indexOf("refuseInternalRequest(") > 0);
+  assert.ok(body.indexOf("refuseInternalRequest(") < body.indexOf("findActiveApiKeyByHash("));
 });
 
 test("MCP: the route exists and every tool needs a declared MCP scope", () => {
