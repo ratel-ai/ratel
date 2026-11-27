@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import { getLogger } from "@/lib/platform/logger";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
@@ -9,6 +10,7 @@ import {
   combinationCount,
   combinations,
   currentVersion,
+  type EvalDefinition,
   type EvalScorer,
   type EvalVersion,
   MAX_COMBINATIONS,
@@ -45,14 +47,16 @@ export type StartEvalRun = {
 };
 
 export type EvalRunChanges = {
-  /** Another dataset, for this run only. */
-  datasetId?: string;
+  /** Another dataset (its id or its name), for this run only. */
+  dataset?: string;
   /** More rows, for this run only. They are not rows of the dataset. */
   rows?: NewRow[];
   /** Other scorers, for this run only. A reference is resolved as for the eval. */
   scorers?: EvalScorer[];
   /** A version id, or `latest`: the newest ready version of the sandbox of the eval. */
   sandboxVersion?: string;
+  /** The sandbox of `latest` when the eval names none. */
+  sandbox?: string;
   /** They go over the default params of the eval. */
   params?: Record<string, unknown>;
   /** Replaces the matrix of the eval. `{}`: no matrix. */
@@ -77,7 +81,7 @@ export async function startEvalRun(
   );
   if (!definition) return refused("not_found", `There is no eval named "${wanted}".`);
   const version = currentVersion(definition);
-  const runtime = await findRuntime(projectId, version, changes.sandboxVersion, deps);
+  const runtime = await findRuntime(projectId, version, changes, deps);
   if (!runtime.ok) return runtime;
   const scorers = await resolveScorers(projectId, changes.scorers ?? version.scorers, deps.library);
   if (!scorers.ok) return refused("invalid_scorers", scorers.message);
@@ -87,7 +91,11 @@ export async function startEvalRun(
   const matrix = changes.matrix ?? version.matrix;
   const variants = variantsOf(runtime.version, params, matrix);
   if (!variants.ok) return variants;
-  const datasetId = changes.datasetId ?? version.datasetId;
+  const datasetId =
+    changes.dataset === undefined
+      ? version.datasetId
+      : await findDatasetId(projectId, changes.dataset, deps);
+  if (datasetId === null) return refused("not_found", `There is no dataset "${changes.dataset}".`);
   const rows = await datasetRows(projectId, datasetId, startedBy, deps);
   if (!rows.ok) return rows;
   const added = changes.rows ?? [];
@@ -116,7 +124,7 @@ export async function startEvalRun(
       evalId: definition.id,
       datasetId,
       variants: variants.variants,
-      changes: changesOf(changes),
+      changes: changesOf(changes, datasetId),
       sandboxVersionId: runtime.version.id,
       sandboxName: runtime.version.name,
       name: name ?? null,
@@ -137,6 +145,99 @@ export async function startEvalRun(
   return { ok: true, experiment };
 }
 
+export type StartEachEvalRun = {
+  /** The names or the ids of the evals. Absent: each eval (of `changes.sandbox`, when given). */
+  evals?: string[];
+  startedBy: string;
+  name?: string;
+  changes?: Omit<EvalRunChanges, "rows" | "scorers">;
+};
+
+/** One part of a start of each eval: its run, or why it did not start. */
+export type EachRunPart = { eval: string; evalId: string } & (
+  | { ok: true; experiment: Experiment; note: string | null }
+  | { ok: false; reason: StartRefusal; message: string }
+);
+
+/**
+ * One run for each eval, with the same changes. A version of one sandbox does not apply to an eval
+ * of another sandbox: that eval takes its own runtime, and its part says so. A refusal of one eval
+ * does not stop the others.
+ */
+export async function startEachEvalRun(
+  subject: UsageSubject,
+  { evals: names, startedBy, name, changes = {} }: StartEachEvalRun,
+  deps: ExperimentDeps,
+): Promise<{ ok: true; runs: EachRunPart[] } | Refusal> {
+  const { projectId } = subject;
+  if (!(await deps.sandboxes.enabled(projectId))) {
+    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+  }
+  const all = await deps.evals.list(projectId);
+  const chosen = chooseEach(all, names, changes.sandbox);
+  if (!chosen.ok) return chosen;
+  if (chosen.evals.length === 0) return refused("no_cases", "The project has no eval to run.");
+  const asked = changes.sandboxVersion;
+  const version =
+    asked === undefined || asked === "latest"
+      ? null
+      : await deps.sandboxes.getVersion(projectId, asked);
+  if (asked !== undefined && asked !== "latest" && !version) {
+    return refused("not_found", "There is no such sandbox version.");
+  }
+  const runs: EachRunPart[] = [];
+  for (const definition of chosen.evals) {
+    const own = currentVersion(definition).sandboxName;
+    const other = version !== null && own !== null && own !== version.name;
+    const result = await startEvalRun(
+      subject,
+      {
+        eval: definition.id,
+        startedBy,
+        ...(name ? { name } : {}),
+        changes: other ? withoutVersion(changes) : changes,
+      },
+      deps,
+    );
+    const part = { eval: definition.name, evalId: definition.id };
+    const note = other
+      ? `The version ${version.id} is of the sandbox ${version.name}. This eval runs on ${own}, so it took its own runtime.`
+      : null;
+    runs.push(
+      result.ok
+        ? { ...part, ok: true, experiment: result.experiment, note }
+        : { ...part, ok: false, reason: result.reason, message: result.message },
+    );
+  }
+  return { ok: true, runs };
+}
+
+function chooseEach(
+  all: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+  sandbox: string | undefined,
+): { ok: true; evals: EvalDefinition[] } | Refusal {
+  if (names === undefined) {
+    const ofSandbox = (one: EvalDefinition) => {
+      const own = currentVersion(one).sandboxName;
+      return sandbox === undefined || own === null || own === sandbox;
+    };
+    return { ok: true, evals: all.filter(ofSandbox) };
+  }
+  const evals: EvalDefinition[] = [];
+  for (const wanted of new Set(names)) {
+    const found = all.find((one) => one.name === wanted || one.id === wanted);
+    if (!found) return refused("not_found", `There is no eval named "${wanted}".`);
+    evals.push(found);
+  }
+  return { ok: true, evals };
+}
+
+function withoutVersion(changes: StartEachEvalRun["changes"] & object) {
+  const { sandboxVersion: _, ...rest } = changes;
+  return rest;
+}
+
 /**
  * The runtime of the run: the version that the run names, else the version that the eval pins,
  * else the newest ready version of the sandbox of the eval.
@@ -144,11 +245,11 @@ export async function startEvalRun(
 async function findRuntime(
   projectId: string,
   version: EvalVersion,
-  asked: string | undefined,
+  { sandboxVersion: asked, sandbox }: Pick<EvalRunChanges, "sandboxVersion" | "sandbox">,
   { sandboxes }: ExperimentDeps,
 ): Promise<{ ok: true; version: SandboxVersionSummary } | Refusal> {
   const wanted = asked ?? version.sandboxVersionId ?? "latest";
-  const { sandboxName } = version;
+  const sandboxName = version.sandboxName ?? sandbox ?? null;
   if (wanted === "latest") {
     const versions = await sandboxes.listVersions(projectId, LATEST_OF);
     const found = versions.find(
@@ -224,10 +325,20 @@ async function datasetRows(
   };
 }
 
+/** A dataset of the project by its id, else by its name. */
+async function findDatasetId(
+  projectId: string,
+  wanted: string,
+  { datasets }: ExperimentDeps,
+): Promise<string | null> {
+  const byId = z.uuid().safeParse(wanted).success ? await datasets.get(projectId, wanted) : null;
+  return (byId ?? (await datasets.getByName(projectId, wanted)))?.id ?? null;
+}
+
 /** What the run changed, as a record: no captured text. */
-function changesOf(changes: EvalRunChanges): RunChanges {
+function changesOf(changes: EvalRunChanges, datasetId: string): RunChanges {
   return {
-    ...(changes.datasetId === undefined ? {} : { datasetId: changes.datasetId }),
+    ...(changes.dataset === undefined ? {} : { datasetId }),
     ...(changes.rows === undefined ? {} : { addedRows: changes.rows.length }),
     ...(changes.scorers === undefined ? {} : { scorers: true }),
     ...(changes.sandboxVersion === undefined ? {} : { sandboxVersionId: changes.sandboxVersion }),

@@ -57,13 +57,15 @@ import {
 } from "@/lib/views/evals/domain/experiment";
 import { type CaseFromTurn, caseFromTurn } from "@/lib/views/evals/domain/from-turn";
 import { deltaKey } from "@/lib/views/evals/domain/suite";
+import {
+  type EachRunPart,
+  type EvalRunChanges,
+  startEachEvalRun,
+  startEvalRun,
+} from "@/lib/views/evals/eval-runs";
 import { advance, experimentDeps } from "@/lib/views/evals/experiment-deps";
 import { caseCounts, trialsByCase } from "@/lib/views/evals/experiment-view";
-import {
-  type StartExperiment,
-  type StartExperimentResult,
-  startExperiment,
-} from "@/lib/views/evals/experiments";
+import type { StartExperimentResult } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
 import type { CaseStore, NewCase } from "@/lib/views/evals/ports/case-store";
@@ -103,7 +105,11 @@ export interface EvalsOperationDeps {
   createCases(inputs: readonly NewCase[]): ReturnType<CaseStore["createAll"]>;
   getEvalByName(projectId: string, name: string): Promise<EvalDefinition | null>;
   createEval(input: NewEval): ReturnType<EvalStore["create"]>;
-  startExperiment(subject: UsageSubject, start: StartExperiment): Promise<StartExperimentResult>;
+  /** A run of one eval, or one run for each eval (or for the evals named). */
+  startRuns(
+    subject: UsageSubject,
+    start: { eval?: string; evals?: string[]; startedBy: string; changes: EvalRunChanges },
+  ): Promise<{ ok: true; runs: EachRunPart[] } | Extract<StartExperimentResult, { ok: false }>>;
   /**
    * Drives a new eval run in this process until it closes, so an agent does not wait for the
    * sweep. The sweep still takes the steps that this process does not. It must not throw.
@@ -157,7 +163,23 @@ const defaultDeps: EvalsOperationDeps = {
   createCases: (inputs) => createDrizzleCaseStore(getDb()).createAll(inputs),
   getEvalByName: (projectId, name) => createDrizzleEvalStore(getDb()).getByName(projectId, name),
   createEval: (input) => createDrizzleEvalStore(getDb()).create(input),
-  startExperiment: (subject, start) => startExperiment(subject, start, experimentDeps()),
+  startRuns: async (subject, { eval: one, evals, startedBy, changes }) => {
+    if (one === undefined) {
+      return startEachEvalRun(
+        subject,
+        { ...(evals ? { evals } : {}), startedBy, changes },
+        experimentDeps(),
+      );
+    }
+    const result = await startEvalRun(subject, { eval: one, startedBy, changes }, experimentDeps());
+    if (!result.ok) return result;
+    const { experiment } = result;
+    const name = experiment.evalVersions[0]?.name ?? one;
+    return {
+      ok: true,
+      runs: [{ eval: name, evalId: experiment.evalId ?? "", ok: true, experiment, note: null }],
+    };
+  },
   advance: (experiment) => {
     void drive(experiment).catch((error: unknown) => {
       // The sweep takes the next step of a running eval run.
@@ -270,7 +292,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Read an eval",
       description:
         "Use this tool to read one eval by its name or id. It returns its newest version: the sandbox, the default params, the trials, and each scorer with its check or its judge question. It also returns the cases of its dataset with the number of the version that counts.",
-      keywords: ["evals", "eval definition", "dataset", "scorers"],
+      keywords: ["evals", "eval definition"],
       scope: "project",
       mutates: false,
       apiKeyScope: "evals:read",
@@ -394,7 +416,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "List eval cases",
       description:
         "Use this tool to see the cases of the datasets of the project, or of one eval. It returns each case with its id, name, eval id, labels and the number of the version that counts. Each case counts in an eval run: the newest version of each.",
-      keywords: ["evals", "eval cases", "dataset"],
+      keywords: ["evals", "eval cases"],
       scope: "project",
       mutates: false,
       apiKeyScope: "evals:read",
@@ -560,69 +582,103 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
     defineOperation({
       id: "evals_start_run",
       domain: "evals",
-      title: "Start an eval run",
+      title: "Start eval runs",
       description:
-        "Use this tool to run the suite, or chosen evals, on a sandbox version. The suite is each eval of the sandbox with a case and a gating scorer. This tool changes data: it starts VM runs. It returns the run id, the state, the eval names, and the numbers of cases and trials. Call evals_get_run until the state is completed.",
-      keywords: ["evals", "start eval run"],
+        "Use this tool to start a run of one eval (eval), or one run for each eval. This tool changes data: it starts VM runs. A run can change, for itself only, the dataset, the runtime version, the params, a matrix and the trials. It returns each run id and its state. Call evals_get_run until the state is completed.",
+      keywords: ["evals", "start eval run", "matrix"],
       scope: "project",
       mutates: true,
       apiKeyScope: "evals:write",
       params: z.object({
         ...projectScoped,
-        sandboxVersion: z
-          .union([z.literal("latest"), uuidParam()])
-          .default("latest")
-          .describe("A sandbox version id, or latest for the newest ready version."),
+        eval: evalParam.optional().describe("The eval to run. Omit it to run each eval."),
         evals: z
           .array(evalParam)
           .min(1)
           .max(100)
           .optional()
-          .describe("The evals to run (names or ids). Omit it to run the suite."),
+          .describe("The evals to run, one run each (names or ids). Omit it to run each eval."),
+        sandboxVersion: z
+          .union([z.literal("latest"), uuidParam()])
+          .optional()
+          .describe(
+            "A runtime version id, or latest. It applies only to the evals of its sandbox. Omit it to use the runtime of each eval.",
+          ),
+        dataset: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Another dataset (name or id), for these runs only."),
         trials: z
           .number()
           .int()
           .min(1)
           .max(MAX_TRIALS)
           .optional()
-          .describe("The runs of each case. Omit it to use the trials of each eval."),
+          .describe("The runs of each row. Omit it to use the trials of each eval."),
         params: z
           .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
           .default({})
           .describe(
-            "Values for the params of the sandbox version. They go over the defaults of each eval.",
+            "Values for the params of the runtime. They go over the defaults of each eval.",
+          ),
+        matrix: z
+          .record(z.string(), z.array(z.union([z.string(), z.number(), z.boolean()])).min(1))
+          .optional()
+          .describe(
+            "For each param, the values to try. A run has one variant for each combination, at most 12.",
           ),
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
         const organizationId = ctx.organizationId ?? (await deps.organizationIdOf(ctx.projectId));
         if (!organizationId) throw notFound("project");
-        const result = await deps.startExperiment(
+        const changes = {
+          ...(params.sandboxVersion === undefined ? {} : { sandboxVersion: params.sandboxVersion }),
+          ...(params.dataset === undefined ? {} : { dataset: params.dataset }),
+          ...(params.trials === undefined ? {} : { trials: params.trials }),
+          ...(params.matrix === undefined ? {} : { matrix: params.matrix }),
+          ...(Object.keys(params.params).length === 0 ? {} : { params: params.params }),
+        };
+        const result = await deps.startRuns(
           { projectId: ctx.projectId, organizationId },
           {
-            sandboxVersion: params.sandboxVersion,
-            ...(params.trials === undefined ? {} : { trialsPerCase: params.trials }),
+            ...(params.eval ? { eval: params.eval } : {}),
             ...(params.evals ? { evals: params.evals } : {}),
-            params: params.params,
             startedBy: requester(ctx.auth),
+            changes,
           },
         );
         if (!result.ok) throw startRefusal(result);
-        const { experiment } = result;
-        deps.advance(experiment);
-        return {
-          data: {
+        const runs = result.runs.map((part) => {
+          if (!part.ok) {
+            return { eval: part.eval, error: part.reason, message: part.message };
+          }
+          const { experiment } = part;
+          deps.advance(experiment);
+          return {
+            eval: part.eval,
             runId: experiment.id,
             state: experiment.state,
             sandboxVersionId: experiment.sandboxVersionId,
-            evals: experiment.evalVersions.map(({ name }) => name),
+            variants: experiment.variants.length,
             cases: experiment.caseVersions.length,
-            trials: experiment.caseVersions.reduce(
-              (sum, frozen) => sum + trialsOfCase(experiment, frozen),
-              0,
-            ),
-          },
-          hint: `The eval run started. Call evals_get_run with runId "${experiment.id}". It waits up to ${RUN_WAIT_MS / 1000} seconds for the run to end. Call it again while the state is running.`,
+            trials:
+              experiment.caseVersions.reduce(
+                (sum, frozen) => sum + trialsOfCase(experiment, frozen),
+                0,
+              ) * Math.max(1, experiment.variants.length),
+            ...(part.note ? { note: part.note } : {}),
+          };
+        });
+        const first = runs.find((run) => "runId" in run);
+        return {
+          data: { runs },
+          hint: first
+            ? `The runs started. Call evals_get_run with runId "${first.runId}" and the other run ids. It waits up to ${RUN_WAIT_MS / 1000} seconds for a run to end. Call it again while the state is running.`
+            : "No run started. Each part says why.",
         };
       },
     }),

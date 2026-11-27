@@ -27,8 +27,11 @@ export type ExperimentsApiDeps = {
   advance: (experiment: Experiment) => void;
   track: (experiment: Experiment, by: { externalId?: string; surface: string }) => Promise<void>;
   publicUrl: (path: string) => string;
-  /** The pinned baseline run of the project, with its trials. Null when none is pinned. */
-  baseline: (projectId: string) => Promise<Compared | null>;
+  /**
+   * The pinned baseline run of an eval (of the suite runs: null), with its trials. Null when none
+   * is pinned.
+   */
+  baseline: (projectId: string, evalId: string | null) => Promise<Compared | null>;
 };
 
 /** Who may call the routes of a project key. */
@@ -183,10 +186,10 @@ async function get(
   if (!experiment) return notFound();
   const [trials, baseline] = await Promise.all([
     experiments.trials(experiment.id),
-    deps.baseline(projectId),
+    deps.baseline(projectId, experiment.evalId),
   ]);
   const suite = suiteTable({ experiment, trials }, baseline);
-  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite));
+  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite, baseline));
 }
 
 export async function forKey(

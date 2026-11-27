@@ -67,7 +67,7 @@ export async function advance(
 
 export const experimentsApiDeps: ExperimentsApiDeps = {
   experiments: experimentDeps,
-  baseline: (projectId) => pinnedRun(projectId, baselineDeps()),
+  baseline: (projectId, evalId) => pinnedRun(projectId, baselineDeps(), evalId),
   advance: (experiment) =>
     after(async () => {
       await advance(experiment);

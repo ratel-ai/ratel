@@ -13,9 +13,12 @@ export type NewDataset = DatasetDetails & {
   createdBy: string;
 };
 
-/** A row of a fixed dataset: a trace turn with its frozen copy, or typed values. */
+/**
+ * A row of a fixed dataset: a trace turn (or a sandbox run, with no turn) with its frozen copy, or
+ * typed values.
+ */
 export type NewRow = { name: string; labels?: string[] } & (
-  | { kind: "trace"; turnId: string; content: CaseContent; sourceOutput: string | null }
+  | { kind: "trace"; turnId: string | null; content: CaseContent; sourceOutput: string | null }
   | { kind: "values"; row: ValueRow }
 );
 

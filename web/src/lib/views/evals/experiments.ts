@@ -49,7 +49,7 @@ export type ExperimentDeps = {
   experiments: ExperimentStore;
   cases: Pick<CaseStore, "list">;
   evals: Pick<EvalStore, "list">;
-  datasets: Pick<DatasetStore, "get" | "keepResolved" | "rows" | "addRunRows">;
+  datasets: Pick<DatasetStore, "get" | "getByName" | "keepResolved" | "rows" | "addRunRows">;
   library: ScorerLibrary;
   /** The traces that a query dataset resolves when a run starts. */
   traces: TraceSource;

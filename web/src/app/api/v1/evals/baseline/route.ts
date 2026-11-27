@@ -9,9 +9,12 @@ import { keyBaselineDeps } from "@/lib/views/evals/key-deps";
 
 export const runtime = "nodejs";
 
-/** GET /api/v1/evals/baseline: the pinned baseline of the project of the key, or null. */
+/** GET /api/v1/evals/baseline[?eval=<id>]: the pinned baseline of the eval (or of the suite runs), or null. */
 export const GET = withRequestLog(async (req: Request) =>
-  handleGetBaselineByKey(keyBaselineDeps(req, BEARER_ROUTE_SCOPES["GET /api/v1/evals/baseline"])),
+  handleGetBaselineByKey(
+    keyBaselineDeps(req, BEARER_ROUTE_SCOPES["GET /api/v1/evals/baseline"]),
+    req,
+  ),
 );
 
 /** PUT /api/v1/evals/baseline: pins a completed experiment. */

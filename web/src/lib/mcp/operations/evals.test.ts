@@ -250,9 +250,17 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     }),
     pinnedRun: async () => ({ experiment: baseline, trials: [baselineTrial] }),
     createEval: async (input) => evalDefinition(input),
-    startExperiment: async () => ({
+    startRuns: async () => ({
       ok: true,
-      experiment: experiment({ state: "running", finishedAt: null }),
+      runs: [
+        {
+          eval: "Refunds",
+          evalId: EVAL,
+          ok: true,
+          experiment: experiment({ state: "running", finishedAt: null, evalId: EVAL }),
+          note: null,
+        },
+      ],
     }),
     advance: () => {},
     listExperiments: async () => experiments,
@@ -557,10 +565,10 @@ test("evals_get_case: withholds captured text from a key without content access"
 
 test("evals_start_run: returns the run id at once and a hint to poll evals_get_run", async () => {
   let advanced = 0;
-  const result = ok<{ runId: string; state: string }>(
+  const result = ok<{ runs: Array<{ runId: string; state: string; eval: string }> }>(
     await call(
       "evals_start_run",
-      { trials: 1 },
+      { eval: "Refunds", trials: 1 },
       {
         advance: () => {
           advanced += 1;
@@ -568,8 +576,9 @@ test("evals_start_run: returns the run id at once and a hint to poll evals_get_r
       },
     ),
   );
-  assert.equal(result.data.runId, RUN);
-  assert.equal(result.data.state, "running");
+  assert.equal(result.data.runs[0]?.runId, RUN);
+  assert.equal(result.data.runs[0]?.eval, "Refunds");
+  assert.equal(result.data.runs[0]?.state, "running");
   assert.equal(advanced, 1);
   assert.match(result.hint ?? "", /evals_get_run/);
   assert.match(result.hint ?? "", new RegExp(RUN));
@@ -581,7 +590,7 @@ test("evals_start_run: an eval with no case is refused with the reason", async (
       "evals_start_run",
       {},
       {
-        startExperiment: async () => ({
+        startRuns: async () => ({
           ok: false,
           reason: "no_cases",
           message: "No eval has a case and a gating scorer. Add a case first.",
@@ -1057,27 +1066,61 @@ test("evals_create_case: two tasks in task make one row in the eval of each", as
   );
 });
 
-test("evals_start_run: the suite, or the evals that you name; the trials of each eval by default", async () => {
+test("evals_start_run: one eval, or one run for each eval, with the changes of the run", async () => {
   const starts: unknown[] = [];
-  const startExperiment: EvalsOperationDeps["startExperiment"] = async (_subject, start) => {
+  const startRuns: EvalsOperationDeps["startRuns"] = async (_subject, start) => {
     starts.push(start);
-    return { ok: true, experiment: experiment({ state: "running", finishedAt: null }) };
+    return {
+      ok: true,
+      runs: [
+        {
+          eval: "Refunds",
+          evalId: EVAL,
+          ok: true,
+          experiment: experiment({ state: "running", finishedAt: null }),
+          note: "The version is of the sandbox a. This eval runs on b, so it took its own runtime.",
+        },
+        { eval: "Empty", evalId: "e2", ok: false, reason: "no_cases", message: "No row." },
+      ],
+    };
   };
-  ok(await call("evals_start_run", {}, { startExperiment }));
-  ok(await call("evals_start_run", { evals: ["Refunds"], trials: 2 }, { startExperiment }));
-  const [suite, chosen] = starts as Array<Record<string, unknown>>;
-  assert.deepEqual([suite?.evals, suite?.trialsPerCase], [undefined, undefined]);
-  assert.deepEqual([chosen?.evals, chosen?.trialsPerCase], [["Refunds"], 2]);
+  const each = ok<{ runs: Array<Record<string, unknown>> }>(
+    await call("evals_start_run", {}, { startRuns }),
+  );
+  assert.match(String(each.data.runs[0]?.note), /own runtime/);
+  assert.deepEqual(each.data.runs[1], { eval: "Empty", error: "no_cases", message: "No row." });
+  ok(
+    await call(
+      "evals_start_run",
+      {
+        eval: "Refunds",
+        trials: 2,
+        dataset: "Asks",
+        matrix: { model: ["a", "b"] },
+        params: { depth: 1 },
+      },
+      { startRuns },
+    ),
+  );
+  ok(
+    await call("evals_start_run", { evals: ["Refunds"], sandboxVersion: "latest" }, { startRuns }),
+  );
+  const [all, one, named] = starts as Array<Record<string, unknown>>;
+  assert.deepEqual([all?.eval, all?.evals, all?.changes], [undefined, undefined, {}]);
+  assert.deepEqual(
+    [one?.eval, one?.changes],
+    [
+      "Refunds",
+      { trials: 2, dataset: "Asks", matrix: { model: ["a", "b"] }, params: { depth: 1 } },
+    ],
+  );
+  assert.deepEqual([named?.evals, named?.changes], [["Refunds"], { sandboxVersion: "latest" }]);
   const wrong = failure(
     await call(
       "evals_start_run",
-      { evals: ["Billing"] },
+      { eval: "Billing" },
       {
-        startExperiment: async () => ({
-          ok: false,
-          reason: "wrong_sandbox",
-          message: "Other sandbox.",
-        }),
+        startRuns: async () => ({ ok: false, reason: "wrong_sandbox", message: "Other sandbox." }),
       },
     ),
   );

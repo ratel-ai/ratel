@@ -10,7 +10,7 @@ import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-sto
 import { compareWithBaseline, pinBaseline } from "../baseline";
 import { datasetOf, type EvalScorer } from "../domain/eval";
 import { paramsOfTrial } from "../domain/experiment";
-import { startEvalRun } from "../eval-runs";
+import { startEachEvalRun, startEvalRun } from "../eval-runs";
 import type { ExperimentDeps } from "../experiments";
 import {
   content,
@@ -184,7 +184,7 @@ test("a run changes the dataset, the rows, the scorers, the params and the trial
     "user_1",
   );
   const result = await start({
-    datasetId: other.id,
+    dataset: "Typed asks",
     rows: [
       { kind: "values", name: "extra", row: { values: { order: "B2" }, expectedOutput: null } },
     ],
@@ -294,4 +294,38 @@ test("the baseline is pinned for each eval, and the suite pin stays for the runs
     (await baselines.get(PROJECT_ID, first.experiment.evalId))?.experimentId,
     second.experiment.id,
   );
+});
+
+test("a start of each eval makes one run for each eval, and a version of another sandbox does not apply", async () => {
+  const { db, deps, cases } = await setup();
+  const billing = await seedEval(db, { name: "Billing", content: { sandboxName: "billing" } });
+  await cases.create({
+    projectId: PROJECT_ID,
+    evalId: billing.id,
+    name: "b",
+    labels: [],
+    content: content(),
+    createdBy: "user_1",
+  });
+  await seedEval(db, { name: "No gate", content: { scorers: [] } });
+  const result = await startEachEvalRun(
+    SUBJECT,
+    { startedBy: "user_1", changes: { sandboxVersion: OLDER.id, params: { model: "m" } } },
+    deps,
+  );
+  assert.ok(result.ok, result.ok ? "" : result.message);
+  const [refunds, ofBilling, noGate] = result.runs;
+  assert.ok(refunds?.ok && ofBilling?.ok);
+  assert.equal(refunds.experiment.sandboxVersionId, OLDER.id);
+  assert.equal(refunds.note, null);
+  assert.equal(ofBilling.experiment.sandboxVersionId, OTHER.id);
+  assert.match(ofBilling.note ?? "", /sandbox support-demo.*runs on billing/);
+  assert.deepEqual(ofBilling.experiment.params, { model: "m" });
+  // A refusal of one eval does not stop the others.
+  assert.equal(noGate?.ok, false);
+  assert.equal(noGate && !noGate.ok && noGate.reason, "invalid_scorers");
+  const named = await startEachEvalRun(SUBJECT, { evals: ["Billing"], startedBy: "user_1" }, deps);
+  assert.deepEqual(named.ok && named.runs.map(({ eval: one }) => one), ["Billing"]);
+  const unknown = await startEachEvalRun(SUBJECT, { evals: ["Nope"], startedBy: "u" }, deps);
+  assert.equal(unknown.ok ? null : unknown.reason, "not_found");
 });
