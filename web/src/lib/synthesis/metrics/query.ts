@@ -39,7 +39,7 @@ export class QueryError extends Error {
 
   constructor(
     message: string,
-    readonly detail?: { code: string; fix: string },
+    readonly detail?: { code: string; fix: string; at?: { start: number; end: number } },
   ) {
     super(message);
   }

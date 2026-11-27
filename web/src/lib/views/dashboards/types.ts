@@ -21,6 +21,8 @@ export interface WidgetRefusal {
   message: string;
   code: string;
   fix: string;
+  /** Where in the text the refusal is, when the compiler knows. */
+  at?: { start: number; end: number };
 }
 
 /** What a widget shows: its numbers, or the refusal of its RQL text. */

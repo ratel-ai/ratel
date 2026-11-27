@@ -31,6 +31,7 @@ runRql(compiled, { projectId }, deps?):
 | `domain/page-filter.ts` | pure: `RqlPageFilter` (the console's trace filter), its conditions on `rql.traces`, and the values it keeps of each list for `each` |
 | `domain/window.ts`, `domain/compile.ts`, `domain/errors.ts` | the window rules; parse, check and rewrite in one call; the error codes and `nearestName` (edit distance) |
 | `domain/describe.ts` | pure: the schema description (tables, columns, functions, operators, limits, rules, examples) |
+| `domain/editor.ts` | pure: what the console's RQL field offers, from the same catalog: `rqlEditorData` (tables, columns, functions, `RQL_KEYWORDS`, the operators of the description) and `rqlCompletions` (tables after FROM, the columns of the table in FROM, else of every table; nothing in a string or a comment). `editor.test.ts` fails when it and the catalog or `describe_rql_schema` differ, and compiles every keyword |
 | `ports/parser.ts`, `adapters/pgsql-ast-parser.ts` | the `RqlParser` port and its one adapter |
 | `query.ts` | kind `sql` of the query object: fills `metricSeams.sql` on import (`sqlQueryRunner`), with the version check, the scope window, and every error as a `QueryError` with its code and fix |
 | `run.ts` | the entry point of a run: `runRql` with the defaults (the RQL pool, the process gate, the timeout of `RQL_LIMITS`), the `feature.rql.run` span and the `feature.rql.query_run` event |
