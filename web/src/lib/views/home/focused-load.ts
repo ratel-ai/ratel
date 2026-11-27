@@ -33,7 +33,6 @@ import { createDrizzleAgentStore } from "@/lib/views/agents/adapters/drizzle-sto
 import type { AlertingRule, AlertRuleCounts } from "@/lib/views/alerts/types";
 import { pageGap } from "@/lib/views/health/data-gaps-model";
 import { type IssueCategory, issueCategories } from "@/lib/views/health/issue-categories";
-import { pendingHealthModel } from "@/lib/views/health/page-model";
 import { alertsWidget, type FocusedAlerts } from "@/lib/views/home/alerting";
 import type { Attention } from "@/lib/views/home/attention";
 import {
@@ -159,10 +158,12 @@ export interface FocusedAttention extends Attention {
 }
 
 /**
- * `clear`: checked, and nothing needs a person. `early`: Agent health has no whole reading yet.
- * `no_data`: nothing arrived in the window. `locked`: the plan hides the issues there are.
+ * `clear`: checked, and nothing needs a person. `collecting`: Agent health is still locked
+ * (`healthUnlock`), so its issues wait for it. `early`: Agent health is open but has no whole
+ * reading to say "nothing" from. `no_data`: nothing arrived in the window. `locked`: the plan
+ * hides the issues there are.
  */
-export type AttentionState = "clear" | "early" | "no_data" | "locked";
+export type AttentionState = "clear" | "collecting" | "early" | "no_data" | "locked";
 
 export interface FocusedOverviewContext {
   split: ContextSplit | null;
@@ -287,7 +288,8 @@ export async function loadFocusedOverview({
       return model === FAILED ? FAILED : applyPlanLimits(model, limits);
     }),
   };
-  // The gauge is Agent health's reading; the numbers and Needs attention are the old Overview's.
+  // The gauge and Needs attention are Agent health's reading, opened by its own rule (`healthUnlock`);
+  // the numbers are the old Overview's.
   const usualHealth = once(async () => {
     const model = await shared.health();
     return model === FAILED ? FAILED : withoutLowConfidence(model);
@@ -405,7 +407,7 @@ export async function loadFocusedOverview({
     const fixesRead = read("fixes", (run) => run(scope));
     const [traces, health, fixes, pendingRewrites, intents, tasks, aggregates] = await Promise.all([
       shared.traces(),
-      usualHealth(),
+      shared.health(),
       fixesRead,
       // Fixes counts them, when it could be read.
       fixesRead.then((fixes) =>
@@ -420,7 +422,8 @@ export async function loadFocusedOverview({
       projectId: project.id,
       window,
       traces: orNull(traces),
-      health: health === FAILED ? applyPlanLimits(pendingHealthModel(windowDays), limits) : health,
+      // Unread is not locked: the list says it is partial instead of showing progress.
+      health: orNull(health),
       healthWindow: windowDays,
       fixes: orNull(fixes),
       pendingRewrites: orNull(pendingRewrites),
@@ -558,12 +561,13 @@ function once<T>(load: () => Promise<T>): () => Promise<T> {
 }
 
 function attentionState(
-  { items, moreIssues }: Attention,
+  attention: Attention,
   health: HealthPageModel | null,
   arrived: boolean,
 ): AttentionState {
-  if (items.length === 0 && moreIssues > 0) return "locked";
+  if (attention.items.length === 0 && attention.moreIssues > 0) return "locked";
   if (!arrived && (health?.turns ?? 0) === 0) return "no_data";
+  if (attention.healthLock) return "collecting";
   const card = healthCard(health);
   return card.kind === "state" && card.reason !== "no_score" ? "early" : "clear";
 }

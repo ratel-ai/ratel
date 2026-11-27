@@ -126,6 +126,8 @@ test("near the limit, the migration converts every definition, once, out of the 
     await client.exec(migration.split("--> statement-breakpoint").at(-1)!);
     assert.equal((await listTaskScorers(PROJECT, "task-a", db)).length, 7);
 
+    // The sweep reads tables of later migrations (org_holds): the schema as a deploy leaves it.
+    for (const file of files.slice(files.indexOf(MIGRATION) + 1)) await client.exec(read(file));
     // The sweep takes every enabled scorer, past the limit: 95 checks and 10 presets (no judge engine).
     const sweep = await sweepScorers({ flagOn: async () => true, judge: { engine: null } }, db);
     assert.equal(sweep.scorers, existing + 10);

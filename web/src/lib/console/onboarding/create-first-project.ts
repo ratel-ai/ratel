@@ -61,6 +61,8 @@ export type CreateFirstProjectDeps = {
     keyHash: string;
     keyPrefix: string;
   }) => Promise<{ id: string }>;
+  /** Why the organization may not be given a new key now, or null. A project comes with one. */
+  keyCreationRefusal: (organizationId: string) => Promise<string | null>;
   generateApiKey: () => GeneratedApiKey;
   /**
    * Hands the new key to an edition that keeps keys for a later reveal; resolves to whether it
@@ -114,6 +116,10 @@ export async function createFirstProject(
     return { ok: false, error: "Organization not found." };
   }
   const actor = { externalId: session.user.externalId, orgId: organization.id };
+
+  // Before the project: one without its key would be of no use.
+  const refusal = await deps.keyCreationRefusal(organization.id);
+  if (refusal) return { ok: false, error: refusal };
 
   const base = slugify(name) || "agent";
   const existing = await deps.listProjects(organization.id);

@@ -142,6 +142,7 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
       },
     ],
     moreIssues: 2,
+    healthLock: null,
     healthHref: HEALTH,
     partial: false,
     state: "clear",
@@ -325,7 +326,14 @@ const NO_TRACES: Partial<Omit<FocusedOverviewData, "lastEventAt">> = {
       progress: { turns: 0, floor: 50 },
     },
   },
-  attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false, state: "no_data" },
+  attention: {
+    items: [],
+    moreIssues: 0,
+    healthLock: null,
+    healthHref: HEALTH,
+    partial: false,
+    state: "no_data",
+  },
   alerts: noAlerts({ total: 0, on: 0, noData: 0 }),
   dashboards: {
     [RUNS]: item(
@@ -399,7 +407,14 @@ const fixtures: ViewFixtures = {
   "get_overview · health": single("health"),
   "get_overview · attention": single("attention"),
   "get_overview · attention, nothing": single("attention", {
-    attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false, state: "clear" },
+    attention: {
+      items: [],
+      moreIssues: 0,
+      healthLock: null,
+      healthHref: HEALTH,
+      partial: false,
+      state: "clear",
+    },
   }),
   "get_overview · alerts": single("alerts"),
   "get_overview · alerts, none": single("alerts", {
@@ -425,8 +440,25 @@ const fixtures: ViewFixtures = {
       },
     },
   }),
+  "get_overview · attention, Agent health collecting": single("attention", {
+    attention: {
+      items: [],
+      moreIssues: 0,
+      healthLock: { unlocked: false, turns: 36, floor: 50 },
+      healthHref: HEALTH,
+      partial: false,
+      state: "collecting",
+    },
+  }),
   "get_overview · attention, too early": single("attention", {
-    attention: { items: [], moreIssues: 0, healthHref: HEALTH, partial: false, state: "early" },
+    attention: {
+      items: [],
+      moreIssues: 0,
+      healthLock: null,
+      healthHref: HEALTH,
+      partial: false,
+      state: "early",
+    },
   }),
   "get_overview · topology, failed read": single("topology", { topology: "failed" }),
   "get_overview · metrics, no data": single("metrics", { hasTelemetry: false, metrics: null }),
