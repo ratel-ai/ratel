@@ -3,6 +3,7 @@ import { QUERY_VERSION } from "@/lib/contracts/query";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { QueryError, runQuery, type SqlResult } from "@/lib/synthesis/metrics/query";
 import { RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { traceScores } from "@/lib/views/scorers/schema";
@@ -51,6 +52,13 @@ export function createDatasetSources(db: Db = getDb()): DatasetSources {
     },
 
     async rqlTraces(projectId, text, window) {
+      // RQL is behind custom monitoring (ADR 0011): a dataset does not open it.
+      if (!(await featureEnabled("customMonitoring", { projectId }))) {
+        return {
+          ok: false,
+          message: "RQL is not on for this project, so a dataset of kind rql cannot run.",
+        };
+      }
       let result: SqlResult;
       try {
         result = (await runQuery(
