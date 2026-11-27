@@ -1,6 +1,7 @@
 import { KIND_LABELS } from "./dataset-pages";
 import type { DatasetKind } from "./domain/dataset";
 import { combinationCount, currentVersion, type EvalDefinition } from "./domain/eval";
+import { LATEST } from "./eval-dialog";
 import type { ChartSeries } from "./evals-page";
 import { CHART_SLOTS } from "./evals-page";
 import type { EvalHistory, EvalRunRow } from "./history-view";
@@ -183,7 +184,13 @@ function changedWords(run: EvalRunRow, datasets: ReadonlyMap<string, DatasetRef>
     words.push(changes.addedRows === 1 ? "1 row added" : `${changes.addedRows} rows added`);
   }
   if (changes.scorers) words.push("other scorers");
-  if (changes.sandboxVersionId) words.push(`pinned ${changes.sandboxVersionId.slice(0, 8)}`);
+  if (changes.sandboxVersionId) {
+    words.push(
+      changes.sandboxVersionId === LATEST
+        ? "newest ready version"
+        : `pinned ${changes.sandboxVersionId.slice(0, 8)}`,
+    );
+  }
   if (changes.params && Object.keys(changes.params).length > 0) {
     words.push(paramWords(changes.params).join(", "));
   }

@@ -6,9 +6,11 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNull,
   lt,
   ne,
   notExists,
+  or,
   sql,
 } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
@@ -90,11 +92,15 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
       return row ? toExperiment(row) : null;
     },
 
-    async list(projectId, limit) {
+    async list(projectId, limit, filter = {}) {
+      const ofEval =
+        filter.evalId === undefined
+          ? undefined
+          : or(eq(evalExperiments.evalId, filter.evalId), isNull(evalExperiments.evalId));
       const rows = await db
         .select()
         .from(evalExperiments)
-        .where(eq(evalExperiments.projectId, projectId))
+        .where(and(eq(evalExperiments.projectId, projectId), ofEval))
         .orderBy(desc(evalExperiments.createdAt), desc(evalExperiments.id))
         .limit(limit);
       return rows.map(toExperiment);

@@ -48,11 +48,17 @@ export async function loadEvalsOverview(
   return { definitions, rows };
 }
 
+/** The newest runs of the project, or of one eval (its runs and the suite runs from before). */
 export async function recentRuns(
   projectId: string,
   { experiments }: Pick<HistoryStores, "experiments">,
+  evalId?: string,
 ): Promise<Compared[]> {
-  const list = await experiments.list(projectId, HISTORY_RUNS);
+  const list = await experiments.list(
+    projectId,
+    HISTORY_RUNS,
+    evalId === undefined ? {} : { evalId },
+  );
   return Promise.all(
     list.map(async (experiment) => ({
       experiment,

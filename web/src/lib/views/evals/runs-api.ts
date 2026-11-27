@@ -125,7 +125,7 @@ export function handleEvalByKey(wanted: string, deps: RunsApiDeps): Promise<Resp
     if (!definition) return notFound();
     const pin = await baselines.get(projectId, definition.id);
     const runs = await withPinnedRuns(
-      await recentRuns(projectId, deps.experiments()),
+      await recentRuns(projectId, deps.experiments(), definition.id),
       [pin?.experimentId],
       (id) => oneRun(projectId, id, deps.experiments()),
     );

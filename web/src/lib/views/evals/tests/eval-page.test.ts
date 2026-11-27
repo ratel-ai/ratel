@@ -166,3 +166,13 @@ test("each run row says what it used, how it scored against the baseline, and wh
   assert.equal(baseline?.deltaNote, null);
   assert.equal(model.baselineId, "r1");
 });
+
+test('a run that goes back to the newest ready version says so, not "pinned latest"', () => {
+  const latest = evalPageModel({
+    projectId: P,
+    definition,
+    history: { ...history, runs: [run("r4", 4, { changes: { sandboxVersionId: "latest" } })] },
+    datasets: [],
+  });
+  assert.deepEqual(latest.runs[0]?.changed, ["newest ready version"]);
+});

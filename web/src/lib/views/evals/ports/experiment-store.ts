@@ -8,8 +8,11 @@ export interface ExperimentStore {
   /** Adds the experiment and its trials, all `pending`. Null: the project has `maxRunning` already. */
   create(input: NewExperiment, maxRunning: number): Promise<Experiment | null>;
   get(projectId: string, experimentId: string): Promise<Experiment | null>;
-  /** The newest first. */
-  list(projectId: string, limit: number): Promise<Experiment[]>;
+  /**
+   * The newest first. With an eval: its own runs, and the suite runs from before (they can hold
+   * it), so an eval page does not lose runs to the other evals of the project.
+   */
+  list(projectId: string, limit: number, filter?: { evalId?: string }): Promise<Experiment[]>;
   counts(experimentIds: readonly string[]): Promise<Map<string, Counts>>;
   /** In the order of the cases, then of the index. With no output and no tool calls. */
   trials(experimentId: string): Promise<Trial[]>;

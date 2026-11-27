@@ -46,7 +46,7 @@ export async function evalPage(projectId: string, evalId: string): Promise<React
       const experiments = createDrizzleExperimentStore(db);
       const [pin, recent, datasets, picker, versions, scorers] = await Promise.all([
         createDrizzleBaselineStore(db).get(project.id, definition.id),
-        recentRuns(project.id, { experiments }),
+        recentRuns(project.id, { experiments }, definition.id),
         createDrizzleDatasetStore(db).list(project.id),
         loadPickerOptions(project.id, db),
         listSandboxVersions(project.id, VERSIONS),

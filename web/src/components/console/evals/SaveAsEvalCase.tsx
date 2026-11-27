@@ -332,8 +332,8 @@ function NoTask({
     <>
       <p className="text-ui text-fg-muted">
         No task matched this run. Ratel finds a task in many runs that call the same tools. A run on
-        a Ratel sandbox gets the task of its sandbox about a minute after its trace arrives. Choose
-        or name the dataset of the case.
+        a sandbox gets the task of its sandbox about a minute after its trace arrives. Choose or
+        name the dataset of the case.
       </p>
       <Field label="Dataset">
         {() => (

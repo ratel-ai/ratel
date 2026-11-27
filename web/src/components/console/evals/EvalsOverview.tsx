@@ -7,7 +7,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { FlaskConical, LineChart } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   type EvalsPage,
   type EvalsTableRow,
@@ -27,6 +27,7 @@ export function EvalsOverview({
   canEdit,
   openNew = false,
   now,
+  children,
 }: {
   model: EvalsPage;
   options: NewEvalOptions;
@@ -34,6 +35,8 @@ export function EvalsOverview({
   /** The old address of the new-eval page opens the dialog. */
   openNew?: boolean;
   now: string;
+  /** The section of the edition at the foot of the page (who judges evals). */
+  children?: ReactNode;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState("");
@@ -143,6 +146,7 @@ export function EvalsOverview({
             />
           }
         />
+        {children}
       </PageBody>
     </Page>
   );

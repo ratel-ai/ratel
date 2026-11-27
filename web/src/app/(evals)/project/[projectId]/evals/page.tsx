@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { EvalsOverview } from "@/components/console/evals/EvalsOverview";
 import type { DialogSandbox } from "@/components/console/evals/NewEvalDialog";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { composition } from "@/lib/composition/ports";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
@@ -79,6 +80,7 @@ export default async function EvalsPage({
     { attributes: { "project.id": project.id } },
   );
   const { overview, summaries, picker, versions, scorers } = loaded;
+  const JudgeSettings = (await composition.ui?.())?.EvalJudgeSettings;
   return (
     <EvalsOverview
       model={evalsPageModel({
@@ -99,7 +101,9 @@ export default async function EvalsPage({
       canEdit={canEdit}
       openNew={query.new !== undefined}
       now={new Date().toISOString()}
-    />
+    >
+      {JudgeSettings ? <JudgeSettings projectId={project.id} /> : null}
+    </EvalsOverview>
   );
 }
 
