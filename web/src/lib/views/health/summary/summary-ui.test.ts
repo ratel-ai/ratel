@@ -138,6 +138,7 @@ const TASKS: TaskListModel = {
     allRuns: 1_284,
     finishRate: 0.8,
     correctionsPer100: 12,
+    correctionsWindowDays: 30,
     correctionsRecorded: true,
   },
   rows: [
@@ -1116,7 +1117,7 @@ test("reads that failed cost their part, not the page", () => {
 });
 
 const STATES: readonly [string, HealthPageState, RegExp][] = [
-  ["nothing yet", { kind: "nothing_yet" }, /No runs yet[^]*Get an API key/],
+  ["nothing yet", { kind: "nothing_yet" }, /No runs yet[^]*Create an API key/],
   [
     "collecting",
     { kind: "too_few", turns: 14, floor: 50, imported: false, wider: { days: 30, plan: null } },
@@ -1174,6 +1175,13 @@ for (const [name, state, expected] of STATES) {
   });
 }
 
+test("before a reading, a project with a key sends the first trace instead of making a key", () => {
+  const html = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, hasApiKey: true });
+  assertHouseStyle(html, "nothing yet, with a key");
+  assert.match(html, /No runs yet[^]*Send your first trace<[^]*View API keys</);
+  assert.doesNotMatch(html, /Create an API key|Get an API key/);
+});
+
 const StubImporter = ({ variant }: { variant: string }) =>
   createElement("div", { "data-stub-importer": variant });
 
@@ -1185,7 +1193,15 @@ test("an edition's importer: offered by the state and the menu, mounted once, it
     Importer: StubImporter,
   };
   const empty = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, imports });
-  assert.match(empty, /No runs yet[^]*Import past runs[^]*Get an API key/);
+  assert.match(empty, /No runs yet[^]*Import past runs[^]*Create an API key/);
+  const keyed = page({
+    model: MOCK_NO_TELEMETRY,
+    state: { kind: "nothing_yet" },
+    imports,
+    hasApiKey: true,
+  });
+  assert.match(keyed, /Import past runs[^]*View API keys/, "the importer leads, the key beside it");
+  assert.doesNotMatch(keyed, /Create an API key|Send your first trace/);
   assert.match(empty, /data-stub-importer="history"/);
   const named = page({
     model: pendingHealthModel(7),

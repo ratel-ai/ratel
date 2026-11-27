@@ -1,6 +1,6 @@
 {
-  "id": "6a4425a7-2141-4433-9074-371416e0b2c2",
-  "prevId": "9ce3385e-c4f3-4881-a180-933ab22dc42d",
+  "id": "9ce3385e-c4f3-4881-a180-933ab22dc42d",
+  "prevId": "893b0691-36c4-44dc-8b0d-3c67dffbd879",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4669,6 +4669,97 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.org_holds": {
+      "name": "org_holds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "since": {
+          "name": "since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "org_holds_organization_idx": {
+          "name": "org_holds_organization_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"org_holds\".\"organization_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "org_holds_project_idx": {
+          "name": "org_holds_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"org_holds\".\"project_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "org_holds_project_id_projects_id_fk": {
+          "name": "org_holds_project_id_projects_id_fk",
+          "tableFrom": "org_holds",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "org_holds_one_scope": {
+          "name": "org_holds_one_scope",
+          "value": "num_nonnulls(\"org_holds\".\"organization_id\", \"org_holds\".\"project_id\") = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.api_keys": {
@@ -11363,70 +11454,6 @@
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.eval_baselines": {
-      "name": "eval_baselines",
-      "schema": "",
-      "columns": {
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "experiment_id": {
-          "name": "experiment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pinned_by": {
-          "name": "pinned_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pinned_at": {
-          "name": "pinned_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "eval_baselines_project_id_projects_id_fk": {
-          "name": "eval_baselines_project_id_projects_id_fk",
-          "tableFrom": "eval_baselines",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "eval_baselines_experiment_id_eval_experiments_id_fk": {
-          "name": "eval_baselines_experiment_id_eval_experiments_id_fk",
-          "tableFrom": "eval_baselines",
-          "tableTo": "eval_experiments",
-          "columnsFrom": [
-            "experiment_id"
           ],
           "columnsTo": [
             "id"

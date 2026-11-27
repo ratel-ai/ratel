@@ -3,7 +3,8 @@ import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
-import type { Organization } from "@/lib/platform/organizations";
+import { getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { getOrganizationByProjectId, type Organization } from "@/lib/platform/organizations";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { listOpenSignals } from "@/lib/readings/trace-signals/signals/queries";
@@ -12,8 +13,14 @@ import { loadWorkflowLabels } from "@/lib/readings/trace-signals/workflows/label
 import { loadFixes } from "@/lib/views/fixes/load";
 import { fixSeams } from "@/lib/views/fixes/seams";
 import type { FixesModel } from "@/lib/views/fixes/types";
+import { readSelfCorrectionRate } from "@/lib/views/health/self-corrections/card";
 import type { TaskFixLike } from "@/lib/views/tasks/issues";
-import type { TaskDetailModel, TaskFixSource, TasksInputs } from "@/lib/views/tasks/model";
+import {
+  correctionsWindowFor,
+  type TaskDetailModel,
+  type TaskFixSource,
+  type TasksInputs,
+} from "@/lib/views/tasks/model";
 import {
   type ExampleRun,
   issueSources,
@@ -43,6 +50,8 @@ export interface TasksLoadDeps {
     supplementary?: boolean,
   ) => Promise<T>;
   latestRun: (projectId: string, db: BoundReadDb) => Promise<LatestTasksRun | null>;
+  /** The longest window the project's plan lets the Self-corrections page show. */
+  planWindowDays: (projectId: string) => Promise<number>;
 }
 
 const defaultDeps: TasksLoadDeps = {
@@ -52,6 +61,11 @@ const defaultDeps: TasksLoadDeps = {
       ...(supplementary ? { timeoutMs: supplementaryReadTimeoutMs() } : {}),
     }),
   latestRun: (projectId, db) => loadLatestTasksRun(projectId, db),
+  planWindowDays: async (projectId) => {
+    const organization = await getOrganizationByProjectId(projectId);
+    if (!organization) throw new Error("no organization for the project");
+    return getAgentHealthLimits(organization).agentHealthWindowDays;
+  },
 };
 
 function fallback<T>(
@@ -63,9 +77,18 @@ function fallback<T>(
   return loadOrFallback({ operation, distinctId: `project:${projectId}`, fallback: value, load });
 }
 
+/** What a caller reads besides every task page's inputs. */
+export interface TasksLoadOptions extends Partial<TasksLoadDeps> {
+  /**
+   * The project's self-corrections for the list's tile (the Tasks list and
+   * `list_tasks`): two counts over up to 90 days, so only where it is shown.
+   */
+  selfCorrectionsTile?: boolean;
+}
+
 export async function loadTasksInputs(
   projectId: string,
-  overrides: Partial<TasksLoadDeps> = {},
+  { selfCorrectionsTile = false, ...overrides }: TasksLoadOptions = {},
 ): Promise<TasksInputs> {
   const deps = { ...defaultDeps, ...overrides };
   const run = await fallback(projectId, "tasks_latest_run", null as LatestTasksRun | null, () =>
@@ -81,6 +104,7 @@ export async function loadTasksInputs(
     insights: null,
     fixes: [],
     recorded: null,
+    projectCorrections: null,
     topics: null,
     price: null,
   };
@@ -88,24 +112,48 @@ export async function loadTasksInputs(
   const since = run.windowStart;
   const read = <T>(operation: string, value: T, load: (db: BoundReadDb) => Promise<T>) =>
     fallback(projectId, operation, value, () => deps.read(operation, load, true));
-  const [labels, names, signalRows, insights, recorded, topics] = await Promise.all([
-    read("tasks_labels", new Map() as Awaited<ReturnType<typeof loadWorkflowLabels>>, (db) =>
-      loadWorkflowLabels(projectId, db),
-    ),
-    read("tasks_catalog_names", new Map<string, string>(), (db) => loadCatalogNames(projectId, db)),
-    read("tasks_open_issues", [] as Awaited<ReturnType<typeof listOpenSignals>>, (db) =>
-      listOpenSignals(projectId, db),
-    ),
-    read("tasks_insights", null as Awaited<ReturnType<typeof loadWorkflowInsights>>, (db) =>
-      loadWorkflowInsights(projectId, db),
-    ),
-    read("tasks_self_corrections", null as Awaited<ReturnType<typeof loadTaskCorrections>>, (db) =>
-      loadTaskCorrections(projectId, since, db),
-    ),
-    read("tasks_topics", null as Awaited<ReturnType<typeof loadTaskTopics>>, (db) =>
-      loadTaskTopics(projectId, since, db),
-    ),
-  ]);
+  const [labels, names, signalRows, insights, recorded, projectCorrections, topics] =
+    await Promise.all([
+      read("tasks_labels", new Map() as Awaited<ReturnType<typeof loadWorkflowLabels>>, (db) =>
+        loadWorkflowLabels(projectId, db),
+      ),
+      read("tasks_catalog_names", new Map<string, string>(), (db) =>
+        loadCatalogNames(projectId, db),
+      ),
+      read("tasks_open_issues", [] as Awaited<ReturnType<typeof listOpenSignals>>, (db) =>
+        listOpenSignals(projectId, db),
+      ),
+      read("tasks_insights", null as Awaited<ReturnType<typeof loadWorkflowInsights>>, (db) =>
+        loadWorkflowInsights(projectId, db),
+      ),
+      read(
+        "tasks_self_corrections",
+        null as Awaited<ReturnType<typeof loadTaskCorrections>>,
+        (db) => loadTaskCorrections(projectId, since, db),
+      ),
+      // The tile's rate is the Self-corrections page's own, over the window it opens on.
+      selfCorrectionsTile
+        ? fallback(
+            projectId,
+            "tasks_project_self_corrections",
+            null as Awaited<ReturnType<typeof readSelfCorrectionRate>>,
+            async () => {
+              const days = correctionsWindowFor(
+                run.windowDays,
+                await deps.planWindowDays(projectId),
+              );
+              return deps.read(
+                "tasks_project_self_corrections",
+                (db) => readSelfCorrectionRate(db, projectId, days),
+                true,
+              );
+            },
+          )
+        : null,
+      read("tasks_topics", null as Awaited<ReturnType<typeof loadTaskTopics>>, (db) =>
+        loadTaskTopics(projectId, since, db),
+      ),
+    ]);
   // The tool crafter's drafted changes, once it lands (`tasksSeams`); none until then.
   const drafts = tasksSeams.loadDrafts;
   const fixes = drafts
@@ -121,6 +169,7 @@ export async function loadTasksInputs(
     insights: insights?.data ?? null,
     fixes,
     recorded,
+    projectCorrections,
     topics,
     price: fixSeams.priceOf && Array.isArray(run.daily) ? fixSeams.priceOf(run.daily) : null,
   };

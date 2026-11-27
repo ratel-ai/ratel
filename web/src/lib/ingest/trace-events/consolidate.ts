@@ -47,6 +47,11 @@ export type ConsolidateTraceEventsOptions = {
    * sends is kept, and changes nothing else.
    */
   appendOnly?: boolean;
+  /**
+   * When a queued batch was accepted (ADR-0010): the clock that bounds the facts' timestamps, so
+   * that a late run gives the same rows. Absent, the time of the transaction.
+   */
+  receivedAt?: Date;
 };
 
 type TraceTransaction = Parameters<
@@ -164,8 +169,8 @@ export async function consolidateTraceEvents(
     const insertedFacts = inserted.filter(({ event }) => event.ingestSource === "runtime");
 
     await insertHits(projectId, inserted, tx);
-    if (!appendOnly) await upsertSources(projectId, insertedFacts, tx);
-    await upsertToolCounters(projectId, insertedFacts, tx);
+    if (!appendOnly) await upsertSources(projectId, insertedFacts, tx, options.receivedAt);
+    await upsertToolCounters(projectId, insertedFacts, tx, options.receivedAt);
     await upsertExperimentLogs(projectId, insertedFacts, tx, appendOnly);
     if (
       !appendOnly &&
@@ -365,6 +370,7 @@ async function upsertSources(
   projectId: string,
   facts: InsertedFact[],
   db: TraceTransaction,
+  receivedAt: Date | undefined,
 ): Promise<void> {
   const earliestBySource = new Map<string, Date>();
   for (const { event } of facts) {
@@ -381,7 +387,7 @@ async function upsertSources(
       [...earliestBySource].map(([sourceId, factsStartedAt]) => ({
         projectId,
         sourceId,
-        factsStartedAt: boundedFactTimestamp(factsStartedAt),
+        factsStartedAt: boundedFactTimestamp(factsStartedAt, receivedAt),
       })),
     )
     .onConflictDoUpdate({
@@ -397,6 +403,7 @@ async function upsertToolCounters(
   projectId: string,
   facts: InsertedFact[],
   db: TraceTransaction,
+  receivedAt: Date | undefined,
 ): Promise<void> {
   const counters = new Map<string, ToolCounter>();
   for (const { event } of facts) {
@@ -423,8 +430,8 @@ async function upsertToolCounters(
       [...counters.values()].map((counter) => ({
         projectId,
         ...counter,
-        firstUsedAt: boundedFactTimestamp(counter.firstUsedAt),
-        lastUsedAt: boundedFactTimestamp(counter.lastUsedAt),
+        firstUsedAt: boundedFactTimestamp(counter.firstUsedAt, receivedAt),
+        lastUsedAt: boundedFactTimestamp(counter.lastUsedAt, receivedAt),
       })),
     )
     .onConflictDoUpdate({
@@ -620,8 +627,9 @@ function newToolCounter(event: ParsedTraceEvent): ToolCounter {
   };
 }
 
-function boundedFactTimestamp(occurredAt: Date) {
-  return sql<Date>`least(greatest(${occurredAt}, current_timestamp - ${FACTS_ERA_CLOCK_SKEW}), current_timestamp)`;
+function boundedFactTimestamp(occurredAt: Date, receivedAt: Date | undefined) {
+  const now = receivedAt ? sql`${receivedAt.toISOString()}::timestamptz` : sql`current_timestamp`;
+  return sql<Date>`least(greatest(${occurredAt}, ${now} - ${FACTS_ERA_CLOCK_SKEW}), ${now})`;
 }
 
 function experimentAttributes(

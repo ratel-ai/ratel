@@ -86,6 +86,7 @@ function readyHealth(): HealthPageModel {
     ...pendingHealthModel(30),
     turns: 500,
     floor: 50,
+    computedAt: "2026-11-01T04:00:00.000Z",
     tiles: [firstTry],
     signals: [
       signal("a", "error_loop", "tool", "upload", ["upload"]),
@@ -164,6 +165,29 @@ test("Agent health adds its first try, its issues cut to the plan, each opening 
 test("Agent health still collecting gives no first try", () => {
   const overview = assemble({ health: { ...readyHealth(), turns: 10 } });
   assert.equal(overview.health?.firstTry, null);
+});
+
+test("Agent health still collecting lists none of its issues and says how far it is", () => {
+  const overview = assemble({ health: { ...readyHealth(), turns: 36 } });
+  assert.deepEqual(
+    overview.attention.items.filter((item) => item.key.startsWith("issue:")),
+    [],
+  );
+  assert.equal(overview.attention.moreIssues, 0);
+  assert.deepEqual(overview.attention.healthLock, { unlocked: false, turns: 36, floor: 50 });
+});
+
+test("a low-confidence reading opens Needs attention as it opens Agent health, not the first try", () => {
+  const early = {
+    ...readyHealth(),
+    turns: 12,
+    floor: 10,
+    lowConfidence: { turns: 12, firmsUpAt: 50 },
+  };
+  const overview = assemble({ health: early });
+  assert.equal(overview.attention.healthLock, null);
+  assert.ok(overview.attention.items.some((item) => item.key.startsWith("issue:")));
+  assert.equal(overview.health?.firstTry, null, "the stat row keeps the usual floor");
 });
 
 test("description updates ready open Quality › Descriptions, and nothing shows with Quality off", () => {
@@ -296,6 +320,7 @@ test("the tiles read intents, tasks, self-corrections and fixes, each failing on
       allRuns: 10,
       finishRate: 0.8,
       correctionsPer100: null,
+      correctionsWindowDays: null,
       correctionsRecorded: false,
     },
     rows: [

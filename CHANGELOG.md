@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.0](https://github.com/ratel-ai/ratel/compare/v0.5.0...v0.6.0) (2026-11-27)
+
+
+### Features
+
+* **web:** Dashboards, Explore, Scorers and Alerts as top-level items ([#476](https://github.com/ratel-ai/ratel/issues/476)) ([29a8c70](https://github.com/ratel-ai/ratel/commit/29a8c70c9b31baa050ef45929d5c634646679662))
+* **web:** Dashboards, Explore, Scorers, Alerts as top-level Monitor items ([29a8c70](https://github.com/ratel-ai/ratel/commit/29a8c70c9b31baa050ef45929d5c634646679662))
+* **web:** designed empty states for the Overview widgets ([#477](https://github.com/ratel-ai/ratel/issues/477)) ([87a3f39](https://github.com/ratel-ai/ratel/commit/87a3f39ed473a590d274382eafcbe04f46ccd4bd))
+* **web:** MCP item in the project rail opens the MCP setup guide ([#480](https://github.com/ratel-ai/ratel/issues/480)) ([602fa89](https://github.com/ratel-ai/ratel/commit/602fa89b561e099bd9922cf27f5c356c7940c01e))
+* **web:** one scorer model, task kinds as preset scorers ([#481](https://github.com/ratel-ai/ratel/issues/481)) ([7fe53e5](https://github.com/ratel-ai/ratel/commit/7fe53e57f4b0d63f7eb2c5adf512b334d21ea3a7))
+* **web:** RQL core with MCP tools describe_rql_schema and run_rql ([#482](https://github.com/ratel-ai/ratel/issues/482)) ([a936aee](https://github.com/ratel-ai/ratel/commit/a936aee5768e457d4982e89a86bc23a641b0a867))
+* **web:** RQL in Explore, dashboards and alerts ([#483](https://github.com/ratel-ai/ratel/issues/483)) ([7567bb4](https://github.com/ratel-ai/ratel/commit/7567bb4010d58eabfcff6c07e161cdc403a69597))
+
+
+### Bug Fixes
+
+* **health:** check each problem's evidence before showing it ([#486](https://github.com/ratel-ai/ratel/issues/486)) ([08eeb6c](https://github.com/ratel-ai/ratel/commit/08eeb6c609b3c1f0c40b732521446e9318dd47d7))
+* persist ingested events and metrics atomically ([#443](https://github.com/ratel-ai/ratel/issues/443)) ([e859ae6](https://github.com/ratel-ai/ratel/commit/e859ae64103b300d0c5f2a6ddfeca4e1badf80b0))
+* prevent late workers from overwriting reaped jobs ([#413](https://github.com/ratel-ai/ratel/issues/413)) ([1c1dcbc](https://github.com/ratel-ai/ratel/commit/1c1dcbce9d0919246533bbcab387c3632dc5e6fc))
+* **web:** held card follows the pointer in the arrange grid ([f4f0799](https://github.com/ratel-ai/ratel/commit/f4f0799a3ab3702190992b7892a1a0096eb75870))
+* **web:** held widget follows the pointer while dragged ([#475](https://github.com/ratel-ai/ratel/issues/475)) ([f4f0799](https://github.com/ratel-ai/ratel/commit/f4f0799a3ab3702190992b7892a1a0096eb75870))
+* **web:** monitoring review follow-ups (RTL-293) ([#479](https://github.com/ratel-ai/ratel/issues/479)) ([0a46b71](https://github.com/ratel-ai/ratel/commit/0a46b71bf0b2b4dc9080f172c95d5cdddfa0840a))
+
 ## [0.5.0](https://github.com/ratel-ai/ratel/compare/v0.4.0...v0.5.0) (2026-11-25)
 
 

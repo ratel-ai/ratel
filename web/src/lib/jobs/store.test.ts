@@ -76,8 +76,8 @@ test("a reaper failure logs and captures without blocking the drain", async () =
 test("the drain reads the queue clock and the registered handlers", async () => {
   const jobStore = {
     claimNextQueued: async () => null,
-    markDone: async () => {},
-    markError: async () => {},
+    markDone: async () => true,
+    markError: async () => true,
     queueClock: async () => new Date(0),
   };
   const registered = { cluster_intents: async () => null };
