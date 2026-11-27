@@ -3,7 +3,7 @@
 import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { ArrowRight, Pause, Play, ScanSearch, TriangleAlert } from "lucide-react";
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import { memo, type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
 import {
   formatStepTime,
   type SessionChat,
@@ -25,7 +25,8 @@ import { stepWords } from "./format";
  * duration, long waits shortened and hatched with their real time, the
  * playhead, play at 1×/2×/4×, zoom Fit/2×/4× that follows the playhead, and
  * "Next problem". Drag or scroll over the track to move; a click on a step
- * opens it. Keys (←/→, Space) are the chat view's.
+ * opens it. Keys (←/→, Space) are the chat view's. It reads the live
+ * playhead (the chat view defers the rest), so it must stay cheap per move.
  */
 
 export const SPEEDS = [1, 2, 4] as const;
@@ -73,6 +74,55 @@ const LEGEND = [
   { label: "Their message", className: SEGMENT_CLASS.ask },
   { label: "Waiting for them, shortened", className: SEGMENT_CLASS.wait },
 ];
+
+/**
+ * The track's blocks for one view window. Memo'd (RTL-368): at Fit the window never moves,
+ * so dragging the playhead redraws the playhead only, not hundreds of blocks per move.
+ */
+const TrackBlocks = memo(function TrackBlocks({
+  chat,
+  startMs,
+  endMs,
+}: {
+  chat: SessionChat;
+  startMs: number;
+  endMs: number;
+}) {
+  const width = endMs - startMs;
+  return chat.segments.map((segment, i) => {
+    const left = width > 0 ? ((segment.trackStartMs - startMs) / width) * 100 : 0;
+    const w = width > 0 ? (segment.trackMs / width) * 100 : 0;
+    if (left + w < 0 || left > 100) return null;
+    const label =
+      segment.kind === "wait"
+        ? segment.label
+        : segment.measured && segment.realMs !== null && segment.kind !== "ask"
+          ? formatStepTime(segment.realMs)
+          : "";
+    return (
+      <div
+        key={`${segment.stepIndex ?? "wait"}-${i}`}
+        data-segment={segment.kind}
+        data-step={segment.stepIndex ?? undefined}
+        title={
+          segment.kind === "wait"
+            ? segment.label
+            : `${stepWords(segment)} · ${segment.measured ? formatStepTime(segment.realMs ?? 0) : "time not measured"}`
+        }
+        className={cn(
+          "absolute inset-y-0.5 flex items-center justify-center overflow-hidden rounded-sm border-r-2 border-raised text-[11px] tabular-nums",
+          SEGMENT_CLASS[segment.kind],
+          segment.problem && "ring-1 ring-warning ring-inset",
+          segment.kind === "wait" ? "text-fg-subtle" : "text-fg",
+          !segment.measured && "opacity-60",
+        )}
+        style={{ left: `${left}%`, width: `${w}%` }}
+      >
+        {w >= LABEL_MIN_PERCENT ? <span className="truncate px-1">{label}</span> : null}
+      </div>
+    );
+  });
+});
 
 export function SessionTrack({
   chat,
@@ -252,39 +302,7 @@ export function SessionTrack({
         onPointerCancel={() => (drag.current = null)}
         className="relative h-6 cursor-ew-resize touch-none overflow-hidden rounded-md outline-none select-none focus-visible:ring-2 focus-visible:ring-focus"
       >
-        {chat.segments.map((segment, i) => {
-          const left = percent(segment.trackStartMs);
-          const w = width > 0 ? (segment.trackMs / width) * 100 : 0;
-          if (left + w < 0 || left > 100) return null;
-          const label =
-            segment.kind === "wait"
-              ? segment.label
-              : segment.measured && segment.realMs !== null && segment.kind !== "ask"
-                ? formatStepTime(segment.realMs)
-                : "";
-          return (
-            <div
-              key={`${segment.stepIndex ?? "wait"}-${i}`}
-              data-segment={segment.kind}
-              data-step={segment.stepIndex ?? undefined}
-              title={
-                segment.kind === "wait"
-                  ? segment.label
-                  : `${stepWords(segment)} · ${segment.measured ? formatStepTime(segment.realMs ?? 0) : "time not measured"}`
-              }
-              className={cn(
-                "absolute inset-y-0.5 flex items-center justify-center overflow-hidden rounded-sm border-r-2 border-raised text-[11px] tabular-nums",
-                SEGMENT_CLASS[segment.kind],
-                segment.problem && "ring-1 ring-warning ring-inset",
-                segment.kind === "wait" ? "text-fg-subtle" : "text-fg",
-                !segment.measured && "opacity-60",
-              )}
-              style={{ left: `${left}%`, width: `${w}%` }}
-            >
-              {w >= LABEL_MIN_PERCENT ? <span className="truncate px-1">{label}</span> : null}
-            </div>
-          );
-        })}
+        <TrackBlocks chat={chat} startMs={view.startMs} endMs={view.endMs} />
         {marker && markerAt !== undefined && percent(markerAt) >= 0 && percent(markerAt) <= 100 ? (
           <div
             data-track-marker={marker.stepIndex}
