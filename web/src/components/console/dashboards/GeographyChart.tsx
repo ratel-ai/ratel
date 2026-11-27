@@ -38,6 +38,7 @@ export function GeographyChart({
   valueLabel,
   samplesLabel,
   fill = false,
+  compact = false,
 }: {
   query: GeographyQuery;
   result: GeographyResult;
@@ -50,6 +51,8 @@ export function GeographyChart({
   samplesLabel: string;
   /** Take the height of the place it is in. */
   fill?: boolean;
+  /** A small chart of a group-by: the map alone, without the notes under it. */
+  compact?: boolean;
 }) {
   const { country } = query;
   const drawable = !country || hasRegionMap(country);
@@ -113,7 +116,12 @@ export function GeographyChart({
           onFailed={() => setAsTable(true)}
         />
       )}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-subtle">
+      <div
+        className={cn(
+          "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-subtle",
+          compact && "hidden",
+        )}
+      >
         {places.length > 0 ? (
           <span>
             {formatInteger(located.traces)} of {formatInteger(located.matched)} traces have a{" "}

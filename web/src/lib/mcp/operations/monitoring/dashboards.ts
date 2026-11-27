@@ -3,6 +3,7 @@ import { MAX_FILTER_BYTES } from "@/lib/contracts/filter-budget";
 import {
   BUCKETS,
   DIMENSIONS,
+  GROUP_LIMITS,
   MEASURES,
   QUERY_KINDS,
   QUERY_VERSION,
@@ -23,7 +24,13 @@ import {
   required,
   requireMonitoring,
 } from "@/lib/mcp/operations/monitoring/deps";
-import { cappedResult, countOf, headline } from "@/lib/mcp/operations/monitoring/results";
+import {
+  cappedResult,
+  countOf,
+  groupSummaries,
+  headline,
+  viewResult,
+} from "@/lib/mcp/operations/monitoring/results";
 import { RQL_WINDOW } from "@/lib/mcp/operations/monitoring/rql";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
@@ -88,7 +95,7 @@ const EDITOR_NAME = "An agent (MCP)";
 const EXAMPLE_QUERY =
   'Example: {"version":1,"kind":"metric","measures":[{"measure":"latency","aggregation":"p95"}],"dimensions":["model"]}.';
 const EXAMPLE_STEP_FLOW =
-  'A step flow: {"version":1,"kind":"step_flow","node":"tool","start":"intent"}.';
+  'A step flow: {"version":1,"kind":"step_flow","node":"tool","start":"intent"}; one small chart per task: add "groupBy":"task".';
 const EXAMPLE_WIDGET =
   'Example: {"title":"Speed","chart":"line","query":{"version":1,"kind":"metric","measures":[{"measure":"latency","aggregation":"p95"}]}}.';
 const EXAMPLE_DOCUMENT =
@@ -289,7 +296,7 @@ export function dashboardReadOperations(
                     name: shown[index].name,
                     layout: alone ? WHOLE : panelCell(index, panels.length),
                     widget,
-                    result: results[index],
+                    result: viewResult(widget.query, results[index]),
                   })),
                 },
               }
@@ -391,7 +398,16 @@ export function dashboardReadOperations(
             widgets: widgets.map(({ widget, result }) => ({
               ...shownWidget(widget),
               ...(params.numbers && !isBroken(widget)
-                ? { summary: widgetHeadline(widget, result, window) }
+                ? {
+                    summary: widgetHeadline(widget, result, window),
+                    // A group-by: each value with its traces and its numbers in one line.
+                    ...(result?.kind === "grouped"
+                      ? {
+                          groups: groupSummaries(widget.query, result),
+                          leftOutValues: result.leftOut,
+                        }
+                      : {}),
+                  }
                 : {}),
             })),
             document: exportDashboard(dashboard, scorers),
@@ -424,7 +440,7 @@ export function dashboardReadOperations(
                           },
                           missingScorer: widget.missingScorer,
                         }),
-                    result,
+                    result: isBroken(widget) ? result : viewResult(widget.query, result),
                   })),
                 },
               }
@@ -951,6 +967,7 @@ function catalog() {
       `All clauses of a filter, together with the filters of the dashboard or of query_monitoring, are ${MAX_FILTER_BYTES.toLocaleString("en-US")} bytes of JSON at most, so that View traces can always carry them.`,
       'A trace property that the project indexes filters any query: filters.properties, such as {"properties":{"organization":["acme"]}} (any value of a name; names combine). A metric of traces or of scores groups by one: {"property":"organization"} in dimensions. list_trace_properties gives the names; one that is not indexed is refused with property_not_indexed. user, session, environment, model and service are built-in fields, not properties.',
       'A flow, step_flow, funnel and geography query takes the same filter: filters.properties, filters.withoutProperties (indexed properties the trace has no value of, such as {"withoutProperties":["organization"]}), users, sessions and tasks (task ids from list_tasks: the traces that ran in the task). A metric takes them too, and groups by "task" (RQL: contains(tasks, <task id>) and each(tasks)). The filters of a dashboard (set_filters) and of query_monitoring take properties too, and narrow every widget.',
+      `A flow, step_flow, funnel and geography query groups by one value per small chart: groupBy "task", "user", "session" or {"property":"plan"} (indexed), and groupLimit, the values drawn (${GROUP_LIMITS.min} to ${GROUP_LIMITS.max}, ${GROUP_LIMITS.default} by default). Each value is the same query with the value as one more filter (filters.without ["user"], ["session"] or ["task"] keeps the traces without one), the values of the most traces first; the traces without a value are one group. The result is kind grouped: groups (value, traces, result) and leftOut, the values not drawn.`,
       "A number has no dimension. A metric widget is RQL: a table draws any rows, a number one row with one number, a line one time column and numbers, a bar a time or text column and numbers.",
       "An alert takes a metric query without dimensions. It reads what became known in its window: a trace when it ends, a scorer result when it is stored, so a trace longer than the window counts. A count or a sum of nothing is 0, so trace_count below 10 alerts on silence; a rate, an average or a percentile of nothing is no_data.",
       "A geography query reads where each trace came from. get_location_attributes has the span attributes it is read from; change_location_attributes changes them (organization admins).",

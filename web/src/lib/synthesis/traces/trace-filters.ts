@@ -43,6 +43,11 @@ export interface TraceFilter {
    * filter; like `properties`, a name that is not indexed is refused first.
    */
   withoutProperties?: readonly string[];
+  /**
+   * The trace has no end user, no session, or ran in no task: the "no value" group of a group-by
+   * of the kinds (RTL-398).
+   */
+  without?: readonly ("user" | "session" | "task")[];
   /** More clauses that must match too, also on the same property. */
   and?: readonly TraceFilter[];
 }
@@ -110,6 +115,13 @@ export function traceFilterCondition(
     ...cleanValues(filter.withoutProperties).map(
       // A row with no properties at all (null) has none of them either.
       (name) => sql`(s.properties ->> ${name}::text) is null`,
+    ),
+    ...[...new Set(filter.without ?? [])].map((field) =>
+      field === "user"
+        ? sql`s.end_user_id is null`
+        : field === "session"
+          ? sql`s.session_id is null`
+          : sql`cardinality(${traceTasks(sql`s`)}) = 0`,
     ),
     ...(filter.and ?? []).map((clause) => traceFilterCondition(projectId, clause)),
   ].filter((part): part is SQL => part !== null);

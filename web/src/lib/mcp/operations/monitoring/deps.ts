@@ -1,4 +1,4 @@
-import type { Query } from "@/lib/contracts/query";
+import { isGrouped, type Query } from "@/lib/contracts/query";
 import { forbidden, invalidParams, type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
 import { mcpActor, mcpEventContext, mcpSessionDeps } from "@/lib/mcp/operations/loop/tasks";
 import type { OperationContext } from "@/lib/mcp/registry";
@@ -8,11 +8,12 @@ import { featureEnabled } from "@/lib/platform/experimental-features";
 import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { type ServerEventName, trackServerEvent } from "@/lib/platform/telemetry";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
+import type { GroupedResult } from "@/lib/synthesis/metrics/groups";
 import { QueryError, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
 // Fills `metricSeams.sql`: kind sql (run_rql, query_monitoring).
 import "@/lib/synthesis/rql/query";
 import { postTo } from "@/lib/views/alerts/slack";
-import { loadWidget } from "@/lib/views/dashboards/data";
+import { loadWidget, runGroupedQuery } from "@/lib/views/dashboards/data";
 import { countLastWeek, previewScorer } from "@/lib/views/scorers/preview";
 import { slackAppStatus } from "@/lib/views/slack/app";
 import { channelAccess, listChannels, revokeToken } from "@/lib/views/slack/channels";
@@ -27,8 +28,12 @@ export interface MonitoringDeps {
   db(): ReturnType<typeof getDb>;
   previewScorer(...args: Parameters<typeof previewScorer>): ReturnType<typeof previewScorer>;
   countLastWeek(...args: Parameters<typeof countLastWeek>): ReturnType<typeof countLastWeek>;
-  /** A query's numbers, under the read timeout. */
-  runQuery(projectId: string, query: Query, scope: QueryScope): Promise<QueryResult>;
+  /** A query's numbers, under the read timeout; with a group-by, each value's (`runGroupedQuery`). */
+  runQuery(
+    projectId: string,
+    query: Query,
+    scope: QueryScope,
+  ): Promise<QueryResult | GroupedResult>;
   /** A widget's numbers, or null when the read failed. */
   loadWidget: typeof loadWidget;
   canSeal(): boolean;
@@ -52,11 +57,13 @@ export const defaultMonitoringDeps: MonitoringDeps = {
   countLastWeek: (...args) => countLastWeek(...args),
   // RQL runs on its own read-only pool with its own timeout: no transaction of the primary pool.
   runQuery: (projectId, query, scope) =>
-    query.kind === "sql"
-      ? runQuery(projectId, query, scope)
-      : withStatementTimeout((db) => runQuery(projectId, query, scope, db), {
-          operation: "mcp_query_monitoring",
-        }),
+    isGrouped(query)
+      ? runGroupedQuery(projectId, query, scope, { operation: "mcp_query_monitoring" })
+      : query.kind === "sql"
+        ? runQuery(projectId, query, scope)
+        : withStatementTimeout((db) => runQuery(projectId, query, scope, db), {
+            operation: "mcp_query_monitoring",
+          }),
   loadWidget,
   canSeal: () => secretBoxConfigured(),
   slack: {

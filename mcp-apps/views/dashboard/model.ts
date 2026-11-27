@@ -1,6 +1,10 @@
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { DashboardRange } from "@/lib/views/dashboards/links";
-import type { DashboardFilters, GridPosition, WidgetInput } from "@/lib/views/dashboards/types";
+import type {
+  DashboardFilters,
+  GridPosition,
+  WidgetInput,
+  WidgetResult,
+} from "@/lib/views/dashboards/types";
 import type { ToolSuccess } from "../../shell/state";
 
 /** What get_dashboard and query_monitoring carry for this view (lib/mcp/operations/monitoring). */
@@ -23,7 +27,7 @@ export interface ViewWidget {
   missingScorer?: string;
   /** Why it cannot be shown. */
   problem?: string;
-  result: QueryResult | null;
+  result: WidgetResult | null;
 }
 
 /** The text form: what any host passes on. */

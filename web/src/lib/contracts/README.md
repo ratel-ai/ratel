@@ -17,8 +17,12 @@ written in (`rqlVersion`, a whole number from 1); `synthesis/rql` checks the ver
 A trace filter has `properties` (RTL-396): indexed trace properties by name, any of the values of
 each name, at most 20 names (`MAX_FILTER_PROPERTIES`) of 100 characters. It also has
 `withoutProperties` (names the trace has no value of), `users`, `sessions` and `tasks` (RTL-397).
-A metric groups by `{ "property": "<name>" }` on a measure a trace filter applies to, and by the
-dimensions `user`, `session` and `task` (`task` on the measures of traces and of scores). `trace-properties.ts` holds the limits and `COLUMN_PROPERTIES`: user, session,
+A flow, a step flow, a funnel and a geography query take `groupBy` (RTL-398): `task`, `user`,
+`session` or `{ "property": "<name>" }`, and `groupLimit` (1 to 12, 6 by default), one small chart
+per value; `isGrouped` tells them apart. Their filter takes `without` (`user`, `session`, `task`:
+the trace has none), the group of no value; a metric refuses it. A metric groups by
+`{ "property": "<name>" }` on a measure a trace filter applies to, and by the dimensions `user`,
+`session` and `task` (`task` on the measures of traces and of scores). `trace-properties.ts` holds the limits and `COLUMN_PROPERTIES`: user, session,
 environment, model and service are columns of every trace, so a filter or a group-by refuses them
 as properties and names the built-in field. `queryProperties` gives the names a query reads;
 `runQuery` refuses one that is not indexed.

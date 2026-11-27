@@ -98,6 +98,20 @@ export type MetricDimension = Dimension | PropertyDimension;
 /** The dimensions one query may group by. */
 export const MAX_DIMENSIONS = 2;
 
+/**
+ * The kinds that draw one small chart per value of a group-by (RTL-398): each chart is the same
+ * query with one more filter, the value's.
+ */
+export const GROUPED_KINDS = ["flow", "step_flow", "funnel", "geography"] as const;
+export type GroupedKind = (typeof GROUPED_KINDS)[number];
+/** What a small chart of one value is filtered by, besides a trace property. */
+export const GROUP_FIELDS = ["task", "user", "session"] as const;
+export type GroupField = (typeof GROUP_FIELDS)[number];
+/** What the kinds group by: a field of every trace, or an indexed trace property. */
+export type GroupBy = GroupField | PropertyDimension;
+/** The values drawn, the most traces first: one small chart each. */
+export const GROUP_LIMITS = { min: 1, max: 12, default: 6 } as const;
+
 export const BUCKETS = ["hour", "day"] as const;
 export type Bucket = (typeof BUCKETS)[number];
 
@@ -153,6 +167,8 @@ export type FunnelCondition = FunnelStep["condition"];
 export type ClustersQuery = Extract<Query, { kind: "clusters" }>;
 export type GeographyQuery = Extract<Query, { kind: "geography" }>;
 export type SqlQuery = Extract<Query, { kind: "sql" }>;
+/** A query of a kind that can group by a value per small chart. */
+export type GroupedQuery = Extract<Query, { kind: GroupedKind }>;
 /** The metric form's selection: a metric query without its version and kind. */
 export type MetricForm = NonNullable<SqlQuery["form"]>;
 export type QueryFilters = MetricQuery["filters"];
@@ -221,7 +237,7 @@ export function stepFlowQuery(
 /** A funnel of steps, in order unless given. */
 export function funnelQuery(
   steps: FunnelStep[],
-  rest: Partial<Pick<FunnelQuery, "order" | "filters">> = {},
+  rest: Partial<Pick<FunnelQuery, "order" | "filters" | "groupBy" | "groupLimit">> = {},
 ): FunnelQuery {
   return { version: QUERY_VERSION, kind: "funnel", order: "in_order", steps, filters: {}, ...rest };
 }
@@ -265,9 +281,18 @@ export function propertyOf(dimension: MetricDimension): string | undefined {
   return typeof dimension === "string" ? undefined : dimension.property;
 }
 
+/** Whether a query draws one small chart per value. */
+export function isGrouped(query: object): query is GroupedQuery & { groupBy: GroupBy } {
+  return "groupBy" in query && query.groupBy !== undefined;
+}
+
 /** The trace properties a query names: in its filters, every clause, and in its group-by. */
 export function queryProperties(query: object): string[] {
-  const { filters, dimensions } = query as { filters?: unknown; dimensions?: unknown };
+  const { filters, dimensions, groupBy } = query as {
+    filters?: unknown;
+    dimensions?: unknown;
+    groupBy?: unknown;
+  };
   const named = new Set<string>();
   const visit = (filter: unknown) => {
     const clause = filter as
@@ -278,7 +303,7 @@ export function queryProperties(query: object): string[] {
     for (const more of clause?.and ?? []) visit(more);
   };
   visit(filters);
-  for (const dimension of Array.isArray(dimensions) ? dimensions : [])
+  for (const dimension of [...(Array.isArray(dimensions) ? dimensions : []), groupBy])
     if (dimension && typeof dimension === "object" && "property" in dimension)
       named.add(String(dimension.property));
   return [...named];
@@ -346,6 +371,13 @@ const clauseShape = {
     .max(MAX_FILTER_PROPERTIES, PROPERTIES_PROBLEM)
     .optional()
     .describe("Indexed trace properties, by name, that the trace has no value of."),
+  without: z
+    .array(z.enum(GROUP_FIELDS))
+    .max(GROUP_FIELDS.length)
+    .optional()
+    .describe(
+      "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+    ),
 };
 
 /**
@@ -392,20 +424,50 @@ const version = z.literal(QUERY_VERSION, {
 const traceFilters = filtersWith({});
 const name = z.string().trim().min(1).max(500).refine(hasNoNul, NUL_PROBLEM);
 
-const flowSchema = z.strictObject({
-  version,
-  kind: z.literal("flow"),
-  node: z.enum(FLOW_NODES, {
-    error: ({ input }) => `A flow cannot move between "${shownValue(input)}".`,
-  }),
-  start: name.optional().describe("Paths start at its first appearance; other traces are out."),
-  end: name.optional().describe("Paths end at its first appearance; other traces are out."),
-  steps: limit(FLOW_LIMITS.steps, "flow", "steps").describe("The nodes kept of each path."),
-  edges: limit(FLOW_LIMITS.edges, "flow", "edges").describe(
-    "The edges kept, the most traces first.",
-  ),
-  filters: traceFilters,
-});
+/** The group-by of the kinds that draw a small chart per value. */
+const groupFields = {
+  groupBy: z
+    .union(
+      [
+        z.enum(GROUP_FIELDS),
+        z
+          .strictObject({ property: propertyName })
+          .describe("An indexed trace property, by name: list_trace_properties gives them."),
+      ],
+      {
+        error: ({ input }) =>
+          `Unknown group-by "${shownValue(input)}". Group by ${GROUP_FIELDS.join(", ")} or { "property": name }.`,
+      },
+    )
+    .optional()
+    .describe(
+      "One small chart per value: the same query filtered by the value, for the values of the most traces. Traces without a value are one group.",
+    ),
+  groupLimit: z
+    .int(groupLimitProblem())
+    .min(GROUP_LIMITS.min, groupLimitProblem())
+    .max(GROUP_LIMITS.max, groupLimitProblem())
+    .optional()
+    .describe(`The values drawn with groupBy: ${GROUP_LIMITS.default} unless given.`),
+};
+
+const flowSchema = z
+  .strictObject({
+    version,
+    kind: z.literal("flow"),
+    node: z.enum(FLOW_NODES, {
+      error: ({ input }) => `A flow cannot move between "${shownValue(input)}".`,
+    }),
+    start: name.optional().describe("Paths start at its first appearance; other traces are out."),
+    end: name.optional().describe("Paths end at its first appearance; other traces are out."),
+    steps: limit(FLOW_LIMITS.steps, "flow", "steps").describe("The nodes kept of each path."),
+    edges: limit(FLOW_LIMITS.edges, "flow", "edges").describe(
+      "The edges kept, the most traces first.",
+    ),
+    filters: traceFilters,
+    ...groupFields,
+  })
+  .superRefine(groupRules);
 
 const stepFlowSchema = z
   .strictObject({
@@ -431,8 +493,11 @@ const stepFlowSchema = z
       "The nodes named in a column, the most traces first; the rest fold into one.",
     ),
     filters: traceFilters,
+    ...groupFields,
   })
-  .superRefine(({ mode, target }, context) => {
+  .superRefine((query, context) => {
+    groupRules(query, context);
+    const { mode, target } = query;
     const refuse = (message: string) =>
       context.addIssue({ code: "custom", message, path: ["target"] });
     if (mode === "before" && target === undefined)
@@ -587,8 +652,16 @@ function geographyWith<S extends z.ZodType>(scorer: S) {
         .optional()
         .describe("The country whose regions are shown."),
       filters: filtersWith({ scorer: scorer.optional() }),
+      ...groupFields,
     })
-    .superRefine(({ measures: [first], level, country, filters }, context) => {
+    .superRefine((query, context) => {
+      groupRules(query, context);
+      const {
+        measures: [first],
+        level,
+        country,
+        filters,
+      } = query;
       if (!first) return;
       const rules: MeasureRules = MEASURES[first.measure];
       const refuse = (message: string, ...path: (string | number)[]) =>
@@ -625,27 +698,47 @@ function funnelWith<S extends z.ZodType>(scorer: S) {
     ],
     { error: "A step takes a tool, a skill, an attribute, a scorer or no error." },
   );
-  return z.strictObject({
-    version,
-    kind: z.literal("funnel"),
-    order: z.enum(FUNNEL_ORDERS).default("in_order"),
-    steps: z
-      .array(
-        z.strictObject({
-          name: z
-            .string()
-            .trim()
-            .min(1, "Name each step.")
-            .max(MAX_STEP_NAME)
-            .refine(hasNoNul, NUL_PROBLEM),
-          condition,
-        }),
-        count,
-      )
-      .min(min, count)
-      .max(max, count),
-    filters: traceFilters,
-  });
+  return z
+    .strictObject({
+      version,
+      kind: z.literal("funnel"),
+      order: z.enum(FUNNEL_ORDERS).default("in_order"),
+      steps: z
+        .array(
+          z.strictObject({
+            name: z
+              .string()
+              .trim()
+              .min(1, "Name each step.")
+              .max(MAX_STEP_NAME)
+              .refine(hasNoNul, NUL_PROBLEM),
+            condition,
+          }),
+          count,
+        )
+        .min(min, count)
+        .max(max, count),
+      filters: traceFilters,
+      ...groupFields,
+    })
+    .superRefine(groupRules);
+}
+
+/** A count of values says how many of a group-by: there is none without one. */
+function groupRules(
+  { groupBy, groupLimit }: { groupBy?: GroupBy; groupLimit?: number },
+  context: z.RefinementCtx,
+) {
+  if (groupLimit !== undefined && groupBy === undefined)
+    context.addIssue({
+      code: "custom",
+      message: "A count of values goes with groupBy.",
+      path: ["groupLimit"],
+    });
+}
+
+function groupLimitProblem(): string {
+  return `A group-by draws ${GROUP_LIMITS.min} to ${GROUP_LIMITS.max} values.`;
 }
 
 function named(message: string) {
@@ -722,6 +815,10 @@ function metricRules(
       refuse(`${named} is grouped by twice.`, "dimensions", index);
   }
   const { scorer: scorerRef, ...traceFilters } = filters as Record<string, unknown>;
+  // The absence of a user, a session or a task is the group-by of the other kinds: RQL has none.
+  const clauses = [traceFilters, ...((traceFilters.and as object[] | undefined) ?? [])];
+  if (clauses.some((clause) => ((clause as { without?: unknown[] }).without ?? []).length > 0))
+    refuse("A metric has no filter of a missing user, session or task.", "filters", "without");
   if (!rules.filterable && !isEmptyFilter(traceFilters))
     refuse(`${rules.label} cannot be filtered.`, "filters");
   if (scorerRef && !rules.byScorer)

@@ -2,9 +2,12 @@ import type { Query } from "@/lib/contracts/query";
 import { placeName } from "@/lib/ingest/geo/codes";
 import { capRows, round, type TruncationTracker } from "@/lib/mcp/serialize";
 import { getMetric, type MetricUnit } from "@/lib/synthesis/metrics/catalog";
+import { groupQuery } from "@/lib/synthesis/metrics/group-query";
+import type { GroupedResult } from "@/lib/synthesis/metrics/groups";
 import type { QueryResult, SqlResult } from "@/lib/synthesis/metrics/query";
 import { formatMetric } from "@/lib/views/dashboards/chart-model";
 import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
+import { groupByLabel, groupValueLabel, leftOutNote } from "@/lib/views/dashboards/grouped";
 import { sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import type { WidgetResult } from "@/lib/views/dashboards/types";
 import { measuresOne } from "@/lib/views/dashboards/widget";
@@ -21,10 +24,16 @@ function queryUnit(query: Query): MetricUnit | null {
 /** The result for a context window: `limit` rows, and the newest points of a series. */
 export function cappedResult(
   query: Query,
-  result: QueryResult,
+  result: QueryResult | GroupedResult,
   limit: number,
   tracker: TruncationTracker,
 ) {
+  return result.kind === "grouped"
+    ? cappedGroups(query, result, limit, tracker)
+    : cappedOne(query, result, limit, tracker);
+}
+
+function cappedOne(query: Query, result: QueryResult, limit: number, tracker: TruncationTracker) {
   switch (result.kind) {
     case "metric": {
       const from = Math.max(0, result.buckets.length - POINT_CAP);
@@ -106,6 +115,14 @@ export function headline(query: Query, result: WidgetResult | null): string {
   if (result.kind === "refused")
     return `RQL refused the query: ${result.message} Fix: ${result.fix}`;
   switch (result.kind) {
+    case "grouped": {
+      const each = result.groups.map(
+        ({ value, traces, result: small }) =>
+          `${groupValueLabel(result.by, value)} (${traces} trace${traces === 1 ? "" : "s"}): ${headline(groupQuery(query, value), small)}`,
+      );
+      const more = leftOutNote(result.leftOut);
+      return `By ${groupByLabel(result.by)}: ${each.join("; ") || "no trace in this window"}${more ? `. ${more}` : ""}`;
+    }
     case "metric":
     case "geography": {
       const unit = queryUnit(query) ?? "count";
@@ -152,6 +169,51 @@ export function headline(query: Query, result: WidgetResult | null): string {
     case "sql":
       return tableSummary(result);
   }
+}
+
+/** Each value with its traces, its numbers in one line and its result, capped as any result. */
+function cappedGroups(
+  query: Query,
+  { by, groups, leftOut }: GroupedResult,
+  limit: number,
+  tracker: TruncationTracker,
+) {
+  return {
+    kind: "grouped" as const,
+    by,
+    leftOut,
+    groups: groups.map(({ value, traces, result }) => {
+      const small = groupQuery(query, value);
+      return {
+        value,
+        traces,
+        summary: headline(small, result),
+        result: result && cappedOne(small, result, limit, tracker),
+      };
+    }),
+  };
+}
+
+/** Each value of a group-by with its traces and its numbers in one line: what get_dashboard lists. */
+export function groupSummaries(query: Query, { groups }: GroupedResult) {
+  return groups.map(({ value, traces, result }) => ({
+    value,
+    traces,
+    summary: headline(groupQuery(query, value), result),
+  }));
+}
+
+/**
+ * A result as a view gets it: a group-by's values carry their numbers in one line, which the view
+ * lists in place of one small chart each (`mcp-apps/views/dashboard`).
+ */
+export function viewResult<R extends WidgetResult | null>(query: Query, result: R) {
+  if (result?.kind !== "grouped") return result;
+  const summaries = groupSummaries(query, result);
+  return {
+    ...result,
+    groups: result.groups.map((group, index) => ({ ...group, summary: summaries[index].summary })),
+  };
 }
 
 /** "2 rows of 2 columns: model, cost." The words of a table, for a host that draws nothing. */

@@ -500,6 +500,19 @@
                           "maxLength": 100
                         }
                       },
+                      "without": {
+                        "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "user",
+                            "session"
+                          ]
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -630,6 +643,19 @@
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 100
+                              }
+                            },
+                            "without": {
+                              "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "user",
+                                  "session"
+                                ]
                               }
                             }
                           },
@@ -845,6 +871,19 @@
                           "maxLength": 100
                         }
                       },
+                      "without": {
+                        "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "user",
+                            "session"
+                          ]
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -976,6 +1015,19 @@
                                 "minLength": 1,
                                 "maxLength": 100
                               }
+                            },
+                            "without": {
+                              "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "user",
+                                  "session"
+                                ]
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -983,6 +1035,40 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "groupBy": {
+                    "description": "One small chart per value: the same query filtered by the value, for the values of the most traces. Traces without a value are one group.",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "task",
+                          "user",
+                          "session"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "property": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "property"
+                        ],
+                        "additionalProperties": false,
+                        "description": "An indexed trace property, by name: list_trace_properties gives them."
+                      }
+                    ]
+                  },
+                  "groupLimit": {
+                    "description": "The values drawn with groupBy: 6 unless given.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
                 "required": [
@@ -1183,6 +1269,19 @@
                           "maxLength": 100
                         }
                       },
+                      "without": {
+                        "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "user",
+                            "session"
+                          ]
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -1314,6 +1413,19 @@
                                 "minLength": 1,
                                 "maxLength": 100
                               }
+                            },
+                            "without": {
+                              "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "user",
+                                  "session"
+                                ]
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -1321,6 +1433,40 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "groupBy": {
+                    "description": "One small chart per value: the same query filtered by the value, for the values of the most traces. Traces without a value are one group.",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "task",
+                          "user",
+                          "session"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "property": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "property"
+                        ],
+                        "additionalProperties": false,
+                        "description": "An indexed trace property, by name: list_trace_properties gives them."
+                      }
+                    ]
+                  },
+                  "groupLimit": {
+                    "description": "The values drawn with groupBy: 6 unless given.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
                 "required": [
@@ -1643,6 +1789,19 @@
                           "maxLength": 100
                         }
                       },
+                      "without": {
+                        "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "user",
+                            "session"
+                          ]
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -1774,6 +1933,19 @@
                                 "minLength": 1,
                                 "maxLength": 100
                               }
+                            },
+                            "without": {
+                              "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "user",
+                                  "session"
+                                ]
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -1781,6 +1953,40 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "groupBy": {
+                    "description": "One small chart per value: the same query filtered by the value, for the values of the most traces. Traces without a value are one group.",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "task",
+                          "user",
+                          "session"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "property": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "property"
+                        ],
+                        "additionalProperties": false,
+                        "description": "An indexed trace property, by name: list_trace_properties gives them."
+                      }
+                    ]
+                  },
+                  "groupLimit": {
+                    "description": "The values drawn with groupBy: 6 unless given.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
                 "required": [
@@ -2227,6 +2433,19 @@
                           "maxLength": 100
                         }
                       },
+                      "without": {
+                        "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "task",
+                            "user",
+                            "session"
+                          ]
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -2358,6 +2577,19 @@
                                 "minLength": 1,
                                 "maxLength": 100
                               }
+                            },
+                            "without": {
+                              "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "task",
+                                  "user",
+                                  "session"
+                                ]
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -2379,6 +2611,40 @@
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "groupBy": {
+                    "description": "One small chart per value: the same query filtered by the value, for the values of the most traces. Traces without a value are one group.",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "task",
+                          "user",
+                          "session"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "property": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 100
+                          }
+                        },
+                        "required": [
+                          "property"
+                        ],
+                        "additionalProperties": false,
+                        "description": "An indexed trace property, by name: list_trace_properties gives them."
+                      }
+                    ]
+                  },
+                  "groupLimit": {
+                    "description": "The values drawn with groupBy: 6 unless given.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
                 "required": [
@@ -2796,6 +3062,19 @@
                               "maxLength": 100
                             }
                           },
+                          "without": {
+                            "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "task",
+                                "user",
+                                "session"
+                              ]
+                            }
+                          },
                           "and": {
                             "description": "More clauses: a trace must match every one, also on the same property.",
                             "type": "array",
@@ -2926,6 +3205,19 @@
                                     "type": "string",
                                     "minLength": 1,
                                     "maxLength": 100
+                                  }
+                                },
+                                "without": {
+                                  "description": "The trace has no end user, no session or no task, as the group without a value of a groupBy. Not on a metric.",
+                                  "maxItems": 3,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "task",
+                                      "user",
+                                      "session"
+                                    ]
                                   }
                                 }
                               },

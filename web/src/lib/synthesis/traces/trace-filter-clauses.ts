@@ -62,7 +62,7 @@ function mergedValue(name: keyof TraceFilter, a: unknown, b: unknown): unknown {
   if (a === undefined || (Array.isArray(a) && a.length === 0)) return b;
   if (typeof a === "number" && typeof b === "number") return Math.max(a, b);
   // Each absence must hold: the names add up.
-  if (name === "withoutProperties" && Array.isArray(a) && Array.isArray(b))
+  if ((name === "withoutProperties" || name === "without") && Array.isArray(a) && Array.isArray(b))
     return [...new Set([...a, ...b])];
   if (name === "properties") return mergedProperties(a as PropertyValues, b as PropertyValues);
   if (!Array.isArray(a) || !Array.isArray(b)) return a === b ? a : undefined;

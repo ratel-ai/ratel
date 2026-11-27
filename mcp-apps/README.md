@@ -113,7 +113,9 @@ for a host:
 `views/dashboard` draws `get_dashboard` and `query_monitoring` with the console's own `WidgetBody`,
 from the widgets and results in the tool's `view`, on the stored 12-column grid, read-only. A host
 that passes the text only gets a table of one line per widget. `query_monitoring` with `queries`
-shows two to four results side by side, and Open in Ratel opens the same in Explore. Clusters are a table with a link to
+shows two to four results side by side, and Open in Ratel opens the same in Explore. A widget with a
+group-by (RTL-398) is a list of its values, each with its traces and its numbers in one line
+(`groups-table.tsx`): one small chart per value does not fit a cell of a view. Clusters are a table with a link to
 the console: the Intents map's drawings bring about 150 KB. The view is 733 KB:
 the map's shapes are about 210 KB of it.
 

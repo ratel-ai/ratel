@@ -27,6 +27,7 @@ import { ClustersFields } from "./ClustersFields";
 import { FlowFields } from "./FlowFields";
 import { FunnelFields } from "./FunnelFields";
 import { GeographyFields } from "./GeographyFields";
+import { GroupByFields } from "./GroupByFields";
 import { Choice, QueryFilter } from "./MetricFields";
 import { MetricWidgetFields } from "./MetricWidgetFields";
 import { StepFlowFields } from "./StepFlowFields";
@@ -115,6 +116,12 @@ export function WidgetFields({
       ) : null}
       {query.kind === "funnel" ? (
         <FunnelFields query={query} facets={facets} onChange={(next) => set({ query: next })} />
+      ) : null}
+      {query.kind === "flow" ||
+      query.kind === "step_flow" ||
+      query.kind === "funnel" ||
+      query.kind === "geography" ? (
+        <GroupByFields query={query} onChange={(next) => set({ query: next })} />
       ) : null}
       {refusal("query")}
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">

@@ -1,5 +1,6 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { isGrouped } from "@/lib/contracts/query";
 import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchResult, type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
@@ -14,7 +15,7 @@ import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
 import { createRqlGate } from "@/lib/synthesis/rql/run";
 import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import type { SealedDestination } from "@/lib/views/alerts/destinations";
-import { loadWidget } from "@/lib/views/dashboards/data";
+import { loadWidget, runGroupedQuery } from "@/lib/views/dashboards/data";
 // What these modules own is read through what they register.
 import "@/lib/views/dashboards/data";
 import { scorePresetTraces } from "@/lib/views/scorers/preset";
@@ -104,7 +105,10 @@ export async function monitoring(
     db: () => db,
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),
-    runQuery: (projectId, query, scope) => runQuery(projectId, query, scope, db),
+    runQuery: (projectId, query, scope) =>
+      isGrouped(query)
+        ? runGroupedQuery(projectId, query, scope, { db: db as never })
+        : runQuery(projectId, query, scope, db),
     // The console's own read: it keeps a refusal of every kind.
     loadWidget: (projectId, widget, scope) => loadWidget(projectId, widget, scope, db as never),
     canSeal: () => true,

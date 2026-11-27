@@ -1,14 +1,18 @@
 "use client";
 
+import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { DataTable } from "@ratel/design-system/data-table";
 import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
-import { ChartColumn, CircleAlert, Funnel, Waypoints } from "lucide-react";
+import { ArrowLeft, ChartColumn, CircleAlert, Funnel, Waypoints } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { StillCalculating } from "@/components/console/scorers/StillCalculating";
 import type { MetricQuery } from "@/lib/contracts/query";
 import { getMetric, type MetricSource } from "@/lib/synthesis/metrics/catalog";
+import { groupQuery } from "@/lib/synthesis/metrics/group-query";
+import type { GroupedResult } from "@/lib/synthesis/metrics/groups";
 import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
@@ -21,6 +25,12 @@ import {
   seriesKey,
 } from "@/lib/views/dashboards/chart-model";
 import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
+import {
+  groupByLabel,
+  groupValueLabel,
+  leftOutNote,
+  NO_VALUE,
+} from "@/lib/views/dashboards/grouped";
 import {
   type DashboardRange,
   funnelStepFilter,
@@ -66,6 +76,8 @@ export function WidgetBody({
   available = true,
   missingScorer,
   fill = false,
+  expanded = false,
+  compact = false,
 }: {
   projectId: string;
   widget: WidgetInput;
@@ -79,6 +91,10 @@ export function WidgetBody({
   missingScorer?: string;
   /** The chart takes the height of the place it is in. */
   fill?: boolean;
+  /** Shown large, in place of the grid: a small chart of a group-by opens its value alone. */
+  expanded?: boolean;
+  /** One small chart of a group-by: the chart alone, without its notes. */
+  compact?: boolean;
 }) {
   const { query } = widget;
   const taskNames = useTaskNames();
@@ -121,6 +137,17 @@ export function WidgetBody({
             Index it in project settings
           </Link>
         }
+      />
+    );
+  if (result.kind === "grouped")
+    return (
+      <GroupedBody
+        projectId={projectId}
+        widget={widget}
+        result={result}
+        range={range}
+        filters={dashboardFilters}
+        expanded={expanded}
       />
     );
   if (result.kind === "refused")
@@ -268,10 +295,144 @@ export function WidgetBody({
         }
         samplesLabel={metric.source === "scores" ? "Results" : "Traces"}
         fill={fill}
+        compact={compact}
       />
     ) : null;
   }
   return null;
+}
+
+/**
+ * A widget with a group-by (RTL-398): one small chart per value, the most traces first, each with
+ * its value as its title and its traces, and how many values are left out. Expanded, a click on a
+ * small chart opens its value alone, as a filter of the widget, until "All values".
+ */
+function GroupedBody({
+  projectId,
+  widget,
+  result,
+  range,
+  filters,
+  expanded,
+}: {
+  projectId: string;
+  widget: WidgetInput;
+  result: GroupedResult;
+  range: DashboardRange;
+  filters: DashboardFilters;
+  expanded: boolean;
+}) {
+  const taskNames = useTaskNames();
+  const [focused, setFocused] = useState<number | null>(null);
+  const { by, groups, leftOut } = result;
+  const label = (value: string | null) => groupValueLabel(by, value, taskNames);
+  const small = (value: string | null) => ({
+    ...widget,
+    title: label(value),
+    query: groupQuery(widget.query, value) as WidgetInput["query"],
+  });
+  if (groups.length === 0)
+    return (
+      <EmptyState
+        icon={Waypoints}
+        title="No traces in this time range"
+        description="Try a longer range or fewer filters."
+      />
+    );
+  const alone = focused === null ? undefined : groups[focused];
+  if (alone)
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Button variant="ghost" size="sm" onClick={() => setFocused(null)}>
+            <ArrowLeft aria-hidden /> All values
+          </Button>
+          <span className="rounded-md border border-line bg-surface px-2 py-0.5 text-fg">
+            {groupByLabel(by)} = {label(alone.value)}
+          </span>
+          <span className="text-fg-subtle">{tracesOf(alone.traces)}</span>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <WidgetBody
+            projectId={projectId}
+            widget={small(alone.value)}
+            result={alone.result}
+            range={range}
+            filters={filters}
+            fill
+          />
+        </div>
+      </div>
+    );
+  const note = leftOutNote(leftOut);
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <ul
+        aria-label={`By ${groupByLabel(by)}`}
+        className={cn(
+          "grid min-h-0 flex-1 gap-2 overflow-auto",
+          expanded
+            ? "auto-rows-[minmax(14rem,1fr)] grid-cols-[repeat(auto-fill,minmax(18rem,1fr))]"
+            : "auto-rows-[minmax(8.5rem,1fr)] grid-cols-[repeat(auto-fill,minmax(11rem,1fr))]",
+          // A step flow needs the width of its columns to read.
+          widget.query.kind === "step_flow" &&
+            (expanded
+              ? "grid-cols-[repeat(auto-fill,minmax(30rem,1fr))]"
+              : "grid-cols-[repeat(auto-fill,minmax(22rem,1fr))]"),
+        )}
+      >
+        {groups.map((group, index) => (
+          // biome-ignore lint/a11y/useKeyWithClickEvents: the title is the button of the keyboard.
+          <li
+            key={group.value ?? NO_VALUE}
+            className={cn(
+              "flex min-h-0 min-w-0 flex-col gap-1 rounded-md border border-line p-2",
+              expanded && "cursor-pointer hover:border-line-strong",
+            )}
+            onClick={(event) => {
+              // A link or a control of the chart keeps its own click.
+              if (!expanded || (event.target as Element).closest("a, button, input")) return;
+              setFocused(index);
+            }}
+          >
+            <div className="flex min-w-0 items-baseline justify-between gap-2 text-xs">
+              {expanded ? (
+                <button
+                  type="button"
+                  className="min-w-0 truncate text-left font-medium text-fg hover:underline"
+                  title={`Open ${label(group.value)} alone`}
+                  onClick={() => setFocused(index)}
+                >
+                  {label(group.value)}
+                </button>
+              ) : (
+                <span className="min-w-0 truncate font-medium text-fg" title={label(group.value)}>
+                  {label(group.value)}
+                </span>
+              )}
+              <span className="shrink-0 text-fg-subtle">{tracesOf(group.traces)}</span>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <WidgetBody
+                projectId={projectId}
+                widget={small(group.value)}
+                result={group.result}
+                range={range}
+                filters={filters}
+                fill
+                compact
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+      {note ? <p className="text-xs text-fg-subtle">{note}</p> : null}
+    </div>
+  );
+}
+
+function tracesOf(count: number): string {
+  return `${formatInteger(count)} trace${count === 1 ? "" : "s"}`;
 }
 
 function MetricBody({

@@ -58,6 +58,17 @@ test("a dashboard without widgets, and one query, render", () => {
   assert.match(render(fixtures.query_monitoring), /Latency p95 by model, by day/);
 });
 
+test("a group-by is a list of its values with their traces and numbers, and the values left out", () => {
+  const html = render(fixtures["query_monitoring · grouped"]);
+  for (const says of [
+    /By plan/,
+    /pro[\s\S]*210[\s\S]*Found the order 210 &gt; Refunded 126/,
+    /No value[\s\S]*50/,
+    /2 more values are not shown/,
+  ])
+    assert.match(html, says);
+});
+
 test("two queries show side by side, with the way to Explore", () => {
   const html = render(fixtures["query_monitoring · two queries"]);
   assert.match(html, /--cell-column:1 \/ span 6;--cell-row:1 \/ span 10/);

@@ -3,6 +3,7 @@ import {
   type Aggregation,
   type Bucket,
   type Dimension,
+  isGrouped,
   type MeasureId,
   type MetricQuery,
   parseQuery,
@@ -237,9 +238,25 @@ export async function runQuery<Q extends Query>(
   scope: QueryScope,
   db: MetricsDb = getDb(),
 ): Promise<ResultOf<Q>> {
+  const checked = await runnableQuery(projectId, query, scope, db);
+  // A query of one more filter per value runs through `groups.ts#runGrouped`.
+  if (isGrouped(checked)) throw new Error("a grouped query runs through runGrouped");
+  return (await runParsed(projectId, checked, scope, db)) as ResultOf<Q>;
+}
+
+/**
+ * The query as the contract of today reads it, over a window it allows, once every trace property
+ * it names, and the page filter names, is indexed. Throws `QueryError` otherwise.
+ */
+export async function runnableQuery(
+  projectId: string,
+  query: Query,
+  scope: QueryScope,
+  db: MetricsDb = getDb(),
+): Promise<Query> {
   const checked = checkedQuery(query, scope);
   await refuseUnindexed(projectId, [checked, { filters: scope.filter }], db);
-  return (await runParsed(projectId, checked, scope, db)) as ResultOf<Q>;
+  return checked;
 }
 
 /**

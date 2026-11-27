@@ -237,6 +237,9 @@ test("each other kind is exported as it is imported, and drawn as itself only", 
       start: "search",
       steps: 3,
       filters: { environments: ["prod"], and: [{ environments: ["staging"] }, { tools: ["t"] }] },
+      // A group-by goes with the document (RTL-398).
+      groupBy: { property: "plan" },
+      groupLimit: 12,
     }),
     funnelQuery(
       [
@@ -247,7 +250,7 @@ test("each other kind is exported as it is imported, and drawn as itself only", 
         },
         { name: "Clean", condition: { type: "no_error" } },
       ],
-      { order: "any_order" },
+      { order: "any_order", groupBy: "user" },
     ),
     stepFlowQuery("skill", {
       start: "intent",
@@ -256,12 +259,17 @@ test("each other kind is exported as it is imported, and drawn as itself only", 
       steps: 5,
       nodes: 4,
       filters: { environments: ["prod"] },
+      groupBy: "task",
     }),
     clustersQuery("tools", { clusters: ["Deploys"], tasks: ["Release"], minSize: 5 }),
-    geographyQuery("error_rate", "rate", {
-      country: "US",
-      filters: { services: ["support"] },
-    }),
+    {
+      ...geographyQuery("error_rate", "rate", {
+        country: "US",
+        filters: { services: ["support"] },
+      }),
+      groupBy: "session",
+      groupLimit: 3,
+    },
   ];
   const widgets = queries.map((query, index) => ({
     title: "",
