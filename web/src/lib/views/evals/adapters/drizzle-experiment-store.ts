@@ -137,6 +137,16 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
       return row ? { output: row.output?.value ?? null, toolCalls: row.toolCalls } : null;
     },
 
+    async trialFromTrace(projectId, trialId) {
+      const [row] = await db
+        .select({ sourceTurnId: evalCaseVersions.sourceTurnId })
+        .from(evalTrials)
+        .innerJoin(evalExperiments, eq(evalExperiments.id, evalTrials.experimentId))
+        .innerJoin(evalCaseVersions, eq(evalCaseVersions.id, evalTrials.caseVersionId))
+        .where(and(eq(evalExperiments.projectId, projectId), eq(evalTrials.id, trialId)));
+      return (row?.sourceTurnId ?? null) !== null;
+    },
+
     async outputPreviews(experimentId, chars) {
       const rows = await db
         .select({

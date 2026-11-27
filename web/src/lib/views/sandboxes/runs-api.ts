@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type ConsoleAccessDeps, forMember, refuse, reply } from "./console-access";
 import { toolModeSchema } from "./domain/contract";
-import { runView } from "./domain/run";
+import { EVAL_TRIAL_PREFIX, runView } from "./domain/run";
 import { getRun, type RunDeps, type StartRunResult, startRun } from "./runs";
 
 /** The session routes of runs: a member runs one input by hand. */
@@ -13,6 +13,8 @@ export type RunsApiDeps = ConsoleAccessDeps & {
     organizationId: string;
     outcome: string;
   }) => Promise<void>;
+  /** Whether the project lets Ratel read captured text. */
+  contentOptIn: (projectId: string) => Promise<boolean>;
 };
 
 const bodySchema = z.object({
@@ -77,6 +79,13 @@ export function handleGetRun(
   return forMember(projectId, "get_run", deps, async (member) => {
     const known = z.uuid().safeParse(runId).success;
     const run = known ? await getRun(member.projectId, runId, deps.runDeps()) : null;
-    return run ? reply(200, runView(run)) : refuse(404, "not_found", "There is no such run.");
+    if (!run) return refuse(404, "not_found", "There is no such run.");
+    // The input of a run that an eval started can be a row copied from a trace: captured text.
+    const fromEval = run.requestedBy.startsWith(EVAL_TRIAL_PREFIX);
+    if (fromEval && !(await deps.contentOptIn(member.projectId))) {
+      const view = runView(run);
+      return reply(200, { ...view, input: null, result: null, logs: null, contentWithheld: true });
+    }
+    return reply(200, runView(run));
   });
 }

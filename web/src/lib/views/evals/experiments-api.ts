@@ -125,7 +125,10 @@ export function handleStartByMember(
   );
 }
 
-/** The output and the tool calls of one trial, for a member. */
+/**
+ * The output and the tool calls of one trial, for a member. A row copied from a trace keeps them
+ * when the project does not let Ratel read captured text, as the run grid does.
+ */
 export function handleTrialEvidence(
   projectId: string,
   trialId: string,
@@ -133,10 +136,16 @@ export function handleTrialEvidence(
 ): Promise<Response> {
   const span = { feature: "evals", operation: "get_trial" } as const;
   return forMember(projectId, span, deps, async (member) => {
-    const { experiments } = deps.experiments();
+    const { experiments, traces } = deps.experiments();
     const known = z.uuid().safeParse(trialId).success;
     const evidence = known ? await experiments.trialEvidence(member.projectId, trialId) : null;
-    return evidence ? reply(200, evidence) : notFound();
+    if (!evidence) return notFound();
+    const withheld =
+      (await experiments.trialFromTrace(member.projectId, trialId)) &&
+      !(await traces.readContent(member.projectId));
+    return withheld
+      ? reply(200, { output: null, toolCalls: [], contentWithheld: true })
+      : reply(200, evidence);
   });
 }
 

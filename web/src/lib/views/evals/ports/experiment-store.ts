@@ -14,6 +14,8 @@ export interface ExperimentStore {
   /** In the order of the cases, then of the index. With no output and no tool calls. */
   trials(experimentId: string): Promise<Trial[]>;
   trialEvidence(projectId: string, trialId: string): Promise<TrialEvidence | null>;
+  /** Whether the row of the trial was copied from a trace turn: its output is captured text. */
+  trialFromTrace(projectId: string, trialId: string): Promise<boolean>;
   /**
    * The output of each trial that has one, as text cut to `chars` (a string as it is, other JSON as
    * its text), by the trial id. The grid reads it with no large value.

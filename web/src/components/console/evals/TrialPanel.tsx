@@ -82,16 +82,18 @@ export function TrialPanel({
 
 /** The logs of the sandbox run of a trial: the end only, so they are read with the panel. */
 function RunLogs({ projectId, runId }: { projectId: string; runId: string }) {
-  const [logs, setLogs] = useState<string | "loading" | "failed">("loading");
+  const [logs, setLogs] = useState<string | "loading" | "failed" | "withheld">("loading");
   useEffect(() => {
     let live = true;
     fetch(`/api/projects/${projectId}/sandboxes/runs/${runId}`)
       .then((response) =>
-        response.ok ? (response.json() as Promise<{ logs: string | null }>) : null,
+        response.ok
+          ? (response.json() as Promise<{ logs: string | null; contentWithheld?: true }>)
+          : null,
       )
       .catch(() => null)
       .then((run) => {
-        if (live) setLogs(run ? (run.logs ?? "") : "failed");
+        if (live) setLogs(run ? (run.contentWithheld ? "withheld" : (run.logs ?? "")) : "failed");
       });
     return () => {
       live = false;
@@ -102,7 +104,9 @@ function RunLogs({ projectId, runId }: { projectId: string; runId: string }) {
       ? "Loading…"
       : logs === "failed"
         ? "The logs did not load."
-        : logs || "The run wrote no log.";
+        : logs === "withheld"
+          ? "The project does not let Ratel read captured text, so the logs of an eval run are not shown."
+          : logs || "The run wrote no log.";
   return (
     <Disclosure title="Logs">
       <pre className="max-h-60 overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
@@ -122,14 +126,14 @@ function Evidence({
   trialId: string;
   load: boolean;
 }) {
-  const [evidence, setEvidence] = useState<TrialEvidence | "loading" | "failed" | null>(
+  const [evidence, setEvidence] = useState<Shown | "loading" | "failed" | null>(
     loadFirst ? "loading" : null,
   );
 
   const load = useCallback(async () => {
     setEvidence("loading");
     const answer = await fetch(`/api/projects/${projectId}/evals/experiments/trials/${trialId}`)
-      .then((response) => (response.ok ? (response.json() as Promise<TrialEvidence>) : null))
+      .then((response) => (response.ok ? (response.json() as Promise<Shown>) : null))
       .catch(() => null);
     setEvidence(answer ?? "failed");
   }, [projectId, trialId]);
@@ -148,6 +152,14 @@ function Evidence({
           <span className="text-ui text-fg-muted">They did not load. Try again.</span>
         ) : null}
       </div>
+    );
+  }
+  if (evidence.contentWithheld) {
+    return (
+      <p className="text-ui text-fg-muted">
+        This row is from a trace, and the project does not let Ratel read captured text, so its
+        output and tool calls are not shown. An admin can change it in Settings.
+      </p>
     );
   }
   return (
@@ -176,6 +188,9 @@ function Evidence({
     </div>
   );
 }
+
+/** A trial's evidence, or a mark that it is captured text this project does not show. */
+type Shown = TrialEvidence & { contentWithheld?: true };
 
 function show(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value ?? null);

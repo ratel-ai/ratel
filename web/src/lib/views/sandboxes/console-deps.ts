@@ -5,6 +5,7 @@ import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import {
   createDrizzleDeclaredSecrets,
   createDrizzleSecretStore,
@@ -33,6 +34,7 @@ export const secretsApiDeps: SecretsApiDeps = {
 
 export const runsApiDeps: RunsApiDeps = {
   ...consoleAccess,
+  contentOptIn: (projectId) => contentOptIn(projectId),
   // The run goes on after the response.
   runDeps: () => runDeps((work) => after(work)),
   track: ({ externalId, projectId, organizationId, outcome }) =>

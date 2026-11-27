@@ -30,6 +30,7 @@ import {
   handleListByKey,
   handleStartByKey,
   handleStartByMember,
+  handleTrialEvidence,
   type KeyDeps,
 } from "../experiments-api";
 import {
@@ -1111,4 +1112,55 @@ test("a trial that the concurrency limit refused waits for the next step", async
   t.setRefuse(() => full(0));
   await t.step(none);
   assert.equal((await t.trials(none.id))[0]?.result, "invalid");
+});
+
+test("a member reads the output of a trace row only when the project lets Ratel read captured text", async () => {
+  const t = await setup();
+  const fromTurn = await t.cases.create({
+    projectId: PROJECT_ID,
+    evalId: (await t.evals.list(PROJECT_ID))[0]?.id ?? "",
+    name: "from a turn",
+    labels: [],
+    content: content(),
+    createdBy: "user_1",
+    source: { turnId: "a1111111-1111-4111-8111-111111111111", output: "ok" },
+  });
+  assert.ok(typeof fromTurn === "object");
+  await t.addCase("typed");
+  const experiment = await t.start({ trialsPerCase: 1 });
+  await t.step(experiment);
+  for (const run of t.runs.values()) t.end(run, {}, "captured answer");
+  await t.step(experiment);
+  const trials = await t.deps.experiments.trials(experiment.id);
+  const byName = new Map(
+    experiment.caseVersions.map(({ versionId, name }) => [
+      name,
+      trials.find((trial) => trial.caseVersionId === versionId)?.id ?? "",
+    ]),
+  );
+  const deps = (optIn: boolean): ConsoleDeps => ({
+    ...keyDeps(t),
+    experiments: () => ({
+      ...t.deps,
+      traces: { ...t.deps.traces, readContent: async () => optIn },
+    }),
+    getSession: async () => ({ user: { id: "u1", externalId: "user_1" } }),
+    findProjectScope: async (projectId) => ({
+      project: { id: projectId },
+      organization: { id: ORGANIZATION_ID },
+      role: "member",
+    }),
+    enabled: async () => true,
+    isRestricted: async () => false,
+  });
+  const read = async (name: string, optIn: boolean) =>
+    (await handleTrialEvidence(PROJECT_ID, byName.get(name) ?? "", deps(optIn))).json();
+  assert.deepEqual(await read("from a turn", false), {
+    output: null,
+    toolCalls: [],
+    contentWithheld: true,
+  });
+  assert.deepEqual(await read("from a turn", true), { output: "captured answer", toolCalls: [] });
+  // A typed row is not captured text: it shows with the opt-in off.
+  assert.deepEqual(await read("typed", false), { output: "captured answer", toolCalls: [] });
 });
