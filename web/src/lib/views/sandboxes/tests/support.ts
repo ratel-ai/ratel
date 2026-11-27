@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { afterEach } from "node:test";
 import { gzipSync } from "node:zlib";
+import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -10,9 +12,21 @@ export const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 export const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 export const OTHER_PROJECT_ID = "33333333-3333-4333-8333-333333333333";
 
-/** A migrated database with two projects of one organization. */
+/** The databases opened by the running test. */
+const open = new Set<PGlite>();
+
+// Each database holds ~100 MB of WASM memory until it is closed. A file of 40 tests kept 4 GB,
+// and two such files on one CI shard ran the runner out of memory.
+afterEach(async () => {
+  const closing = [...open].map((client) => client.close());
+  open.clear();
+  await Promise.all(closing);
+});
+
+/** A migrated database with two projects of one organization, closed after its test. */
 export async function createSandboxDb() {
   const client = await createMigratedPGlite();
+  open.add(client);
   await client.exec(`
     insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
     insert into projects (id, organization_id, name, slug) values
