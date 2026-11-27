@@ -26,6 +26,8 @@ export interface ExperimentStore {
   ): Promise<Trial[]>;
   /** `starting` to `running`. */
   markRunning(trialId: string, sandboxRunId: string): Promise<void>;
+  /** `starting` back to `pending`: the next step tries again. */
+  releaseStart(trialId: string): Promise<void>;
   listRunningTrials(experimentId: string, limit: number): Promise<Trial[]>;
   /** `running` to `scoring`. False when another process has it. */
   claimScoring(trialId: string, now: Date): Promise<boolean>;

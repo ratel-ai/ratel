@@ -10,7 +10,7 @@ import type { ScorerSnapshot, TrialResult } from "./score";
 /** An experiment as a comparison reads it. */
 export type ComparedRun = {
   experiment: Pick<Experiment, "id" | "state" | "caseVersions" | "scorerSnapshots">;
-  trials: ReadonlyArray<Pick<Trial, "caseVersionId" | "result">>;
+  trials: ReadonlyArray<Pick<Trial, "caseVersionId" | "result" | "scorers">>;
 };
 
 export type Verdict = "regressed" | "improved" | "unchanged" | "inconclusive";
@@ -81,7 +81,7 @@ export function compare(
       "An experiment has not ended. Compare it when it is completed.",
     );
   }
-  const scorers = scorerDifferences(baseline.experiment, candidate.experiment);
+  const scorers = scorerDifferences(baseline, candidate);
   if (scorers.length > 0) {
     const words = scorers
       .slice(0, NAMED_SCORERS)
@@ -91,7 +91,7 @@ export function compare(
       );
     const others = scorers.length - words.length;
     if (others > 0) words.push(`and ${others} more`);
-    const message = `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it.`;
+    const message = `The scorers of the two experiments differ: ${words.join(", ")}. Run the baseline again with the present scorers and pin it. If the judge model changed during this run, run it again too.`;
     return { ...refused("scorers_differ", message), scorers };
   }
   const cases = comparedCases(baseline, candidate);
@@ -108,7 +108,7 @@ export function otherCases({ cases }: Pick<Comparison, "cases">): ComparedCase[]
 }
 
 const DIFFERENCE: Record<ScorerDifference["difference"], string> = {
-  changed: "its definition changed",
+  changed: "its definition or its judge model changed",
   gating: "gating on one side and advisory on the other",
   added: "not in the baseline",
   removed: "only in the baseline",
@@ -169,10 +169,13 @@ function changeOf(baseline: CaseSide | null, candidate: CaseSide | null): CaseCh
   return candidate.status === "fail" ? "regressed" : "improved";
 }
 
-/** Of the cases that both experiments have. The id and the name of a scorer do not score. */
+/**
+ * Of the cases that both experiments have. The id and the name of a scorer do not score. The model
+ * of a judge does: it is a setting that can change between two experiments, and in one.
+ */
 function scorerDifferences(
-  baseline: ComparedRun["experiment"],
-  candidate: ComparedRun["experiment"],
+  { experiment: baseline, trials: baselineTrials }: ComparedRun,
+  { experiment: candidate, trials: candidateTrials }: ComparedRun,
 ): ScorerDifference[] {
   const before = new Map(baseline.caseVersions.map((frozen) => [frozen.caseId, frozen]));
   return [...candidate.caseVersions]
@@ -182,8 +185,37 @@ function scorerDifferences(
       if (!old) return [];
       const left = baseline.scorerSnapshots[old.versionId] ?? [];
       const right = candidate.scorerSnapshots[versionId] ?? [];
-      return differences(left, right).map((found) => ({ caseId, caseName: name, ...found }));
+      const found = differences(left, right);
+      const models = new Map<string, Set<string>>();
+      addModels(models, left, baselineTrials, old.versionId);
+      addModels(models, right, candidateTrials, versionId);
+      // A scorer of both sides has one difference at most.
+      for (const { name: scorer, hash } of right) {
+        const changed = (models.get(hash)?.size ?? 0) > 1;
+        if (changed && !found.some((other) => other.name === scorer)) {
+          found.push({ name: scorer, difference: "changed" });
+        }
+      }
+      return found.map((difference) => ({ caseId, caseName: name, ...difference }));
     });
+}
+
+/** The models that gave an answer, by the content hash of their judge. */
+function addModels(
+  models: Map<string, Set<string>>,
+  snapshots: readonly ScorerSnapshot[],
+  trials: ComparedRun["trials"],
+  versionId: string,
+): void {
+  const hashes = new Map(snapshots.map(({ id, hash }) => [id, hash]));
+  for (const trial of trials) {
+    if (trial.caseVersionId !== versionId) continue;
+    for (const { scorerId, model } of trial.scorers) {
+      const hash = hashes.get(scorerId);
+      if (!hash || !model) continue;
+      models.set(hash, (models.get(hash) ?? new Set()).add(model));
+    }
+  }
 }
 
 type Found = Pick<ScorerDifference, "name" | "difference">;

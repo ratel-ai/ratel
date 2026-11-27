@@ -14,7 +14,7 @@ import type { JobKind } from "@/lib/jobs/runner";
  *   signals, task names and scores, intents, the graph fold) and a match
  *   quality run, which a person can also start by hand;
  * - 2, sweeps that can wait: tool reading, drafted tools, query categories.
- * Imports have their own lane in the worker and are not ranked here.
+ * Imports and image builds have their own lanes in the worker and are not ranked there.
  */
 export const JOB_TIER: Record<JobKind, 0 | 1 | 2> = {
   simulate_fix_eval: 0,
@@ -33,7 +33,8 @@ export const JOB_TIER: Record<JobKind, 0 | 1 | 2> = {
   fold_intent_graph: 1,
   match_quality_run: 1,
   run_import: 1,
-  sandbox_image_build: 0,
+  // Last where there is no worker: a build can take many minutes, for one project.
+  sandbox_image_build: 2,
   explore_tool_usage: 2,
   craft_tools: 2,
   categorize_queries: 2,

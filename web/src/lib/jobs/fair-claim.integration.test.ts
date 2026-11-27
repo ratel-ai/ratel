@@ -123,3 +123,10 @@ test("work someone waits on is claimed before fresh data, and sweeps come last (
   }
   assert.deepEqual(order, ["simulate_fix_eval", "build_trace_turns", "craft_tools"]);
 });
+
+test("queued builds of one project wait behind the fresh data of the others", async () => {
+  const db = await setup();
+  await db.execute(`update jobs set kind = 'sandbox_image_build' where project_id = '${BUSY}'`);
+  const first = await claimNextQueuedJob(undefined, undefined, db, { runningPerProject: 1 });
+  assert.equal(first?.projectId, QUIET);
+});

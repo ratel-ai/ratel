@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import type { RunStatus, SandboxRun } from "../domain/run";
 import type { RunStore } from "../ports/run-store";
-import { sandboxRuns } from "../schema";
+import { sandboxInstances, sandboxRuns } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "transaction">;
 
@@ -62,18 +62,23 @@ export function createDrizzleRunStore(db: Db): RunStore {
       return row ?? null;
     },
 
-    async markStarted(runId, instanceRef, now) {
-      const [row] = await db
-        .update(sandboxRuns)
-        .set({
-          instanceRef,
-          startedAt: now,
-          // The result can come first: an ended run keeps its status.
-          status: sql`case when ${sandboxRuns.status} = 'queued' then 'running' else ${sandboxRuns.status} end`,
-        })
-        .where(eq(sandboxRuns.id, runId))
-        .returning({ status: sandboxRuns.status });
-      return row ? (row.status as RunStatus) : null;
+    markStarted({ id, projectId }, instanceRef, now) {
+      return db.transaction(async (tx) => {
+        await tx
+          .insert(sandboxInstances)
+          .values({ runId: id, projectId, instanceRef, startedAt: now });
+        const [row] = await tx
+          .update(sandboxRuns)
+          .set({
+            instanceRef,
+            startedAt: now,
+            // The result can come first: an ended run keeps its status.
+            status: sql`case when ${sandboxRuns.status} = 'queued' then 'running' else ${sandboxRuns.status} end`,
+          })
+          .where(eq(sandboxRuns.id, id))
+          .returning({ status: sandboxRuns.status });
+        return row ? (row.status as RunStatus) : null;
+      });
     },
 
     async finish(runId, outcome, now) {
@@ -92,7 +97,13 @@ export function createDrizzleRunStore(db: Db): RunStore {
     },
 
     async markInstanceStopped(runId, now) {
-      await db.update(sandboxRuns).set({ instanceStoppedAt: now }).where(eq(sandboxRuns.id, runId));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(sandboxRuns)
+          .set({ instanceStoppedAt: now })
+          .where(eq(sandboxRuns.id, runId));
+        await tx.delete(sandboxInstances).where(eq(sandboxInstances.runId, runId));
+      });
     },
 
     async markUsageRecorded(runId, now) {
@@ -100,26 +111,47 @@ export function createDrizzleRunStore(db: Db): RunStore {
     },
 
     async listOpen(limit) {
-      const rows = await db
+      const columns = {
+        id: sandboxRuns.id,
+        projectId: sandboxRuns.projectId,
+        status: sandboxRuns.status,
+        instanceRef: sandboxRuns.instanceRef,
+        instanceStoppedAt: sandboxRuns.instanceStoppedAt,
+        usageRecordedAt: sandboxRuns.usageRecordedAt,
+        timeoutS: sandboxRuns.timeoutS,
+        createdAt: sandboxRuns.createdAt,
+        startedAt: sandboxRuns.startedAt,
+      };
+      // The two conditions of sandbox_runs_open_idx, each with its own limit: the active runs of
+      // all projects must not hide the ended ones, and the other way round.
+      const open = (condition: SQL) =>
+        db
+          .select(columns)
+          .from(sandboxRuns)
+          .where(condition)
+          .orderBy(asc(sandboxRuns.createdAt))
+          .limit(limit);
+      const [ended, active] = await Promise.all([
+        open(
+          sql`${sandboxRuns.status} not in ('queued', 'running') and ${sandboxRuns.instanceRef} is not null and (${sandboxRuns.instanceStoppedAt} is null or ${sandboxRuns.usageRecordedAt} is null)`,
+        ),
+        open(sql`${sandboxRuns.status} in ('queued', 'running')`),
+      ]);
+      return [...ended, ...active].map((row) => ({ ...row, status: row.status as RunStatus }));
+    },
+
+    async listOrphans(limit) {
+      return db
         .select({
-          id: sandboxRuns.id,
-          projectId: sandboxRuns.projectId,
-          status: sandboxRuns.status,
-          instanceRef: sandboxRuns.instanceRef,
-          instanceStoppedAt: sandboxRuns.instanceStoppedAt,
-          usageRecordedAt: sandboxRuns.usageRecordedAt,
-          timeoutS: sandboxRuns.timeoutS,
-          createdAt: sandboxRuns.createdAt,
-          startedAt: sandboxRuns.startedAt,
+          id: sandboxInstances.runId,
+          projectId: sandboxInstances.projectId,
+          instanceRef: sandboxInstances.instanceRef,
         })
-        .from(sandboxRuns)
-        .where(
-          // The condition of sandbox_runs_open_idx.
-          sql`${sandboxRuns.status} in ('queued', 'running') or (${sandboxRuns.instanceRef} is not null and (${sandboxRuns.instanceStoppedAt} is null or ${sandboxRuns.usageRecordedAt} is null))`,
-        )
-        .orderBy(asc(sandboxRuns.createdAt))
+        .from(sandboxInstances)
+        .leftJoin(sandboxRuns, eq(sandboxRuns.id, sandboxInstances.runId))
+        .where(isNull(sandboxRuns.id))
+        .orderBy(asc(sandboxInstances.startedAt))
         .limit(limit);
-      return rows.map((row) => ({ ...row, status: row.status as RunStatus }));
     },
   };
 }

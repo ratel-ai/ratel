@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { resolveConfig } from "@/config";
+import { LONG_JOB_KINDS, RUN_IMPORT_JOB, SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { DEFAULT_DRAIN_TIMEOUT_MS, drainTimeoutMs } from "./drain-observer";
 import type { WorkerDeps } from "./worker";
 import {
   type BackgroundWorkerDeps,
+  LANE_KINDS,
   reportTopQueries,
   startBackgroundWorker,
   stopBackgroundWorker,
@@ -351,6 +353,27 @@ test("the watchdog limit reads CRON_DRAIN_TIMEOUT_MS: ten minutes by default, 0 
   assert.equal(drainTimeoutMs(config({ CRON_DRAIN_TIMEOUT_MS: "0" })), 0);
   assert.throws(() => config({ CRON_DRAIN_TIMEOUT_MS: "ten minutes" }), /CRON_DRAIN_TIMEOUT_MS/);
   assert.throws(() => config({ CRON_DRAIN_TIMEOUT_MS: "-1" }), /CRON_DRAIN_TIMEOUT_MS/);
+});
+
+test("builds drain in a lane of their own, so a long build never holds an import back", async () => {
+  const h = harness({
+    drainBuilds: async () => {
+      h.calls.push("builds");
+      return { done: 1, failed: 0 };
+    },
+  });
+  startBackgroundWorker(h.deps);
+  const loop = h.wired.loop;
+  const drained = await loop?.drainBuilds?.();
+  h.finishStep();
+  assert.deepEqual(drained, { done: 1, failed: 0 });
+  assert.deepEqual(h.calls, ["builds"]);
+});
+
+test("the lanes of the worker share no job kind", () => {
+  assert.deepEqual(LANE_KINDS.imports, { only: [RUN_IMPORT_JOB] });
+  assert.deepEqual(LANE_KINDS.builds, { only: [SANDBOX_IMAGE_BUILD_JOB] });
+  assert.deepEqual(LANE_KINDS.analysis, { except: LONG_JOB_KINDS });
 });
 
 test("what runs beside the loop is stopped with it, before the flush and the exit", async () => {

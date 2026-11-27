@@ -2,7 +2,7 @@ import { workerLanes } from "@/lib/composition/registry";
 import type { WorkerLane } from "@/lib/contracts/registry";
 import { runDrainTick } from "@/lib/jobs/drain";
 import { type DrainObserverDeps, drainTimeoutMs, timedDrain } from "@/lib/jobs/drain-observer";
-import { LONG_JOB_KINDS } from "@/lib/jobs/kinds";
+import { LONG_JOB_KINDS, RUN_IMPORT_JOB, SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { drainProjectJobs } from "@/lib/jobs/store";
 import { startWorker, type WorkerDeps, type WorkerHandle } from "@/lib/jobs/worker";
 import { getDb } from "@/lib/platform/db/client";
@@ -16,8 +16,10 @@ const GLOBAL_KEY = Symbol.for("ratel.platform.worker");
 export interface BackgroundWorkerDeps {
   /** The analysis lane: every queued kind but the long ones. */
   drain: WorkerDeps["drain"];
-  /** The long lane (RC-40): `LONG_JOB_KINDS` only, so a long job never holds analysis back. */
+  /** The import lane (RC-40): `run_import` only, so a long import never holds analysis back. */
   drainImports?: WorkerDeps["drainImports"];
+  /** The build lane: `sandbox_image_build` only, so the builds of one project hold back no import. */
+  drainBuilds?: WorkerDeps["drainBuilds"];
   /** The registrations' lanes (the ingest queue's persist lane, RTL-314). Read once, at start. */
   lanes?: () => readonly WorkerLane[];
   /** The day's most expensive statements, logged once a day (`reportTopQueries`). */
@@ -30,9 +32,17 @@ export interface BackgroundWorkerDeps {
   warn: (fields: Record<string, unknown>, message: string) => void;
 }
 
+/** The job kinds of each lane. */
+export const LANE_KINDS = {
+  analysis: { except: LONG_JOB_KINDS },
+  imports: { only: [RUN_IMPORT_JOB] },
+  builds: { only: [SANDBOX_IMAGE_BUILD_JOB] },
+} as const;
+
 const defaultDeps = (): BackgroundWorkerDeps => ({
-  drain: () => drainProjectJobs(undefined, undefined, { kinds: { except: LONG_JOB_KINDS } }),
-  drainImports: () => drainProjectJobs(undefined, undefined, { kinds: { only: LONG_JOB_KINDS } }),
+  drain: () => drainProjectJobs(undefined, undefined, { kinds: LANE_KINDS.analysis }),
+  drainImports: () => drainProjectJobs(undefined, undefined, { kinds: LANE_KINDS.imports }),
+  drainBuilds: () => drainProjectJobs(undefined, undefined, { kinds: LANE_KINDS.builds }),
   lanes: () => workerLanes(),
   reportTopQueries: () => reportTopQueries(),
   tick: workerTick(),
@@ -54,8 +64,8 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
  * first. A job cut short is marked as an error by the reaper
  * (`reapStaleRunningJobs`); the cron safety nets queue its work again.
  *
- * Two lanes, as upstream: analysis drains every kind but imports, and imports (`run_import`,
- * which can take many minutes) drain in a lane of their own. Once a day it logs the database's
+ * Three lanes: analysis drains every kind but the long ones, and imports (`run_import`) and image
+ * builds, which can take many minutes, each drain in a lane of their own. Once a day it logs the database's
  * most expensive statements (`reportTopQueries`).
  *
  * `beforeExit` runs between the last step and the exit: the self-telemetry flush, when this
@@ -76,13 +86,14 @@ export function startBackgroundWorker(
   const globals = globalThis as Record<symbol, WorkerHandle | undefined>;
   const existing = globals[GLOBAL_KEY];
   if (existing) return existing;
-  const drainImports = deps.drainImports;
+  const { drainImports, drainBuilds } = deps;
   const lanesOnly = options.lanesOnly === true;
   const handle = deps.startWorker({
     ...(lanesOnly ? { analysis: false } : {}),
     extraLanes: deps.lanes?.() ?? [],
     drain: () => deps.drain(),
     ...(drainImports ? { drainImports: () => drainImports() } : {}),
+    ...(drainBuilds ? { drainBuilds: () => drainBuilds() } : {}),
     sweep: async () => {
       const tick = await deps.tick();
       if (!tick.ok) deps.warn({ error: tick.error }, "worker sweep finished with an error");

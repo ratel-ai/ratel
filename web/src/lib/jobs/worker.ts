@@ -19,6 +19,8 @@ export interface WorkerDeps {
    * the sweeps. Absent, imports go through `drain` like any job.
    */
   drainImports?: () => Promise<{ done: number; failed: number }>;
+  /** The same for queued image builds, which must not hold up imports either. */
+  drainBuilds?: () => Promise<{ done: number; failed: number }>;
   /** The registrations' lanes (`Registration.workerLanes`), each run `concurrency` times. */
   extraLanes?: readonly WorkerLane[];
   /**
@@ -87,11 +89,15 @@ export function startWorker(deps: WorkerDeps): WorkerHandle {
       );
     }
   }
-  const imports = deps.drainImports;
-  if (imports && analysis) {
+  // A persist-only process runs no imports and no builds.
+  for (const [name, drain] of [
+    ["imports", analysis ? deps.drainImports : undefined],
+    ["builds", analysis ? deps.drainBuilds : undefined],
+  ] as const) {
+    if (!drain) continue;
     lanes.push(
-      lane("imports", async () => {
-        const { done, failed } = await imports();
+      lane(name, async () => {
+        const { done, failed } = await drain();
         return done + failed > 0;
       }),
     );

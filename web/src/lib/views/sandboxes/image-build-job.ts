@@ -15,14 +15,19 @@ export type ImageBuildDeps = {
   now: () => Date;
   /** Calls `beat` again and again until the returned function is called. */
   every: (ms: number, beat: () => void) => () => void;
+  /** The limit of one build. `BUILD_DEADLINE_MS` by default. */
+  deadlineMs?: number;
 };
 
 export const HEARTBEAT_MS = 30_000;
 /** With no heartbeat for this time the process of a build is gone. */
 export const BUILD_STOPPED_MS = 5 * 60_000;
+/** A little more than the provider's own limits: a call that never answers must not hold the lane. */
+export const BUILD_DEADLINE_MS = 40 * 60_000;
 export const NOT_CONFIGURED_REASON = "Ratel sandbox is not configured on this deployment.";
 export const OFF_REASON = "Ratel sandbox is off for this project.";
 export const STOPPED_REASON = "The build was interrupted. Push again.";
+const TOO_LONG_REASON = "The build took too long. Push again.";
 const SERVICE_REASON = "The build service did not work. Push again.";
 /** The end of the log is the part that explains a failure. */
 const MAX_LOG_CHARS = 64_000;
@@ -51,7 +56,7 @@ export async function runImageBuild(
     });
   });
   try {
-    const outcome = await build(version, deps.provider, deps.bundles);
+    const outcome = await build(version, deps.provider, deps);
     await deps.builds.finish(versionId, outcome, deps.now());
     logger.info(
       { project_id: projectId, version_id: versionId, outcome: outcome.status },
@@ -66,7 +71,7 @@ export async function runImageBuild(
 async function build(
   version: SandboxVersion,
   provider: SandboxProvider,
-  bundles: BundleStore,
+  { bundles, deadlineMs = BUILD_DEADLINE_MS }: ImageBuildDeps,
 ): Promise<BuildOutcome> {
   const { id, projectId, manifest, bundle } = version;
   const log = createLog();
@@ -75,15 +80,18 @@ async function build(
       "sandboxes",
       "build_image",
       () =>
-        provider.buildImage({
-          versionId: id,
-          projectId,
-          base: manifest.base,
-          install: manifest.install,
-          entry: manifest.entry,
-          bundle: { ...bundle, body: bodyOf(version, bundles) },
-          log: log.add,
-        }),
+        within(
+          deadlineMs,
+          provider.buildImage({
+            versionId: id,
+            projectId,
+            base: manifest.base,
+            install: manifest.install,
+            entry: manifest.entry,
+            bundle: { ...bundle, body: bodyOf(version, bundles) },
+            log: log.add,
+          }),
+        ),
       { attributes: { "project.id": projectId, "sandbox.version_id": id } },
     );
     return { status: "ready", imageRef, log: log.text() };
@@ -93,6 +101,18 @@ async function build(
     }
     logger.error({ project_id: projectId, version_id: id, err: error }, "sandbox build broke");
     return { status: "failed", reason: SERVICE_REASON, log: log.text() };
+  }
+}
+
+async function within<T>(ms: number, work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new BuildFailed(TOO_LONG_REASON)), ms);
+  });
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

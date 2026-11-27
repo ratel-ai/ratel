@@ -61,7 +61,7 @@ export type StartRefusal =
   | "too_many_running"
   | "too_many_trials";
 
-/** The open trials of one project at a time. The others wait, and do not reach the limit. */
+/** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
 /** A claim that is older than this was left by a process that ended. */
 export const CLAIM_STOPPED_MS = 10 * 60_000;
@@ -260,6 +260,14 @@ async function startTrial(
     if (started.ok) {
       sandboxRunId = started.run.id;
       return await deps.experiments.markRunning(trial.id, sandboxRunId);
+    }
+    // A place gets free when a run ends. The other limits do not change in the time of a run.
+    if (
+      started.reason === "limit_reached" &&
+      started.limit === "sandbox_concurrent_instances" &&
+      started.max > 0
+    ) {
+      return await deps.experiments.releaseStart(trial.id);
     }
     const why =
       started.reason === "limit_reached" ? `${started.limit}: ${started.message}` : started.message;
