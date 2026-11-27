@@ -324,3 +324,44 @@ test("a run records what it changed: rows from turns, scorers, params, a matrix"
   );
   assert.equal(elsewhere.ok ? null : elsewhere.reason, "not_found");
 });
+
+test("the scorers of one run follow the rules of an eval: at most five judges, unique ids", async () => {
+  const { deps } = await setup();
+  const fixed = await createDataset(
+    PROJECT_ID,
+    ACTOR,
+    { name: "Rows", description: null, query: { kind: "fixed" }, turnIds: [TURN_1] },
+    deps,
+  );
+  assert.ok(fixed.ok);
+  const made = await createEval(
+    PROJECT_ID,
+    ACTOR,
+    { ...EVAL, dataset: { datasetId: fixed.dataset.id } },
+    deps,
+  );
+  assert.ok(made.ok);
+  const judge = (n: number) => ({
+    id: `judge-${n}`,
+    name: `Safe ${n}`,
+    gating: true,
+    ref: { source: "predefined" as const, key: "is_safe" as const, settings: {} },
+  });
+  const six = await startRun(
+    SUBJECT,
+    made.eval.id,
+    ACTOR,
+    { scorers: Array.from({ length: 6 }, (_, n) => judge(n)) },
+    deps,
+  );
+  assert.equal(six.ok ? null : six.reason, "invalid_scorers");
+  assert.match(six.ok ? "" : six.message, /at most 5 judges/);
+  const twice = await startRun(
+    SUBJECT,
+    made.eval.id,
+    ACTOR,
+    { scorers: [judge(1), judge(1)] },
+    deps,
+  );
+  assert.equal(twice.ok ? null : twice.reason, "invalid_scorers");
+});

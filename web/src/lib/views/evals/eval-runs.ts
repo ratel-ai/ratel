@@ -13,6 +13,7 @@ import {
   type EvalDefinition,
   type EvalScorer,
   type EvalVersion,
+  evalScorersSchema,
   MAX_COMBINATIONS,
   type ParamMatrix,
   runProblem,
@@ -84,6 +85,14 @@ export async function startEvalRun(
   const version = currentVersion(definition);
   const runtime = await findRuntime(projectId, version, changes, deps);
   if (!runtime.ok) return runtime;
+  // The scorers of one run follow the rules of the scorers of an eval: unique ids, few judges.
+  const asked = changes.scorers ? evalScorersSchema.safeParse(changes.scorers) : null;
+  if (asked && !asked.success) {
+    return refused(
+      "invalid_scorers",
+      asked.error.issues[0]?.message ?? "The scorers are not valid.",
+    );
+  }
   const scorers = await resolveScorers(projectId, changes.scorers ?? version.scorers, deps.library);
   if (!scorers.ok) return refused("invalid_scorers", scorers.message);
   const problem = runProblem({ scorers: scorers.scorers });

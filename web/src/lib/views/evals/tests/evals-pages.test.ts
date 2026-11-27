@@ -514,3 +514,46 @@ test("a run with no matrix has one column, and a suite run shows the rows of the
   );
   assert.equal(model.score, 0);
 });
+
+test("a run grid hides the input of a trace row when the project does not let Ratel read captured text", () => {
+  const made = evalRun("r1", "e1", 1, ["pass"]);
+  const versionId = made.experiment.caseVersions[0]?.versionId ?? "";
+  const version = {
+    id: versionId,
+    caseId: "a",
+    number: 1,
+    input: "refund A200",
+    earlierTurns: [],
+    toolFixtures: [],
+    expectedOutput: "No refund.",
+    sourceTurnId: "turn-1",
+    sourceOutput: null,
+    updatedAt: at(0),
+  };
+  const model = (readContent: boolean) =>
+    runPageModel({
+      projectId: PROJECT_ID,
+      evalId: "e1",
+      experiment: made.experiment,
+      trials: made.trials,
+      versions: [version],
+      outputs: new Map(),
+      readContent,
+    });
+  assert.equal(model(true).rows[0]?.input, "refund A200");
+  assert.equal(model(false).rows[0]?.input, null);
+  assert.equal(model(false).rows[0]?.expectedOutput, null);
+  assert.equal(model(false).contentWithheld, true);
+  // Typed values are not captured text.
+  const typed = runPageModel({
+    projectId: PROJECT_ID,
+    evalId: "e1",
+    experiment: made.experiment,
+    trials: made.trials,
+    versions: [{ ...version, sourceTurnId: null }],
+    outputs: new Map(),
+    readContent: false,
+  });
+  assert.equal(typed.rows[0]?.input, "refund A200");
+  assert.equal(typed.contentWithheld, false);
+});

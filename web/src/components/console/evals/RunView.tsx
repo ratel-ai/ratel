@@ -3,7 +3,7 @@
 import { Badge, StatusDot } from "@ratel/design-system/badge";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { StatRow } from "@ratel/design-system/stat-row";
-import { EmptyState } from "@ratel/design-system/states";
+import { Callout, EmptyState } from "@ratel/design-system/states";
 import { Rows3 } from "lucide-react";
 import Link from "next/link";
 import { Fragment } from "react";
@@ -59,6 +59,11 @@ export function RunView({ model, evalName }: { model: RunPageModel; evalName: st
               : []),
           ]}
         />
+        {model.contentWithheld ? (
+          <Callout tone="info">
+            The project does not let Ratel read captured text: a row from a trace shows no input.
+          </Callout>
+        ) : null}
         {model.rows.length === 0 ? (
           <EmptyState
             icon={Rows3}
@@ -138,7 +143,7 @@ function GridRow({ row, scorers }: { row: RunGridRow; scorers: RunPageModel["sco
       <td className="px-3 py-2">
         <span className="block font-medium text-fg">{row.name}</span>
         <code className="line-clamp-3 font-mono text-xs break-all text-fg-muted">
-          {row.input || "The row is gone."}
+          {row.input === null ? "Captured text is off" : row.input || "The row is gone."}
         </code>
       </td>
       <td className="px-3 py-2">

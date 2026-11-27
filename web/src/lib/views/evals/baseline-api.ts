@@ -208,7 +208,7 @@ function baselineView(projectId: string, baseline: Baseline, deps: BaselineApiDe
   return {
     evalId,
     experimentId,
-    url: urlOf({ projectId, id: experimentId }, deps),
+    url: urlOf({ projectId, id: experimentId, evalId }, deps),
     pinnedBy,
     pinnedAt: pinnedAt.toISOString(),
   };

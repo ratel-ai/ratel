@@ -135,15 +135,16 @@ export async function loadRunPage(projectId: string, evalId: string, runId: stri
     store.get(projectId, runId),
   ]);
   if (!definition || !experiment || !runOfEval(experiment, evalId)) return null;
-  const [trials, versions, outputs] = await Promise.all([
+  const [trials, versions, outputs, readContent] = await Promise.all([
     store.trials(experiment.id),
     store.caseVersions(experiment.caseVersions.map(({ versionId }) => versionId)),
     // One more character than the grid shows, so a cut output gets its "…".
     store.outputPreviews(experiment.id, PREVIEW_CHARS + 1),
+    contentOptIn(projectId),
   ]);
   return {
     evalName: definition.name,
-    model: runPageModel({ projectId, evalId, experiment, trials, versions, outputs }),
+    model: runPageModel({ projectId, evalId, experiment, trials, versions, outputs, readContent }),
   };
 }
 

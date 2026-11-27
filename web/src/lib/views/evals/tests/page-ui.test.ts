@@ -305,7 +305,11 @@ test("a matrix run shows its variants side by side, with their params in the hea
   );
   const text = visibleText(html);
   assert.match(text, /model=sonnet[\s\S]*model=haiku/);
-  assert.equal((html.match(/>Output</g) ?? []).length, 2, "one output column for each variant");
+  assert.equal(
+    (html.match(/>Output and trials</g) ?? []).length,
+    2,
+    "one output column for each variant",
+  );
   assert.match(html, /\/evals\/e1\/runs\/r1\/trials\/second/);
 });
 

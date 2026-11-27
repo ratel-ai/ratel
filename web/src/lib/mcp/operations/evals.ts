@@ -481,7 +481,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Edit an eval",
       description:
         "Use this tool to change an eval: its name, task, runtime, dataset, params, matrix, trials or scorers. This tool changes data: a change of content adds a version, and a started run keeps its own. A field that you omit keeps its value. It returns the eval id and the version number.",
-      keywords: ["evals", "edit eval", "scorers", "matrix"],
+      keywords: ["evals", "edit eval", "change eval", "matrix"],
       scope: "project",
       mutates: true,
       apiKeyScope: "evals:write",

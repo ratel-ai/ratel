@@ -50,8 +50,8 @@ export type RunGridRow = {
   caseId: string;
   versionId: string;
   name: string;
-  /** Cut. Empty when the row version is gone. */
-  input: string;
+  /** Cut. Empty when the row version is gone. Null when the content rule withholds it. */
+  input: string | null;
   expectedOutput: string | null;
   cells: RunVariantCell[];
 };
@@ -71,6 +71,8 @@ export type RunPageModel = {
   variants: RunVariantColumn[];
   scorers: Array<{ name: string; gating: boolean }>;
   rows: RunGridRow[];
+  /** True when a row from a trace hides its input: the project does not let Ratel read captured text. */
+  contentWithheld: boolean;
 };
 
 export function runPageModel({
@@ -80,6 +82,7 @@ export function runPageModel({
   trials,
   versions,
   outputs,
+  readContent = true,
 }: {
   projectId: string;
   evalId: string;
@@ -89,6 +92,8 @@ export function runPageModel({
   versions: readonly CaseVersion[];
   /** Outputs by trial id. */
   outputs: ReadonlyMap<string, string>;
+  /** The content rule of the project: a row from a trace is captured text. */
+  readContent?: boolean;
 }): RunPageModel {
   const frozen = experiment.caseVersions.filter(
     (one) => experiment.evalId === evalId || one.evalId === evalId,
@@ -103,6 +108,8 @@ export function runPageModel({
     trials: own,
   });
   const byVersion = new Map(versions.map((version) => [version.id, version]));
+  const withheld = (versionId: string) =>
+    !readContent && (byVersion.get(versionId)?.sourceTurnId ?? null) !== null;
   return {
     projectId,
     evalId,
@@ -132,6 +139,7 @@ export function runPageModel({
       experiment,
       frozen.map(({ versionId }) => versionId),
     ),
+    contentWithheld: frozen.some(({ versionId }) => withheld(versionId)),
     rows: frozen.map((row) => {
       const version = byVersion.get(row.versionId);
       const ofRow = own.filter(({ caseVersionId }) => caseVersionId === row.versionId);
@@ -139,8 +147,11 @@ export function runPageModel({
         caseId: row.caseId,
         versionId: row.versionId,
         name: row.name,
-        input: version ? preview(version.input) : "",
-        expectedOutput: version?.expectedOutput ? preview(version.expectedOutput) : null,
+        input: withheld(row.versionId) ? null : version ? preview(version.input) : "",
+        expectedOutput:
+          withheld(row.versionId) || !version?.expectedOutput
+            ? null
+            : preview(version.expectedOutput),
         cells: variants.map((variant) => {
           const cell = ofRow
             .filter((trial) => trial.variant === variant.index)
