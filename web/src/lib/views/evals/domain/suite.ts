@@ -12,8 +12,10 @@ import type { ScorerSnapshot } from "./score";
 /**
  * The score of each eval of a run, and its delta against the baseline run (decision
  * `suite-table`). The score of an eval is the mean of its scorer pass rates. A pass rate counts the
- * valid trials (`pass` or `fail`) where the scorer gave a result: an invalid trial, an open trial
- * and a scorer that could not run are counted, not rated.
+ * valid trials (`pass` or `fail`) where the scorer gave a result: an invalid trial (an infra
+ * error, a timeout, a refused start), an open trial and a scorer that could not run are counted,
+ * not rated. A trial whose agent failed (a `fail` with no scorer result) is a fail for every
+ * scorer: the agent's failure lowers the score.
  */
 
 /** A run as the scores read it. */
@@ -210,6 +212,10 @@ function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
     const { id, name, gating, hash } = snapshot;
     let [pass, fail, notScored] = [0, 0, 0];
     for (const trial of valid) {
+      if (agentFailed(trial)) {
+        fail += 1;
+        continue;
+      }
       const own = group.ofCase[trial.caseVersionId]?.find(
         (one) => pairKey(one) === pairKey(snapshot),
       );
@@ -239,6 +245,14 @@ function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
     score: mean(scorers.map(({ passRate }) => passRate)),
     scorers,
   };
+}
+
+/**
+ * A trial whose agent failed: result `fail` with no scorer result (`scoreRun` scores no answer).
+ * A scored trial always has its scorers' results, so this is never a scorer's fail.
+ */
+function agentFailed(trial: Pick<ScoredRun["trials"][number], "result" | "scorers">): boolean {
+  return trial.result === "fail" && trial.scorers.length === 0;
 }
 
 /** The score delta is the mean delta of the scorers rated on both sides. */

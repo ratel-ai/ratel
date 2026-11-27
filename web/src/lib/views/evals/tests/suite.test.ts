@@ -305,3 +305,53 @@ function ownScorerIds(made: ScoredRun): ScoredRun {
     })),
   };
 }
+
+// A trial whose agent failed has result `fail` and no scorer result (`scoreRun`).
+const agentFailed = { result: "fail" as const };
+
+test("a trial whose agent failed is a fail for every scorer, so it lowers the score", () => {
+  const [refunds] = evalScores(
+    run("r1", {
+      refunds: {
+        scorers: [NO_REFUND, POLITE],
+        rows: {
+          a: { trials: [{ result: "pass", scorers: { "no-refund": "pass", polite: "pass" } }] },
+          b: { trials: [agentFailed, invalid] },
+        },
+      },
+    }),
+  );
+  assert.deepEqual(
+    refunds?.scorers.map(({ scorerId, pass, fail, notScored, passRate }) => [
+      scorerId,
+      pass,
+      fail,
+      notScored,
+      passRate,
+    ]),
+    [
+      // The agent's failure counts against it. An infra error (invalid) stays out of the rate.
+      ["no-refund", 1, 1, 0, 0.5],
+      ["polite", 1, 1, 0, 0.5],
+    ],
+  );
+  assert.equal(refunds?.score, 0.5);
+});
+
+test("a run whose agent fails on most rows has a negative delta, and one that fails on all rows scores 0", () => {
+  const rows = (trials: Array<Row["trials"][number]>) =>
+    Object.fromEntries(trials.map((trial, i) => [`row${i}`, { trials: [trial] }]));
+  const baseline = run("base", { refunds: { rows: rows(Array(10).fill(passed)) } });
+  const mostly = run("next", {
+    refunds: { rows: rows([passed, ...Array(9).fill(agentFailed)]) },
+  });
+  const all = run("all", { refunds: { rows: rows(Array(10).fill(agentFailed)) } });
+  assert.equal(evalScores(mostly)[0]?.score, 0.1);
+  const delta = evalDeltas(baseline, mostly).get("refunds");
+  assert.ok(delta?.ok);
+  assert.ok(Math.abs((delta.score ?? 0) - -0.9) < 1e-9);
+  assert.equal(evalScores(all)[0]?.score, 0);
+  const allDelta = evalDeltas(baseline, all).get("refunds");
+  assert.ok(allDelta?.ok);
+  assert.equal(allDelta.score, -1);
+});

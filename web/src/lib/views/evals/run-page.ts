@@ -107,6 +107,10 @@ export function runPageModel({
     experiment: { ...experiment, caseVersions: frozen },
     trials: own,
   });
+  const columns = scorerColumns(
+    experiment,
+    frozen.map(({ versionId }) => versionId),
+  );
   const byVersion = new Map(versions.map((version) => [version.id, version]));
   const withheld = (versionId: string) =>
     !readContent && (byVersion.get(versionId)?.sourceTurnId ?? null) !== null;
@@ -135,10 +139,7 @@ export function runPageModel({
         counts: countTrials(ofVariant),
       };
     }),
-    scorers: scorerColumns(
-      experiment,
-      frozen.map(({ versionId }) => versionId),
-    ),
+    scorers: columns,
     contentWithheld: frozen.some(({ versionId }) => withheld(versionId)),
     rows: frozen.map((row) => {
       const version = byVersion.get(row.versionId);
@@ -161,7 +162,7 @@ export function runPageModel({
             variant: variant.index,
             output: output === undefined ? null : preview(output),
             counts: countTrials(cell),
-            scorers: scorerCells(cell),
+            scorers: scorerCells(cell, columns),
             trials: cell.map((trial) => ({
               trialId: trial.id,
               index: trial.index,
@@ -187,9 +188,21 @@ function scorerColumns(experiment: Pick<Experiment, "scorerSnapshots">, versionI
   return [...columns.values()];
 }
 
-function scorerCells(trials: readonly Pick<Trial, "scorers">[]): Record<string, ScorerCell> {
+/** A trial whose agent failed (a fail with no scorer result) is a fail of every column. */
+function scorerCells(
+  trials: readonly Pick<Trial, "result" | "scorers">[],
+  columns: ReadonlyArray<{ name: string }>,
+): Record<string, ScorerCell> {
   const cells: Record<string, ScorerCell> = {};
-  for (const { scorers } of trials) {
+  for (const { result, scorers } of trials) {
+    if (result === "fail" && scorers.length === 0) {
+      for (const { name } of columns) {
+        const cell = cells[name] ?? { pass: 0, rated: 0 };
+        cells[name] = cell;
+        cell.rated += 1;
+      }
+      continue;
+    }
     for (const { name, status } of scorers) {
       const cell = cells[name] ?? { pass: 0, rated: 0 };
       cells[name] = cell;
