@@ -233,6 +233,7 @@ function span(overrides: Partial<OtelSpan> & { spanId: string; at?: number }): O
     endUserId: null,
     events: null,
     links: null,
+    properties: null,
     ...rest,
   };
 }

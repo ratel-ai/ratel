@@ -205,7 +205,11 @@ export type ProductEventProperties = {
   organization_settings_updated: { name_changed: boolean; slug_changed: boolean };
   organization_deleted: { organization_slug: string };
   project_created: { project_slug: string };
-  project_settings_updated: { field: "name" | "geo_attributes" };
+  project_settings_updated: {
+    field: "name" | "geo_attributes" | "trace_properties";
+    // trace_properties: index, stop or erase (RTL-395).
+    action?: "index" | "stop" | "erase";
+  };
   project_deleted: { project_slug: string };
   api_key_created: { key_prefix: string; named: boolean; expires_in: string; access?: string };
   api_key_revoked: { key_prefix: string };

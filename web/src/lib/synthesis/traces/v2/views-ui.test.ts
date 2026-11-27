@@ -317,6 +317,7 @@ function otelSpan(overrides: Partial<OtelSpan> & { spanId: string; at?: number }
     endUserId: null,
     events: null,
     links: null,
+    properties: null,
     ...rest,
   };
 }

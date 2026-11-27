@@ -17,6 +17,7 @@ export const OSS_LIMITS: PlanLimits = Object.freeze({
   agentHealthEvidenceTurns: 6,
   agentHealthWindowDays: 90,
   toolPickerMonthlyAllowanceUsd: Number.POSITIVE_INFINITY,
+  maxIndexedPropertiesPerProject: Number.POSITIVE_INFINITY,
 });
 
 /** Overrides still apply: an operator may lower a limit on purpose through `limit_overrides`. */

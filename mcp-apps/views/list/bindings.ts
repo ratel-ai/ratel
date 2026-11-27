@@ -700,6 +700,54 @@ export const listBindings: ListBinding[] = [
     },
   },
   {
+    tool: "list_trace_properties",
+    config: {
+      rows: "rows",
+      rowKey: "name",
+      title: "name",
+      noun: { one: "trace property", many: "trace properties" },
+      columns: [
+        { key: "name", label: "Property" },
+        {
+          key: "source",
+          label: "Source",
+          format: "badge",
+          width: "7rem",
+          labels: { standard: "Standard", user: "Your own" },
+          tones: { standard: "info", user: "neutral" },
+        },
+        {
+          key: "state",
+          label: "State",
+          format: "badge",
+          width: "7rem",
+          labels: { indexed: "Indexed", detected: "Detected" },
+          tones: { indexed: "success", detected: "neutral" },
+        },
+        {
+          key: "lastSeenAt",
+          label: "Last seen",
+          format: "relative",
+          width: "7rem",
+          hiddenBelow: "sm",
+        },
+      ],
+      search: ["name"],
+      filters: [
+        {
+          key: "state",
+          label: "State",
+          kind: "values",
+          badgeLabels: { indexed: "Indexed", detected: "Detected" },
+        },
+      ],
+      empty: {
+        title: "No trace properties yet",
+        description: "Keys show up here once the project's traces arrive.",
+      },
+    },
+  },
+  {
     tool: "list_dashboards",
     config: {
       rows: "dashboards",

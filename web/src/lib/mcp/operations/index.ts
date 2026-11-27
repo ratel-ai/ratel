@@ -30,6 +30,10 @@ import {
   locationReadOperations,
   locationWriteOperations,
 } from "@/lib/mcp/operations/monitoring/locations";
+import {
+  propertyReadOperations,
+  propertyWriteOperations,
+} from "@/lib/mcp/operations/monitoring/properties";
 import { rqlOperations } from "@/lib/mcp/operations/monitoring/rql";
 import {
   scorerReadOperations,
@@ -105,6 +109,7 @@ export function assembleOperations(
     ...dashboardReadOperations(),
     ...(options.customMonitoring ? rqlOperations() : []),
     ...locationReadOperations(),
+    ...propertyReadOperations(),
     ...writeOperations(),
     ...(options.focusedConsole ? overviewWriteOperations() : []),
     ...runtimeWriteOperations(),
@@ -116,6 +121,7 @@ export function assembleOperations(
     ...alertWriteOperations(),
     ...dashboardWriteOperations(),
     ...locationWriteOperations(),
+    ...propertyWriteOperations(),
   ];
   const operations = placeEditionOperations(core, adaptEditionOperations(registrations, core));
   return includeWrites ? operations : operations.filter((operation) => !operation.mutates);

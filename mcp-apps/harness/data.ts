@@ -1188,6 +1188,37 @@ export function locationAttributes(prefix = "", copies = 1) {
   };
 }
 
+export function traceProperties(count: number) {
+  const standard = [
+    { name: "organization", column: null },
+    { name: "release", column: null },
+    { name: "user", column: "end_user_id" },
+    { name: "session", column: "session_id" },
+  ];
+  const rows = Array.from({ length: count }, (_, index) => {
+    const own = index >= standard.length;
+    const state = own && index % 3 !== 0 ? "detected" : "indexed";
+    return {
+      name: own ? `app.key_${index}` : standard[index]!.name,
+      state,
+      source: own ? "user" : "standard",
+      sourceMeans: own
+        ? "your own: indexing it is a paid-plan feature"
+        : "standard: Ratel indexes it on every plan",
+      column: own ? null : standard[index]!.column,
+      lastSeenAt: new Date(Date.UTC(2026, 10, 24, 12) - index * 3_600_000).toISOString(),
+      seenCount: 1_000 - index * 7,
+      valuesStored: state === "indexed" && (own || !standard[index]!.column),
+    };
+  });
+  return {
+    summary: `${rows.length} trace properties`,
+    count: rows.length,
+    rows,
+    href: "/project/p1/settings",
+  };
+}
+
 export function dashboards(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,

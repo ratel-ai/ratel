@@ -73,6 +73,8 @@ export interface OtelSpanRow {
   /** The span's events and links (AOBS-7); null when it has none or they are not stored. */
   events: StoredSpanEvent[] | null;
   links: StoredSpanLink[] | null;
+  /** The values of the project's indexed trace properties (RTL-395); null when it has none. */
+  properties: Record<string, string> | null;
 }
 
 const MAX_ATTRIBUTE_BYTES = 16 * 1024;
@@ -129,6 +131,8 @@ export interface OtelSpanRowOptions {
    * a span they do not hold, the row's dimension columns are null.
    */
   dimensions?: SpanDimensionsById;
+  /** Each span's trace property values, by span id (`lib/ingest/properties`). Absent, none. */
+  properties?: ReadonlyMap<string, Readonly<Record<string, string>>>;
 }
 
 export function toOtelSpanRows(
@@ -255,6 +259,7 @@ export function toOtelSpanRows(
       ...sessionAndUser(span, byId),
       events: events.value,
       links: links.value,
+      properties: propertiesOf(options.properties, span.spanId),
     } satisfies NewOtelSpan;
   });
 }
@@ -273,6 +278,15 @@ function sessionAndUser(
     sessionId: session?.slice(0, MAX_ID) ?? null,
     endUserId: resolveUp(span, byId, USER_KEYS)?.slice(0, MAX_ID) ?? null,
   };
+}
+
+/** The span's trace property values; null when it has none. */
+function propertiesOf(
+  values: OtelSpanRowOptions["properties"],
+  spanId: string,
+): Record<string, string> | null {
+  const own = values?.get(spanId);
+  return own ? { ...own } : null;
 }
 
 /**

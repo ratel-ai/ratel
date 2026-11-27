@@ -17,6 +17,12 @@ export interface PlanLimits {
   agentHealthEvidenceTurns: number;
   agentHealthWindowDays: number;
   toolPickerMonthlyAllowanceUsd: number;
+  /**
+   * How many trace properties of its own (not standard ones) a project may index (RTL-395). Zero:
+   * indexing is not on the plan. Optional so an edition built against an older core still
+   * type-checks; absent, it reads as zero. Core caps it at 20 whatever the plan answers.
+   */
+  maxIndexedPropertiesPerProject?: number;
 }
 
 /**

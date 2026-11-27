@@ -12,6 +12,7 @@ import {
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
+import { propertyIngest } from "@/lib/ingest/properties/ingest";
 import type { IngestQueueAcceptDeps } from "@/lib/ingest/queue/accept";
 import type { IngestPersistDeps } from "@/lib/ingest/queue/persist";
 import {
@@ -107,6 +108,7 @@ export function ingestPersistDeps(): IngestPersistDeps {
       genAiLogs,
       otlpRawCapture,
       locate: geoIngest.locate,
+      properties: propertyIngest.capture,
       modelPricing,
       trackServerEvent,
     },

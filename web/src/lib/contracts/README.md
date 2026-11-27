@@ -27,7 +27,7 @@ edition also `experimentalFeatures`). With it, the edition decides each switch p
 project and person; a forced value still comes first, and a failed read is off. The core reads switches through `featureEnabled` (`lib/platform/experimental-features.ts`),
 and `get_flag_status` reports what it returns.
 
-`entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
+`entitlements.ts` is what an organization may have and use (`maxIndexedPropertiesPerProject`, optional: the trace properties of its own a project may index, RTL-395; absent reads as none). Its optional `plans` is the plan
 table of an edition that sells plans: the organization's plan and subscription state
 (`summary`), the cheapest plan whose Agent health window reaches a number of days, the cheapest
 that shows Agent health in full (optional, named by the locks), and a plan's name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.

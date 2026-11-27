@@ -16,6 +16,7 @@ history holds the earlier records and how they changed.
 | [0009](0009-queued-ingest.md) | Ingest accepts a batch fast and a fair queue persists it |
 | [0010](0010-kafka-ingest.md) | A worker stores the telemetry that a gateway put on Kafka, with `INGEST_QUEUE=kafka` |
 | [0011](0011-rql-query-language.md) | RQL (Ratel Query Language): a neutral read-only query language, behind two walls (0010 is kept for the model vendors record of PR #442) |
+| [0012](0012-trace-properties-storage.md) | Trace properties: key names per project, values in one jsonb column with one shared GIN index |
 
 The SDK decisions (engine, retrieval, bindings, adapters, rankers, releases) belong to
 [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), where that code lives.

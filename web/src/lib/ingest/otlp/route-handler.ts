@@ -133,6 +133,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
   /** Where each span comes from (`lib/ingest/geo`); absent, no span is located. */
   locate?: PersistSpansDeps["locate"];
+  /** The trace properties (`lib/ingest/properties`); absent, no key is recorded and no value stored. */
+  properties?: PersistSpansDeps["properties"];
   /** The same for an export that is queued: what must not be stored, taken out of its body. */
   redact?: (
     projectId: string,

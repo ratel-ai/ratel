@@ -182,6 +182,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // The improvement loop (RC-43). run_eval mutates: the
   // eval gate (RC-46) records each simulation it runs.
   ["list_tasks", false],
+  ["list_trace_properties", false],
   ["get_task", false],
   ["list_insights", false],
   ["list_fixes", false],
@@ -205,6 +206,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["get_scorer", false],
   ["test_scorer", true],
   ["change_scorer", true],
+  ["change_trace_property", true],
   ["list_alerts", false],
   ["get_alert", false],
   ["change_alert", true],

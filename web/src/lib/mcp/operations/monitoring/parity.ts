@@ -18,12 +18,14 @@ export const ACTION_FILES = {
   ],
   slack: ["lib/views/slack/*actions.ts", "lib/views/slack/install.ts"],
   locations: ["lib/ingest/geo/actions.ts"],
+  properties: ["lib/ingest/properties/actions.ts"],
   console: [
     "app/(console)/project/[projectId]/scorers/*actions.ts",
     "app/(console)/project/[projectId]/alerts/*actions.ts",
     "app/(console)/project/[projectId]/dashboards/*actions.ts",
     "app/(console)/project/[projectId]/overview-actions.ts",
     "app/(console)/project/[projectId]/settings/geo-actions.ts",
+    "app/(console)/project/[projectId]/settings/property-actions.ts",
     "app/(console)/project/[projectId]/settings/notifications/*actions.ts",
     "app/(console)/org/[orgSlug]/settings/slack/*actions.ts",
   ],
@@ -60,9 +62,12 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "lib/views/slack/install.ts#finishInstall": CONSENT,
 
   "lib/ingest/geo/actions.ts#changeGeoAttributes": "change_location_attributes",
+  "lib/ingest/properties/actions.ts#changeTraceProperty": "change_trace_property",
 
   "app/(console)/project/[projectId]/settings/geo-actions.ts#saveGeoAttributesAction":
     "change_location_attributes",
+  "app/(console)/project/[projectId]/settings/property-actions.ts#changeTracePropertyAction":
+    "change_trace_property",
   "app/(console)/project/[projectId]/scorers/actions.ts#changeScorerAction": "change_scorer",
   "app/(console)/project/[projectId]/scorers/actions.ts#testScorerAction": "test_scorer",
   "app/(console)/project/[projectId]/scorers/actions.ts#countScorerTracesAction": "test_scorer",
@@ -121,6 +126,10 @@ export const CHANGES: Readonly<
       attach: "attach",
       detach: "detach",
     },
+  },
+  "lib/ingest/properties/actions.ts": {
+    operation: "change_trace_property",
+    actions: { index: "index", stop: "stop", erase: "erase" },
   },
   "lib/views/alerts/actions.ts": {
     operation: "change_alert",

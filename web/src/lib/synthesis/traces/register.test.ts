@@ -13,8 +13,8 @@ const result = (spansScanned: number): TraceSummaryRefreshResult => ({
   lockContended: false,
 });
 
-test("traces register the raw prune, then the refresh between upstream's retention prunes, and no job", () => {
-  assert.deepEqual(Object.keys(tracesRegistration.jobs ?? {}), []);
+test("traces register the raw prune, then the refresh between upstream's retention prunes, and the property fill job", () => {
+  assert.deepEqual(Object.keys(tracesRegistration.jobs ?? {}), ["fill_trace_properties"]);
   assert.deepEqual(
     (tracesRegistration.drainSteps ?? []).map((s) => [s.name, s.phase, s.retentionOnly ?? false]),
     [
