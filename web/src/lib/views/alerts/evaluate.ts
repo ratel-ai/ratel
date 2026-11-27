@@ -4,6 +4,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { supplementaryReadTimeoutMs } from "@/lib/platform/db/statement-timeout";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { runQuery } from "@/lib/synthesis/metrics/query";
 import {
@@ -111,7 +112,7 @@ async function dueRules(
   const rows = await db
     .select({ id: alertRules.id, projectId: alertRules.projectId })
     .from(alertRules)
-    .where(dueAt(now))
+    .where(and(dueAt(now), notOnHold(alertRules.projectId)))
     .orderBy(sql`${alertRules.lastEvaluatedAt} asc nulls first`, asc(alertRules.id));
   const flags = new Map<string, boolean>();
   for (const { projectId } of rows)

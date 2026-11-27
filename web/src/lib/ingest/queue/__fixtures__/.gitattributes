@@ -1,0 +1,3 @@
+# Byte-exact contract: no line-ending conversion.
+*.bin binary
+*.json text eol=lf

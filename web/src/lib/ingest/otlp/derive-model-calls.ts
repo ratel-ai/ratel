@@ -94,7 +94,10 @@ function nearest<T>(
 }
 
 /** Every model round trip in the export as an `otlp_model_call` row. */
-export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
+export function deriveModelCalls(
+  spans: readonly DecodedSpan[],
+  receivedAt?: Date,
+): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
   const models = spans.filter((span) => span.spanId && span.traceId && isModelRoundTrip(span));
   const wrappers = wrappingModelSpans(models, byId);
@@ -102,7 +105,7 @@ export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEven
   for (const span of models) {
     if (wrappers.has(span.spanId)) continue;
     const session = resolveUp(span, byId, SESSION_KEYS);
-    const startOk = plausibleOccurredAt(span.startUnixMs);
+    const startOk = plausibleOccurredAt(span.startUnixMs, receivedAt);
     const tookMs = startOk ? Math.max(0, Math.round(span.endUnixMs - span.startUnixMs)) : null;
     // Some frameworks (Mastra) put the menu and the messages on the agent or
     // step span around the model call rather than on the call itself.
@@ -126,7 +129,7 @@ export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEven
       type: OTLP_MODEL_CALL,
       schemaVersion: 1,
       sessionId: (session ?? span.traceId).slice(0, MAX_ID),
-      occurredAt: startOk ?? new Date(),
+      occurredAt: startOk ?? receivedAt ?? new Date(),
       toolId: null,
       skillId: null,
       query: null,

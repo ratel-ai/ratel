@@ -60,6 +60,8 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
  *
  * `beforeExit` runs between the last step and the exit: the self-telemetry flush, when this
  * process exports its own traces and logs. A failure there never keeps the process alive.
+ * `beside` runs next to the loop and is stopped with it, before that flush: the ingest queue's
+ * consumer, which finishes the message in hand.
  */
 export function startBackgroundWorker(
   deps: BackgroundWorkerDeps = defaultDeps(),
@@ -67,6 +69,8 @@ export function startBackgroundWorker(
     beforeExit?: () => Promise<void>;
     /** A persist-only process (APP_ROLE=persist): the registrations' lanes and nothing else. */
     lanesOnly?: boolean;
+    /** Runs next to the loop and is stopped with it (the Kafka consumer). */
+    beside?: WorkerHandle;
   } = {},
 ): WorkerHandle {
   const globals = globalThis as Record<symbol, WorkerHandle | undefined>;
@@ -91,13 +95,19 @@ export function startBackgroundWorker(
   const report =
     topQueries && !lanesOnly ? setInterval(() => void topQueries(), TOP_QUERIES_EVERY_MS) : null;
   report?.unref();
+  const stopBeside = async () => {
+    try {
+      await options.beside?.stop();
+    } catch (error) {
+      deps.warn({ error: String(error) }, "worker stop failed");
+    }
+  };
   let stopping = false;
   const stop = () => {
     if (stopping) return deps.exit(1);
     stopping = true;
     if (report) clearInterval(report);
-    void handle
-      .stop()
+    void Promise.all([handle.stop(), stopBeside()])
       .then(async () => {
         try {
           await options.beforeExit?.();

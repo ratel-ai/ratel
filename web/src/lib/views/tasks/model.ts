@@ -4,7 +4,12 @@ import type {
   StoredWorkflow,
   StoredWorkflows,
 } from "@/lib/readings/trace-signals/signals/workflow-stored";
-import type { UnservedAskView } from "@/lib/readings/trace-signals/view";
+import {
+  parseWindowDays,
+  type UnservedAskView,
+  WINDOW_DAY_OPTIONS,
+  type WindowDays,
+} from "@/lib/readings/trace-signals/view";
 import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide";
 import { taskFinish } from "@/lib/readings/trace-signals/workflows/finish";
 import { runsInFixedOrder } from "@/lib/readings/trace-signals/workflows/fixed-order";
@@ -72,6 +77,23 @@ export const CORRECTION_KINDS = [
 export type CorrectionKind = (typeof CORRECTION_KINDS)[number];
 export type CorrectionCounts = Partial<Record<CorrectionKind, number>>;
 
+/** The Self-corrections page's headline counts over one of its windows. */
+export interface ProjectCorrections {
+  windowDays: WindowDays;
+  turns: number;
+  events: number;
+}
+
+/**
+ * The Self-corrections window the tile reads and opens: the longest the page
+ * offers that fits in the tasks reading's window, within what the plan lets
+ * the page show (the page clamps a longer one, and the two would differ).
+ */
+export function correctionsWindowFor(readingDays: number, planDays: number): WindowDays {
+  const fits = WINDOW_DAY_OPTIONS.filter((days) => days <= readingDays).at(-1);
+  return parseWindowDays(fits === undefined ? undefined : String(fits), planDays);
+}
+
 /** Self-corrections recorded per task, when the project has any rows at all. */
 export interface RecordedCorrections {
   byTask: ReadonlyMap<string, CorrectionCounts>;
@@ -112,6 +134,13 @@ export interface TasksInputs {
   fixes: readonly TaskFixSource[];
   /** Null until the self-corrections job has written a row for the project. */
   recorded: RecordedCorrections | null;
+  /**
+   * The project's self-corrections as the Self-corrections page counts them
+   * (every closed turn ending in `windowDays`, placed in a task or not), for
+   * the list's tile; null when the page has no reading, it was not read, or
+   * the caller shows no tile (`selfCorrectionsTile`).
+   */
+  projectCorrections: ProjectCorrections | null;
   /** Null until topics have been assigned for the project. */
   topics: ReadonlyMap<string, readonly TaskTopic[]> | null;
   price: RoundTripPrice | null;
@@ -142,6 +171,7 @@ interface TaskCore {
   finishRate: number | null;
   weakest: WeakestStep | null;
   corrections: { events: number; byKind: CorrectionCounts; source: "recorded" | "steps" } | null;
+  /** Per 100 of the task's turns (a run is one turn). */
   correctionsPer100: number | null;
   status: TaskStatus;
   watch: WatchReason | null;
@@ -348,7 +378,7 @@ export function statusLine(
   if (core.watch === "step" && core.weakest)
     return `${core.weakest.label} fails ${formatPercentWhole(core.weakest.failureShare)} of its calls.`;
   if (core.watch === "corrections" && core.correctionsPer100 !== null) {
-    return `The agent corrects itself ${Math.round(core.correctionsPer100)} times per 100 runs.`;
+    return `The agent corrects itself ${Math.round(core.correctionsPer100)} times per 100 turns.`;
   }
   return finish ? `Finishes ${finish} of its runs.` : "No runs in this window.";
 }
@@ -411,7 +441,13 @@ export interface TaskListModel {
     runsInTasks: number;
     allRuns: number;
     finishRate: number | null;
+    /**
+     * The project's self-corrections per 100 turns, the Self-corrections
+     * page's headline over `correctionsWindowDays`; null without its reading.
+     */
     correctionsPer100: number | null;
+    /** The page window that rate is read over, to open the page on it. */
+    correctionsWindowDays: WindowDays | null;
     /** Recorded self-corrections (every kind) rather than the ones read from steps. */
     correctionsRecorded: boolean;
   };
@@ -435,6 +471,11 @@ export interface TaskFixesOption {
   fixes?: readonly TaskFixLike[] | null;
 }
 
+/** Per 100 turns, as the Self-corrections page's headline: null without a turn. */
+function projectRate(counts: ProjectCorrections | null): number | null {
+  return counts && counts.turns > 0 ? (counts.events * 100) / counts.turns : null;
+}
+
 export function buildTaskList(inputs: TasksInputs, options: TaskFixesOption = {}): TaskListModel {
   const { cores, stored } = coresOf(inputs);
   const label = nameOf(inputs.names);
@@ -445,9 +486,6 @@ export function buildTaskList(inputs: TasksInputs, options: TaskFixesOption = {}
   const runsInTasks = cores.reduce((sum, core) => sum + core.runs, 0);
   const finished = cores.reduce((sum, core) => sum + core.finishedRuns, 0);
   const finishOf = cores.reduce((sum, core) => sum + core.runs + core.askedNoTool, 0);
-  const counted = cores.filter((core) => core.corrections !== null);
-  const correctionRuns = counted.reduce((sum, core) => sum + core.runs, 0);
-  const correctionEvents = counted.reduce((sum, core) => sum + (core.corrections?.events ?? 0), 0);
   const rows: TaskRow[] = [...cores]
     .sort(
       (a, b) =>
@@ -492,7 +530,8 @@ export function buildTaskList(inputs: TasksInputs, options: TaskFixesOption = {}
       runsInTasks,
       allRuns,
       finishRate: finishOf > 0 ? finished / finishOf : null,
-      correctionsPer100: correctionRuns > 0 ? (correctionEvents * 100) / correctionRuns : null,
+      correctionsPer100: projectRate(inputs.projectCorrections),
+      correctionsWindowDays: inputs.projectCorrections?.windowDays ?? null,
       correctionsRecorded: inputs.recorded !== null,
     },
     rows,
@@ -536,6 +575,7 @@ export interface CorrectionRow {
   kind: CorrectionKind;
   label: string;
   count: number;
+  /** Per 100 of the task's turns. */
   per100: number | null;
 }
 
@@ -600,6 +640,7 @@ export interface TaskDetailModel {
     source: "recorded" | "steps";
     rows: CorrectionRow[];
     total: number;
+    /** Per 100 of the task's turns. */
     per100: number | null;
   } | null;
   issues: IssueView[];

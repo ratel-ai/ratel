@@ -10,6 +10,7 @@ assets/                           Images and other static assets
 schemas/                          JSON Schemas of the platform's documents
 geography.md                      Where traces come from: the map widget and its data
 baseline-capture-distributed.md   Collecting seeding evidence from a multi-instance host
+internal-api.md                   The service-to-service routes, off by default
 ```
 
 ## Guides

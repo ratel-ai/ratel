@@ -39,9 +39,12 @@ const INT4_MAX = 2_147_483_647;
 const STATUS_ERROR = 2;
 
 /** Every `invoke_agent` root span of the export as an `agent_run` row. */
-export function deriveAgentRuns(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
+export function deriveAgentRuns(
+  spans: readonly DecodedSpan[],
+  receivedAt?: Date,
+): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
-  return spans.filter(isAgentRunRoot).map((span) => agentRunRow(span, byId));
+  return spans.filter(isAgentRunRoot).map((span) => agentRunRow(span, byId, receivedAt));
 }
 
 function isAgentRunRoot(span: DecodedSpan): boolean {
@@ -52,8 +55,12 @@ function isAgentRunRoot(span: DecodedSpan): boolean {
   );
 }
 
-function agentRunRow(span: DecodedSpan, byId: ReadonlyMap<string, DecodedSpan>): ParsedTraceEvent {
-  const startOk = plausibleOccurredAt(span.startUnixMs);
+function agentRunRow(
+  span: DecodedSpan,
+  byId: ReadonlyMap<string, DecodedSpan>,
+  receivedAt: Date | undefined,
+): ParsedTraceEvent {
+  const startOk = plausibleOccurredAt(span.startUnixMs, receivedAt);
   const tookMs = startOk ? Math.max(0, Math.round(span.endUnixMs - span.startUnixMs)) : null;
   const errorType = runErrorType(span);
   const ask = promptOf(span.attributes);
@@ -70,7 +77,7 @@ function agentRunRow(span: DecodedSpan, byId: ReadonlyMap<string, DecodedSpan>):
     type: AGENT_RUN_EVENT_TYPE,
     schemaVersion: 1,
     sessionId: (resolveUp(span, byId, SESSION_KEYS) ?? span.traceId).slice(0, MAX_ID),
-    occurredAt: startOk ?? new Date(),
+    occurredAt: startOk ?? receivedAt ?? new Date(),
     toolId: null,
     skillId: null,
     query: null,

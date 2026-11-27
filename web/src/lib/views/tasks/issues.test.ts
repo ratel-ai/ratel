@@ -116,7 +116,7 @@ test("one row per kind: the task's own issue keeps the row, the same kind on its
     kind: "self_correcting",
     family: "correcting",
     title: "Agent keeps correcting itself",
-    figure: { display: "12", caption: "per 100 runs" },
+    figure: { display: "12", caption: "per 100 turns" },
     claim: "",
     fix: "",
     tools: [],

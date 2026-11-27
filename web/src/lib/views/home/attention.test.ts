@@ -63,7 +63,7 @@ const SPLIT: ContextSplit = {
 };
 
 test("nothing to say is an empty list", () => {
-  assert.deepEqual(buildAttention(input()), { items: [], moreIssues: 0 });
+  assert.deepEqual(buildAttention(input()), { items: [], moreIssues: 0, healthLock: null });
 });
 
 test("failing runs lead once there are enough of them, as a share with its count", () => {
@@ -313,4 +313,47 @@ test("titles and captions speak the product's nouns", () => {
       /workflow|topic|suggestion|signal/i,
     );
   }
+});
+
+test("while Agent health is locked, its issues are not listed and the lock says how far it is", () => {
+  const healthLock = { unlocked: false as const, turns: 36, floor: 50 };
+  const attention = buildAttention(
+    input({
+      errors: { count: 9, total: 60, href: "/traces?errorOnly=1" },
+      issues: [issue("a", "error_loop"), issue("b", "latency_outlier")],
+      lockedIssues: 3,
+      healthLock,
+    }),
+  );
+  assert.deepEqual(
+    attention.items.map((item) => item.key),
+    ["errors"],
+  );
+  assert.equal(attention.moreIssues, 0);
+  assert.deepEqual(attention.healthLock, healthLock);
+});
+
+test("rows that open other pages stay while Agent health is locked", () => {
+  const { items } = buildAttention(
+    input({
+      issues: [issue("a", "error_loop")],
+      healthLock: { unlocked: false, turns: 12, floor: 50 },
+      pendingRewrites: { count: 2, href: "/fixes" },
+      contextSuggestions: [{ source: "tools", severity: "high" }],
+      contextSplit: SPLIT,
+    }),
+  );
+  assert.deepEqual(
+    items.map((item) => item.key),
+    ["rewrites", "context:tools"],
+  );
+});
+
+test("an open Agent health lists its issues and carries no lock", () => {
+  const attention = buildAttention(input({ issues: [issue("a", "error_loop")], healthLock: null }));
+  assert.deepEqual(
+    attention.items.map((item) => item.key),
+    ["issue:a"],
+  );
+  assert.equal(attention.healthLock, null);
 });
