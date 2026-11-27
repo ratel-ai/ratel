@@ -1,6 +1,16 @@
 import type { Member } from "@/lib/console/scope/member-access";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
+import type { ComparisonResult } from "./baseline";
 import { approvedVersion, type CaseVersion, draftVersion, type EvalCase } from "./domain/case";
+import {
+  type CaseChange,
+  type CaseSide,
+  type ComparedCase,
+  changedCases,
+  otherCases,
+  type ScorerDifference,
+  type Verdict,
+} from "./domain/compare";
 import {
   type Counts,
   countTrials,
@@ -135,7 +145,7 @@ export function experimentPageModel(
     counts: countTrials(trials),
     cases: caseCounts(experiment, trials).map((row) => ({
       ...row,
-      trials: (byCase.get(row.versionId) ?? []).map(({ experimentId: _, ...trial }) => trial),
+      trials: trialViews(byCase.get(row.versionId)),
     })),
   };
 }
@@ -145,4 +155,112 @@ export function readyVersions(versions: readonly SandboxVersionSummary[]): Ready
   return versions
     .filter(({ status }) => status === "ready")
     .map(({ id, name, git }) => ({ id, name, commit: git.commit }));
+}
+
+/** One of the two experiments of a comparison. */
+export type ComparedExperiment = {
+  id: string;
+  sandboxName: string;
+  commit: string;
+  dirty: boolean;
+};
+export type ComparedCaseSide = CaseSide & {
+  /** Of the trials that have one. Null when none has. */
+  costUsd: number | null;
+  meanDurationMs: number | null;
+  trials: TrialView[];
+};
+export type ComparedCaseRow = {
+  caseId: string;
+  name: string;
+  change: CaseChange;
+  baseline: ComparedCaseSide | null;
+  candidate: ComparedCaseSide | null;
+};
+export type ComparePageModel = { projectId: string; experimentId: string } & (
+  | {
+      ok: true;
+      verdict: Verdict;
+      rule: string;
+      baseline: ComparedExperiment;
+      candidate: ComparedExperiment;
+      pinnedBy: string;
+      pinnedAt: string;
+      changed: ComparedCaseRow[];
+      others: ComparedCaseRow[];
+    }
+  | {
+      ok: false;
+      reason: string;
+      message: string;
+      scorers: ScorerDifference[];
+      /** Null: no baseline is pinned. */
+      baselineId: string | null;
+    }
+);
+
+export function comparePageModel(
+  ids: { projectId: string; experimentId: string },
+  result: ComparisonResult,
+  /** The identity of the reader, to say "you". */
+  reader: string,
+): ComparePageModel {
+  if (!result.ok) {
+    const { pin, ...refusal } = result.refusal;
+    return { ...ids, ok: false, ...refusal, baselineId: pin?.experimentId ?? null };
+  }
+  const { pin, baseline, candidate, comparison } = result;
+  const before = trialsByCase(baseline.trials);
+  const after = trialsByCase(candidate.trials);
+  const row = (compared: ComparedCase): ComparedCaseRow => ({
+    ...compared,
+    baseline: comparedSide(compared.baseline, before),
+    candidate: comparedSide(compared.candidate, after),
+  });
+  return {
+    ...ids,
+    ok: true,
+    verdict: comparison.verdict,
+    rule: comparison.rule,
+    baseline: comparedExperiment(baseline.experiment),
+    candidate: comparedExperiment(candidate.experiment),
+    pinnedBy: personOf(pin.pinnedBy, reader),
+    pinnedAt: pin.pinnedAt.toISOString(),
+    changed: changedCases(comparison).map(row),
+    others: otherCases(comparison).map(row),
+  };
+}
+
+function comparedSide(
+  side: CaseSide | null,
+  byCase: ReadonlyMap<string, Trial[]>,
+): ComparedCaseSide | null {
+  if (!side) return null;
+  const trials = byCase.get(side.versionId) ?? [];
+  const costs = trials.flatMap(({ costUsd }) => (costUsd === null ? [] : [costUsd]));
+  const durations = trials.flatMap(({ durationMs }) => (durationMs === null ? [] : [durationMs]));
+  return {
+    ...side,
+    costUsd: costs.length > 0 ? sum(costs) : null,
+    meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
+    trials: trialViews(trials),
+  };
+}
+
+function comparedExperiment(experiment: Experiment): ComparedExperiment {
+  const { id, sandboxName, gitCommit, gitDirty } = experiment;
+  return { id, sandboxName, commit: gitCommit, dirty: gitDirty };
+}
+
+function trialViews(trials: readonly Trial[] = []): TrialView[] {
+  return trials.map(({ experimentId: _, ...trial }) => trial);
+}
+
+function personOf(pinnedBy: string, reader: string): string {
+  if (pinnedBy === reader) return "you";
+  return pinnedBy.startsWith("key:") ? "a project key" : "a member";
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
 }

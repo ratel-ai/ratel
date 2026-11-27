@@ -25,13 +25,16 @@ export type ExperimentsApiDeps = {
   publicUrl: (path: string) => string;
 };
 
-export type KeyDeps = ExperimentsApiDeps & {
+/** Who may call the routes of a project key. */
+export type KeyAccess = {
   /** True when no project of the deployment can have the flag: the route then answers 404 first. */
   offForAll: () => boolean;
   authenticate: () => Promise<ResolvedApiKeyProject>;
   enabled: (projectId: string) => Promise<boolean>;
   organizationIdOf: (projectId: string) => Promise<string | null>;
 };
+
+export type KeyDeps = ExperimentsApiDeps & KeyAccess;
 
 export type ConsoleDeps = ExperimentsApiDeps & MemberAccessDeps;
 
@@ -154,8 +157,8 @@ async function get(
   return reply(200, experimentView(experiment, trials, urlOf(experiment, deps)));
 }
 
-async function forKey(
-  deps: KeyDeps,
+export async function forKey(
+  deps: KeyAccess,
   operation: string,
   work: (subject: UsageSubject, apiKeyId: string) => Promise<Response>,
 ): Promise<Response> {
@@ -171,11 +174,14 @@ async function forKey(
   });
 }
 
-function urlOf({ projectId, id }: Experiment, deps: ExperimentsApiDeps): string {
+export function urlOf(
+  { projectId, id }: Pick<Experiment, "projectId" | "id">,
+  deps: Pick<ExperimentsApiDeps, "publicUrl">,
+): string {
   return deps.publicUrl(`/project/${projectId}/evals/experiments/${id}`);
 }
 
-async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request): Promise<unknown> {
   const text = await request.text().catch(() => "");
   if (text.length > MAX_BODY_CHARS) return null;
   try {
@@ -185,6 +191,6 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-function notFound(): Response {
+export function notFound(): Response {
   return refuse(404, "not_found", "Not found.");
 }

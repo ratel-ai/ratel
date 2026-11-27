@@ -5,6 +5,8 @@ import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
+import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { experimentPageModel } from "@/lib/views/evals/page-model";
@@ -32,16 +34,31 @@ export default async function ExperimentPage({
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const model = await withFeatureSpan(
+  const loaded = await withFeatureSpan(
     "evals",
     "load_experiment",
     async () => {
-      const store = createDrizzleExperimentStore(getDb());
+      const db = getDb();
+      const store = createDrizzleExperimentStore(db);
       const found = UUID.test(experimentId) ? await store.get(project.id, experimentId) : null;
-      return found && experimentPageModel(found, await store.trials(found.id));
+      if (!found) return null;
+      const [trials, baseline] = await Promise.all([
+        store.trials(found.id),
+        createDrizzleBaselineStore(db).get(project.id),
+      ]);
+      return { model: experimentPageModel(found, trials), baseline };
     },
     { attributes: { "project.id": project.id } },
   );
-  if (!model) notFound();
-  return <ExperimentView model={model} now={new Date().toISOString()} />;
+  if (!loaded) notFound();
+  const { model, baseline } = loaded;
+  const pinned = baseline?.experimentId === model.id ? "this" : "other";
+  return (
+    <ExperimentView
+      model={model}
+      baseline={baseline ? pinned : "none"}
+      canEdit={!(await isRestrictedBySupportSession())}
+      now={new Date().toISOString()}
+    />
+  );
 }

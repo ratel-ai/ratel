@@ -113,6 +113,8 @@ export const SERVER_EVENT_NAMES = [
   "eval_case_approved",
   "eval_experiment_started",
   "eval_experiment_finished",
+  "eval_baseline_pinned",
+  "eval_baseline_unpinned",
   "mcp_servers_viewed",
   "agents_viewed",
   "feature.scorers.changed",

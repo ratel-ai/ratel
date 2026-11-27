@@ -20,6 +20,7 @@ export function EvalsView({
   canEdit,
   cases,
   experiments,
+  baselineId,
   versions,
   now,
   children,
@@ -28,6 +29,7 @@ export function EvalsView({
   canEdit: boolean;
   cases: CaseRow[];
   experiments: ExperimentRow[];
+  baselineId: string | null;
   versions: ReadyVersion[];
   /** ISO time the page was rendered, so relative times agree on server and client. */
   now: string;
@@ -58,7 +60,12 @@ export function EvalsView({
             approved={cases.filter(({ approved }) => approved !== null).length}
           />
         ) : null}
-        <ExperimentList projectId={projectId} experiments={experiments} now={now} />
+        <ExperimentList
+          projectId={projectId}
+          experiments={experiments}
+          baselineId={baselineId}
+          now={now}
+        />
         <Section title="Cases" description="Only an approved case counts in an eval run.">
           {cases.length === 0 ? (
             <EmptyState

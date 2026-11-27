@@ -17,10 +17,12 @@ const RESULTS: Array<{ key: keyof Counts; label: string; tone: Tone }> = [
 export function ExperimentList({
   projectId,
   experiments,
+  baselineId,
   now,
 }: {
   projectId: string;
   experiments: ExperimentRow[];
+  baselineId: string | null;
   now: string;
 }) {
   if (experiments.length === 0) return null;
@@ -39,6 +41,7 @@ export function ExperimentList({
               {row.sandboxName} · {row.commit.slice(0, 12)}
             </Link>
             <StateBadge state={row.state} />
+            {row.id === baselineId ? <Badge tone="accent">Baseline</Badge> : null}
             <CountBadges counts={row.counts} />
             <span className="ml-auto text-xs text-fg-subtle" title={row.createdAt}>
               {formatRelativeTime(row.createdAt, now)}

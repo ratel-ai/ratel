@@ -345,7 +345,9 @@ test("no route changes an experiment", () => {
         }),
   );
   assert.deepEqual(methods.sort(), [
+    "GET projects/[projectId]/evals/experiments/[experimentId]/comparison/route.ts",
     "GET projects/[projectId]/evals/experiments/trials/[trialId]/route.ts",
+    "GET v1/evals/experiments/[experimentId]/comparison/route.ts",
     "GET v1/evals/experiments/[experimentId]/route.ts",
     "GET v1/evals/experiments/route.ts",
     "POST projects/[projectId]/evals/experiments/route.ts",
