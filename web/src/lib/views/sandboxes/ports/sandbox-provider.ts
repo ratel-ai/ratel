@@ -126,9 +126,9 @@ export class ProviderRefused extends Error {
 
 /** Why the service refused the account, by its HTTP status, in words that name no provider. */
 const ACCOUNT_REFUSALS: Readonly<Record<number, string>> = {
-  401: "the Ratel sandbox account key is not valid",
-  402: "the Ratel sandbox account is not active",
-  403: "the Ratel sandbox account lacks a permission",
+  401: "the sandbox account key is not valid",
+  402: "the sandbox account is not active",
+  403: "the sandbox account lacks a permission",
 };
 
 /**

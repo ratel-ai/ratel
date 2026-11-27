@@ -358,8 +358,8 @@ test("a prepare VM that does not start keeps its counted start, and records no u
 
 test("a refusal of the sandbox service fails the version with a reason that names no provider and gives no retry advice", async () => {
   const cases: Array<[number, string]> = [
-    [402, "The sandbox service refused the request: the Ratel sandbox account is not active."],
-    [403, "The sandbox service refused the request: the Ratel sandbox account lacks a permission."],
+    [402, "The sandbox service refused the request: the sandbox account is not active."],
+    [403, "The sandbox service refused the request: the sandbox account lacks a permission."],
   ];
   for (const [status, reason] of cases) {
     const t = await setup();
@@ -387,7 +387,7 @@ test("a smoke VM that does not start fails the version, and its snapshot is dele
   };
   assert.deepEqual(await t.run({ provider }), { status: "failed" });
   const failed = await t.read();
-  assert.match(failed.reason ?? "", /as many machines as it can/);
+  assert.match(failed.reason ?? "", /as many machines as they can/);
   assert.equal(failed.imageRef, null);
   assert.deepEqual(t.provider.deletedSnapshots, [snapshotName("test-deployment", t.version.id)]);
   assert.equal(t.provider.vms.size, 0);
@@ -598,7 +598,7 @@ test("a rate limit or a full account gives a reason to push again, with no provi
   const errors: Array<[Error, RegExp]> = [
     [new ProviderRateLimited("boat: 429", 30), /Push again in 30 s\./],
     [new ProviderRateLimited("boat: 429", null), /Push again in a minute\./],
-    [new ProviderAtCapacity("boat: full"), /as many machines as it can/],
+    [new ProviderAtCapacity("boat: full"), /as many machines as they can/],
   ];
   for (const [error, reason] of errors) {
     const t = await setup();

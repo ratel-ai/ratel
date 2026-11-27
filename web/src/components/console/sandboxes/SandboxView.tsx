@@ -1,42 +1,37 @@
 "use client";
 
-import { CodeBlock } from "@ratel/design-system/code";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
-import { Section } from "@ratel/design-system/section";
-import { Callout } from "@ratel/design-system/states";
+import { Select } from "@ratel/design-system/select";
+import { TabNav } from "@ratel/design-system/tabs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import type { SandboxPageModel } from "@/lib/views/sandboxes/page-model";
+import type { SandboxDetailModel } from "@/lib/views/sandboxes/page-model";
+import { type SandboxSection, sandboxesHref, sandboxHref } from "@/lib/views/sandboxes/paths";
 import { SandboxRunOnce } from "./SandboxRunOnce";
 import { SandboxSecrets } from "./SandboxSecrets";
-import { SandboxVersions } from "./SandboxVersions";
+import { SandboxVersions, VersionConfiguration } from "./SandboxVersions";
+import { ProblemsCallout, VERSION_STATUS } from "./sandbox-status";
 
 const REFRESH_MS = 3_000;
-/** A short `ratel.yaml`: what a version declares, so the run panel can show it. */
-const RATEL_YAML = `name: support-agent
-image:
-  dockerfile: Dockerfile
-input:
-  example: { message: "Where is my order 7?" }
-params:
-  model:
-    type: enum
-    options: [small, large]
-    default: small
-tools:
-  refund_order: { mode: simulated }
-secrets: [OPENAI_API_KEY]`;
+const SECTIONS: ReadonlyArray<{ section: SandboxSection; label: string }> = [
+  { section: "playground", label: "Playground" },
+  { section: "versions", label: "Versions" },
+  { section: "secrets", label: "Secrets" },
+  { section: "configuration", label: "Configuration" },
+];
 
-/** The Ratel sandbox page: a run by hand first, then the push, the versions and the secrets. */
+/** One sandbox: its name, its sections as tabs, and the section of this address. */
 export function SandboxView({
   model,
-  ratelUrl,
+  section,
+  configurationVersionId = null,
   canSaveCases = false,
   now,
 }: {
-  model: SandboxPageModel;
-  /** The address that a push goes to. */
-  ratelUrl: string;
+  model: SandboxDetailModel;
+  section: SandboxSection;
+  /** The version that Configuration shows. Null: the newest. */
+  configurationVersionId?: string | null;
   /** Whether a run can be saved as an eval case: evals on and a write allowed. */
   canSaveCases?: boolean;
   /** ISO time the page was rendered, so relative times agree on server and client. */
@@ -56,60 +51,71 @@ export function SandboxView({
   return (
     <Page>
       <PageHeader
-        title="Ratel sandbox"
-        description="Ratel builds your agent from your repository and runs it. A tool with side effects does not run for real."
+        title={model.name}
+        crumbs={[{ label: "Sandboxes", href: sandboxesHref(model.projectId) }]}
+        tabs={
+          <TabNav
+            label="Sandbox sections"
+            tabs={SECTIONS.map(({ section: tab, label }) => ({
+              href: sandboxHref(model.projectId, model.name, tab),
+              label,
+              exact: tab === "playground",
+            }))}
+          />
+        }
       />
       <PageBody>
-        {model.problems.length > 0 ? (
-          <Callout
-            tone="warning"
-            title={
-              model.configured
-                ? "A setting of this server is missing"
-                : "Ratel sandbox is not configured"
-            }
-          >
-            <ul className="flex flex-col gap-1">
-              {model.problems.map((problem) => (
-                <li key={problem.setting}>
-                  <code className="font-mono text-xs font-medium">{problem.setting}</code>
-                  {": "}
-                  {problem.message}
-                </li>
-              ))}
-            </ul>
-          </Callout>
-        ) : null}
-        <SandboxRunOnce
-          projectId={model.projectId}
-          versions={model.versions}
-          runs={model.runs}
-          canSaveCases={canSaveCases}
-          configured={model.configured}
-          now={now}
-        />
-        <Section
-          title="Push"
-          description="Run this in the folder of your agent, next to ratel.yaml. Each push makes a new version."
-        >
-          <CodeBlock
-            samples={[
-              {
-                label: "Shell",
-                code: `export RATEL_BASE_URL=${ratelUrl}/api/v1\nexport RATEL_API_KEY=<a key with full access>\nratel push`,
-              },
-              { label: "ratel.yaml", code: RATEL_YAML },
-            ]}
+        <ProblemsCallout model={model} />
+        {section === "playground" ? (
+          <SandboxRunOnce
+            projectId={model.projectId}
+            versions={model.versions}
+            runs={model.runs}
+            canSaveCases={canSaveCases}
+            configured={model.configured}
+            now={now}
           />
-        </Section>
-        <SandboxVersions versions={model.versions} now={now} />
-        <SandboxSecrets
-          projectId={model.projectId}
-          secrets={model.secrets}
-          canEdit={model.canEdit}
-          now={now}
-        />
+        ) : null}
+        {section === "versions" ? (
+          <SandboxVersions projectId={model.projectId} versions={model.versions} now={now} />
+        ) : null}
+        {section === "secrets" ? <SandboxSecrets model={model} now={now} /> : null}
+        {section === "configuration" ? (
+          <Configuration model={model} versionId={configurationVersionId} />
+        ) : null}
       </PageBody>
     </Page>
+  );
+}
+
+/** The parsed `ratel.yaml` of one version, the newest when none is chosen. */
+function Configuration({
+  model,
+  versionId,
+}: {
+  model: SandboxDetailModel;
+  versionId: string | null;
+}) {
+  const router = useRouter();
+  const version = model.versions.find((row) => row.id === versionId) ?? model.versions[0];
+  if (!version) return null;
+  const href = sandboxHref(model.projectId, model.name, "configuration");
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <span className="text-ui text-fg-muted">Version</span>
+        <Select
+          aria-label="Version"
+          value={version.id}
+          onValueChange={(id) => router.push(`${href}?version=${id}`)}
+          options={model.versions.map((row, index) => ({
+            value: row.id,
+            label: `${index === 0 ? "Newest · " : ""}${row.commit?.slice(0, 12) ?? "no commit"} · ${row.id.slice(0, 8)} · ${VERSION_STATUS[row.status].label}`,
+          }))}
+          className="w-96"
+        />
+      </div>
+      <VersionConfiguration spec={version.spec} />
+    </div>
   );
 }

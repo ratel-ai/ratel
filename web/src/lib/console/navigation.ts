@@ -118,11 +118,11 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
-  /** `sandboxes` on for the shown organization: Ratel sandbox before Catalog and Settings. */
+  /** `sandboxes` on for the shown organization: Sandboxes before Catalog and Settings. */
   sandboxPage?: boolean;
   /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
   customMonitoring?: boolean;
-  /** `evals` on for the shown organization: Evals before Ratel sandbox. */
+  /** `evals` on for the shown organization: Evals before Sandboxes. */
   evalsPage?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
@@ -566,11 +566,11 @@ function stageRailNav(
     ...(sandboxPage
       ? [
           {
-            id: "sandbox",
-            label: "Ratel sandbox",
-            href: `${root}/sandbox`,
+            id: "sandboxes",
+            label: "Sandboxes",
+            href: `${root}/sandboxes`,
             icon: "apis" as const,
-            keywords: ["sandbox", "push", "versions", "secrets", "run"],
+            keywords: ["sandbox", "push", "versions", "secrets", "playground", "run"],
             section: "settings" as const,
           },
         ]

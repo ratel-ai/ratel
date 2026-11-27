@@ -6,7 +6,7 @@ import {
 } from "@/lib/platform/experimental-features";
 
 /**
- * Whether Ratel sandboxes are on for a project: the `evals` switch, off by default (ADR-0004). One
+ * Whether Sandboxes are on for a project: the `evals` switch, off by default (ADR-0004). One
  * switch gates the sandbox and the evals together. Owner: rstagi. Remove this file and the flag
  * once it is on for every organization.
  */
@@ -22,7 +22,7 @@ export function sandboxesOffForAll(deps: Partial<FeatureFlagDeps> = {}): boolean
   return featureOffForAll("evals", deps);
 }
 
-/** The organizations whose rail shows Ratel sandbox. A failed decision hides it. */
+/** The organizations whose rail shows Sandboxes. A failed decision hides it. */
 export function sandboxOrganizationIds(
   organizations: ReadonlyArray<{ id: string }>,
   deps: Partial<FeatureFlagDeps> = {},
