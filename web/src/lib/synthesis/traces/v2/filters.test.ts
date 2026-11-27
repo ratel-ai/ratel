@@ -7,7 +7,9 @@ import {
   filterFields,
   groupedSpanOptions,
   hasFilters,
+  packFilter,
   rollupFilterQuery,
+  searchFromTraceFilter,
   searchText,
   tabSearch,
   traceFilterFromSearch,
@@ -373,4 +375,71 @@ test("the conversation filter is a chip on the run list, and is no filter of the
     ["Conversation is 6b1af9ed"],
   );
   assert.deepEqual(filterChips("spans", "?conversation=6b1af9ed"), []);
+});
+
+test("trace properties, their absence, users, sessions and tasks go to the URL and read back (RTL-397)", () => {
+  const filter = {
+    users: ["u1"],
+    sessions: ["s1"],
+    tasks: ["checkout"],
+    properties: { plan: ["pro", "team"], "org.id": ["a=b&c"] },
+    withoutProperties: ["release"],
+  };
+  const search = searchFromTraceFilter(filter);
+  assert.deepEqual(traceFilterFromSearch(search), filter);
+  assert.deepEqual(
+    filterChips("rollup", search).map(({ field, value }) => `${field} ${value}`),
+    [
+      "User is u1",
+      "Session is s1",
+      "Task is checkout",
+      "plan is pro, team",
+      "org.id is a=b&c",
+      "No value of release",
+    ],
+  );
+  assert.ok(hasFilters("rollup", "?prop.plan=pro"));
+  assert.equal(withoutFilters("rollup", `${search}&range=7d`), "?range=7d");
+  assert.equal(withoutRollupFilters(`${search}&sort=cost`), "?sort=cost");
+  assert.deepEqual(
+    traceFilterFromSearch(rollupFilterQuery(`${search}&sort=cost`).toString()),
+    filter,
+  );
+  const [plan] = filterChips("rollup", search).filter(({ field }) => field === "plan is");
+  assert.deepEqual(traceFilterFromSearch(withoutChip(search, plan)).properties, {
+    "org.id": ["a=b&c"],
+  });
+  // A packed clause keeps them too.
+  const packed = `?and=${packFilter(filter)}`;
+  assert.deepEqual(traceFilterFromSearch(packed).and, [filter]);
+});
+
+test("the rollup bar offers the tasks by name when the page reads them, and shows a chosen one by name (RTL-397)", () => {
+  const facets = {
+    ...EMPTY_TRACE_FACETS,
+    task: [
+      { value: "wf-1", label: "Track a delivery", count: 0 },
+      { value: "wf-2", label: "Answer a spec question", count: 0 },
+    ],
+  };
+  const task = filterFields("rollup", "", facets).find(({ id }) => id === "task");
+  assert.deepEqual(
+    task?.options.map(({ value, label }) => [value, label]),
+    [
+      ["wf-1", "Track a delivery"],
+      ["wf-2", "Answer a spec question"],
+    ],
+  );
+  const picked = withFilterToggled("rollup", "", "task", "wf-1");
+  assert.equal(picked, "?facetTask=wf-1");
+  assert.deepEqual(traceFilterFromSearch(picked), { tasks: ["wf-1"] });
+  const names = { taskNames: { "wf-1": "Track a delivery" } };
+  assert.deepEqual(
+    filterChips("rollup", picked, names).map(({ field, value }) => `${field} ${value}`),
+    ["Task is Track a delivery"],
+  );
+  assert.equal(
+    filterFields("rollup", "", EMPTY_TRACE_FACETS).some(({ id }) => id === "task"),
+    false,
+  );
 });

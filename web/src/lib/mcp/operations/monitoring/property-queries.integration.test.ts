@@ -253,7 +253,66 @@ test("change_dashboard keeps a widget grouped and filtered by a property; change
   assert.match(grouped.message, /cannot be grouped by the property "plan"/);
 });
 
-test("query_monitoring and change_dashboard take a metric's task group-by, of the project only (RTL-397)", async () => {
+test("query_monitoring takes a property filter on flow, step_flow, funnel and geography, and the page's too (RTL-397)", async () => {
+  const pro = { properties: { plan: ["pro"] } };
+  const queries = [
+    { version: 1, kind: "flow", node: "tool", filters: pro },
+    { version: 1, kind: "step_flow", node: "tool", start: "none", filters: pro },
+    {
+      version: 1,
+      kind: "funnel",
+      steps: [
+        { name: "Any", condition: { type: "no_error" } },
+        { name: "Again", condition: { type: "no_error" } },
+      ],
+      filters: pro,
+    },
+  ];
+  for (const query of queries) {
+    const own = await m.data<{ result: { sample: { matched: number } } }>("query_monitoring", {
+      query,
+      since: SINCE,
+      until: UNTIL,
+    });
+    assert.equal(own.result.sample.matched, 2, query.kind);
+    const narrowed = await m.data<{ result: { sample: { matched: number } } }>("query_monitoring", {
+      query,
+      since: SINCE,
+      until: UNTIL,
+      filters: { properties: { organization: ["acme"] } },
+    });
+    assert.equal(narrowed.result.sample.matched, 1, query.kind);
+  }
+  const map = await m.data<{ result: { located: { matched: number } } }>("query_monitoring", {
+    query: {
+      version: 1,
+      kind: "geography",
+      measures: [{ measure: "trace_count", aggregation: "count" }],
+      filters: { properties: { organization: ["acme"] } },
+    },
+    since: SINCE,
+    until: UNTIL,
+  });
+  assert.equal(map.result.located.matched, 2);
+  const none = await m.data<{ result: { located: { matched: number } } }>("query_monitoring", {
+    query: {
+      version: 1,
+      kind: "geography",
+      measures: [{ measure: "trace_count", aggregation: "count" }],
+      filters: { withoutProperties: ["plan"] },
+    },
+    since: SINCE,
+    until: UNTIL,
+  });
+  assert.equal(none.result.located.matched, 0);
+  const refused = await m.call("query_monitoring", {
+    query: { version: 1, kind: "flow", node: "tool", filters: { withoutProperties: ["tenant"] } },
+  });
+  assert.ok(!refused.ok);
+  assert.equal(refused.reason, "property_not_indexed");
+});
+
+test("query_monitoring, change_dashboard and change_alert take a metric's task filter and group-by, of the project only (RTL-397)", async () => {
   await m.client.exec(`
     insert into trace_turns (project_id, session_id, turn_key, turn_source, lane, status, started_at, ended_at, last_received_at, workflow_id) values
       ('${PROJECT}', 's', 'otlp:${"a".repeat(32)}', 'otlp', 'otlp', 'closed', now(), now(), now(), 'checkout'),
@@ -275,11 +334,12 @@ test("query_monitoring and change_dashboard take a metric's task group-by, of th
     ["refund", 1],
   ]);
   const asSql = await m.data<{ text: string }>("query_monitoring", {
-    query,
+    query: { ...query, filters: { tasks: ["checkout"] } },
     chart: "table",
     as: "sql",
   });
   assert.match(asSql.text, /each\(tasks\) as task/);
+  assert.match(asSql.text, /contains\(tasks, 'checkout'\)/);
   const { dashboardId } = await m.data<{ dashboardId: string }>("change_dashboard", {
     action: "create",
     name: "By task",
@@ -287,11 +347,80 @@ test("query_monitoring and change_dashboard take a metric's task group-by, of th
   await m.data("change_dashboard", {
     action: "add_widget",
     dashboardId,
-    widget: { query, chart: "bar" },
+    widget: { query: { ...query, filters: { tasks: ["checkout", "refund"] } }, chart: "bar" },
   });
   const board = await m.data<{ document: { widgets: { query: { text: string } }[] } }>(
     "get_dashboard",
     { dashboardId },
   );
   assert.match(board.document.widgets[0].query.text, /each\(tasks\) as task/);
+  const alert = await m.data<{ alert: { query: { text: string } } }>("change_alert", {
+    action: "create",
+    alert: {
+      name: "Checkout errors",
+      query: {
+        version: 1,
+        kind: "metric",
+        measures: [{ measure: "error_rate", aggregation: "rate" }],
+        filters: { tasks: ["checkout"] },
+      },
+      operator: "above",
+      threshold: 0.1,
+      windowMinutes: 15,
+    },
+  });
+  assert.match(alert.alert.query.text, /contains\(tasks, 'checkout'\)/);
+});
+
+test("import_dashboard and change_dashboard keep property filters by name, on the page and on each kind (RTL-397)", async () => {
+  const pro = { properties: { plan: ["pro"] } };
+  const layout = (x: number, y: number) => ({ x, y, w: 6, h: 6 });
+  const document = {
+    type: "ratel.dashboard",
+    version: 1,
+    name: "Pro plan",
+    filters: { properties: { organization: ["acme"] } },
+    range: "7d",
+    widgets: [
+      {
+        title: "",
+        chart: "flow",
+        query: { version: 1, kind: "flow", node: "tool", steps: 5, edges: 50, filters: pro },
+        layout: layout(0, 0),
+      },
+      {
+        title: "",
+        chart: "geography",
+        query: {
+          version: 1,
+          kind: "geography",
+          measures: [{ measure: "trace_count", aggregation: "count" }],
+          level: "world",
+          filters: { withoutProperties: ["plan"] },
+        },
+        layout: layout(6, 0),
+      },
+    ],
+  };
+  const { dashboardId } = await m.data<{ dashboardId: string }>("import_dashboard", { document });
+  const read = await m.data<{
+    document: {
+      filters: object;
+      widgets: { query: { filters: object } }[];
+    };
+  }>("get_dashboard", { dashboardId });
+  assert.deepEqual(read.document.filters, document.filters);
+  assert.deepEqual(
+    read.document.widgets.map(({ query }) => query.filters),
+    [pro, { withoutProperties: ["plan"] }],
+  );
+  await m.data("change_dashboard", {
+    action: "set_filters",
+    dashboardId,
+    filters: { properties: { plan: ["team"] } },
+  });
+  const changed = await m.data<{ document: { filters: object } }>("get_dashboard", {
+    dashboardId,
+  });
+  assert.deepEqual(changed.document.filters, { properties: { plan: ["team"] } });
 });

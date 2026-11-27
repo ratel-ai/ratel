@@ -19,6 +19,16 @@ export interface TraceFilter {
   agents?: readonly string[];
   /** MCP servers of the trace's spans (`mcp_server`), behind `cloud-project-entities` (RC-790). */
   mcpServers?: readonly string[];
+  /** End users of the trace (`end_user_id`). */
+  users?: readonly string[];
+  /** Sessions of the trace (`session_id`). */
+  sessions?: readonly string[];
+  /**
+   * Tasks (Agent health workflow ids) the trace ran in: a run of the task (`trace_turns.workflow_id`)
+   * is the trace's `otlp:<trace id>` turn, or holds an event of the trace, as a scorer of tasks reads
+   * them (`views/scorers/traces.ts#taskTraces`).
+   */
+  tasks?: readonly string[];
   /** "failed": any span reported an error; "ok": none did. */
   status?: "failed" | "ok";
   minCostUsd?: number;
@@ -28,6 +38,11 @@ export interface TraceFilter {
    * not indexed has no stored values, so it keeps no trace: `runQuery` refuses it first.
    */
   properties?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Indexed trace properties the trace has no value of. A group-by's "no value" group is this
+   * filter; like `properties`, a name that is not indexed is refused first.
+   */
+  withoutProperties?: readonly string[];
   /** More clauses that must match too, also on the same property. */
   and?: readonly TraceFilter[];
 }
@@ -63,10 +78,14 @@ const FACET_KEYS: readonly TraceFilterFacetKey[] = ["model", "tool", "service", 
 const ENTITY_FACET_KEYS: readonly TraceEntityFacetKey[] = ["agent", "server"];
 
 /**
- * The rollup condition for a filter on the summary row aliased `s`, or null
- * when it filters nothing (so callers leave their query exactly as it was).
+ * The rollup condition for a filter on the summary row aliased `s` of the project, or null when it
+ * filters nothing (so callers leave their query exactly as it was). The project bounds the task
+ * runs a task filter reads; the caller bounds `s` to it.
  */
-export function traceFilterCondition(filter: TraceFilter | undefined): SQL | null {
+export function traceFilterCondition(
+  projectId: string,
+  filter: TraceFilter | undefined,
+): SQL | null {
   if (!filter) return null;
   const minCostUsd = atLeast(filter.minCostUsd);
   const minTokens = atLeast(filter.minTokens);
@@ -77,6 +96,9 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
     oneOf(sql`s.environment`, filter.environments),
     anyOf(sql`s.agents`, filter.agents),
     anyOf(sql`s.mcp_servers`, filter.mcpServers),
+    oneOf(sql`s.end_user_id`, filter.users),
+    oneOf(sql`s.session_id`, filter.sessions),
+    inTasks(projectId, filter.tasks),
     filter.status === "failed"
       ? sql`s.has_error`
       : filter.status === "ok"
@@ -85,7 +107,11 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
     minCostUsd !== null ? sql`s.cost_usd >= ${minCostUsd}` : null,
     minTokens !== null ? sql`s.input_tokens + s.output_tokens >= ${minTokens}` : null,
     ...Object.entries(filter.properties ?? {}).map(([name, values]) => propertyIn(name, values)),
-    ...(filter.and ?? []).map(traceFilterCondition),
+    ...cleanValues(filter.withoutProperties).map(
+      // A row with no properties at all (null) has none of them either.
+      (name) => sql`(s.properties ->> ${name}::text) is null`,
+    ),
+    ...(filter.and ?? []).map((clause) => traceFilterCondition(projectId, clause)),
   ].filter((part): part is SQL => part !== null);
   return parts.length > 0 ? sql.join(parts, sql` and `) : null;
 }
@@ -101,7 +127,7 @@ export function traceFilterMatch(
   filter: TraceFilter | undefined,
   traceId: SQL,
 ): SQL | null {
-  const condition = traceFilterCondition(filter);
+  const condition = traceFilterCondition(projectId, filter);
   if (!condition) return null;
   return sql`exists (select 1 from otel_trace_summaries s
     where s.project_id = ${projectId} and s.trace_id = ${traceId} and ${condition})`;
@@ -208,6 +234,25 @@ function propertyIn(name: string, values: readonly string[]): SQL | null {
     (value) => sql`s.properties @> jsonb_build_object(${name}::text, ${value}::text)`,
   );
   return each.length === 1 ? each[0] : sql`(${sql.join(each, sql` or `)})`;
+}
+
+/**
+ * The trace ran in one of the tasks: a semi-join on the project's runs of those tasks, by the
+ * `trace_turns` index of (project, task). The same runs as `views/scorers/traces.ts#taskTraces`.
+ */
+function inTasks(projectId: string, tasks: readonly string[] | undefined): SQL | null {
+  const list = cleanValues(tasks);
+  if (list.length === 0) return null;
+  return sql`s.trace_id in (
+    select substr(t.turn_key, ${OTLP_KEY.length + 1}) from trace_turns t
+    where t.project_id = ${projectId} and t.workflow_id = any(${textArray(list)})
+      and t.turn_key like ${`${OTLP_KEY}%`}
+    union
+    select e.trace_id from trace_turns t
+    join trace_turn_steps st on st.project_id = t.project_id and st.turn_id = t.id
+    join trace_events e on e.project_id = st.project_id and e.id = st.trace_event_id
+    where t.project_id = ${projectId} and t.workflow_id = any(${textArray(list)})
+      and e.trace_id is not null)`;
 }
 
 function anyOf(column: SQL, values: readonly string[] | undefined): SQL | null {

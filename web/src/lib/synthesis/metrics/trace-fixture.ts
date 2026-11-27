@@ -26,6 +26,8 @@ type SpanSeed = Partial<NewOtelSpan> & {
 
 export interface TraceSeed {
   id: string;
+  /** `PROJECT` unless given. */
+  projectId?: string;
   startedAt: string;
   root?: Partial<NewOtelSpan>;
   /** In order, a second apart unless `after` says otherwise. */
@@ -48,19 +50,26 @@ export async function traceDatabase() {
       await orm.insert(otelSpans).values(traces.flatMap(spansOf));
       await recomputeTraceSummaries(
         orm as unknown as TraceSummaryExecutor,
-        traces.map(({ id }) => ({ projectId: PROJECT, traceId: id })),
+        traces.map(({ id, projectId = PROJECT }) => ({ projectId, traceId: id })),
       );
     },
   };
 }
 
-function spansOf({ id, startedAt, root = {}, spans = [] }: TraceSeed): NewOtelSpan[] {
+function spansOf({
+  id,
+  projectId = PROJECT,
+  startedAt,
+  root = {},
+  spans = [],
+}: TraceSeed): NewOtelSpan[] {
   const start = new Date(startedAt).getTime();
   const at = (seconds: number) => new Date(start + seconds * 1000);
   return [
-    span({ traceId: id, spanId: `${id}-root`, startedAt: at(0), ...root }),
+    span({ projectId, traceId: id, spanId: `${id}-root`, startedAt: at(0), ...root }),
     ...spans.map(({ after, tool, skill, ...rest }, index) =>
       span({
+        projectId,
         traceId: id,
         spanId: `${id}-${index}`,
         parentSpanId: `${id}-root`,

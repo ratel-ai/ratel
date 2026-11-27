@@ -51,14 +51,44 @@ export function simplified(filter: TraceFilter): TraceFilter {
   return and.length > 0 ? { ...own, and } : own;
 }
 
-const ONE_PER_TRACE: readonly (keyof TraceFilter)[] = ["services", "environments"];
+const ONE_PER_TRACE: readonly (keyof TraceFilter)[] = [
+  "services",
+  "environments",
+  "users",
+  "sessions",
+];
 
 function mergedValue(name: keyof TraceFilter, a: unknown, b: unknown): unknown {
   if (a === undefined || (Array.isArray(a) && a.length === 0)) return b;
   if (typeof a === "number" && typeof b === "number") return Math.max(a, b);
+  // Each absence must hold: the names add up.
+  if (name === "withoutProperties" && Array.isArray(a) && Array.isArray(b))
+    return [...new Set([...a, ...b])];
+  if (name === "properties") return mergedProperties(a as PropertyValues, b as PropertyValues);
   if (!Array.isArray(a) || !Array.isArray(b)) return a === b ? a : undefined;
+  return mergedValues(a, b, ONE_PER_TRACE.includes(name));
+}
+
+type PropertyValues = NonNullable<TraceFilter["properties"]>;
+
+/** Properties of other names combine; a trace has one value of a property, as of a service. */
+function mergedProperties(a: PropertyValues, b: PropertyValues): PropertyValues | undefined {
+  const merged: Record<string, readonly string[]> = { ...a };
+  for (const [name, values] of Object.entries(b)) {
+    const both = Object.hasOwn(merged, name) ? mergedValues(merged[name], values, true) : values;
+    if (both === undefined) return undefined;
+    merged[name] = both;
+  }
+  return merged;
+}
+
+function mergedValues(
+  a: readonly unknown[],
+  b: readonly unknown[],
+  onePerTrace: boolean,
+): readonly string[] | undefined {
   const both = a.filter((value) => b.includes(value));
-  if (both.length === a.length) return a;
-  if (both.length === b.length) return b;
-  return ONE_PER_TRACE.includes(name) && both.length > 0 ? both : undefined;
+  if (both.length === a.length) return a as readonly string[];
+  if (both.length === b.length) return b as readonly string[];
+  return onePerTrace && both.length > 0 ? (both as string[]) : undefined;
 }

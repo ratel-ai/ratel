@@ -60,6 +60,22 @@ test("View traces carries the widget's filter and the time range", () => {
   );
 });
 
+test("View traces keeps a property filter, and a group of a property, user or session (RTL-397)", () => {
+  const filter: TraceFilter = { properties: { plan: ["pro"] }, withoutProperties: ["release"] };
+  const href = new URL(
+    widgetTracesHref("p1", filter, { preset: "7d", from: "", to: "" }, [
+      { by: { property: "org" }, value: "acme" },
+      { by: "user", value: "u1" },
+    ]),
+    "https://x",
+  );
+  assert.deepEqual(traceFilterFromSearch(href.search, { entities: true }), {
+    users: ["u1"],
+    properties: { plan: ["pro"], org: ["acme"] },
+    withoutProperties: ["release"],
+  });
+});
+
 test("stacked bars scale to their total; lines scale to their peak", () => {
   const result = grouped([
     ["b", [3, 1]],

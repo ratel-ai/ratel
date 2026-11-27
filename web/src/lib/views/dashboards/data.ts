@@ -10,9 +10,15 @@ import {
   metricOffered,
   type QueryScope,
 } from "@/lib/synthesis/metrics/catalog";
-import { QueryError, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import { QueryError, runQuery } from "@/lib/synthesis/metrics/query";
 import { textToRun } from "@/lib/views/dashboards/metric-rql";
-import type { BrokenWidget, Widget, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
+import type {
+  BrokenWidget,
+  Widget,
+  WidgetInput,
+  WidgetRefusal,
+  WidgetResult,
+} from "@/lib/views/dashboards/types";
 import { isMetricChart, queryMetric } from "@/lib/views/dashboards/widget";
 // What these modules own is read through what they register.
 import "@/lib/views/scorers/metrics";
@@ -56,17 +62,24 @@ export const loadWidget = (
         scope,
         db,
       )
-    : loadOrFallback<QueryResult | null>({
+    : loadOrFallback<WidgetResult | null>({
         operation: "dashboard_widget",
         distinctId: `project:${projectId}`,
         fallback: null,
         load: () =>
-          withStatementTimeout((db) => runQuery(projectId, widget.query, scope, db), {
-            operation: "dashboard_widget",
-            timeoutMs: supplementaryReadTimeoutMs(),
-            db,
-          }),
+          withStatementTimeout(
+            // A filter on a property that is not indexed says so, as on a widget of kind sql.
+            (db) => runQuery(projectId, widget.query, scope, db).catch(refusedOrThrow),
+            { operation: "dashboard_widget", timeoutMs: supplementaryReadTimeoutMs(), db },
+          ),
       });
+
+/** The refusal of a query the person can fix (its code and the fix); any other error goes on. */
+function refusedOrThrow(error: unknown): WidgetRefusal {
+  if (error instanceof QueryError && error.detail)
+    return { kind: "refused", message: error.message, ...error.detail };
+  throw error;
+}
 
 /** Every widget's numbers, in order. One that is broken, failed, waits for a scorer, or whose switch is off, is null. */
 export async function loadWidgets(

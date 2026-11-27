@@ -36,6 +36,7 @@ export type FilterFieldId =
   | "environment"
   | "agent"
   | "server"
+  | "task"
   | "experiment"
   | "variant"
   | "stepName"
@@ -76,12 +77,17 @@ export interface FilterField {
 export interface TraceFilterOptions {
   /** `cloud-project-entities`: the Agent and MCP server filters exist. */
   entities?: boolean;
+  /** The task names by id, so a Task chip reads as a name (RTL-397). */
+  taskNames?: Readonly<Record<string, string>>;
 }
 
 /** The rollup facets: `agent` and `server` come only with the entity filters on. */
 export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
   Partial<Pick<TraceFacets, "experiment" | "arm" | "name">> &
-  Partial<Record<"agent" | "server", readonly TraceFacetValue[]>>;
+  Partial<Record<"agent" | "server", readonly TraceFacetValue[]>> & {
+    /** The project's tasks, with their names: a page that reads them offers a Task filter. */
+    task?: readonly TraceFacetValue[];
+  };
 
 /** How a packed clause of the `and` parameter starts. */
 const PACKED_CLAUSE = "z.";
@@ -96,9 +102,14 @@ const packedClause = z.object({
   environments: packedValues,
   agents: packedValues,
   mcpServers: packedValues,
+  users: packedValues,
+  sessions: packedValues,
+  tasks: packedValues,
   status: z.enum(["failed", "ok"]).optional(),
   minCostUsd: z.number().optional(),
   minTokens: z.number().optional(),
+  properties: z.record(z.string(), z.array(z.string())).optional(),
+  withoutProperties: packedValues,
 });
 const packedSchema = packedClause.extend({ and: z.array(packedClause).optional() });
 
@@ -109,7 +120,17 @@ const LIST_PARAMS = {
   environments: "facetEnvironment",
   agents: "facetAgent",
   mcpServers: "facetServer",
+  users: "facetUser",
+  sessions: "facetSession",
+  tasks: "facetTask",
 } as const satisfies Partial<Record<keyof TraceFilter, string>>;
+
+/**
+ * A trace property (ADR-0012) is a parameter of its own: `prop.<name>`, once per value, so any name
+ * and any value survive the address as they are. `noProp` names a property the trace has no value of.
+ */
+const PROPERTY_PREFIX = "prop.";
+const NO_PROPERTY = "noProp";
 
 /** Never survive a filter change: the page and the open row belong to the old list. */
 const VOLATILE = ["cursor", "peek"] as const;
@@ -124,6 +145,10 @@ const ROLLUP_FILTER_PARAMS_LIST = [
   "facetEnvironment",
   "minCostUsd",
   "minTokens",
+  "facetUser",
+  "facetSession",
+  "facetTask",
+  NO_PROPERTY,
   "and",
 ] as const;
 export const ROLLUP_FILTER_PARAMS: readonly string[] = ROLLUP_FILTER_PARAMS_LIST;
@@ -186,14 +211,33 @@ const OTEL_KIND_LABEL: Readonly<Record<string, string>> = {
   "5": "Consumer",
 };
 
-function filterParams(tab: TraceTab, options: TraceFilterOptions = {}): readonly string[] {
-  return tab === "rollup" ? ["name", ...rollupParams(options)] : FILTER_PARAMS[tab];
+function filterParams(
+  tab: TraceTab,
+  params: URLSearchParams,
+  options: TraceFilterOptions = {},
+): readonly string[] {
+  return tab === "rollup" ? ["name", ...rollupParams(params, options)] : FILTER_PARAMS[tab];
 }
 
-function rollupParams({ entities = false }: TraceFilterOptions): readonly string[] {
-  return entities
-    ? [...ROLLUP_FILTER_PARAMS_LIST, ...ENTITY_FILTER_PARAMS]
-    : ROLLUP_FILTER_PARAMS_LIST;
+/** The rollup bar's parameters in this query string: the fixed ones and each property's. */
+function rollupParams(
+  params: URLSearchParams,
+  { entities = false }: TraceFilterOptions,
+): readonly string[] {
+  return [
+    ...ROLLUP_FILTER_PARAMS_LIST,
+    ...(entities ? ENTITY_FILTER_PARAMS : []),
+    ...propertyParams(params),
+  ];
+}
+
+/** The `prop.<name>` parameters of a query string, once each, in their order. */
+function propertyParams(params: URLSearchParams): string[] {
+  return [...new Set([...params.keys()].filter((key) => isPropertyParam(key)))];
+}
+
+function isPropertyParam(key: string): boolean {
+  return key.startsWith(PROPERTY_PREFIX) && key.length > PROPERTY_PREFIX.length;
 }
 
 /** The chips for what the URL filters by. Every narrowing parameter shows up, so none hides. */
@@ -226,6 +270,13 @@ export function filterChips(
       multi(params, "facetEnvironment", "Environment is"),
       options.entities ? multi(params, "facetAgent", "Agent is") : null,
       options.entities ? multi(params, "facetServer", "MCP server is") : null,
+      multi(params, "facetUser", "User is"),
+      multi(params, "facetSession", "Session is"),
+      multi(params, "facetTask", "Task is", (id) => options.taskNames?.[id] ?? id),
+      ...propertyParams(params).map((param) =>
+        multi(params, param, `${param.slice(PROPERTY_PREFIX.length)} is`),
+      ),
+      multi(params, NO_PROPERTY, "No value of"),
       measure(params, "Cost", "minCostUsd", "maxCostUsd", (value) => formatMoney(value)),
       measure(params, "Tokens", "minTokens", "maxTokens", (value) => formatInteger(value)),
       clausesChip(params, options),
@@ -308,7 +359,7 @@ export function hasFilters(
   options: TraceFilterOptions = {},
 ): boolean {
   const params = parse(search);
-  return filterParams(tab, options).some(
+  return filterParams(tab, params, options).some(
     (name) => name !== "exactTags" && params.getAll(name).some((value) => value.trim()),
   );
 }
@@ -320,7 +371,7 @@ export function withoutFilters(
   options: TraceFilterOptions = {},
 ): string {
   const params = parse(search);
-  for (const name of filterParams(tab, options)) params.delete(name);
+  for (const name of filterParams(tab, params, options)) params.delete(name);
   return withoutVolatile(params);
 }
 
@@ -385,6 +436,9 @@ export function filterFields(
             new Set(params.getAll("facetServer")),
             true,
           )
+        : null,
+      facets.task
+        ? field("task", "Task", facets.task, new Set(params.getAll("facetTask")), false)
         : null,
       {
         id: "cost",
@@ -542,9 +596,14 @@ export function traceFilterFromSearch(
     environments: values("facetEnvironment"),
     agents: options.entities ? values("facetAgent") : undefined,
     mcpServers: options.entities ? values("facetServer") : undefined,
+    users: values("facetUser"),
+    sessions: values("facetSession"),
+    tasks: values("facetTask"),
     status,
     minCostUsd: minCostUsd ?? undefined,
     minTokens: minTokens ?? undefined,
+    properties: propertiesOf(params, values),
+    withoutProperties: values(NO_PROPERTY),
     and,
   };
   return Object.fromEntries(
@@ -554,6 +613,17 @@ export function traceFilterFromSearch(
   ) as TraceFilter;
 }
 
+/** The `prop.<name>` parameters as a filter's properties, or undefined when there is none. */
+function propertiesOf(
+  params: URLSearchParams,
+  values: (name: string) => string[],
+): TraceFilter["properties"] {
+  const named = propertyParams(params)
+    .map((param): [string, string[]] => [param.slice(PROPERTY_PREFIX.length), values(param)])
+    .filter(([, kept]) => kept.length > 0);
+  return named.length > 0 ? Object.fromEntries(named) : undefined;
+}
+
 /** Only the rollup bar's parameters of a query string, for a request that pages the same list. */
 export function rollupFilterQuery(
   search: string,
@@ -561,7 +631,7 @@ export function rollupFilterQuery(
 ): URLSearchParams {
   const params = parse(search);
   const kept = new URLSearchParams();
-  for (const name of rollupParams(options))
+  for (const name of rollupParams(params, options))
     for (const value of params.getAll(name)) kept.append(name, value);
   return kept;
 }
@@ -569,7 +639,7 @@ export function rollupFilterQuery(
 /** A query string without the rollup bar's parameters, so the span-scan filters never also read them. */
 export function withoutRollupFilters(search: string, options: TraceFilterOptions = {}): string {
   const params = parse(search);
-  for (const name of rollupParams(options)) params.delete(name);
+  for (const name of rollupParams(params, options)) params.delete(name);
   const text = params.toString();
   return text ? `?${text}` : "";
 }
@@ -775,7 +845,7 @@ function field(
 ): FilterField {
   const options = values.map((item) => ({
     value: item.value,
-    label: item.value,
+    label: item.label ?? item.value,
     ...(withCounts ? { count: item.count } : {}),
     selected: selected.has(item.value),
   }));
@@ -803,6 +873,7 @@ const ROLLUP_MULTI: Partial<Record<FilterFieldId, string>> = {
   // Offered only with `cloud-project-entities` on, so a toggle never comes without it.
   agent: "facetAgent",
   server: "facetServer",
+  task: "facetTask",
 };
 
 function toggleRollup(params: URLSearchParams, fieldId: FilterFieldId, value: string): void {
@@ -852,6 +923,9 @@ export function searchFromTraceFilter(filter: TraceFilter): string {
   if (filter.status) params.set("status", filter.status);
   if (filter.minCostUsd !== undefined) params.set("minCostUsd", String(filter.minCostUsd));
   if (filter.minTokens !== undefined) params.set("minTokens", String(filter.minTokens));
+  for (const [name, values] of Object.entries(filter.properties ?? {}))
+    for (const value of values) params.append(`${PROPERTY_PREFIX}${name}`, value);
+  for (const name of filter.withoutProperties ?? []) params.append(NO_PROPERTY, name);
   for (const clause of filter.and ?? []) {
     const said = searchFromTraceFilter({ ...clause, and: undefined }).slice(1);
     if (said) params.append("and", said);

@@ -7,7 +7,6 @@ import { SegmentedControl } from "@ratel/design-system/tabs";
 import { useState } from "react";
 import { PropertyBlockNote } from "@/components/console/properties/PropertyBlockNote";
 import { usePropertyChoices } from "@/components/console/properties/PropertyChoicesProvider";
-import { PropertyFilterFields } from "@/components/console/properties/PropertyFilterFields";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { MAX_DIMENSIONS, type MetricForm, metricQuery, type SqlQuery } from "@/lib/contracts/query";
 import { getMetric } from "@/lib/synthesis/metrics/catalog";
@@ -168,17 +167,11 @@ export function MetricRqlFields({
         }}
       />
       {form && metric?.filterable ? (
-        <>
-          <QueryFilter
-            filter={queryFilter(query)}
-            facets={facets}
-            onChange={(next) => apply({ filter: next(queryFilter(query)) })}
-          />
-          <PropertyFilterFields
-            filter={queryFilter(query)}
-            onChange={(next) => apply({ filter: next(queryFilter(query)) })}
-          />
-        </>
+        <QueryFilter
+          filter={queryFilter(query)}
+          facets={facets}
+          onChange={(next) => apply({ filter: next(queryFilter(query)) })}
+        />
       ) : null}
       <ConfirmDialog
         open={reset !== null}

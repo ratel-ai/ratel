@@ -4359,7 +4359,7 @@
           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
         },
         "filters": {
-          "description": "On top of the query's own: environments, services, models, agents (lists).",
+          "description": "On top of the query's own: environments, services, models, agents (lists), and properties (indexed trace properties, by name: a list of values each).",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -6525,7 +6525,7 @@
           "maxLength": 200
         },
         "filters": {
-          "description": "For set_filters: replaces them. {} removes them.",
+          "description": "For set_filters: replaces them. {} removes them. properties narrows every widget by indexed trace properties, by name.",
           "type": "object",
           "properties": {
             "environments": {
@@ -6562,6 +6562,23 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 2000
+              }
+            },
+            "properties": {
+              "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "minItems": 1,
+                "maxItems": 1000,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
               }
             }
           },

@@ -105,11 +105,8 @@ export async function monitoring(
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),
     runQuery: (projectId, query, scope) => runQuery(projectId, query, scope, db),
-    loadWidget: (projectId, widget, scope) =>
-      // Kind sql through the console's own read: it drops the page's filter and keeps a refusal.
-      widget.query.kind === "sql"
-        ? loadWidget(projectId, widget, scope, db as never)
-        : runQuery(projectId, widget.query, scope, db),
+    // The console's own read: it keeps a refusal of every kind.
+    loadWidget: (projectId, widget, scope) => loadWidget(projectId, widget, scope, db as never),
     canSeal: () => true,
     secretKey: SECRET_KEY,
     slack: {

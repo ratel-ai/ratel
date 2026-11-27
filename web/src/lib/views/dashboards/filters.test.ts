@@ -14,6 +14,7 @@ import {
   sameDefaults,
   shownFilters,
   takesPageFilters,
+  withBarFilter,
   withBarSearch,
   withoutOwnView,
   withPageFilters,
@@ -118,4 +119,39 @@ test("clauses survive the query string of the Traces page, and are one chip", ()
     "?and=and%3DfacetModel%3Dm",
   ])
     assert.deepEqual(traceFilterFromSearch(bad, { entities: true }), {});
+});
+
+test("the page filter holds trace properties: in the address, saved, and as a clause of each query (RTL-397)", () => {
+  const saved = { properties: { plan: ["pro"] } };
+  assert.deepEqual(shownFilters("?range=7d", saved), saved);
+  assert.equal(barSearch("?range=7d", saved), "?prop.plan=pro");
+  const changed = withBarSearch("?range=7d", "?prop.org=acme&prop.org=globex&facetTool=x", saved);
+  assert.equal(changed, "?range=7d&prop.org=acme&prop.org=globex");
+  assert.deepEqual(shownFilters(changed, saved), { properties: { org: ["acme", "globex"] } });
+  assert.deepEqual(shownFilters("?prop.plan=team", {}), { properties: { plan: ["team"] } });
+  assert.equal(withoutOwnView(changed), "");
+  assert.ok(
+    sameDefaults(
+      { filters: { properties: { a: ["1", "2"], b: ["x"] } }, range: null },
+      { filters: { properties: { b: ["x"], a: ["2", "1"] } }, range: null },
+    ),
+  );
+  assert.ok(!sameDefaults({ filters: saved, range: null }, { filters: {}, range: null }));
+  const flow = withPageFilters(
+    { version: 1, kind: "flow", node: "tool", steps: 6, edges: 30, filters: {} },
+    saved,
+  );
+  assert.deepEqual(flow.filters, { and: [saved] });
+});
+
+test("the property pickers of the page edit the bar's query string as a filter", () => {
+  const bar = "?facetModel=gpt&prop.plan=pro";
+  const edited = withBarFilter(bar, (filter) => ({
+    ...filter,
+    properties: { ...filter.properties, org: ["acme"] },
+  }));
+  assert.deepEqual(shownFilters(withBarSearch("?range=7d", edited, {}), {}), {
+    models: ["gpt"],
+    properties: { plan: ["pro"], org: ["acme"] },
+  });
 });

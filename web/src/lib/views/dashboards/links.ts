@@ -31,14 +31,25 @@ export const MAX_PLAIN_CHARS = 2_800;
 
 export const ADD_SCORER_PARAM = "addScorer";
 
-/** The dimensions the Traces filter can say. It has no scorer, user, session or property. */
-const GROUP_FILTERS: Partial<Record<Dimension, keyof TraceFilter>> = {
+/** The dimensions the Traces filter can say. It has no scorer; a property is a clause of its own. */
+const GROUP_FILTERS: Partial<Record<Dimension, ListFilterKey>> = {
   model: "models",
   tool: "tools",
   service: "services",
   environment: "environments",
   agent: "agents",
+  user: "users",
+  session: "sessions",
 };
+
+type ListFilterKey =
+  | "models"
+  | "tools"
+  | "services"
+  | "environments"
+  | "agents"
+  | "users"
+  | "sessions";
 
 export function dashboardsHref(projectId: string): string {
   return `/project/${encodeURIComponent(projectId)}/dashboards`;
@@ -67,7 +78,8 @@ export function widgetTracesHref(
 ): string {
   // A group is a clause: its value says nothing of the filter's own values.
   const all = groups.reduce<TraceFilter>((kept, { by, value }) => {
-    const key = typeof by === "string" ? GROUP_FILTERS[by] : undefined;
+    if (typeof by !== "string") return withClause(kept, { properties: { [by.property]: [value] } });
+    const key = GROUP_FILTERS[by];
     return key ? withClause(kept, { [key]: [value] }) : kept;
   }, filter);
   const params = new URLSearchParams(filterSearch(simplified(all)));

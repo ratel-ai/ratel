@@ -64,7 +64,8 @@ RQL (Ratel Query Language, `synthesis/rql`) answers a trace question that no que
 
 `query_monitoring` runs a lone query of kind `sql` too and gives its table; a panel of `queries`
 cannot be one. `query_monitoring`, `change_dashboard` and `change_alert` take a trace property in a
-filter (`filters.properties`) and in a metric's group-by (`{ "property": "<name>" }`). A property
+filter (`filters.properties`, `filters.withoutProperties`, on every kind with a trace filter, and in
+the filters of a dashboard and of `query_monitoring`, RTL-397) and in a metric's group-by (`{ "property": "<name>" }`). A property
 that is not indexed is refused with the reason `property_not_indexed`, its name and the fix, by
 `run_rql` and by `query_monitoring`. `describe_monitoring_schema` lists kind `sql` in its catalog.
 

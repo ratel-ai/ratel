@@ -270,8 +270,11 @@ export function queryProperties(query: object): string[] {
   const { filters, dimensions } = query as { filters?: unknown; dimensions?: unknown };
   const named = new Set<string>();
   const visit = (filter: unknown) => {
-    const clause = filter as { properties?: object; and?: unknown[] } | undefined;
+    const clause = filter as
+      | { properties?: object; withoutProperties?: unknown[]; and?: unknown[] }
+      | undefined;
     for (const name of Object.keys(clause?.properties ?? {})) named.add(name);
+    for (const name of clause?.withoutProperties ?? []) named.add(String(name));
     for (const more of clause?.and ?? []) visit(more);
   };
   visit(filters);
@@ -314,6 +317,9 @@ const clauseShape = {
   environments: values.optional(),
   agents: values.optional(),
   mcpServers: values.optional(),
+  users: values.optional().describe("End users (user_id): one of them."),
+  sessions: values.optional().describe("Sessions (session_id): one of them."),
+  tasks: values.optional().describe("Tasks, by id (list_tasks): the trace ran in one of them."),
   status: z.enum(["failed", "ok"]).optional(),
   minCostUsd: threshold.optional(),
   minTokens: threshold.optional(),
@@ -335,6 +341,11 @@ const clauseShape = {
     .describe(
       "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
     ),
+  withoutProperties: z
+    .array(propertyName)
+    .max(MAX_FILTER_PROPERTIES, PROPERTIES_PROBLEM)
+    .optional()
+    .describe("Indexed trace properties, by name, that the trace has no value of."),
 };
 
 /**

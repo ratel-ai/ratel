@@ -10,12 +10,18 @@ export interface RqlPageFilter {
   environments?: readonly string[];
   agents?: readonly string[];
   mcpServers?: readonly string[];
+  /** End users: the trace's `user_id`. */
+  users?: readonly string[];
+  /** Sessions: the trace's `session_id`. */
+  sessions?: readonly string[];
   /** "failed": a span of the trace failed; "ok": none did. */
   status?: "failed" | "ok";
   minCostUsd?: number;
   minTokens?: number;
   /** Trace properties (ADR-0012): of one name, any of its values; names combine. */
   properties?: Readonly<Record<string, readonly string[]>>;
+  /** Trace properties the trace has no value of. */
+  withoutProperties?: readonly string[];
   and?: readonly RqlPageFilter[];
 }
 
@@ -40,6 +46,8 @@ export function pageFilterConditions(
   oneOf("environment", filter.environments);
   anyOf("agents", filter.agents);
   anyOf("mcp_servers", filter.mcpServers);
+  oneOf("user_id", filter.users);
+  oneOf("session_id", filter.sessions);
   if (filter.status === "failed") parts.push(`"has_error"`);
   if (filter.status === "ok") parts.push(`not "has_error"`);
   const minCostUsd = positive(filter.minCostUsd);
@@ -52,6 +60,8 @@ export function pageFilterConditions(
     if (kept.length > 0)
       parts.push(`("properties" ->> ${param(name)}) in (${kept.map(param).join(", ")})`);
   }
+  for (const name of cleaned(filter.withoutProperties))
+    parts.push(`("properties" ->> ${param(name)}) is null`);
   for (const clause of filter.and ?? []) parts.push(...pageFilterConditions(clause, param));
   return parts;
 }

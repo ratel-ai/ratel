@@ -10,11 +10,17 @@ import { ChevronDown, Compass, Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { previewKey } from "@/components/console/dashboards/use-widget-preview";
+import { PropertyFilterFields } from "@/components/console/properties/PropertyFilterFields";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import { type TimeWindow, TimeWindowMenu } from "@/components/console/traces/TracesHeader";
 import { type TraceFilterBarFacets, withRangePreset } from "@/lib/synthesis/traces/v2/filters";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
-import { barChange, barSearch, DASHBOARD_FILTER_FIELDS } from "@/lib/views/dashboards/filters";
+import {
+  barChange,
+  barSearch,
+  DASHBOARD_FILTER_FIELDS,
+  withBarFilter,
+} from "@/lib/views/dashboards/filters";
 import { type DashboardRange, EXACT_RANGE } from "@/lib/views/dashboards/links";
 import type { DashboardFilters, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import { STARTING_POINTS } from "@/lib/views/explore/starts";
@@ -58,6 +64,18 @@ export function ExploreView({
   const [saving, setSaving] = useState(false);
   const [filtersRefused, setFiltersRefused] = useState<string | null>(null);
   const { preset, from, to } = range;
+
+  /** A change of the page filter: in the address, unless a panel cannot take it. */
+  function changeBar(next: string | ((bar: string) => string)) {
+    // Every panel can be saved with the filters, so each must take them.
+    const change = barChange(next, {
+      search,
+      saved: {},
+      queries: panels.map(({ widget }) => widget.query),
+    });
+    setFiltersRefused(change.refused);
+    if (!change.refused) go(change.go);
+  }
   const servedResults = useMemo(
     () =>
       new Map(
@@ -126,16 +144,14 @@ export function ExploreView({
           pending={pending}
           facets={facets}
           search={barSearch(search, {})}
-          onSearchChange={(next) => {
-            // Every panel can be saved with the filters, so each must take them.
-            const change = barChange(next, {
-              search,
-              saved: {},
-              queries: panels.map(({ widget }) => widget.query),
-            });
-            setFiltersRefused(change.refused);
-            if (!change.refused) go(change.go);
-          }}
+          onSearchChange={changeBar}
+          more={
+            <PropertyFilterFields
+              filter={filters}
+              chips={false}
+              onChange={(edit) => changeBar((bar) => withBarFilter(bar, edit))}
+            />
+          }
         />
         {filtersRefused ? (
           <p role="alert" className="text-xs text-danger">

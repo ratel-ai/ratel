@@ -3,6 +3,7 @@
 import { Field } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import type { ReactNode } from "react";
+import { PropertyFilterFields } from "@/components/console/properties/PropertyFilterFields";
 import { ScorerPicker } from "@/components/console/scorers/ScorerPicker";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
@@ -113,7 +114,11 @@ export function MetricFilter({
   return <QueryFilter filter={query.filters} facets={facets} onChange={onChange} />;
 }
 
-/** A trace filter as the Traces page edits it. */
+/**
+ * A trace filter as the Traces page edits it, with the trace properties of the surface (RTL-397):
+ * the bar shows every part of the filter as a chip, properties too, and their pickers follow
+ * "Filter". The Metric, Flow, Step flow, Funnel and Map forms all edit their filter here.
+ */
 export function QueryFilter({
   filter,
   facets,
@@ -135,13 +140,12 @@ export function QueryFilter({
         onSearchChange={(next) =>
           onChange((current) => {
             const search = searchFromTraceFilter(current);
-            const edited = traceFilterFromSearch(typeof next === "function" ? next(search) : next, {
+            return traceFilterFromSearch(typeof next === "function" ? next(search) : next, {
               entities: true,
             });
-            // The bar has no trace properties: their part of the filter stays as it was.
-            return current.properties ? { ...edited, properties: current.properties } : edited;
           })
         }
+        more={<PropertyFilterFields filter={filter} chips={false} onChange={onChange} />}
       />
     </Choice>
   );

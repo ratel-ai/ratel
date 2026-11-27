@@ -71,7 +71,7 @@ export async function countMatchingTraces(
 
 /** Whether a scorer takes the summary row `s` of this project. */
 export function targetCondition(projectId: string, { filter, tasks }: ScorerTarget): SQL {
-  const condition = traceFilterCondition(filter) ?? sql`true`;
+  const condition = traceFilterCondition(projectId, filter) ?? sql`true`;
   if (tasks === null) return condition;
   if (tasks.length === 0) return sql`false`;
   return sql`(${condition} and s.trace_id in (${taskTraces(projectId, tasks)}))`;

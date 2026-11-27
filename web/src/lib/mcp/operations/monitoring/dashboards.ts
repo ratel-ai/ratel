@@ -211,7 +211,9 @@ export function dashboardReadOperations(
         filters: z
           .record(z.string(), z.unknown())
           .optional()
-          .describe("On top of the query's own: environments, services, models, agents (lists)."),
+          .describe(
+            "On top of the query's own: environments, services, models, agents (lists), and properties (indexed trace properties, by name: a list of values each).",
+          ),
         chart: z
           .enum(METRIC_CHARTS)
           .optional()
@@ -463,7 +465,9 @@ export function dashboardWriteOperations(
         name: z.string().max(200).optional().describe("For create and rename."),
         filters: dashboardFiltersSchema
           .optional()
-          .describe("For set_filters: replaces them. {} removes them."),
+          .describe(
+            "For set_filters: replaces them. {} removes them. properties narrows every widget by indexed trace properties, by name.",
+          ),
         range: defaultsSchema.shape.range
           .optional()
           .describe("For set_filters. Null: the console's default."),
@@ -946,6 +950,7 @@ function catalog() {
       "A filter is a list of clauses that must all match: its own properties, then each one of and. Two clauses on one property both hold, so {models:[a],and:[{models:[b]}]} keeps the traces that used a and b.",
       `All clauses of a filter, together with the filters of the dashboard or of query_monitoring, are ${MAX_FILTER_BYTES.toLocaleString("en-US")} bytes of JSON at most, so that View traces can always carry them.`,
       'A trace property that the project indexes filters any query: filters.properties, such as {"properties":{"organization":["acme"]}} (any value of a name; names combine). A metric of traces or of scores groups by one: {"property":"organization"} in dimensions. list_trace_properties gives the names; one that is not indexed is refused with property_not_indexed. user, session, environment, model and service are built-in fields, not properties.',
+      'A flow, step_flow, funnel and geography query takes the same filter: filters.properties, filters.withoutProperties (indexed properties the trace has no value of, such as {"withoutProperties":["organization"]}), users, sessions and tasks (task ids from list_tasks: the traces that ran in the task). A metric takes them too, and groups by "task" (RQL: contains(tasks, <task id>) and each(tasks)). The filters of a dashboard (set_filters) and of query_monitoring take properties too, and narrow every widget.',
       "A number has no dimension. A metric widget is RQL: a table draws any rows, a number one row with one number, a line one time column and numbers, a bar a time or text column and numbers.",
       "An alert takes a metric query without dimensions. It reads what became known in its window: a trace when it ends, a scorer result when it is stored, so a trace longer than the window counts. A count or a sum of nothing is 0, so trace_count below 10 alerts on silence; a rate, an average or a percentile of nothing is no_data.",
       "A geography query reads where each trace came from. get_location_attributes has the span attributes it is read from; change_location_attributes changes them (organization admins).",

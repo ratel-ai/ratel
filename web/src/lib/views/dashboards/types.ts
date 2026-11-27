@@ -75,7 +75,10 @@ export type Widget = WidgetInput & {
 };
 
 /** What every widget of a dashboard is narrowed by, on top of its own filters. */
-export type DashboardFilters = Pick<TraceFilter, "environments" | "services" | "models" | "agents">;
+export type DashboardFilters = Pick<
+  TraceFilter,
+  "environments" | "services" | "models" | "agents" | "properties"
+>;
 
 /** What a dashboard opens with. */
 export interface DashboardDefaults {
