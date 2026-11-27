@@ -20,11 +20,13 @@ export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
       ...(base ? { url: base.text } : {}),
       siteName: preview.siteName,
       type: "website",
+      ...(preview.image ? { images: [preview.image] } : {}),
     },
     twitter: {
       card: "summary_large_image",
       title: preview.title,
       description: preview.description,
+      ...(preview.image ? { images: [preview.image] } : {}),
     },
   };
 }
@@ -43,12 +45,16 @@ function metadataBase(origin: string): { url: URL; text: string } | null {
   }
 }
 
-/** The preview without an edition: this deployment's name and origin. */
+/**
+ * The preview without an edition: this deployment's name and origin, ratel.sh's description, and
+ * the social card `ratel-og.png` of @ratel/brand, served from `public/og.png`.
+ */
 export function defaultLinkPreview(appName: string, baseUrl: string): LinkPreview {
   return {
     origin: baseUrl,
     siteName: appName,
     title: appName,
-    description: `${appName} breaks down how your agent spends its input token budget across skills, tools, history, memory, and user input, then tells you what to reclaim.`,
+    description: `${appName} finds problems, fixes them and runs evals on your agent, for higher accuracy, lower latency and no wasted tokens, turn after turn.`,
+    image: "/og.png",
   };
 }

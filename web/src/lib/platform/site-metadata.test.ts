@@ -46,12 +46,25 @@ test("an origin written without a scheme is read as https, and one that does not
   assert.equal((broken.openGraph as { url?: string }).url, undefined);
 });
 
-test("without an edition, the preview names this deployment", () => {
+test("a preview with an image puts it on the OpenGraph and the Twitter card", () => {
+  const metadata = siteMetadata("Acme", {
+    origin: "https://app.example.com",
+    siteName: "Acme",
+    title: "Acme",
+    description: "d",
+    image: "/og.png",
+  });
+  assert.deepEqual((metadata.openGraph as { images?: unknown }).images, ["/og.png"]);
+  assert.deepEqual((metadata.twitter as { images?: unknown }).images, ["/og.png"]);
+});
+
+test("without an edition, the preview names this deployment and shows the social card", () => {
   assert.deepEqual(defaultLinkPreview("Ratel", "http://localhost:3000"), {
     origin: "http://localhost:3000",
     siteName: "Ratel",
     title: "Ratel",
     description:
-      "Ratel breaks down how your agent spends its input token budget across skills, tools, history, memory, and user input, then tells you what to reclaim.",
+      "Ratel finds problems, fixes them and runs evals on your agent, for higher accuracy, lower latency and no wasted tokens, turn after turn.",
+    image: "/og.png",
   });
 });
