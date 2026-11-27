@@ -3,6 +3,7 @@ import { cn } from "@ratel/design-system/cn";
 import { EmptyState } from "@ratel/design-system/states";
 import { CircleAlert } from "lucide-react";
 import type { ComponentProps } from "react";
+import { drawnChart } from "@/lib/views/dashboards/sql-chart";
 import { WidgetBody } from "./WidgetBody";
 
 /** A widget's body as a card draws it, under the card's title row: on a dashboard and on the Overview. */
@@ -11,8 +12,10 @@ export function WidgetCardBody(props: Omit<ComponentProps<typeof WidgetBody>, "f
     <div
       className={cn(
         "min-h-0 flex-1",
-        // A chart's readout may reach out of it.
-        ["line", "bar"].includes(props.widget.chart) ? "" : "overflow-auto",
+        // A chart's readout may reach out of it. A table scrolls: one drawn in place of a chart too.
+        ["line", "bar"].includes(drawnChart(props.widget.chart, props.result))
+          ? ""
+          : "overflow-auto",
       )}
     >
       <WidgetBody {...props} fill />

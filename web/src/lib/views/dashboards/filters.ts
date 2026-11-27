@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { filterProblem } from "@/lib/contracts/filter-budget";
-import { traceFilterShape } from "@/lib/contracts/query";
+import { type Query, traceFilterShape } from "@/lib/contracts/query";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/synthesis/dashboard";
 import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
 import {
@@ -10,12 +10,8 @@ import {
   unpackFilter,
 } from "@/lib/synthesis/traces/v2/filters";
 import { MAX_PLAIN_CHARS, searchFromTraceFilter } from "@/lib/views/dashboards/links";
-import type {
-  DashboardDefaults,
-  DashboardFilters,
-  WidgetQuery,
-} from "@/lib/views/dashboards/types";
-import { isFilterable, queryFilter, withFilter } from "@/lib/views/dashboards/widget";
+import type { DashboardDefaults, DashboardFilters } from "@/lib/views/dashboards/types";
+import { isFilterable, metricOfForm, queryFilter, withFilter } from "@/lib/views/dashboards/widget";
 
 /**
  * A dashboard's filters in its address. The address wins over the saved ones as a whole; one
@@ -95,12 +91,12 @@ export function sameDefaults(a: DashboardDefaults, b: DashboardDefaults): boolea
 }
 
 /** The query with the page's filters as one more clause. A measure that cannot be filtered stays. */
-export function withPageFilters<Q extends WidgetQuery>(query: Q, page: DashboardFilters): Q {
+export function withPageFilters<Q extends Query>(query: Q, page: DashboardFilters): Q {
   return isFilterable(query) ? withFilter(query, withClause(queryFilter(query), page)) : query;
 }
 
 /** Whether `withPageFilters` adds a clause. */
-export function takesPageFilters(query: WidgetQuery, page: DashboardFilters): boolean {
+export function takesPageFilters(query: Query, page: DashboardFilters): boolean {
   const own = queryFilter(query);
   return isFilterable(query) && withClause(own, page) !== own;
 }
@@ -112,7 +108,7 @@ export function barChange(
     search,
     saved,
     queries,
-  }: { search: string; saved: DashboardFilters; queries: readonly WidgetQuery[] },
+  }: { search: string; saved: DashboardFilters; queries: readonly Query[] },
 ): { go: (current: string) => string; refused: string | null } {
   const go = (current: string) => {
     const bar = barSearch(current, saved);
@@ -122,11 +118,14 @@ export function barChange(
 }
 
 /** Why the filters of a page are too long, alone or together with those of a query on it, or null. */
-export function filtersProblem(
-  queries: readonly WidgetQuery[],
-  page: DashboardFilters,
-): string | null {
-  const all = [page, ...queries.map((query) => queryFilter(withPageFilters(query, page)))];
+export function filtersProblem(queries: readonly Query[], page: DashboardFilters): string | null {
+  // A metric widget's text takes the page's filter as it runs: View traces carries both, as for its metric.
+  const measured = (query: Query) =>
+    query.kind === "sql" && query.form ? metricOfForm(query.form) : query;
+  const all = [
+    page,
+    ...queries.map((query) => queryFilter(withPageFilters(measured(query), page))),
+  ];
   return all.map(filterProblem).find((problem) => problem !== null) ?? null;
 }
 

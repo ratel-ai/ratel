@@ -7,6 +7,7 @@ import { DashboardView } from "@/components/console/dashboards/DashboardView";
 import { GRID_COLUMNS } from "@/lib/console/grid/layout";
 import { metricQuery } from "@/lib/contracts/query";
 import type { DashboardWidget } from "@/lib/views/dashboards/types";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 import { PROJECT_ID, render } from "@/lib/views/tasks/test-support";
 
 /** A dashboard on the shared card grid, in view mode and in edit mode. */
@@ -14,16 +15,14 @@ import { PROJECT_ID, render } from "@/lib/views/tasks/test-support";
 const WIDGETS: DashboardWidget[] = [
   {
     id: "cost",
+    ...formWidget(formOf(metricQuery("cost", "sum")), "number"),
     title: "Cost",
-    query: metricQuery("cost", "sum"),
-    chart: "number",
     layout: { x: 0, y: 0, w: 4, h: 3 },
   },
   {
     id: "speed",
+    ...formWidget(formOf(metricQuery("latency", "p95")), "line"),
     title: "Speed",
-    query: metricQuery("latency", "p95"),
-    chart: "line",
     layout: { x: 4, y: 0, w: 8, h: 6 },
   },
   {

@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@ratel/design-system/cn";
 import { DataTable } from "@ratel/design-system/data-table";
 import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
@@ -8,7 +9,7 @@ import Link from "next/link";
 import { StillCalculating } from "@/components/console/scorers/StillCalculating";
 import type { MetricQuery } from "@/lib/contracts/query";
 import { getMetric, type MetricSource } from "@/lib/synthesis/metrics/catalog";
-import type { MetricResult, QueryResult } from "@/lib/synthesis/metrics/query";
+import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { formatInteger } from "@/lib/synthesis/traces/v2/format";
@@ -23,14 +24,18 @@ import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
 import {
   type DashboardRange,
   funnelStepFilter,
+  rangeWindow,
   stepFlowFilter,
   widgetTracesHref,
 } from "@/lib/views/dashboards/links";
+import { formAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import type { DashboardFilters, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import {
   aggregationLabel,
   dimensionLabel,
   flowNodeNoun,
+  isMetricChart,
+  metricOfForm,
   queryFilter,
   widgetName,
 } from "@/lib/views/dashboards/widget";
@@ -104,20 +109,43 @@ export function WidgetBody({
         {result.message} Fix: {result.fix}
       </Callout>
     );
-  if (query.kind === "sql" && result.kind === "sql")
-    return <SqlBody result={result} label={widgetName(widget)} fill={fill} />;
-  if (query.kind === "metric" && result.kind === "metric")
-    return (
-      <MetricBody
-        projectId={projectId}
-        query={query}
-        widget={widget}
-        result={result}
-        range={range}
-        filters={dashboardFilters}
-        fill={fill}
-      />
-    );
+  if (query.kind === "sql") {
+    const chart = isMetricChart(widget.chart) ? widget.chart : "table";
+    // A text of the form draws as the form did; query_monitoring gives a metric's own result.
+    if (query.form && (result.kind === "metric" || result.kind === "sql")) {
+      // A text cut at the row cap says so under its chart, as a hand-written one does.
+      const notes = result.kind === "sql" ? sqlResultNotes(result) : [];
+      const body = (
+        <MetricBody
+          projectId={projectId}
+          query={metricOfForm(query.form)}
+          widget={{ ...widget, chart }}
+          result={
+            result.kind === "metric"
+              ? result
+              : formAsMetric(result, query.form, chart, rangeWindow(range))
+          }
+          samples={result.kind === "metric"}
+          range={range}
+          filters={dashboardFilters}
+          fill={fill}
+        />
+      );
+      if (notes.length === 0) return body;
+      return (
+        <div className={cn("flex min-w-0 flex-col gap-2", fill && "h-full min-h-0")}>
+          <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>{body}</div>
+          {notes.map((note) => (
+            <p key={note} className="shrink-0 text-xs text-fg-subtle">
+              {note}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    if (result.kind === "sql")
+      return <SqlBody result={result} chart={chart} label={widgetName(widget)} fill={fill} />;
+  }
   if (query.kind === "flow" && result.kind === "flow")
     return result.edges.length === 0 ? (
       <EmptyState
@@ -231,6 +259,7 @@ function MetricBody({
   query,
   widget,
   result,
+  samples: counted,
   range,
   filters: dashboardFilters,
   fill,
@@ -239,6 +268,8 @@ function MetricBody({
   query: MetricQuery;
   widget: WidgetInput;
   result: MetricResult;
+  /** False for the rows of RQL text: they give the values, not the rows behind them. */
+  samples: boolean;
   range: DashboardRange;
   filters: DashboardFilters;
   fill: boolean;
@@ -268,7 +299,9 @@ function MetricBody({
           {
             label: aggregationLabel(aggregation),
             value: formatMetric(total, unit),
-            hint: `${formatInteger(samples)} ${noun}${samples === 1 ? "" : "s"}`,
+            ...(counted
+              ? { hint: `${formatInteger(samples)} ${noun}${samples === 1 ? "" : "s"}` }
+              : {}),
           },
         ]}
       />
@@ -310,7 +343,7 @@ function MetricBody({
               );
             },
           })),
-          ...(metric.unit === "count"
+          ...(metric.unit === "count" || !counted
             ? []
             : [
                 {

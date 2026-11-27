@@ -16,19 +16,27 @@ import {
 import { searchFromTraceFilter } from "@/lib/views/dashboards/links";
 import { aggregationLabel, type QueryChange, scorersOfMetric } from "@/lib/views/dashboards/widget";
 
+/** The Metric dropdown's choice for a text written by hand. */
+export const CUSTOM_METRIC = "custom";
+
 /**
  * What is measured: the metric, its aggregation and its scorer. `children` follow the aggregation.
  * The metrics of scorers show only while scorers are on (a `ScorerPickerProvider` with data).
+ * With `custom`, the Metric dropdown offers `Custom` too: while it is chosen, the aggregation is
+ * off and `query` is the last selection, shown for what it was.
  */
 export function MetricFields({
   query,
   filterableOnly = false,
+  custom,
   onChange,
   children,
 }: {
   query: Pick<MetricQuery, "measures" | "filters">;
   /** Only the metrics of traces that a trace filter applies to. */
   filterableOnly?: boolean;
+  /** The RQL text is written by hand: `Custom` is chosen. */
+  custom?: boolean;
   onChange: (change: QueryChange) => void;
   children?: ReactNode;
 }) {
@@ -44,11 +52,16 @@ export function MetricFields({
           <Select
             {...control}
             className="w-full"
-            options={offeredMetrics({ customMonitoring: scorers !== null })
-              .filter(({ filterable }) => filterable || !filterableOnly)
-              .map(({ id, label }) => ({ value: id, label }))}
-            value={measure}
-            onValueChange={(value) => onChange({ measure: value as MeasureId })}
+            options={[
+              ...offeredMetrics({ customMonitoring: scorers !== null })
+                .filter(({ filterable }) => filterable || !filterableOnly)
+                .map(({ id, label }) => ({ value: id, label })),
+              ...(custom === undefined ? [] : [{ value: CUSTOM_METRIC, label: "Custom" }]),
+            ]}
+            value={custom ? CUSTOM_METRIC : measure}
+            onValueChange={(value) => {
+              if (value !== CUSTOM_METRIC) onChange({ measure: value as MeasureId });
+            }}
           />
         )}
       </Field>
@@ -57,7 +70,7 @@ export function MetricFields({
           <Select
             {...control}
             className="w-full"
-            disabled={metric.aggregations.length === 1}
+            disabled={custom || metric.aggregations.length === 1}
             options={metric.aggregations.map((value) => ({
               value,
               label: aggregationLabel(value),
@@ -68,7 +81,7 @@ export function MetricFields({
         )}
       </Field>
       {children}
-      {metric.source === "scores" ? (
+      {metric.source === "scores" && !custom ? (
         <Field label="Scorer" className="min-w-40 flex-1">
           {({ id }) => (
             <ScorerPicker

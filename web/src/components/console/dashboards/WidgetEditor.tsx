@@ -5,21 +5,17 @@ import { cn } from "@ratel/design-system/cn";
 import { Dialog, DialogClose, DialogContent } from "@ratel/design-system/dialog";
 import { Skeleton } from "@ratel/design-system/states";
 import { useState } from "react";
-import { metricQuery } from "@/lib/contracts/query";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import { filtersProblem } from "@/lib/views/dashboards/filters";
 import type { DashboardRange } from "@/lib/views/dashboards/links";
 import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
-import { widgetName } from "@/lib/views/dashboards/widget";
+import { NEW_SQL_TEXT, sqlWidgetQuery, widgetName } from "@/lib/views/dashboards/widget";
 import { useWidgetPreview } from "./use-widget-preview";
 import { WidgetBody } from "./WidgetBody";
 import { WidgetFields } from "./WidgetFields";
 
-const NEW_WIDGET: WidgetInput = {
-  title: "",
-  query: metricQuery("trace_count", "count"),
-  chart: "line",
-};
+/** A new widget is a metric widget: a table of the newest traces, until a metric is picked. */
+const NEW_WIDGET: WidgetInput = { title: "", query: sqlWidgetQuery(NEW_SQL_TEXT), chart: "table" };
 
 /** Add or edit a widget: one dialog, with the widget drawn live as it changes. */
 export function WidgetEditor({
@@ -112,6 +108,7 @@ function EditorForm({
         }}
         refused={refused ? { field: "filter", message: refused } : null}
         facets={facets}
+        range={range}
         result={preview?.ok ? preview.result : null}
       />
       <section

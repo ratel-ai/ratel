@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { type MeasureId, type MetricQuery, metricQuery } from "@/lib/contracts/query";
+import {
+  type MeasureId,
+  type MetricForm,
+  type MetricQuery,
+  metricQuery,
+  type SqlQuery,
+} from "@/lib/contracts/query";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { type MetricsDb, metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
@@ -14,6 +20,7 @@ import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
 import { dashboardDocumentSchema, exportDashboard } from "@/lib/views/dashboards/document";
 import { barChange, filtersProblem } from "@/lib/views/dashboards/filters";
 import { gridPositionSchema, inReadingOrder } from "@/lib/views/dashboards/layout";
+import { formQuery } from "@/lib/views/dashboards/metric-rql";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import {
@@ -31,12 +38,15 @@ import {
   type DashboardFilters,
   MAX_WIDGETS,
   type WidgetInput,
-  type WidgetQuery,
   type WidgetResult,
 } from "@/lib/views/dashboards/types";
 import {
+  changeForm,
   changeQuery,
   fitWidget,
+  formOf,
+  formWidget,
+  metricOfForm,
   queryScorerId,
   scorersOfMetric,
   scorerWidget,
@@ -47,11 +57,14 @@ import {
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER = "33333333-3333-4333-8333-333333333333";
+/** A metric widget as an older client sends it: the actions read it as RQL of the form. */
 const WIDGET = {
   title: "",
   query: metricQuery("latency", "p95", { filters: { models: ["gpt-4o"] } }),
   chart: "line",
 } as const;
+/** What is saved for `WIDGET`. */
+const SAVED = formWidget(formOf(WIDGET.query), "line");
 const query = (change: object) => ({ query: { ...WIDGET.query, ...change } });
 
 let client: Awaited<ReturnType<typeof createMigratedPGlite>>;
@@ -88,7 +101,7 @@ test("add, edit, move and remove a widget", async () => {
     await ok({ action: "add-widget", dashboardId: id, widget: { ...WIDGET, title } });
   const [a, b, c] = inReadingOrder(await widgets(id));
   assert.deepEqual(a, {
-    ...WIDGET,
+    ...SAVED,
     title: "a",
     id: a.id,
     layout: { x: 0, y: 0, w: 6, h: 6 },
@@ -212,8 +225,8 @@ test("one byte over the filter budget, with the dashboard's filters, is refused 
   assert.equal(await refused({ action: "import", document: document(3_072) }), null);
   const named = await refused({ action: "import", document: document(3_073) });
   assert.ok(named?.startsWith("Widget 1") && named.endsWith(`: ${message}`), String(named));
-  // The widget editor and the filter bar ask the same before they send a change.
-  const queryOf = (bytes: number) => widget(bytes).query as WidgetQuery;
+  // The widget editor and the filter bar ask the same before they send a change, of what is saved.
+  const queryOf = (bytes: number) => formWidget(formOf(widget(bytes).query), "line").query;
   assert.equal(filtersProblem([queryOf(3_072)], page), null);
   assert.equal(filtersProblem([queryOf(3_073)], page), message);
   const bar = (agent: string) =>
@@ -267,7 +280,7 @@ test("a stored widget that is not one is a broken entry; the rest loads, and the
     { customMonitoring: true },
     async (projectId, item, scope) => {
       asked.push(item.title);
-      return runQuery(projectId, item.query as MetricQuery, scope, db as unknown as MetricsDb);
+      return runQuery(projectId, metricOf(item), scope, db as unknown as MetricsDb);
     },
   );
   assert.deepEqual(asked, ["fine"]);
@@ -344,8 +357,7 @@ test("a dashboard filter narrows every widget, on top of its own filter", async 
     metricQuery("trace_count", "count", { dimensions: ["environment"] }),
     metricQuery("context_tokens", "sum"),
   ].map((query, index) => ({
-    ...WIDGET,
-    query,
+    ...formWidget(formOf(query), "line"),
     id: String(index),
     layout: { x: 0, y: 6 * index, w: 6, h: 6 },
   }));
@@ -357,7 +369,7 @@ test("a dashboard filter narrows every widget, on top of its own filter", async 
         { since: new Date("2026-11-02"), until: new Date("2026-11-03"), filter },
         { customMonitoring: false },
         (projectId, widget, scope) =>
-          runQuery(projectId, widget.query as MetricQuery, scope, db as unknown as MetricsDb),
+          runQuery(projectId, metricOf(widget), scope, db as unknown as MetricsDb),
       )
     ).map((result) => seriesOf(result)?.map(({ total }) => total));
   assert.deepEqual(await totals(), [[3], [2], [2, 1], [0]]);
@@ -386,14 +398,13 @@ test("export, then import into another project, gives an equal dashboard", async
     defaults: { filters: { environments: ["prod"] }, range: "30d" },
   });
   const shown: WidgetInput[] = [
-    WIDGET,
+    SAVED,
     scorerWidget(mine[0]),
     { ...scorerWidget(mine[1]), title: "Depth of answers" },
-    {
-      title: "",
-      query: metricQuery("cost", "sum", { dimensions: ["model", "service"], bucket: "day" }),
-      chart: "table",
-    },
+    formWidget(
+      formOf(metricQuery("cost", "sum", { dimensions: ["model", "service"], bucket: "day" })),
+      "table",
+    ),
   ];
   for (const widget of shown)
     assert.ok((await run({ action: "add-widget", dashboardId: id, widget }, on)).ok);
@@ -454,8 +465,7 @@ test("context data of two environments stays whole under a dashboard filter; a t
   }
   const shown = [metricQuery("context_tokens", "sum"), metricQuery("trace_count", "count")].map(
     (query, index) => ({
-      ...WIDGET,
-      query,
+      ...formWidget(formOf(query), "line"),
       id: String(index),
       layout: { x: 0, y: 6 * index, w: 6, h: 6 },
     }),
@@ -468,7 +478,7 @@ test("context data of two environments stays whole under a dashboard filter; a t
         { since: new Date("2026-11-12"), until: new Date("2026-11-13"), filter },
         { customMonitoring: false },
         (projectId, item, scope) =>
-          runQuery(projectId, item.query as MetricQuery, scope, db as unknown as MetricsDb),
+          runQuery(projectId, metricOf(item), scope, db as unknown as MetricsDb),
       )
     ).map((result) => seriesOf(result)?.[0].total);
   assert.deepEqual(await totals(), [15, 2]);
@@ -484,8 +494,7 @@ test("a widget that does not fit the metric catalog or its chart is refused", as
     [query({ kind: "pie" }), /Unknown query kind/],
     [query({ version: 9 }), /Unknown query version/],
     [{ query: undefined }, /Unknown query kind/],
-    [{ chart: "table" }, /needs a group-by/],
-    [{ chart: "number", ...query({ dimensions: ["model"] }) }, /cannot be grouped/],
+    [{ chart: "flow" }, /A metric cannot be drawn as a flow/],
     [{ chart: "pie" }, /invalid/],
     [{ size: "half" }, /invalid/],
     [{ metric: "latency" }, /invalid/],
@@ -512,15 +521,32 @@ test("a sql widget: saved, loaded, refused by RQL, exported and imported", async
   const widget: WidgetInput = {
     title: "Traces",
     query: sqlWidgetQuery("select count(*) as traces from traces"),
-    chart: "sql",
+    chart: "table",
   };
+  // A metric widget is drawn as a line, a bar, a number or a table.
   await refused(
-    { action: "add-widget", dashboardId: id, widget: { ...widget, chart: "table" } },
-    /drawn as chart "sql"/,
+    { action: "add-widget", dashboardId: id, widget: { ...widget, chart: "flow" } },
+    /A metric cannot be drawn as a flow/,
   );
-  assert.ok((await run({ action: "add-widget", dashboardId: id, widget })).ok);
+  // The chart "sql" of an older client is the chart its rows draw: a table here.
+  const older = { ...widget, chart: "sql" };
+  assert.ok((await run({ action: "add-widget", dashboardId: id, widget: older })).ok);
   const [stored] = await widgets(id);
   assert.deepEqual(stored, { ...widget, id: stored.id, layout: stored.layout });
+  // Rows with one time column and numbers drew a line.
+  const timed = sqlWidgetQuery(
+    "select time_bucket('1 hour', started_at) as bucket, count(*) as value\nfrom traces\ngroup by bucket",
+  );
+  const line = await run({
+    action: "add-widget",
+    dashboardId: id,
+    widget: { title: "Timed", query: timed, chart: "sql" },
+  });
+  assert.ok(line.ok);
+  const drawn = (await widgets(id)).find(({ title }) => title === "Timed");
+  assert.ok(drawn);
+  assert.equal(drawn.chart, "line");
+  await ok({ action: "remove-widget", dashboardId: id, widgetId: drawn.id });
 
   const scope = {
     since: new Date(Date.now() - 3_600_000),
@@ -559,23 +585,22 @@ test("a scorer widget is accepted with customMonitoring only", async () => {
   const [stored] = await widgets(id);
   assert.deepEqual(stored, { ...widget, id: stored.id, layout: stored.layout });
   await refused({ action: "edit-widget", dashboardId: id, widgetId: stored.id, widget }, /is off/);
-  const bad: [Record<string, unknown>, RegExp][] = [
+  const bad: [Partial<MetricQuery>, RegExp][] = [
     [{ filters: { scorer: { id: "nope" } } }, /Unknown scorer/],
     [{ dimensions: ["tool"] }, /be grouped/],
     [{ measures: [{ measure: "trace_count", aggregation: "count" }] }, /filtered by scorer/],
   ];
   for (const [change, error] of bad) {
-    const changed = { ...widget, query: { ...widget.query, ...change } };
+    const changed = formWidget(formOf({ ...metricOf(widget), ...change }), "line");
     await refused({ action: "add-widget", dashboardId: id, widget: changed }, error, on);
   }
 });
 
 test("leaving the scorer metrics drops the scorer; each metric offers the scorers it reads", () => {
-  const widget = scorerWidget({ id: OTHER, verdict: false });
-  assert.equal(widget.query.measures[0].measure, "scorer_average");
+  const { form } = metricWidgetOf(scorerWidget({ id: OTHER, verdict: false }));
+  assert.equal(form.measures[0].measure, "scorer_average");
   const mine = [{ id: OTHER, name: "Depth", verdict: false }];
-  const scorerAfter = (measure: MeasureId) =>
-    changeQuery(widget.query, { measure }, mine).filters.scorer;
+  const scorerAfter = (measure: MeasureId) => changeForm(form, { measure }, mine).filters.scorer;
   assert.deepEqual(scorerAfter("scorer_count"), { id: OTHER });
   assert.equal(scorerAfter("cost"), undefined);
   assert.equal(scorerAfter("scorer_pass_rate"), undefined);
@@ -727,12 +752,17 @@ test("a dashboard holds at most 24 widgets", async () => {
 });
 
 test("the editor stays on a widget the rules allow", () => {
-  const fit = (change: object) => fitWidget({ ...WIDGET, ...change });
-  assert.deepEqual(fit({ chart: "table" }).query.dimensions, ["model"]);
-  assert.deepEqual(
-    fit({ chart: "number", ...query({ dimensions: ["model"] }) }).query.dimensions,
-    [],
+  const fit = (change: Partial<WidgetInput>) => fitWidget({ ...SAVED, ...change });
+  // A table needs no group-by: the text follows the chart.
+  assert.deepEqual(fit({ chart: "table" }), formWidget(metricWidgetOf(SAVED).form, "table"));
+  const grouped = formQuery(
+    { ...metricWidgetOf(SAVED).form, dimensions: ["model"] },
+    "line",
+    "hour",
   );
+  assert.deepEqual(metricWidgetOf(fit({ chart: "number", query: grouped })).form.dimensions, []);
+  // A chart of another kind is a table.
+  assert.equal(fit({ chart: "flow" }).chart, "table");
   const cost = changeQuery(WIDGET.query, { measure: "cost" }, []);
   assert.deepEqual(cost, metricQuery("cost", "sum", { filters: WIDGET.query.filters }));
   const context = changeQuery(
@@ -745,15 +775,16 @@ test("the editor stays on a widget the rules allow", () => {
     [],
   );
   assert.deepEqual(context, metricQuery("context_tokens", "sum"));
-  const table = fit({ chart: "table", query: context });
-  assert.equal(table.chart, "line");
-  for (const widget of [fit({ chart: "table" }), fit({ query: cost }), table])
+  const table = fitWidget(formWidget(formOf(context), "table"));
+  assert.equal(table.chart, "table");
+  const costWidget = formWidget(formOf(cost), "line");
+  for (const widget of [fit({ chart: "table" }), costWidget, table])
     assert.ok(parseWidget(widget).ok);
 });
 
 test("a widget is named after what it measures until it has a title", () => {
   const named = (...args: Parameters<typeof metricQuery>) =>
-    widgetName({ title: "", query: metricQuery(...args) });
+    widgetName(formWidget(formOf(metricQuery(...args))));
   assert.equal(named("latency", "p95"), "Latency p95");
   assert.equal(
     named("latency", "p95", { dimensions: ["model", "service"] }),
@@ -761,7 +792,9 @@ test("a widget is named after what it measures until it has a title", () => {
   );
   assert.equal(named("cost", "sum"), "Cost");
   assert.equal(named("cost", "avg"), "Cost per trace");
-  assert.equal(widgetName({ ...WIDGET, title: "Speed" }), "Speed");
+  assert.equal(widgetName({ ...SAVED, title: "Speed" }), "Speed");
+  // A Custom text has no form to be named after.
+  assert.equal(widgetName({ title: "", query: sqlWidgetQuery("select 1") }), "RQL query");
 });
 
 function deps(overrides: Partial<DashboardActionDeps> = {}): DashboardActionDeps {
@@ -821,6 +854,18 @@ async function widget(id: string, widgetId: string) {
 
 async function titles(id: string) {
   return inReadingOrder(await widgets(id)).map((item) => item.title);
+}
+
+/** A metric widget with its form: what a widget of the form editor is. */
+function metricWidgetOf(widget: WidgetInput): { query: SqlQuery; form: MetricForm } {
+  const { query } = widget;
+  assert.ok(query.kind === "sql" && query.form, "a widget of the metric form");
+  return { query, form: query.form };
+}
+
+/** The metric query of a widget's form: what the form compiler reads. */
+function metricOf(widget: WidgetInput): MetricQuery {
+  return metricOfForm(metricWidgetOf(widget).form);
 }
 
 function seriesOf(result: WidgetResult | null) {

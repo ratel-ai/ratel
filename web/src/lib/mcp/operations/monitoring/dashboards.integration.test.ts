@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { z } from "zod";
-import { querySchema } from "@/lib/contracts/query";
+import { type MetricQuery, querySchema } from "@/lib/contracts/query";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
 import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { shownFilters } from "@/lib/views/dashboards/filters";
+import { metricAsRql } from "@/lib/views/dashboards/metric-rql";
 import { resolveWidgetRange } from "@/lib/views/dashboards/range";
 import * as store from "@/lib/views/dashboards/store";
+import type { MetricChartKind } from "@/lib/views/dashboards/types";
+import { formOf, formWidget, metricOfForm } from "@/lib/views/dashboards/widget";
 import { decodePanels, PANELS_PARAM } from "@/lib/views/explore/state";
 import { loadScorerPicker } from "@/lib/views/scorers/picker";
 import { createScorer } from "@/lib/views/scorers/store";
@@ -171,13 +174,14 @@ test("an agent reads the schema, imports a dashboard of every kind and reads it 
     "get_dashboard",
     { dashboardId },
   );
-  assert.deepEqual(read.document, DOCUMENT);
+  // A metric widget comes back as RQL with its form: the shape a widget is kept in.
+  assert.deepEqual(read.document, asRql(DOCUMENT));
   assert.deepEqual([...new Set(read.widgets.map(({ kind }) => kind))].sort(), [
     "clusters",
     "flow",
     "funnel",
     "geography",
-    "metric",
+    "sql",
     "step_flow",
   ]);
   assert.ok(read.widgets.every(({ summary }) => summary.length > 0));
@@ -511,6 +515,8 @@ test("a sql widget: change_dashboard, get_dashboard and import_dashboard carry i
   assert.equal(read.widgets[0].summary, "1 row of 1 column: traces.");
   assert.match(read.widgets[1].summary, /RQL refused the query: .*spans/);
   assert.deepEqual(read.document.widgets[0], { ...read.document.widgets[0], query: sql });
+  // An old chart "sql" is kept as the chart its rows draw: one number with no time is a table.
+  assert.equal(read.document.widgets[0].chart, "table");
 
   const imported = await m.data<{ dashboardId: string }>("import_dashboard", {
     document: read.document,
@@ -524,7 +530,12 @@ test("a sql widget: change_dashboard, get_dashboard and import_dashboard carry i
     "describe_monitoring_schema",
     { part: "catalog" },
   );
-  assert.deepEqual(catalog.kinds.find(({ kind }) => kind === "sql")?.charts, ["sql"]);
+  assert.deepEqual(catalog.kinds.find(({ kind }) => kind === "sql")?.charts, [
+    "line",
+    "bar",
+    "number",
+    "table",
+  ]);
 });
 
 test("a sql widget on a 3 month range: get_dashboard reads the whole range, and as sql gives the text", async () => {
@@ -661,13 +672,13 @@ test("a result has the Explore link of the same queries, filters and range", asy
       filters,
       ...days,
     });
+    const parsed = querySchema.parse(query);
     assert.deepEqual(opened(href), {
+      // A metric opens in Explore as RQL with its form, as a widget keeps it.
       panels: [
-        {
-          title: "",
-          query: querySchema.parse(query),
-          chart: kind === "metric" ? "line" : kind,
-        },
+        parsed.kind === "metric"
+          ? formWidget(formOf(parsed), "line")
+          : { title: "", query: parsed, chart: kind },
       ],
       filters,
       range: ["exact", "2026-11-20T00:00:00.000Z", "2026-11-24T00:00:00.000Z"],
@@ -721,7 +732,7 @@ test("the clauses of a query all match, and its Explore link has them", async ()
   const decoded = decodePanels(new URL(href, "https://x.test").searchParams.get(PANELS_PARAM));
   assert.ok(decoded.ok);
   const { query } = decoded.panels[0];
-  assert.deepEqual("filters" in query && query.filters, filters);
+  assert.deepEqual(query.kind === "sql" && query.form?.filters, filters);
 });
 
 test("the Explore link reads exactly the window of the MCP result", async () => {
@@ -759,11 +770,17 @@ test("the Explore link reads exactly the window of the MCP result", async () => 
     const later = new Date(NOW.getTime() + 86_400_000);
     const { since, until } = resolveWidgetRange(Object.fromEntries(searchParams), later);
     assert.deepEqual(mcp.window, { since: since.toISOString(), until: until.toISOString() });
-    const web = await m.deps.runQuery(PROJECT, decoded.panels[0].query, {
-      since,
-      until,
-      filter: {},
-    });
+    // The panel is RQL with its form: the form's metric gives the numbers the view drew.
+    const panel = decoded.panels[0].query;
+    const web = await m.deps.runQuery(
+      PROJECT,
+      panel.kind === "sql" && panel.form ? metricOfForm(panel.form) : panel,
+      {
+        since,
+        until,
+        filter: {},
+      },
+    );
     assert.deepEqual(web, result);
   }
 });
@@ -822,8 +839,8 @@ test("an invalid query is refused with the path of each error", async () => {
   });
   assert.ok(!filters.ok && filters.issues?.[0].path === "filters.environments");
   const chart = await m.call("query_monitoring", {
-    query: metric("cost", "sum"),
-    chart: "table",
+    query: metric("cost", "sum", ["model"]),
+    chart: "number",
   });
   assert.ok(!chart.ok && chart.issues?.[0].path === "chart");
 });
@@ -835,6 +852,23 @@ function metric(measure: string, aggregation: string, dimensions: string[] = [])
     measures: [{ measure, aggregation }],
     dimensions,
     filters: {},
+  };
+}
+
+/** A document with each metric widget as RQL with its form, as get_dashboard exports it. */
+function asRql(document: typeof DOCUMENT) {
+  return {
+    ...document,
+    widgets: document.widgets.map((item) => {
+      const query = item.query as MetricQuery;
+      if (query.kind !== "metric") return item;
+      const form = formOf(query);
+      const scorer = (query.filters as { scorer?: { name: string } }).scorer;
+      const text = metricAsRql(form, item.chart as MetricChartKind, "hour", {
+        ...(scorer ? { scorerName: scorer.name } : {}),
+      });
+      return { ...item, query: { ...VERSION, kind: "sql", text, rqlVersion: 1, form } };
+    }),
   };
 }
 

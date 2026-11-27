@@ -24,7 +24,13 @@ import {
   setupDb,
 } from "@/lib/readings/trace-signals/signals/integration-support";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
+import { metricSeams } from "@/lib/synthesis/metrics/query";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import { createDashboard, deleteDashboard } from "@/lib/views/dashboards/store";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import {
   changeOverviewLayout,
@@ -115,7 +121,7 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
           id === PROJECT_ID ? { organizationId: ORGANIZATION_ID } : null,
       },
     );
-  return { db, call, web: webDeps(db, "user_ana"), store };
+  return { client, db, call, web: webDeps(db, "user_ana"), store };
 }
 
 /** A loaded Overview with no widget's data, without a database. */
@@ -639,15 +645,22 @@ test("a connection lists the tools when one of its organizations has the flag", 
 });
 
 const BOARD_WIDGET = {
+  ...formWidget(formOf(metricQuery("trace_count", "count")), "number"),
   id: "runs",
   title: "Runs",
-  query: metricQuery("trace_count", "count"),
-  chart: "number" as const,
   layout: { x: 0, y: 0, w: 6, h: 4 },
 };
 
 async function withBoard(over: Partial<OverviewOperationDeps> = {}) {
   const at = await setup(over);
+  // A metric widget is RQL: it reads through the RQL runner, on this test's database.
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(at.client)),
+      gate: createRqlGate(),
+      observe: async () => {},
+    },
+  });
   const made = await createDashboard(
     {
       projectId: PROJECT_ID,
@@ -707,7 +720,7 @@ test("a dashboard widget: the page and the widget alone have its numbers, and th
     assert.equal(widget.name, "Runs");
     assert.equal(widget.dashboard, "Board");
     assert.equal(widget.href, `/project/${PROJECT_ID}/dashboards/${id}`);
-    assert.equal(widget.result.kind, "metric");
+    assert.equal(widget.result.kind, "sql");
     assert.equal(typeof widget.summary, "string");
     assert.ok(viewed.ok && viewed.view);
     const { dashboards } = viewed.view.overview as {

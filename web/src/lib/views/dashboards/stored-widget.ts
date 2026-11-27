@@ -1,5 +1,5 @@
 import { freePosition, gridPositionSchema } from "@/lib/views/dashboards/layout";
-import { parseWidget } from "@/lib/views/dashboards/parse-widget";
+import { type ParseWidgetOptions, parseWidget } from "@/lib/views/dashboards/parse-widget";
 import {
   type BrokenWidget,
   type DashboardWidget,
@@ -25,11 +25,12 @@ export function isWidget(widget: DashboardWidget): widget is Widget {
   return !isBroken(widget);
 }
 
-export function readWidgets(stored: unknown): DashboardWidget[] {
+/** The stored list in today's shape (`parseWidget`): the store gives the chart of an older RQL widget. */
+export function readWidgets(stored: unknown, options: ParseWidgetOptions = {}): DashboardWidget[] {
   const items: unknown[] = Array.isArray(stored) ? stored : [];
   const ids = new Set<string>();
   const read = items.map((raw) => {
-    const result = readWidget(raw, ids);
+    const result = readWidget(raw, ids, options);
     if (result.ok) ids.add(result.widget.id);
     return result;
   });
@@ -65,13 +66,14 @@ export function writeWidgets(widgets: readonly DashboardWidget[]): unknown[] {
 function readWidget(
   raw: unknown,
   ids: ReadonlySet<string>,
+  options: ParseWidgetOptions,
 ): { ok: true; widget: Widget } | { ok: false; problem: string } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw))
     return { ok: false, problem: "The widget is not an object." };
   const { id, layout, missingScorer, ...rest } = raw as Record<string, unknown>;
   if (typeof id !== "string" || !id) return { ok: false, problem: "The widget has no id." };
   if (ids.has(id)) return { ok: false, problem: "Another widget has the same id." };
-  const parsed = parseWidget(rest, FEATURES);
+  const parsed = parseWidget(rest, FEATURES, options);
   if (!parsed.ok) return { ok: false, problem: parsed.error };
   const place = gridPositionSchema.safeParse(layout);
   if (!place.success)

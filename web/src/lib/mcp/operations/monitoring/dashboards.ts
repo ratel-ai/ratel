@@ -4,8 +4,10 @@ import {
   BUCKETS,
   DIMENSIONS,
   MEASURES,
+  QUERY_KINDS,
   QUERY_VERSION,
   type Query,
+  type QueryKind,
   querySchema,
   type SqlQuery,
 } from "@/lib/contracts/query";
@@ -31,14 +33,15 @@ import {
   getMetric,
   MAX_METRIC_WINDOW_DAYS,
   metricBucket,
+  nothingIsZero,
   offeredMetrics,
+  type QueryWindow,
 } from "@/lib/synthesis/metrics/catalog";
 import { RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { dashboardDocumentSchema, exportDashboard } from "@/lib/views/dashboards/document";
-import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
 import {
   dashboardFiltersSchema,
   defaultsSchema,
@@ -46,7 +49,9 @@ import {
 } from "@/lib/views/dashboards/filters";
 import { gridPositionSchema, inReadingOrder } from "@/lib/views/dashboards/layout";
 import { type DashboardRange, dashboardHref, dashboardsHref } from "@/lib/views/dashboards/links";
+import { formQuery } from "@/lib/views/dashboards/metric-rql";
 import { exactly } from "@/lib/views/dashboards/range";
+import { formAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
 import {
@@ -54,13 +59,21 @@ import {
   type DashboardSummary,
   type DashboardWidget,
   METRIC_CHARTS,
-  type MetricWidget,
-  WIDGET_CHARTS,
-  WIDGET_KINDS,
+  type MetricChartKind,
+  STORED_CHARTS,
+  type WidgetChart,
   type WidgetInput,
-  type WidgetKind,
+  type WidgetResult,
 } from "@/lib/views/dashboards/types";
-import { chartProblem, widgetName } from "@/lib/views/dashboards/widget";
+import {
+  chartProblem,
+  formOf,
+  formWidget,
+  isMetricChart,
+  metricOfForm,
+  queryName,
+  widgetName,
+} from "@/lib/views/dashboards/widget";
 import { explorePanelsHref } from "@/lib/views/explore/links";
 import { MAX_PANELS } from "@/lib/views/explore/types";
 import { scorerNames } from "@/lib/views/scorers/picker";
@@ -69,7 +82,6 @@ const FEATURES = { customMonitoring: true } as const;
 const QUERY_WINDOW = { defaultDays: 7, maxDays: MAX_METRIC_WINDOW_DAYS } as const;
 /** Kind sql reads the window of RQL: its default and its longest window, as `run_rql`. */
 const SQL_WINDOW = RQL_WINDOW;
-const SQL_CHART_PROBLEM = "A query of kind sql has no chart: it gives a table.";
 /** How a change made through MCP is signed: the core has no table of people. */
 const EDITOR_NAME = "An agent (MCP)";
 
@@ -88,8 +100,10 @@ const widgetParam = z.strictObject({
   title: z.string().max(80).optional().describe("Empty: the query's own name."),
   query: queryParam,
   chart: z
-    .enum(WIDGET_CHARTS)
-    .describe("line, bar, number or table for a metric; else the query's kind."),
+    .enum(STORED_CHARTS)
+    .describe(
+      "line, bar, number or table for a metric or RQL (kind sql: its rows decide which ones draw); else the query's kind. A metric widget is kept as RQL: kind sql with its form.",
+    ),
 });
 
 /** A panel of the Explore page: a widget whose chart may be left out. */
@@ -120,7 +134,7 @@ export const EXAMPLES = {
     kind: "geography",
     measures: [{ measure: "trace_count", aggregation: "count" }],
   },
-} as const satisfies Record<Exclude<WidgetKind, "sql">, z.input<typeof querySchema>>;
+} as const satisfies Record<Exclude<QueryKind, "sql">, z.input<typeof querySchema>>;
 
 const SQL_PANEL_PROBLEM =
   "A query of kind sql cannot be a panel: ask it alone, or keep it as a widget with change_dashboard.";
@@ -134,8 +148,8 @@ const SQL_KIND = {
     text: "select model, count(*) as calls from events where type = 'llm_call' group by model",
     rqlVersion: RQL_VERSION,
   },
-  charts: ["sql"],
-  note: "RQL text. query_monitoring runs it and gives a table. A widget of chart sql holds it: a table, or a chart when its rows have one time column. The dashboard's filter keeps the rows whose trace matches. A panel cannot hold it. describe_rql_schema gives the language. run_rql runs it with a table view.",
+  charts: METRIC_CHARTS,
+  note: "RQL text: what every metric widget is. query_monitoring runs it and gives a table. A widget draws its rows as a line or a bar (one time column, or a text column for bars, and numbers), a number (one row, one number) or a table (any rows). form is the metric form's selection that wrote the text; without it the text is Custom. A widget given as kind metric is kept as kind sql with its form. The dashboard's filter keeps the rows whose trace matches. A panel cannot hold it. describe_rql_schema gives the language. run_rql runs it with a table view.",
 } as const;
 
 export function dashboardReadOperations(
@@ -207,7 +221,7 @@ export function dashboardReadOperations(
           .enum(["sql"])
           .optional()
           .describe(
-            "sql: for a lone metric query, give the RQL text of its numbers (the web app's Edit as SQL) instead of running it. A rate, a context metric and a group-by model, tool or agent have none yet: the refusal says why.",
+            "sql: for a lone metric query, give the RQL text of its numbers instead of running it: the query of kind sql, with the form, that a metric widget keeps.",
           ),
       }),
       async execute(ctx, params) {
@@ -232,7 +246,10 @@ export function dashboardReadOperations(
         const tracker = new TruncationTracker();
         tracker.mark(window.clamped);
         const range = rangeOf(exactly(window.since, window.until));
-        const href = explorePanelsHref(projectId, panels, { filters: filter ?? {}, range });
+        const href = explorePanelsHref(projectId, panels.map(asWidget), {
+          filters: filter ?? {},
+          range,
+        });
         const shown = panels.map((widget, index) => ({
           name: widgetName(widget),
           summary: headline(widget.query, results[index]),
@@ -363,7 +380,7 @@ export function dashboardReadOperations(
                   ? [`${widget.title} needs attention: ${widget.problem}`]
                   : params.numbers
                     ? [
-                        `${widgetName(widget)}: ${headline(widget.query, result).replace(/\.$/, "")}.`,
+                        `${widgetName(widget)}: ${widgetHeadline(widget, result, window).replace(/\.$/, "")}.`,
                       ]
                     : [],
               ),
@@ -372,7 +389,7 @@ export function dashboardReadOperations(
             widgets: widgets.map(({ widget, result }) => ({
               ...shownWidget(widget),
               ...(params.numbers && !isBroken(widget)
-                ? { summary: headline(widget.query, result) }
+                ? { summary: widgetHeadline(widget, result, window) }
                 : {}),
             })),
             document: exportDashboard(dashboard, scorers),
@@ -526,8 +543,9 @@ interface QueryParams {
 }
 
 /**
- * Edit as SQL: the RQL text that gives the numbers of a lone metric query, as the web app's widget
- * editor makes it (`metricAsRql`), with the bucket the query reads over the window. Not run.
+ * The RQL text that gives the numbers of a lone metric query, as the web app's metric form writes
+ * it, with the bucket the query reads over the window: the query of kind sql, with its form, that
+ * a metric widget keeps. Not run.
  */
 async function editAsSql(deps: MonitoringDeps, params: QueryParams) {
   if (params.queries !== undefined)
@@ -535,29 +553,23 @@ async function editAsSql(deps: MonitoringDeps, params: QueryParams) {
   const query = parsedQuery(params.query, ["query"]);
   if (query.kind !== "metric")
     throw invalidParams(AS_SQL_PROBLEM, [{ path: "query.kind", message: AS_SQL_PROBLEM }]);
-  const chart = (params.chart ?? "line") as MetricWidget["chart"];
-  const widget: MetricWidget = { title: "", query, chart };
-  const problem = chartProblem(widget);
+  const chart = (params.chart ?? "line") as MetricChartKind;
+  const problem = panelChartProblem({ query, chart });
   if (problem) throw invalidParams(problem, [{ path: "chart", message: problem }]);
   const window = resolveWindow(params, QUERY_WINDOW, deps.now());
   const metric = getMetric(query.measures[0].measure);
   const bucket = query.bucket ?? (metric ? metricBucket(metric, window) : "day");
-  const text = metricAsRql(widget, bucket);
-  const sqlQuery: SqlQuery = {
-    version: QUERY_VERSION,
-    kind: "sql",
-    text,
-    rqlVersion: RQL_VERSION,
-  };
+  const sqlQuery = formQuery(formOf(query), chart, bucket);
+  const name = queryName(query);
   return {
     data: {
-      name: widgetName(widget),
-      summary: `The RQL text of ${widgetName(widget)}, by ${bucket}.`,
-      text,
+      name,
+      summary: `The RQL text of ${name}, by ${bucket}.`,
+      text: sqlQuery.text,
       query: sqlQuery,
     },
     window: window.toJSON(),
-    hint: "query_monitoring runs this query; change_dashboard (add_widget, chart sql) keeps it as a widget. The page filter of a dashboard applies to it as it runs.",
+    hint: "query_monitoring runs this query; change_dashboard (add_widget, with a chart) keeps it as a widget. The page filter of a dashboard applies to it as it runs.",
   };
 }
 
@@ -578,8 +590,6 @@ async function sqlAnswer(
   query: SqlQuery,
   params: QueryParams,
 ) {
-  if (params.chart)
-    throw invalidParams(SQL_CHART_PROBLEM, [{ path: "chart", message: SQL_CHART_PROBLEM }]);
   const window = resolveWindow(params, SQL_WINDOW, deps.now());
   const filter = parsedFilters(params.filters);
   const result = await deps
@@ -597,16 +607,23 @@ async function sqlAnswer(
     },
     truncated: tracker.value,
     window: window.toJSON(),
-    hint: "run_rql runs RQL too, and shows the table as a view. change_dashboard (add_widget, chart sql) keeps it as a widget.",
+    hint: "run_rql runs RQL too, and shows the table as a view. change_dashboard (add_widget, chart line, bar, number or table) keeps it as a widget.",
   };
+}
+
+/** A panel of query_monitoring: a query as an agent asks it, with the chart it is drawn as. */
+interface Panel {
+  title: string;
+  query: Query;
+  chart: WidgetChart;
 }
 
 /** The panels a call asks for, each with the chart it is drawn as. */
 function askedPanels(params: {
   query?: unknown;
   queries?: readonly z.infer<typeof panelParam>[];
-  chart?: WidgetInput["chart"];
-}): WidgetInput[] {
+  chart?: string;
+}): Panel[] {
   if ((params.query === undefined) === (params.queries === undefined))
     throw invalidParams("Pass query, or queries for two to four panels: one of them.", [
       { path: "query", message: "Pass query or queries." },
@@ -625,9 +642,10 @@ function askedPanels(params: {
         { path: [...path, "query", "kind"].join("."), message: SQL_PANEL_PROBLEM },
       ]);
     // The chart of a lone query is for a metric; the other kinds have one each.
-    const chart =
-      query.kind === "metric" ? (given ?? "line") : path.length > 0 && given ? given : query.kind;
-    const problem = chartProblem({ chart, query });
+    const chart = (
+      query.kind === "metric" ? (given ?? "line") : path.length > 0 && given ? given : query.kind
+    ) as WidgetChart;
+    const problem = panelChartProblem({ chart, query });
     if (problem)
       throw invalidParams(problem, [{ path: [...path, "chart"].join("."), message: problem }]);
     return { title: title.trim(), query, chart };
@@ -851,13 +869,61 @@ function parsedFilters(raw: unknown): Dashboard["filters"] | undefined {
   throw invalidParams(`The filters are invalid at "${at}": ${message}`, [{ path: at, message }]);
 }
 
+/** A widget's numbers in one line: a metric widget of the form says them as its metric does. */
+function widgetHeadline(
+  widget: WidgetInput,
+  result: WidgetResult | null,
+  window: QueryWindow,
+): string {
+  const { query, chart } = widget;
+  if (!(query.kind === "sql" && query.form && result?.kind === "sql" && isMetricChart(chart)))
+    return headline(query, result);
+  const metric = metricOfForm(query.form);
+  const drawn = formAsMetric(result, query.form, chart, window);
+  const timed = chart === "line" || chart === "bar";
+  // A text cut at the row cap says so, as the console does under the chart.
+  const notes = sqlResultNotes(result)
+    .map((note) => ` ${note}`)
+    .join("");
+  // A text by bucket gives no total for a rate, an average or a percentile: say its latest bucket.
+  if (!timed || nothingIsZero(metric.measures[0].aggregation))
+    return `${headline(metric, drawn)}${notes}`;
+  const latest = {
+    ...drawn,
+    series: drawn.series.map((series) => ({
+      ...series,
+      total: series.values.findLast((value) => value !== null) ?? null,
+    })),
+  };
+  return `${headline(metric, latest)} (the latest ${drawn.bucket} with a value)${notes}`;
+}
+
+/** Why a panel's chart does not fit its query: a metric as the form draws it, else its widget's rule. */
+function panelChartProblem({ chart, query }: { chart: WidgetChart; query: Query }): string | null {
+  if (query.kind !== "metric") return chartProblem({ chart, query });
+  if (!isMetricChart(chart)) return `A metric cannot be drawn as a ${chart}.`;
+  if (chart === "number" && query.dimensions.length > 0) return "A number cannot be grouped.";
+  return null;
+}
+
+/** A panel as the console's widget: a metric becomes RQL with its form, as a widget keeps it. */
+function asWidget({ title, query, chart }: Panel): WidgetInput {
+  if (query.kind !== "metric") return { title, query, chart };
+  return { ...formWidget(formOf(query), chart as MetricChartKind), title };
+}
+
 function catalog() {
   return {
     kinds: [
-      ...WIDGET_KINDS.filter((kind) => kind !== "sql").map((kind) => ({
+      ...QUERY_KINDS.filter((kind) => kind !== "sql").map((kind) => ({
         kind,
         charts: kind === "metric" ? METRIC_CHARTS : [kind],
         example: EXAMPLES[kind],
+        ...(kind === "metric"
+          ? {
+              note: "A widget keeps a metric as RQL: kind sql, with this query as its form (query_monitoring as sql gives it).",
+            }
+          : {}),
       })),
       SQL_KIND,
     ],
@@ -879,7 +945,7 @@ function catalog() {
     rules: [
       "A filter is a list of clauses that must all match: its own properties, then each one of and. Two clauses on one property both hold, so {models:[a],and:[{models:[b]}]} keeps the traces that used a and b.",
       `All clauses of a filter, together with the filters of the dashboard or of query_monitoring, are ${MAX_FILTER_BYTES.toLocaleString("en-US")} bytes of JSON at most, so that View traces can always carry them.`,
-      "A table needs a dimension. A number has none.",
+      "A number has no dimension. A metric widget is RQL: a table draws any rows, a number one row with one number, a line one time column and numbers, a bar a time or text column and numbers.",
       "An alert takes a metric query without dimensions. It reads what became known in its window: a trace when it ends, a scorer result when it is stored, so a trace longer than the window counts. A count or a sum of nothing is 0, so trace_count below 10 alerts on silence; a rate, an average or a percentile of nothing is no_data.",
       "A geography query reads where each trace came from. get_location_attributes has the span attributes it is read from; change_location_attributes changes them (organization admins).",
       "A layout is x, y, w and h on 12 columns. Overlaps and gaps are closed.",

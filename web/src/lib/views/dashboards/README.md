@@ -2,14 +2,18 @@
 
 A project's custom dashboards, behind the `customMonitoring` flag. A dashboard is a name and
 widgets on a grid. A widget is one query object
-(`lib/contracts/query.ts`) and how it is drawn.
+(`lib/contracts/query.ts`) and how it is drawn. A metric widget is RQL: a query of kind `sql`,
+drawn as a line, a bar, a number or a table, with `form` (the metric form's selection) when the
+form wrote its text. Without `form` the text is Custom. No widget has kind `metric`: a stored or
+imported one is read as kind `sql` with its form, and saved so.
 
 | File | Holds |
 |---|---|
 | `types.ts` | the widget and dashboard types, and their limits. `createDashboard` counts the project's dashboards with its insert, under the project's advisory lock, so creates at the same time never pass 100 (`concurrency.test.ts`) |
 | `schema.ts` | `dashboards` (migration 0047): the widgets are a jsonb list, each with its place |
-| `parse-widget.ts` | `parseWidget`: the shape of a widget from outside, its query's contract, the project's switches, then the chart's rules |
-| `widget.ts` | `chartProblem`, `changeQuery` and `fitWidget` (the nearest allowed query and widget, for the editor), and the labels; safe for the browser |
+| `parse-widget.ts` | `parseWidget`: the shape of a widget from outside, its query's contract, the project's switches, then the chart's rules. It reads an older shape in today's: a metric is kind `sql` with its form, the chart `sql` is the chart its rows drew (`sqlChart`), and a form whose text is not its own any more is dropped (Custom) |
+| `legacy-chart.ts` | `sqlChartOfText`: the chart of an older RQL widget (chart `sql`) from its compiled columns: a line for one time column and numbers, else a table. Server only (the compiler) |
+| `widget.ts` | `chartProblem`, `changeQuery`, `changeForm` and `fitWidget` (the nearest allowed query and widget, for the editor; a widget of the form gets the text of its selection again), `formWidget`, `formOf`, `metricOfForm`, and the labels; safe for the browser |
 | `filters.ts` | the dashboard's filters: in the address, else the saved ones (`filters=none` in the address: no filter at all); safe for the browser |
 | `range.ts` | `resolveWidgetRange`: a preset, whole days, or two exact instants (`range=exact`), as on the Traces page |
 | `document.ts`, `json-schemas.ts` | `exportDashboard`, `importDashboard`: a dashboard as a versioned JSON document (`ratel.dashboard`, version 1) without a database id, and the published JSON Schemas (`docs/schemas`) |
@@ -18,8 +22,8 @@ widgets on a grid. A widget is one query object
 | `starter.ts` | the four widgets of "Start from the traces overview" |
 | `store.ts` | the reads and writes; a widget change locks its row |
 | `data.ts` | `loadWidget`, `loadWidgets`: the numbers, a few reads at a time, each bounded; a failed one, or one whose switch is off, is null; kind `sql` runs on the RQL path, in a lane as wide as the RQL gate of a project (2), and gives a refusal as `WidgetRefusal`. It reads the whole range of the page, up to 372 days, as a metric widget does |
-| `edit-as-sql.ts` | `metricAsRql`: the RQL text that gives a metric widget's numbers, for every measure, aggregation, group-by, bucket and filter of the form (`rate`, `coalesce(sum, 0)`, `each` for a list, `prompts` for the context measures, the trace columns of `scores` for a filter); buckets newest first, so a cut drops the oldest; numbers in plain digits. `EDIT_AS_SQL_NOTE`: what differs from the form; safe for the browser |
-| `sql-chart.ts` | `sqlAsMetric`: the rows of an RQL query as a chart's series (the 10 of the highest sum, as the form keeps its groups), or null for a table; with a `SqlChartFrame` (the window, the bucket, 0 or nothing for an empty bucket) it draws every bucket of the window and a total only for a count or a sum. `sqlResultNotes`: the truncated note, shown under a chart as under a table; safe for the browser |
+| `metric-rql.ts` | `metricAsRql`: the RQL text of a selection of the form, for every measure, aggregation, group-by, bucket and filter (`rate`, `coalesce(sum, 0)`, `each` for a list, `prompts` for the context measures, the trace columns of `scores` for a filter); buckets newest first, so a cut drops the oldest; numbers in plain digits; a scorer by name for a document. `formQuery`, `formBucketOf` and `isFormText` (a text is the form's while it equals the text of its selection after the same normalisation: RQL is never parsed back), `textToRun` (a text of the form follows the window's bucket, as the form did); safe for the browser |
+| `sql-chart.ts` | `chartChoices`: the charts the rows of an RQL query fill, with the reason for each other one. `sqlAsMetric`: the rows as a chart's series (the 10 of the highest sum, as the form keeps its groups); with a `SqlChartFrame` (the window, the bucket, 0 or nothing for an empty bucket) it draws every bucket of the window and a total only for a count or a sum; rows cut at the row cap leave the buckets they dropped empty, never 0, and the note says so under the chart and in MCP. `drawnChart`: the chart a widget draws, a table when the rows cannot fill the chosen one. `formAsMetric`: the rows of a text of the form as the form's result, so the widget draws as it did. `sqlNumber`, `sqlAsCategories` (bars of a text column). `sqlResultNotes`: the truncated note, shown under a chart as under a table; safe for the browser |
 | `chart-model.ts` | what a chart draws: six color slots by group name, "Other", the scale, the axis labels and the number formats |
 | `flow-model.ts` | what the flow widget draws: a column per step, one color per name |
 | `step-flow-model.ts` | what the step flow widget draws: a lane of cards per step, as many as fit, with the Health map's ribbons (`views/health/flow-journey-layout`); unfolding a bucket or Later is view state |
@@ -28,13 +32,15 @@ widgets on a grid. A widget is one query object
 | `links.ts` | the addresses, and the Traces page with a widget's filter and time range |
 | `actions.ts` | `changeDashboard`: one change by a person, after membership, the flag and a support-session check (the pages' server action calls it) |
 
-Chart rules: a table needs a group-by, a number has none, a line and a bar take both. Every other
-query kind has the one chart of its name. Kind `sql` (RQL text) has chart
-`sql`: a table, or a line when its rows have one time column (`sql-chart.ts`). The page filter
-(the dashboard's, or Explore's) applies to it when it runs: the compiler keeps the rows whose trace
-matches, on every table, so `Edit as SQL` keeps the form's numbers under a filter
+Chart rules: a metric widget takes a line, a bar, a number or a table. Its rows decide which ones
+draw (`chartChoices`): a table any rows, a number one row with one number column, a line one time
+column and numbers, a bar a time or a text column and numbers; a second text column is the series.
+The editor disables the others, with the reason. A number of the form has no group-by. Every other
+query kind has the one chart of its name. The page filter (the dashboard's, or Explore's) applies
+to the RQL text when it runs: the compiler keeps the rows whose trace matches, on every table, so
+the text of the form gives the form's numbers under a filter
 (`metric-rql-parity.integration.test.ts`: every cell of the matrix, also under page filters, and the
-alert value by known time). A refusal of RQL is the widget's result
+alert value by known time). A new metric widget starts as a table of the newest traces (`NEW_SQL_TEXT`). A refusal of RQL is the widget's result
 (`WidgetRefusal`: the message and the fix). `query_monitoring` takes it alone, not as a panel. A move of a flow opens the Traces page for the traces of
 its source: the trace filter knows no order, and no skill. A node of a step flow opens the traces that
 had it at any step, for the same reason; a skill, an intent and a fold open none. A funnel step opens its traces only when

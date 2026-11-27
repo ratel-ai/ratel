@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { MetricResult } from "@/lib/synthesis/metrics/query";
+import { RQL_LIMITS } from "@/lib/synthesis/rql/compile";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
 import {
@@ -16,7 +17,7 @@ import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import type { MetricWidget } from "@/lib/views/dashboards/types";
-import { SQL_CHART_PROBLEM, scorerWidget } from "@/lib/views/dashboards/widget";
+import { scorerWidget } from "@/lib/views/dashboards/widget";
 
 const FILTER: TraceFilter = {
   models: ["gpt-4o", "a&b"],
@@ -151,7 +152,8 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
       return widget.title === "3" ? null : grouped([[widget.title, [1]]]);
     },
   );
-  assert.equal(most, 4);
+  // A metric widget is RQL: it waits for a place of the RQL gate.
+  assert.equal(most, RQL_LIMITS.parallelQueriesPerProject);
   assert.deepEqual(
     results.map((result) => (result as MetricResult | null)?.series[0].groups[0].value ?? null),
     ["0", "1", "2", null, "4", "5", "6", "7", "8", "9"],
@@ -171,7 +173,7 @@ test("a scorer widget reads nothing while customMonitoring is off", async () => 
       { since: new Date(0), until: new Date(1) },
       { customMonitoring },
       async (_, widget) => {
-        asked.push((widget as MetricWidget).query.measures[0].measure);
+        asked.push((widget as MetricWidget).query.form?.measures[0].measure ?? "custom");
         return null;
       },
     );
@@ -204,13 +206,30 @@ function grouped(series: [string, number[]][]): MetricResult {
   };
 }
 
-test("a query of kind sql is a widget of chart sql", () => {
+test("a query of kind sql is drawn as a line, a bar, a number or a table", () => {
   const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
   const features = { customMonitoring: true };
-  assert.ok(parseWidget({ title: "", query, chart: "sql" }, features).ok);
-  for (const chart of ["table", "number", "line"])
+  for (const chart of ["line", "bar", "number", "table"])
+    assert.deepEqual(parseWidget({ title: "", query, chart }, features), {
+      ok: true,
+      widget: { title: "", query, chart },
+    });
+  for (const chart of ["flow", "funnel"])
     assert.deepEqual(parseWidget({ title: "", query, chart }, features), {
       ok: false,
-      error: SQL_CHART_PROBLEM,
+      error: `A metric cannot be drawn as a ${chart}.`,
     });
+});
+
+test("an older widget of chart sql is read as the chart its rows draw", () => {
+  const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
+  const features = { customMonitoring: true };
+  assert.deepEqual(parseWidget({ title: "", query, chart: "sql" }, features), {
+    ok: true,
+    widget: { title: "", query, chart: "table" },
+  });
+  assert.deepEqual(
+    parseWidget({ title: "", query, chart: "sql" }, features, { sqlChart: () => "line" }),
+    { ok: true, widget: { title: "", query, chart: "line" } },
+  );
 });

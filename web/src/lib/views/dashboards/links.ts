@@ -15,6 +15,17 @@ export interface DashboardRange {
 
 export { EXACT_RANGE, searchFromTraceFilter };
 
+/** The instants of a range: a day runs to the end of the day, an instant is itself. */
+export function rangeWindow({ from, to }: Pick<DashboardRange, "from" | "to">): {
+  since: Date;
+  until: Date;
+} {
+  const day = (text: string) => text.length === 10;
+  const since = new Date(day(from) ? `${from}T00:00:00Z` : from);
+  const end = new Date(day(to) ? `${to}T00:00:00Z` : to);
+  return { since, until: day(to) ? new Date(end.getTime() + 86_400_000) : end };
+}
+
 /** A longer query string is packed: no person reads it. */
 export const MAX_PLAIN_CHARS = 2_800;
 

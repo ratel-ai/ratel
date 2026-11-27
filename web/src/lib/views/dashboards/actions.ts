@@ -12,6 +12,7 @@ import {
   freePosition,
   gridPositionSchema,
 } from "@/lib/views/dashboards/layout";
+import { sqlChartOfText } from "@/lib/views/dashboards/legacy-chart";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_NAME, STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import type * as store from "@/lib/views/dashboards/store";
@@ -264,7 +265,7 @@ async function widgetChange(
 }
 
 function checkedWidget(raw: unknown, features: MetricFeatures): WidgetInput {
-  const parsed = parseWidget(raw, features);
+  const parsed = parseWidget(raw, features, { sqlChart: sqlChartOfText });
   if (!parsed.ok) throw new Refusal(parsed.error);
   return parsed.widget;
 }

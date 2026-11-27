@@ -1,4 +1,7 @@
+import type { MetricQuery } from "@/lib/contracts/query";
 import { foldStepFlow } from "@/lib/synthesis/metrics/step-flow-columns";
+import type { MetricChartKind } from "@/lib/views/dashboards/types";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 import { seeded } from "../../harness/data";
 import { okResult, type ViewFixtures } from "../../shell/types";
 import type { DashboardModel, ViewWidget } from "./model";
@@ -39,13 +42,13 @@ function item(
   result: object | null,
   [x, y, w, h]: readonly [number, number, number, number],
 ): ViewWidget {
-  return {
-    id,
-    name,
-    layout: { x, y, w, h },
-    widget: { title: "", query, chart },
-    result,
-  } as ViewWidget;
+  // A metric widget is RQL with the form's selection, as get_dashboard carries it.
+  const metricQuery = query as MetricQuery;
+  const widget =
+    metricQuery.kind === "metric"
+      ? formWidget(formOf(metricQuery), chart as MetricChartKind)
+      : { title: "", query, chart };
+  return { id, name, layout: { x, y, w, h }, widget, result } as ViewWidget;
 }
 
 /** Tool paths of two intents, with one tool that often fails. */

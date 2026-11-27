@@ -132,6 +132,8 @@ export type FunnelCondition = FunnelStep["condition"];
 export type ClustersQuery = Extract<Query, { kind: "clusters" }>;
 export type GeographyQuery = Extract<Query, { kind: "geography" }>;
 export type SqlQuery = Extract<Query, { kind: "sql" }>;
+/** The metric form's selection: a metric query without its version and kind. */
+export type MetricForm = NonNullable<SqlQuery["form"]>;
 export type QueryFilters = MetricQuery["filters"];
 /** The query as a document carries it between projects. */
 export type PortableQuery = z.infer<typeof portableQuerySchema>;
@@ -376,9 +378,14 @@ const SQL_TEXT_PROBLEM = "Write the RQL text of the query.";
 
 /**
  * RQL text: one SELECT over the `rql` tables. No trace filter: the text says what it keeps. The
- * window of whoever runs it is its window; a time condition in the text narrows it.
+ * window of whoever runs it is its window; a time condition in the text narrows it. `form` is the
+ * metric form's selection that wrote the text, when the form wrote it.
  */
-const sqlSchema = z.strictObject({
+function sqlWith<S extends z.ZodType>(scorer: S) {
+  return z.strictObject({ ...sqlFields, form: metricFormWith(scorer).optional() });
+}
+
+const sqlFields = {
   version,
   kind: z.literal("sql"),
   text: z
@@ -395,7 +402,7 @@ const sqlSchema = z.strictObject({
     .int(RQL_VERSION_PROBLEM)
     .min(1, RQL_VERSION_PROBLEM)
     .describe("The RQL version the text was written in. A saved query is compiled again at load."),
-});
+};
 
 /** One check, as a check scorer stores it. */
 const checkSchema = z
@@ -466,7 +473,7 @@ function queryWith<S extends z.ZodType>(scorer: S) {
       funnelWith(scorer),
       clustersSchema,
       geographyWith(scorer),
-      sqlSchema,
+      sqlWith(scorer),
     ],
     {
       error: ({ input }) =>
@@ -558,36 +565,66 @@ function named(message: string) {
 
 function metricQueryWith<S extends z.ZodType>(scorer: S) {
   return z
-    .strictObject({
-      version,
-      kind: z.literal("metric"),
-      measures: z.array(measureSchema).length(1).describe("One measure and its aggregation."),
-      dimensions: z
-        .array(
-          z.enum(DIMENSIONS, { error: ({ input }) => `Unknown dimension "${shownValue(input)}".` }),
-        )
-        .max(MAX_DIMENSIONS, `A query has ${MAX_DIMENSIONS} dimensions at most.`)
-        .default([]),
-      filters: filtersWith({ scorer: scorer.optional() }),
-      bucket: z.enum(BUCKETS).optional().describe("Chosen from the window when absent."),
-    })
-    .superRefine(({ measures: [first], dimensions, filters, bucket }, context) => {
-      if (!first) return;
-      const rules: MeasureRules = MEASURES[first.measure];
-      const refuse = (message: string, ...path: (string | number)[]) =>
-        context.addIssue({ code: "custom", message, path });
-      for (const [index, dimension] of dimensions.entries()) {
-        if (!rules.dimensions.includes(dimension))
-          refuse(`${rules.label} cannot be grouped by "${dimension}".`, "dimensions", index);
-        else if (dimensions.indexOf(dimension) !== index)
-          refuse(`"${dimension}" is grouped by twice.`, "dimensions", index);
-      }
-      const { scorer: scorerRef, ...traceFilters } = filters as Record<string, unknown>;
-      if (!rules.filterable && !isEmptyFilter(traceFilters))
-        refuse(`${rules.label} cannot be filtered.`, "filters");
-      if (scorerRef && !rules.byScorer)
-        refuse(`${rules.label} cannot be filtered by scorer.`, "filters", "scorer");
-      if (bucket && !rules.buckets.includes(bucket))
-        refuse(`${rules.label} has no ${bucket} buckets.`, "bucket");
-    });
+    .strictObject({ version, kind: z.literal("metric"), ...metricFields(scorer) })
+    .superRefine(metricRules);
+}
+
+/**
+ * The selection of the metric form that wrote an RQL text: a measure, its aggregation, the
+ * group-by, the filter and the bucket. A text with no selection is Custom.
+ */
+function metricFormWith<S extends z.ZodType>(scorer: S) {
+  return z
+    .strictObject(metricFields(scorer))
+    .superRefine(metricRules)
+    .describe(
+      "The metric form's selection that wrote the text. Absent: the text is Custom, written by hand.",
+    );
+}
+
+function metricFields<S extends z.ZodType>(scorer: S) {
+  return {
+    measures: z.array(measureSchema).length(1).describe("One measure and its aggregation."),
+    dimensions: z
+      .array(
+        z.enum(DIMENSIONS, { error: ({ input }) => `Unknown dimension "${shownValue(input)}".` }),
+      )
+      .max(MAX_DIMENSIONS, `A query has ${MAX_DIMENSIONS} dimensions at most.`)
+      .default([]),
+    filters: filtersWith({ scorer: scorer.optional() }),
+    bucket: z.enum(BUCKETS).optional().describe("Chosen from the window when absent."),
+  };
+}
+
+function metricRules(
+  {
+    measures: [first],
+    dimensions,
+    filters,
+    bucket,
+  }: {
+    measures: { measure: MeasureId }[];
+    dimensions: Dimension[];
+    filters: object;
+    bucket?: Bucket;
+  },
+  context: z.RefinementCtx,
+) {
+  if (!first) return;
+  const rules: MeasureRules = MEASURES[first.measure];
+  const refuse = (message: string, ...path: (string | number)[]) =>
+    context.addIssue({ code: "custom", message, path });
+  for (const [index, dimension] of dimensions.entries()) {
+    if (!rules.dimensions.includes(dimension))
+      refuse(`${rules.label} cannot be grouped by "${dimension}".`, "dimensions", index);
+    else if (dimensions.indexOf(dimension) !== index)
+      refuse(`"${dimension}" is grouped by twice.`, "dimensions", index);
+  }
+  const { scorer: scorerRef, ...traceFilters } = filters as Record<string, unknown>;
+  if (!rules.filterable && !isEmptyFilter(traceFilters))
+    refuse(`${rules.label} cannot be filtered.`, "filters");
+  if (scorerRef && !rules.byScorer)
+    refuse(`${rules.label} cannot be filtered by scorer.`, "filters", "scorer");
+  if (bucket && !rules.buckets.includes(bucket))
+    refuse(`${rules.label} has no ${bucket} buckets.`, "bucket");
 }

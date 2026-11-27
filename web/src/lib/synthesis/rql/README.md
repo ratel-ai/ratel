@@ -164,8 +164,9 @@ minimum tokens and the `and` clauses) applies on every table and no part is left
 has no trace: the filter keeps all of its rows. On `sessions`
 and `users` it narrows the trace rows before their totals. Each value is a bound parameter. Alert
 rules give no filter.
-A widget of chart `sql` holds the kind (`views/dashboards`: a table, or a chart for rows with one
-time column), and so do dashboard documents and Explore's SQL mode. An alert rule holds it when the
+Every metric widget holds the kind (`views/dashboards`: drawn as a line, a bar, a number or a
+table, as its rows allow), with the form's selection when the form wrote the text, and so do
+dashboard documents and Explore. An alert rule holds it when the
 text gives one row with one number (`oneRow` and the column type, checked at save and at each run;
 `views/alerts`). `query_monitoring` refuses it as one of several panels.
 `query_monitoring` runs a lone query of the kind, and the MCP tool `run_rql` runs its RQL text as

@@ -1,21 +1,34 @@
-import type { Aggregation, Bucket, Dimension, MeasureId } from "@/lib/contracts/query";
-import { RQL_LIMITS } from "@/lib/synthesis/rql/compile";
+import {
+  type Aggregation,
+  type Bucket,
+  type Dimension,
+  type MeasureId,
+  type MetricForm,
+  QUERY_VERSION,
+  type SqlQuery,
+} from "@/lib/contracts/query";
+import { getMetric, metricBucket, type QueryWindow } from "@/lib/synthesis/metrics/catalog";
+import { RQL_LIMITS } from "@/lib/synthesis/rql/domain/limits";
+import { RQL_VERSION } from "@/lib/synthesis/rql/domain/version";
 import { clausesOf } from "@/lib/synthesis/traces/trace-filter-clauses";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
-import type { MetricWidget } from "@/lib/views/dashboards/types";
+import type { MetricChartKind } from "@/lib/views/dashboards/types";
 
 /**
- * The RQL text that gives the numbers of a metric widget. Pure and safe for the browser. Every
- * valid metric query has one: the text reads the same rows over the same window, and gives the
- * same numbers as the metric form (`metric-rql-parity.integration.test.ts`). A line or a bar gives
- * one row per bucket and group, a number one row, a table one row per group. The text keeps
- * every group, where the form keeps the 10 highest: the code that draws the rows keeps them
- * (`sql-chart.ts`), and fills the empty buckets.
+ * The RQL text of the metric form: a metric widget is RQL, and the form is a quick way to write
+ * it. Pure and safe for the browser. Every selection of the form has a text: it reads the same
+ * rows over the same window, and gives the same numbers as the form compiler
+ * (`metric-rql-parity.integration.test.ts`). A line or a bar gives one row per bucket and group,
+ * a number one row, a table one row per group. The text keeps every group, where the form keeps
+ * the 10 highest: the code that draws the rows keeps them (`sql-chart.ts`), and fills the empty
+ * buckets. A text is the form's while it is the text of its selection; an edit makes it Custom.
  */
 
-/** What a person reads under `Edit as SQL`: where the text differs from the form. */
-export const EDIT_AS_SQL_NOTE =
-  "The RQL text of these numbers. It does not go back to the form. The bucket size is written in the text: it does not follow the range.";
+/** How the scorer filter of a selection is written: by id, or by name in a document. */
+export interface MetricRqlOptions {
+  /** The scorer's name, to write `scorer = 'name'`: a document carries no database id. */
+  scorerName?: string;
+}
 
 type Table = "traces" | "scores" | "prompts";
 
@@ -88,16 +101,18 @@ const TIME_COLUMNS: Record<Table, string> = {
 
 const BUCKET_INTERVALS: Record<Bucket, string> = { hour: "1 hour", day: "1 day" };
 
-/** The RQL text of a metric widget, read by `bucket` for a line or a bar. */
-export function metricAsRql(widget: MetricWidget, bucket: Bucket): string {
+/** The RQL text of a selection drawn as `chart`, read by `bucket` for a line or a bar. */
+export function metricAsRql(
+  form: MetricForm,
+  chart: MetricChartKind,
+  bucket: Bucket,
+  options: MetricRqlOptions = {},
+): string {
   const {
-    query: {
-      measures: [{ measure, aggregation }],
-      dimensions,
-      filters: { scorer, ...filter },
-    },
-    chart,
-  } = widget;
+    measures: [{ measure, aggregation }],
+    dimensions,
+    filters: { scorer, ...filter },
+  } = form;
   const read = MEASURES[measure];
   const groups = dimensions.flatMap((dimension) => GROUP_COLUMNS[dimension]);
   const keys = groups.map((column) => column.replace(/^.* as /, ""));
@@ -111,7 +126,13 @@ export function metricAsRql(widget: MetricWidget, bucket: Bucket): string {
   ];
   const where = [
     ...(read.where ? [read.where] : []),
-    ...(scorer ? [`scorer_id = ${literal(scorer.id)}`] : []),
+    ...(scorer
+      ? [
+          options.scorerName === undefined
+            ? `scorer_id = ${literal(scorer.id)}`
+            : `scorer = ${literal(options.scorerName)}`,
+        ]
+      : []),
     ...dimensions
       .filter((dimension) => !LIST_DIMENSIONS[dimension])
       .flatMap((dimension) => GROUP_COLUMNS[dimension])
@@ -132,6 +153,68 @@ export function metricAsRql(widget: MetricWidget, bucket: Bucket): string {
     ...(ordered.length > 0 ? [`order by ${ordered.join(", ")}`] : []),
     ...(grouped.length > 0 ? [`limit ${RQL_LIMITS.maxLimit}`] : []),
   ].join("\n");
+}
+
+/** A query of kind sql that the form wrote: its selection, and its text for `chart` and `bucket`. */
+export function formQuery(form: MetricForm, chart: MetricChartKind, bucket: Bucket): SqlQuery {
+  return {
+    version: QUERY_VERSION,
+    kind: "sql",
+    text: metricAsRql(form, chart, bucket),
+    rqlVersion: RQL_VERSION,
+    form,
+  };
+}
+
+/**
+ * The bucket a text was written with when it is still the text of its form's selection, or null
+ * when it is not: an edited text is Custom. The texts are compared after the same normalisation
+ * (runs of white space are one space); RQL is never parsed back into a form.
+ */
+export function formBucketOf(
+  query: Pick<SqlQuery, "text" | "form">,
+  chart: MetricChartKind,
+  options: MetricRqlOptions = {},
+): Bucket | null {
+  const { form } = query;
+  if (!form) return null;
+  const text = normalized(query.text);
+  for (const bucket of ["hour", "day"] as const)
+    if (normalized(metricAsRql(form, chart, bucket, options)) === text) return bucket;
+  return null;
+}
+
+/** Whether the text is still its form's: the Metric dropdown shows the measure, else Custom. */
+export function isFormText(
+  query: Pick<SqlQuery, "text" | "form">,
+  chart: MetricChartKind,
+): boolean {
+  return formBucketOf(query, chart) !== null;
+}
+
+/**
+ * The text that runs over a window. A text of the form follows the window, as the form does: a
+ * selection with no bucket of its own reads hours for a few days and days for more. A Custom
+ * text runs as it is written.
+ */
+export function textToRun(
+  query: Pick<SqlQuery, "text" | "form">,
+  chart: MetricChartKind,
+  window: QueryWindow,
+): string {
+  const { form } = query;
+  if (!form || !isFormText(query, chart)) return query.text;
+  return metricAsRql(form, chart, formBucket(form, window));
+}
+
+/** The bucket a selection reads over a window: its own, or the window's. */
+export function formBucket(form: MetricForm, window: QueryWindow): Bucket {
+  const metric = getMetric(form.measures[0].measure);
+  return form.bucket ?? (metric ? metricBucket(metric, window) : "day");
+}
+
+function normalized(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /** The filter as RQL conditions on the trace columns of the table. */

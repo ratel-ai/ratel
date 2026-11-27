@@ -3,9 +3,26 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
 import { type MetricQuery, metricQuery } from "@/lib/contracts/query";
+import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
+import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { type MetricsDb, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import {
+  type MetricsDb,
+  metricSeams,
+  type QueryResult,
+  runQuery,
+} from "@/lib/synthesis/metrics/query";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
+import { getTraceAggregates, listTraces } from "@/lib/synthesis/traces/queries";
+import { refreshTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
+import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
+import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+import { traceFilterFromSearch, withoutRollupFilters } from "@/lib/synthesis/traces/v2/filters";
+import { resolveTraceListView, resolveTraceRange } from "@/lib/synthesis/traces/view";
 import {
   alertQueryOf,
   IN_FRAGMENT,
@@ -16,21 +33,17 @@ import {
 import { parseAlertQuery } from "@/lib/views/alerts/parse-rule";
 import { changeDashboard, type DashboardActionDeps } from "@/lib/views/dashboards/actions";
 // The modules that run the kinds register with it.
-import "@/lib/views/dashboards/data";
-import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
-import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
-import { getTraceAggregates, listTraces } from "@/lib/synthesis/traces/queries";
-import { refreshTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
-import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
-import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
-import { traceFilterFromSearch, withoutRollupFilters } from "@/lib/synthesis/traces/v2/filters";
-import { resolveTraceListView, resolveTraceRange } from "@/lib/synthesis/traces/view";
+import { loadWidget } from "@/lib/views/dashboards/data";
 import { takesPageFilters, withPageFilters } from "@/lib/views/dashboards/filters";
 import { widgetTracesHref } from "@/lib/views/dashboards/links";
 import { exactly } from "@/lib/views/dashboards/range";
 import * as store from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
-import { type DashboardFilters, WIDGET_KINDS } from "@/lib/views/dashboards/types";
+import {
+  type DashboardFilters,
+  WIDGET_KINDS,
+  type WidgetResult,
+} from "@/lib/views/dashboards/types";
 import { queryFilter, widgetOfKind, withFilter } from "@/lib/views/dashboards/widget";
 import { START_PANEL } from "@/lib/views/explore/starts";
 import { decodePanels, encodePanels } from "@/lib/views/explore/state";
@@ -70,6 +83,14 @@ before(async () => {
     db as never,
   );
   await refreshTraceSummaries({ visibilityLagMs: 0 }, db as never);
+  // A saved metric widget is RQL: it reads on the RQL path, over the same database.
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(client)),
+      gate: createRqlGate(),
+      observe: async () => {},
+    },
+  });
   const summary = (index: number, values: string) =>
     `update otel_trace_summaries set ${values} where trace_id = '${idOf(index)}';`;
   await client.exec(
@@ -144,7 +165,9 @@ test("the saved widget, the alert and the trace link read the rows the panel sho
     await change({ action: "add-widget", dashboardId, widget });
     const stored = (await store.getDashboard(PROJECT, dashboardId, db))?.widgets.at(-1);
     assert.ok(stored && isWidget(stored));
-    assert.deepEqual(await runQuery(PROJECT, stored.query, HOUR, db), shown, name);
+    // The saved widget runs its RQL text: the same number as the panel showed.
+    const saved = await loadWidget(PROJECT, stored, HOUR, db as never);
+    assert.equal(sumOf(saved), expected.length, name);
 
     const alert = alertOf(newAlertHref(PROJECT, merged, takesPageFilters(query, page)));
     assert.deepEqual(await runQuery(PROJECT, alert, HOUR, db), shown, name);
@@ -273,6 +296,13 @@ async function tracesOf(href: string, of: typeof db = db): Promise<number[]> {
   const { items } = await listTraces(PROJECT, options, of as never);
   assert.equal((await getTraceAggregates(PROJECT, options, of as never)).count, items.length);
   return items.map(({ traceId }) => Number.parseInt(traceId, 16) - 1).sort();
+}
+
+/** The sum of the number column of an RQL result. */
+function sumOf(result: WidgetResult | null): number {
+  assert.ok(result?.kind === "sql", JSON.stringify(result));
+  const at = result.columns.findIndex(({ name }) => name === "value");
+  return result.rows.reduce((sum, row) => sum + Number(row[at] ?? 0), 0);
 }
 
 function totalOf(result: QueryResult): number {

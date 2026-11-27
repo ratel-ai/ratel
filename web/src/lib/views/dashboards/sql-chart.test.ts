@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { metricQuery } from "@/lib/contracts/query";
 import type { SqlResult } from "@/lib/synthesis/metrics/query";
-import { sqlAsMetric } from "@/lib/views/dashboards/sql-chart";
+import { drawnChart, formAsMetric, sqlAsMetric } from "@/lib/views/dashboards/sql-chart";
+import { formOf } from "@/lib/views/dashboards/widget";
 
 const H1 = "2026-11-02T09:00:00.000Z";
 const H2 = "2026-11-02T10:00:00.000Z";
@@ -173,4 +175,62 @@ test("a chart keeps the 10 groups of the highest sum", () => {
   assert.equal(result?.series.length, 10);
   assert.deepEqual(result?.series[0].groups, [{ value: "g11" }]);
   assert.ok(!result?.series.some(({ groups }) => ["g0", "g1"].includes(groups[0].value)));
+});
+
+test("the chart drawn: rows that cannot fill the chosen chart are a table, which scrolls in its card", () => {
+  const traces = table(
+    [
+      ["trace_id", "text"],
+      ["started_at", "timestamp"],
+    ],
+    [["t1", H1]],
+  );
+  assert.equal(drawnChart("bar", traces), "table");
+  assert.equal(drawnChart("line", traces), "table");
+  const series = table(
+    [
+      ["hour", "timestamp"],
+      ["traces", "integer"],
+    ],
+    [[H1, 1]],
+  );
+  assert.equal(drawnChart("bar", series), "bar");
+  // A result of another kind draws its own chart.
+  assert.equal(drawnChart("line", null), "line");
+});
+
+test("a text of the form cut at the row cap leaves the buckets it dropped empty, never 0", () => {
+  const form = formOf(
+    metricQuery("trace_count", "count", { dimensions: ["tool"], bucket: "hour" }),
+  );
+  const window = {
+    since: new Date("2026-11-02T06:00:00.000Z"),
+    until: new Date("2026-11-02T12:00:00.000Z"),
+  };
+  const hour = (h: number) => `2026-11-02T${String(h).padStart(2, "0")}:00:00.000Z`;
+  // Newest first, cut inside 09:00: the rows of 06:00 to 08:00 and part of 09:00 are gone.
+  const rows = [11, 10, 9].flatMap((h) => [
+    [hour(h), "a", 2],
+    [hour(h), "b", 1],
+  ]);
+  const cut = {
+    ...table(
+      [
+        ["bucket", "timestamp"],
+        ["tool", "text"],
+        ["value", "integer"],
+      ],
+      rows.slice(0, 5),
+    ),
+    truncated: true,
+  };
+  const drawn = formAsMetric(cut, form, "line", window);
+  const a = drawn.series.find(({ groups }) => groups[0]?.value === "a");
+  assert.deepEqual(a?.values, [null, null, null, null, 2, 2]);
+  // Whole rows: an hour with no row is 0, as the form drew it.
+  const whole = formAsMetric({ ...cut, rows, truncated: false }, form, "line", window);
+  assert.deepEqual(
+    whole.series.find(({ groups }) => groups[0]?.value === "a")?.values,
+    [0, 0, 0, 2, 2, 2],
+  );
 });

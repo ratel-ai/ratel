@@ -17,9 +17,9 @@ import { METRIC_TO_SQL_WARNING } from "@/lib/views/alerts/format";
 import { measureSqlValue } from "@/lib/views/alerts/sql-value";
 import * as alerts from "@/lib/views/alerts/store";
 import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
-import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
+import { metricAsRql } from "@/lib/views/dashboards/metric-rql";
 import { sqlAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
-import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
+import { formOf, sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 
 /**
  * The major findings of the review of RQL in Explore, dashboards and alerts: each as the case that
@@ -75,7 +75,7 @@ function held() {
 
 const sqlWidget = (text: string) => ({
   title: "",
-  chart: "sql" as const,
+  chart: "table" as const,
   query: sqlWidgetQuery(text),
 });
 const db = () => database.db as never;
@@ -163,7 +163,7 @@ test("major 2: two readers load a dashboard of 6 sql widgets with no refused wid
 
 test("major 3: a metric has its text on any range: a console run reads up to 372 days", () => {
   assert.match(
-    metricAsRql({ title: "", chart: "line", query: metricQuery("trace_count", "count") }, "day"),
+    metricAsRql(formOf(metricQuery("trace_count", "count")), "line", "day"),
     /from traces/,
   );
   assert.equal(RQL_LIMITS.consoleMaxWindowDays, 372);
@@ -193,13 +193,10 @@ test("major 4: a truncated result drawn as a chart still says it is truncated", 
   assert.deepEqual(sqlResultNotes({ ...result, truncated: false }), []);
 });
 
-test("major 4: Edit as SQL keeps the newest buckets when the rows pass the cap", () => {
+test("major 4: the text of a metric keeps the newest buckets when the rows pass the cap", () => {
   const rql = metricAsRql(
-    {
-      title: "",
-      chart: "line",
-      query: metricQuery("trace_count", "count", { dimensions: ["service"], bucket: "hour" }),
-    },
+    formOf(metricQuery("trace_count", "count", { dimensions: ["service"], bucket: "hour" })),
+    "line",
     "hour",
   );
   assert.match(rql, /order by bucket desc/);
@@ -231,14 +228,11 @@ test("major 6: a dashboard of wide sql widgets stays under the result cap of eac
   assert.ok(Buffer.byteLength(JSON.stringify(results)) <= 6 * (RQL_LIMITS.maxResultBytes + 10_000));
 });
 
-test("minor: Edit as SQL prints a filter number RQL can read", () => {
+test("minor: the text of a metric prints a filter number RQL can read", () => {
   for (const value of [1e-7, 1e21, 0.1 + 0.2]) {
     const rql = metricAsRql(
-      {
-        title: "",
-        chart: "number",
-        query: metricQuery("trace_count", "count", { filters: { minCostUsd: value } }),
-      },
+      formOf(metricQuery("trace_count", "count", { filters: { minCostUsd: value } })),
+      "number",
       "hour",
     );
     assert.ok(compileRql(rql, { now: NOW }).ok, rql);
@@ -246,10 +240,7 @@ test("minor: Edit as SQL prints a filter number RQL can read", () => {
 });
 
 test("minor: a context metric gives its text, not a refusal", () => {
-  const rql = metricAsRql(
-    { title: "", chart: "number", query: metricQuery("context_tokens", "avg") },
-    "hour",
-  );
+  const rql = metricAsRql(formOf(metricQuery("context_tokens", "avg")), "number", "hour");
   assert.match(rql, /from prompts/);
   assert.doesNotMatch(rql, /rate\(/);
 });

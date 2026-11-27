@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { hasNoNul, NUL_PROBLEM, shownValue } from "@/lib/contracts/json-text";
-import { type PortableQuery, portableQuerySchema, type Query } from "@/lib/contracts/query";
+import { type PortableQuery, parseQuery, portableQuerySchema } from "@/lib/contracts/query";
 import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 import { defaultsSchema, filtersProblem } from "@/lib/views/dashboards/filters";
 import { compacted, gridPositionSchema } from "@/lib/views/dashboards/layout";
+import { sqlChartOfText } from "@/lib/views/dashboards/legacy-chart";
+import { formBucketOf, metricAsRql } from "@/lib/views/dashboards/metric-rql";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
 import {
@@ -11,11 +13,13 @@ import {
   MAX_DASHBOARD_NAME,
   MAX_WIDGET_TITLE,
   MAX_WIDGETS,
-  WIDGET_CHARTS,
+  type MetricChartKind,
+  STORED_CHARTS,
   type Widget,
+  type WidgetChart,
   type WidgetQuery,
 } from "@/lib/views/dashboards/types";
-import { queryName, scorersOfMetric } from "@/lib/views/dashboards/widget";
+import { isMetricChart, queryName, scorersOfMetric } from "@/lib/views/dashboards/widget";
 import type { PickerScorer } from "@/lib/views/scorers/picker";
 
 /**
@@ -35,7 +39,7 @@ const ANY_SCORER = "00000000-0000-4000-8000-000000000000";
 const widgetSchema = z.strictObject({
   title: z.string().trim().max(MAX_WIDGET_TITLE).refine(hasNoNul, NUL_PROBLEM).default(""),
   query: portableQuerySchema,
-  chart: z.enum(WIDGET_CHARTS),
+  chart: z.enum(STORED_CHARTS),
   layout: gridPositionSchema,
 });
 
@@ -90,13 +94,14 @@ export function exportDashboard(
     range,
     // A broken one is no part of a document that can be imported.
     widgets: widgets.filter(isWidget).map(({ title, query, chart, layout, missingScorer }) => {
-      return { title, query: portable(query, scorers, missingScorer), chart, layout };
+      return { title, query: portable(query, chart, scorers, missingScorer), chart, layout };
     }),
   };
 }
 
 function portable(
-  query: Query,
+  query: WidgetQuery,
+  chart: WidgetChart,
   scorers: readonly Pick<PickerScorer, "id" | "name">[],
   missingScorer: string | undefined,
 ): PortableQuery {
@@ -104,7 +109,6 @@ function portable(
     name: scorers.find((scorer) => scorer.id === id)?.name ?? missingScorer ?? DELETED_SCORER,
   });
   switch (query.kind) {
-    case "metric":
     case "geography": {
       const { scorer, ...rest } = query.filters;
       const name = scorer ? named(scorer.id) : missingScorer ? { name: missingScorer } : null;
@@ -121,6 +125,29 @@ function portable(
               : condition,
         })),
       };
+    case "sql": {
+      const { form, ...text } = query;
+      if (!form) return text;
+      const { scorer, ...rest } = form.filters;
+      const name = scorer ? named(scorer.id) : missingScorer ? { name: missingScorer } : null;
+      const bucket = isMetricChart(chart) ? formBucketOf(query, chart) : null;
+      // The scorer goes by its name in the text too: a document carries no database id.
+      return {
+        ...text,
+        ...(name && bucket && isMetricChart(chart)
+          ? {
+              // A scorer the project lacked is in no filter of the form: the text names it again.
+              text: metricAsRql(
+                { ...form, filters: { ...rest, scorer: scorer ?? { id: ANY_SCORER } } },
+                chart,
+                bucket,
+                { scorerName: name.name },
+              ),
+            }
+          : {}),
+        form: { ...form, filters: { ...rest, ...(name ? { scorer: name } : {}) } },
+      };
+    }
     default:
       return query;
   }
@@ -189,7 +216,7 @@ function importWidget(
     return { ok: false, error: "The layout must be x, y, w and h on 12 columns." };
   const named = withScorersAs(rest, ANY_SCORER);
   if (named === null) return { ok: false, error: 'A scorer is given by its name: {"name": "…"}.' };
-  const parsed = parseWidget(named.widget, features);
+  const parsed = parseWidget(named.widget, features, { sqlChart: sqlChartOfText });
   if (!parsed.ok) return parsed;
   return {
     ok: true,
@@ -217,12 +244,39 @@ function withScorersAs(
   const query = record(widget.query);
   const next = { ...query };
   if (query.filters !== undefined) next.filters = exchanged(query.filters);
+  if (query.kind === "sql" && isRecord(query.form) && query.form.filters !== undefined) {
+    const form = record(query.form);
+    const before = names.length;
+    next.form = { ...form, filters: exchanged(form.filters) };
+    // A text of the form names its scorer by name: it becomes the text of the exchanged selection.
+    const name = names[before];
+    if (name !== undefined)
+      next.text = formTextWithScorer(next, String(widget.chart), name) ?? query.text;
+  }
   if (query.kind === "funnel" && Array.isArray(query.steps))
     next.steps = query.steps.map((step) =>
       isRecord(step) ? { ...step, condition: exchanged(step.condition) } : step,
     );
   if (!valid) return null;
   return { widget: names.length > 0 ? { ...widget, query: next } : widget, scorers: names };
+}
+
+/**
+ * The text of a selection whose scorer a document names, written with the exchanged id, or null
+ * when the document's text is not the text of its selection (a Custom text).
+ */
+function formTextWithScorer(
+  query: Record<string, unknown>,
+  chart: string,
+  name: string,
+): string | null {
+  const parsed = parseQuery(query);
+  if (!parsed.ok || parsed.query.kind !== "sql" || !parsed.query.form) return null;
+  if (!isMetricChart(chart as WidgetChart)) return null;
+  const drawn = chart as MetricChartKind;
+  const { form } = parsed.query;
+  const bucket = formBucketOf(parsed.query, drawn, { scorerName: name });
+  return bucket ? metricAsRql(form, drawn, bucket) : null;
 }
 
 /** The names become the project's scorers, in their order. Of two of one name, the first the query can read. */
@@ -245,11 +299,19 @@ function resolved(
   };
   const read = (): WidgetQuery => {
     switch (query.kind) {
-      case "metric":
       case "geography": {
         const { scorer: _, ...filters } = query.filters;
         const scorer = found(scorersOfMetric(query.measures[0].measure, scorers));
         return { ...query, filters: scorer ? { ...filters, scorer } : filters };
+      }
+      case "sql": {
+        const { form } = query;
+        if (!form || !isMetricChart(widget.chart)) return query;
+        const bucket = formBucketOf(query, widget.chart) ?? "hour";
+        const { scorer: _, ...filters } = form.filters;
+        const scorer = found(scorersOfMetric(form.measures[0].measure, scorers));
+        const next = { ...form, filters: scorer ? { ...filters, scorer } : filters };
+        return { ...query, form: next, text: metricAsRql(next, widget.chart, bucket) };
       }
       case "funnel":
         return {

@@ -4,7 +4,8 @@ import {
   type MetricQuery,
   metricQuery,
 } from "@/lib/contracts/query";
-import type { WidgetChart, WidgetInput } from "@/lib/views/dashboards/types";
+import type { MetricChartKind, WidgetInput } from "@/lib/views/dashboards/types";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 
 export const STARTER_NAME = "Traces overview";
 
@@ -17,14 +18,10 @@ export const STARTER_WIDGETS: readonly WidgetInput[] = [
 ];
 
 function widget(
-  chart: WidgetChart,
+  chart: MetricChartKind,
   measure: MeasureId,
   aggregation: Aggregation,
   dimensions: MetricQuery["dimensions"] = [],
 ): WidgetInput {
-  return {
-    title: "",
-    query: metricQuery(measure, aggregation, { dimensions }),
-    chart,
-  };
+  return formWidget(formOf(metricQuery(measure, aggregation, { dimensions })), chart);
 }

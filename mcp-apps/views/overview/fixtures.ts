@@ -1,5 +1,6 @@
 import { metricQuery } from "@/lib/contracts/query";
 import { healthScoreView } from "@/lib/readings/trace-signals/health-score";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 import type { DashboardItem } from "@/lib/views/home/dashboard-items";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
 import type { ChangeSource } from "@/lib/views/overview-layout/domain/history";
@@ -262,7 +263,7 @@ const item = (
 const ITEMS: Record<DashboardItemId, DashboardItem> = {
   [RUNS]: item(
     "Runs by model",
-    { query: metricQuery("trace_count", "count", { dimensions: ["model"] }), chart: "table" },
+    formWidget(formOf(metricQuery("trace_count", "count", { dimensions: ["model"] })), "table"),
     {
       kind: "metric",
       bucket: "day",
@@ -338,7 +339,7 @@ const NO_TRACES: Partial<Omit<FocusedOverviewData, "lastEventAt">> = {
   dashboards: {
     [RUNS]: item(
       "Runs by model",
-      { query: metricQuery("trace_count", "count", { dimensions: ["model"] }), chart: "table" },
+      formWidget(formOf(metricQuery("trace_count", "count", { dimensions: ["model"] })), "table"),
       { kind: "metric", bucket: "day", buckets: [], series: [] },
     ),
   },
