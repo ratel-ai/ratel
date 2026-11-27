@@ -13,6 +13,7 @@ import { storable } from "@/lib/platform/storable";
 import type { Compared } from "./baseline";
 import { MAX_SANDBOX_NAME_CHARS } from "./domain/eval";
 import { type Experiment, MAX_TRIALS } from "./domain/experiment";
+import { runScore } from "./domain/history";
 import { experimentView } from "./experiment-view";
 import { type ExperimentDeps, type StartRefusal, startExperiment } from "./experiments";
 import { suiteTable } from "./suite-view";
@@ -27,8 +28,11 @@ export type ExperimentsApiDeps = {
   advance: (experiment: Experiment) => void;
   track: (experiment: Experiment, by: { externalId?: string; surface: string }) => Promise<void>;
   publicUrl: (path: string) => string;
-  /** The pinned baseline run of the project, with its trials. Null when none is pinned. */
-  baseline: (projectId: string) => Promise<Compared | null>;
+  /**
+   * The baseline run of a run, with its trials: the pin of its eval, else of the project. Null when
+   * none is pinned.
+   */
+  baseline: (projectId: string, experiment: Pick<Experiment, "evalId">) => Promise<Compared | null>;
 };
 
 /** Who may call the routes of a project key. */
@@ -58,7 +62,7 @@ const startSchema = z.object({
   label: z.string().trim().min(1).max(100).optional(),
   name: z.string().trim().min(1).max(200).optional(),
 });
-const STATUS: Record<StartRefusal, number> = {
+export const STATUS: Record<StartRefusal, number> = {
   sandboxes_off: 409,
   not_found: 404,
   not_ready: 409,
@@ -67,6 +71,12 @@ const STATUS: Record<StartRefusal, number> = {
   too_many_trials: 413,
   invalid_params: 400,
   wrong_sandbox: 409,
+  invalid_matrix: 400,
+  invalid_scorers: 409,
+  invalid_rows: 400,
+  no_content_access: 403,
+  too_many_rows: 413,
+  invalid_query: 400,
 };
 
 export function handleStartByKey(request: Request, deps: KeyDeps): Promise<Response> {
@@ -179,10 +189,13 @@ async function get(
   if (!experiment) return notFound();
   const [trials, baseline] = await Promise.all([
     experiments.trials(experiment.id),
-    deps.baseline(projectId),
+    deps.baseline(projectId, experiment),
   ]);
   const suite = suiteTable({ experiment, trials }, baseline);
-  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite));
+  const run = experiment.evalId
+    ? runScore({ experiment, trials }, experiment.evalId, baseline)
+    : null;
+  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite, run));
 }
 
 export async function forKey(

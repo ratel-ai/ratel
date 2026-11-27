@@ -4,12 +4,15 @@ export type NewEval = EvalDetails & { projectId: string; content: EvalContent; c
 
 export type EvalEdit = EvalDetails & { content: EvalContent };
 
-export type EvalWriteRefusal = "not_found" | "changed" | "name_taken";
+export type EvalWriteRefusal = "not_found" | "changed" | "name_taken" | "dataset_not_found";
 
 /** The evals of a project. No method changes a version: an edit adds one. */
 export interface EvalStore {
-  /** Adds an eval with its first version. */
-  create(input: NewEval): Promise<EvalDefinition | "name_taken">;
+  /**
+   * Adds an eval with its first version. With no dataset, it also adds a fixed dataset with the name
+   * of the eval. `dataset_not_found`: the project has no such dataset.
+   */
+  create(input: NewEval): Promise<EvalDefinition | "name_taken" | "dataset_not_found">;
   get(projectId: string, evalId: string): Promise<EvalDefinition | null>;
   /** By name, as a person or an agent writes it. */
   getByName(projectId: string, name: string): Promise<EvalDefinition | null>;
@@ -17,7 +20,8 @@ export interface EvalStore {
   list(projectId: string): Promise<EvalDefinition[]>;
   /**
    * Writes the name and the task, and adds a version when the content differs from the newest
-   * one. `base` is the id of the newest version as the person read it.
+   * one. `base` is the id of the newest version as the person read it. A content with no dataset
+   * keeps the dataset of the newest version.
    */
   update(
     projectId: string,

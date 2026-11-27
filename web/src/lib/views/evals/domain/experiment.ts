@@ -1,13 +1,8 @@
-import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./case";
-import {
-  currentVersion,
-  type EvalDefinition,
-  type EvalVersion,
-  type FrozenEval,
-  freezeEval,
-  runProblem,
-} from "./eval";
-import { type ScorerResult, type ScorerSnapshot, snapshotOf, type TrialResult } from "./score";
+import type { CaseVersion, EvalCase } from "./case";
+import type { FrozenDataset } from "./dataset";
+import type { EvalScorerRef, FrozenEval } from "./eval";
+import { combinationKey, type Matrix, type MatrixValue } from "./matrix";
+import type { ScorerResult, ScorerSnapshot, TrialResult } from "./score";
 
 export const DEFAULT_TRIALS = 3;
 export const MAX_TRIALS = 20;
@@ -17,13 +12,41 @@ export type ExperimentState = "running" | "completed";
 /** `starting` and `scoring` are claims of one process. Only `done` has a result. */
 export type TrialState = "pending" | "starting" | "running" | "scoring" | "done";
 
-/** A case version as an experiment freezes it. A run from before evals had definitions has no `evalId`. */
+/**
+ * A row as an experiment freezes it. A run from before evals had definitions has no `evalId`. A row
+ * of a fixed dataset is a case version. A row that the run resolved from a query, or added for
+ * itself, is a run row (`row: "run"`): its `caseId` is the turn that it copies, else its own id, so
+ * the same turn in two runs is the same case.
+ */
 export type FrozenCase = {
   caseId: string;
   versionId: string;
   number: number;
   name: string;
   evalId?: string;
+  /** Where its content is. Absent: a case version. */
+  row?: "case" | "run";
+};
+
+/** One combination of the matrix of a run: the values of the matrix, and all the params of it. */
+export type Variant = {
+  index: number;
+  /** The values of the matrix params. Empty with no matrix. */
+  values: Record<string, MatrixValue>;
+  /** The params that each trial of the variant gets. */
+  params: Record<string, unknown>;
+};
+
+/** What a run changed for itself only (decision `runs-per-eval`). The eval does not change. */
+export type RunChanges = {
+  datasetId?: string;
+  /** The number of rows that the run added for itself. */
+  extraRows?: number;
+  scorers?: EvalScorerRef[];
+  sandboxVersionId?: string;
+  params?: Record<string, unknown>;
+  matrix?: Matrix;
+  trials?: number;
 };
 
 /** What an experiment is. Nothing but the state and the end changes after the start. */
@@ -31,6 +54,8 @@ export type Experiment = {
   id: string;
   projectId: string;
   organizationId: string;
+  /** The eval of the run. Null for a suite run from before runs had one eval. */
+  evalId: string | null;
   sandboxVersionId: string;
   sandboxName: string;
   /** The name that the person gave the run. Null when it has none. */
@@ -46,6 +71,11 @@ export type Experiment = {
   evalVersions: FrozenEval[];
   /** The frozen scorers of each case version (the scorers of its eval version), by its id. */
   scorerSnapshots: Record<string, ScorerSnapshot[]>;
+  /** The dataset as the run used it. Null for a run from before datasets. */
+  dataset: FrozenDataset | null;
+  /** One for each combination of the matrix. Empty for a run from before: one variant of `params`. */
+  variants: Variant[];
+  changes: RunChanges;
   startedBy: string;
   state: ExperimentState;
   createdAt: Date;
@@ -65,6 +95,8 @@ export type Trial = {
   experimentId: string;
   caseVersionId: string;
   index: number;
+  /** The index of its variant. 0 with no matrix. */
+  variant: number;
   state: TrialState;
   result: TrialResult | null;
   /** Why it is invalid, or the error of the agent. */
@@ -93,57 +125,41 @@ export type Counts = { pass: number; fail: number; invalid: number; open: number
 
 export type FrozenSuite = Pick<Experiment, "caseVersions" | "evalVersions" | "scorerSnapshots">;
 
-/**
- * Freezes the newest version of each eval that can run, and the newest version of each case of its
- * dataset: each row counts (decision `rows-count-at-once`). A case version gets the scorers of its
- * eval version. An eval with no gating scorer, or with no case, is left out. With a label, only the
- * cases that have it.
- */
-export function freezeSuite(
-  evals: readonly EvalDefinition[],
-  cases: readonly EvalCase[],
-  label: string | null = null,
-  run: { params?: Record<string, unknown>; trials?: number } = {},
-): FrozenSuite {
-  const byEval = Map.groupBy(cases, ({ evalId }) => evalId);
-  const frozen: FrozenSuite = { caseVersions: [], evalVersions: [], scorerSnapshots: {} };
-  for (const definition of evals) {
-    const version = currentVersion(definition);
-    if (runProblem(version)) continue;
-    const rows = rowsOf(byEval.get(definition.id) ?? [], label);
-    if (rows.length === 0) continue;
-    frozen.evalVersions.push(freezeEval(definition, run));
-    for (const { evalCase, caseVersion } of rows) {
-      frozen.caseVersions.push(frozenCase(evalCase, caseVersion));
-      frozen.scorerSnapshots[caseVersion.id] = snapshotsOf(version);
-    }
-  }
-  return frozen;
-}
-
-function rowsOf(
+/** The current version of each case, with a label only the cases that have it. */
+export function rowsOf(
   cases: readonly EvalCase[],
   label: string | null,
 ): Array<{ evalCase: EvalCase; caseVersion: CaseVersion }> {
   return cases.flatMap((evalCase) => {
     if (label !== null && !evalCase.labels.includes(label)) return [];
-    const caseVersion = currentRow(evalCase);
+    const caseVersion = evalCase.versions[0];
     return caseVersion ? [{ evalCase, caseVersion }] : [];
   });
 }
 
-function frozenCase(evalCase: EvalCase, version: CaseVersion): FrozenCase {
+export function frozenCase(evalCase: EvalCase, version: CaseVersion, evalId: string): FrozenCase {
   return {
     caseId: evalCase.id,
     versionId: version.id,
     number: version.number,
     name: evalCase.name,
-    evalId: evalCase.evalId,
+    evalId,
   };
 }
 
-function snapshotsOf(version: Pick<EvalVersion, "scorers">): ScorerSnapshot[] {
-  return version.scorers.map(snapshotOf);
+/** The variants of a run: each run param the same in each. With no variant (a run from before), one. */
+export function variantsOf(
+  experiment: Pick<Experiment, "variants" | "params">,
+): Variant[] {
+  return experiment.variants.length > 0
+    ? experiment.variants
+    : [{ index: 0, values: {}, params: experiment.params }];
+}
+
+/** The variant of the other run with the same values of the matrix, or null. */
+export function sameVariant(variant: Variant, other: readonly Variant[]): Variant | null {
+  const key = combinationKey(variant.values);
+  return other.find((one) => combinationKey(one.values) === key) ?? null;
 }
 
 /** The frozen eval of a case version. Null for a run from before evals had definitions. */
@@ -157,7 +173,7 @@ export function evalOfVersion(
   return experiment.evalVersions.find((frozen) => frozen.evalId === evalId) ?? null;
 }
 
-/** The trials of a case: the trials of its eval, else the trials of the run. */
+/** The trials of a case in one variant: the trials of its eval, else the trials of the run. */
 export function trialsOfCase(
   experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "trialsPerCase">,
   frozen: FrozenCase,
@@ -168,11 +184,17 @@ export function trialsOfCase(
   );
 }
 
-/** The params of a trial: the params of its eval with the run's over them, else the run's. */
+/**
+ * The params of a trial: the params of its variant; else the params of its eval with the run's
+ * over them; else the run's.
+ */
 export function paramsOfTrial(
-  experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "params">,
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "params" | "variants">,
   caseVersionId: string,
+  variant = 0,
 ): Record<string, unknown> {
+  const own = experiment.variants.find(({ index }) => index === variant);
+  if (own) return own.params;
   return evalOfVersion(experiment, caseVersionId)?.params ?? experiment.params;
 }
 

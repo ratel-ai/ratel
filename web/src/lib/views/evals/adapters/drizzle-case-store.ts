@@ -3,16 +3,20 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
 import type { CaseContent, CaseVersion, EvalCase } from "../domain/case";
-import type { CaseStore, NewCase } from "../ports/case-store";
-import { evalCases, evalCaseVersions, evalDefinitions } from "../schema";
+import type { CaseRefusal, CaseStore, NewCase } from "../ports/case-store";
+import { evalCases, evalCaseVersions, evalDatasets, evalDefinitionVersions, evalDefinitions } from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type CaseRow = typeof evalCases.$inferSelect;
 type VersionRow = typeof evalCaseVersions.$inferSelect;
 
-/** A rollback with no row added: one eval of the batch is not in the project. */
-class EvalNotFound extends Error {}
+/** A rollback with no row added: one eval or dataset of the batch is not in the project, or not fixed. */
+class Refused extends Error {
+  constructor(readonly reason: CaseRefusal) {
+    super(reason);
+  }
+}
 
 export function createDrizzleCaseStore(db: Db): CaseStore {
   const createAll: CaseStore["createAll"] = async (inputs) => {
@@ -20,21 +24,41 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
       return await db.transaction(async (tx) => {
         const made: EvalCase[] = [];
         for (const input of inputs) {
-          const one = await insertCase(tx, input);
-          if (!one) throw new EvalNotFound();
+          const one = await insertCase(tx, input, made);
+          if (typeof one === "string") throw new Refused(one);
           made.push(one);
         }
         return made;
       });
     } catch (error) {
-      if (error instanceof EvalNotFound) return "eval_not_found";
+      if (error instanceof Refused) return error.reason;
       throw error;
     }
+  };
+  const listWhere = async (where: ReturnType<typeof and>) => {
+    const rows = await db
+      .select()
+      .from(evalCases)
+      .where(where)
+      .orderBy(desc(evalCases.createdAt), desc(evalCases.id));
+    if (rows.length === 0) return [];
+    const versions = await db
+      .select()
+      .from(evalCaseVersions)
+      .where(
+        inArray(
+          evalCaseVersions.caseId,
+          rows.map(({ id }) => id),
+        ),
+      )
+      .orderBy(desc(evalCaseVersions.number));
+    const byCase = Map.groupBy(versions, ({ caseId }) => caseId);
+    return rows.map((row) => toCase(row, byCase.get(row.id) ?? []));
   };
   return {
     async create(input) {
       const made = await createAll([input]);
-      return made === "eval_not_found" ? made : (made[0] ?? "eval_not_found");
+      return typeof made === "string" ? made : (made[0] ?? "eval_not_found");
     },
 
     createAll,
@@ -54,29 +78,13 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
     },
 
     async list(projectId, evalId) {
-      const rows = await db
-        .select()
-        .from(evalCases)
-        .where(
-          and(
-            eq(evalCases.projectId, projectId),
-            evalId === undefined ? undefined : eq(evalCases.evalId, evalId),
-          ),
-        )
-        .orderBy(desc(evalCases.createdAt), desc(evalCases.id));
-      if (rows.length === 0) return [];
-      const versions = await db
-        .select()
-        .from(evalCaseVersions)
-        .where(
-          inArray(
-            evalCaseVersions.caseId,
-            rows.map(({ id }) => id),
-          ),
-        )
-        .orderBy(desc(evalCaseVersions.number));
-      const byCase = Map.groupBy(versions, ({ caseId }) => caseId);
-      return rows.map((row) => toCase(row, byCase.get(row.id) ?? []));
+      if (evalId === undefined) return listWhere(eq(evalCases.projectId, projectId));
+      const datasetId = await datasetOfEval(db, projectId, evalId);
+      return datasetId === null ? [] : listWhere(and(eq(evalCases.projectId, projectId), eq(evalCases.datasetId, datasetId)));
+    },
+
+    listDataset(projectId, datasetId) {
+      return listWhere(and(eq(evalCases.projectId, projectId), eq(evalCases.datasetId, datasetId)));
     },
 
     update(projectId, caseId, { name, labels, content }, base, now) {
@@ -124,22 +132,55 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
   };
 }
 
-/** Adds one case with its first version. Null when the project has no such eval. */
+/**
+ * The dataset of the newest version of an eval of the project. Null when the project has no such
+ * eval.
+ */
+export async function datasetOfEval(
+  db: Pick<Db, "select">,
+  projectId: string,
+  evalId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ datasetId: evalDefinitionVersions.datasetId })
+    .from(evalDefinitionVersions)
+    .innerJoin(evalDefinitions, eq(evalDefinitions.id, evalDefinitionVersions.evalId))
+    .where(and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)))
+    .orderBy(desc(evalDefinitionVersions.number))
+    .limit(1);
+  return row?.datasetId ?? null;
+}
+
+/** Adds one case with its first version, to the dataset (or to the dataset of the eval). */
 async function insertCase(
   tx: Tx,
-  { projectId, evalId, name, labels, content, createdBy, source }: NewCase,
-): Promise<EvalCase | null> {
+  { projectId, evalId, datasetId: given, name, labels, content, createdBy, source }: NewCase,
+  batch: readonly EvalCase[],
+): Promise<EvalCase | CaseRefusal> {
   const now = new Date();
-  // The lock keeps the eval while the case joins it.
+  const datasetId =
+    given ?? (evalId === undefined ? null : await datasetOfEval(tx, projectId, evalId));
+  if (!datasetId) return "eval_not_found";
+  // Two evals of one batch can share the dataset: the row goes into it one time.
+  const same = batch.find((one) => one.datasetId === datasetId);
+  if (same) return same;
+  // The lock keeps the dataset while the case joins it.
   const [owner] = await tx
-    .select({ id: evalDefinitions.id })
-    .from(evalDefinitions)
-    .where(and(eq(evalDefinitions.projectId, projectId), eq(evalDefinitions.id, evalId)))
+    .select({ id: evalDatasets.id, kind: evalDatasets.kind })
+    .from(evalDatasets)
+    .where(and(eq(evalDatasets.projectId, projectId), eq(evalDatasets.id, datasetId)))
     .for("share");
-  if (!owner) return null;
+  if (!owner) return "eval_not_found";
+  if (owner.kind !== "fixed") return "not_fixed";
   const [row] = await tx
     .insert(evalCases)
-    .values({ ...storable({ name, labels }), projectId, evalId, createdBy })
+    .values({
+      ...storable({ name, labels }),
+      projectId,
+      datasetId,
+      evalId: evalId ?? null,
+      createdBy,
+    })
     .returning();
   if (!row) throw new Error("the case row is missing");
   const [version] = await tx
@@ -168,8 +209,17 @@ function columns({ input, earlierTurns, toolFixtures, expectedOutput }: CaseCont
 }
 
 function toCase(row: CaseRow, versions: VersionRow[]): EvalCase {
-  const { id, projectId, evalId, name, labels, createdAt } = row;
-  return { id, projectId, evalId, name, labels, createdAt, versions: versions.map(toVersion) };
+  const { id, projectId, datasetId, evalId, name, labels, createdAt } = row;
+  return {
+    id,
+    projectId,
+    datasetId,
+    evalId,
+    name,
+    labels,
+    createdAt,
+    versions: versions.map(toVersion),
+  };
 }
 
 export function toVersion(row: VersionRow): CaseVersion {

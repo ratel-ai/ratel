@@ -3,9 +3,15 @@ import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import type { BaselineKeyDeps } from "./baseline-api";
 import { baselineApiDeps } from "./baseline-deps";
-import { experimentsApiDeps } from "./experiment-deps";
+import { experimentDeps, experimentsApiDeps } from "./experiment-deps";
+import type { ModelApiDeps } from "./model-api";
+import { evalsServiceDeps } from "./service-deps";
 import type { KeyAccess, KeyDeps } from "./experiments-api";
 import { evalsEnabledForProject, evalsOffForAll } from "./gate";
+import { readOnlyTools } from "./console-deps";
+import { caseFromTurn } from "./domain/from-turn";
+import { loadTurnContent } from "./turn-content";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 /** The routes of a project key, over the real key and database. */
 export function keyExperimentDeps(request: Request, scope: ApiKeyScope): KeyDeps {
@@ -14,6 +20,23 @@ export function keyExperimentDeps(request: Request, scope: ApiKeyScope): KeyDeps
 
 export function keyBaselineDeps(request: Request, scope: ApiKeyScope): BaselineKeyDeps {
   return { ...baselineApiDeps, ...keyAccess(request, scope) };
+}
+
+/** The routes of a project key for datasets, evals, the library and runs of one eval. */
+export function keyModelDeps(request: Request, scope: ApiKeyScope): ModelApiDeps {
+  return {
+    ...keyAccess(request, scope),
+    service: evalsServiceDeps,
+    experiments: experimentDeps,
+    advance: experimentsApiDeps.advance,
+    track: (experiment, by) => experimentsApiDeps.track(experiment, by),
+    publicUrl: experimentsApiDeps.publicUrl,
+    readContent: (projectId) => contentOptIn(projectId),
+    turnRow: async (projectId, turnId) => {
+      const turn = await loadTurnContent(projectId, turnId);
+      return turn ? caseFromTurn(turn, await readOnlyTools(projectId)) : null;
+    },
+  };
 }
 
 function keyAccess(request: Request, scope: ApiKeyScope): KeyAccess {

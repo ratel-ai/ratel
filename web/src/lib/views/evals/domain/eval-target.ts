@@ -67,7 +67,10 @@ export function saveTarget(
     name: freeName(task.name, evals),
     taskId: task.id,
     content: {
+      datasetId: null,
       sandboxName: defaults.sandboxName,
+      sandboxVersionId: null,
+      matrix: {},
       params: {},
       trials: DEFAULT_EVAL_TRIALS,
       scorers: defaults.scorers,

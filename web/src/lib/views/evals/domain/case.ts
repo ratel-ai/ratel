@@ -56,8 +56,10 @@ export type CaseVersion = CaseContent & {
 export type EvalCase = CaseDetails & {
   id: string;
   projectId: string;
-  /** The eval whose dataset has the case. */
-  evalId: string;
+  /** The fixed dataset that has the row. */
+  datasetId: string;
+  /** The eval that the row was added through. Null: added to the dataset itself. */
+  evalId: string | null;
   createdAt: Date;
   /** The newest first. */
   versions: CaseVersion[];

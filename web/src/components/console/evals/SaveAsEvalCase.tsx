@@ -9,6 +9,7 @@ import { Callout } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ownScorers } from "@/lib/views/evals/domain/eval";
 import type { SaveTarget } from "@/lib/views/evals/domain/eval-target";
 import { caseHref } from "@/lib/views/evals/paths";
 import { chosenTargets, type SaveOptions } from "@/lib/views/evals/save-target";
@@ -230,7 +231,8 @@ function TargetLine({
     );
   }
   if (target.kind !== "new") return null;
-  const { sandboxName, scorers } = target.content;
+  const { sandboxName } = target.content;
+  const scorers = ownScorers(target.content.scorers);
   return (
     <div className="flex flex-col gap-2 text-ui">
       <p className="text-fg">

@@ -26,7 +26,7 @@ function definition(id: string, taskId: string | null = null): EvalDefinition {
     createdAt: new Date(0),
     versions: [
       {
-        ...evalContent(),
+        ...evalContent({ datasetId: `${id}-dataset` }),
         id: `${id}-v1`,
         evalId: id,
         number: 1,
@@ -41,6 +41,7 @@ function evalCase(id: string, evalId: string): EvalCase {
   return {
     id,
     projectId: PROJECT_ID,
+    datasetId: `${evalId}-dataset`,
     evalId,
     name: id,
     labels: [],

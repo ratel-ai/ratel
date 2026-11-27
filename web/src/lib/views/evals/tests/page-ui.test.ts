@@ -127,6 +127,7 @@ const gridTrial = (over: Partial<Trial>): Trial => ({
   experimentId: "e1",
   caseVersionId: "v1",
   index: 0,
+  variant: 0,
   state: "done",
   result: "pass",
   reason: null,
@@ -157,6 +158,10 @@ const gridExperiment: Experiment = {
   gitDirty: false,
   params: { tone: "formal", offerRefund: true },
   trialsPerCase: 3,
+  evalId: null,
+  dataset: null,
+  variants: [],
+  changes: {},
   evalVersions: [],
   caseVersions: [
     { caseId: "c1", versionId: "v1", number: 2, name: "Late refund" },
@@ -400,8 +405,11 @@ function suiteEval(id: string) {
     createdAt: new Date(0),
     versions: [
       {
+        datasetId: null,
         sandboxName: null,
+        sandboxVersionId: null,
         params: {},
+        matrix: {},
         trials: 3,
         scorers: [NO_REFUND],
         id: `${id}-v1`,

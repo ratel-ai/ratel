@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { EvalCase } from "../domain/case";
 import {
   currentVersion,
   type EvalDefinition,
@@ -9,9 +8,7 @@ import {
   runProblem,
   sameContent,
 } from "../domain/eval";
-import { freezeSuite } from "../domain/experiment";
-import { snapshotOf } from "../domain/score";
-import { content, evalContent, NO_REFUND, PROJECT_ID } from "./support";
+import { evalContent, NO_REFUND, PROJECT_ID } from "./support";
 
 const JUDGE = {
   id: "polite",
@@ -27,8 +24,11 @@ test("an eval has a name, an optional task, and defaults for the sandbox, the pa
   });
   assert.equal(evalDetailsSchema.safeParse({ name: " " }).success, false);
   assert.deepEqual(evalContentSchema.parse({}), {
+    datasetId: null,
     sandboxName: null,
+    sandboxVersionId: null,
     params: {},
+    matrix: {},
     trials: 3,
     scorers: [],
   });
@@ -86,31 +86,12 @@ test("an edit with the same content is the same version", () => {
   assert.ok(!sameContent(evalContent(), evalContent({ sandboxName: "support-demo" })));
 });
 
-test("a suite freezes the newest version of each eval that can run, and the newest version of each row", () => {
+test("the current version of an eval is its newest", () => {
   const refunds = definition("e1", "Refunds", [
     version("e1v2", 2, [NO_REFUND, JUDGE]),
     version("e1v1", 1, [NO_REFUND]),
   ]);
-  const advisory = definition("e2", "Advisory", [version("e2v1", 1, [JUDGE])]);
-  const empty = definition("e3", "Empty", [version("e3v1", 1, [NO_REFUND])]);
   assert.equal(currentVersion(refunds).id, "e1v2");
-  const cases = [
-    evalCase("c1", "e1", 2, ["smoke"]),
-    evalCase("c2", "e1", 1),
-    evalCase("c3", "e2", 1),
-  ];
-  const frozen = freezeSuite([refunds, advisory, empty], cases);
-  assert.deepEqual(frozen.evalVersions, [
-    { evalId: "e1", versionId: "e1v2", number: 2, name: "Refunds", params: {}, trials: 3 },
-  ]);
-  assert.deepEqual(frozen.caseVersions, [
-    { caseId: "c1", versionId: "c1-2", number: 2, name: "c1", evalId: "e1" },
-    { caseId: "c2", versionId: "c2-1", number: 1, name: "c2", evalId: "e1" },
-  ]);
-  const snapshots = [NO_REFUND, JUDGE].map(snapshotOf);
-  assert.deepEqual(frozen.scorerSnapshots, { "c1-2": snapshots, "c2-1": snapshots });
-  assert.deepEqual(freezeSuite([refunds], cases, "other").evalVersions, []);
-  assert.equal(freezeSuite([refunds], cases, "smoke").caseVersions.length, 1);
 });
 
 function definition(id: string, name: string, versions: EvalDefinition["versions"]) {
@@ -125,26 +106,5 @@ function version(id: string, number: number, scorers: (typeof NO_REFUND)[]) {
     number,
     createdBy: "user_1",
     createdAt: new Date(0),
-  };
-}
-
-/** A case with this many versions, the newest first. */
-function evalCase(id: string, evalId: string, count: number, labels: string[] = []): EvalCase {
-  return {
-    id,
-    projectId: PROJECT_ID,
-    evalId,
-    name: id,
-    labels,
-    createdAt: new Date(0),
-    versions: Array.from({ length: count }, (_, n) => ({
-      ...content(),
-      id: `${id}-${count - n}`,
-      caseId: id,
-      number: count - n,
-      sourceTurnId: null,
-      sourceOutput: null,
-      updatedAt: new Date(0),
-    })),
   };
 }

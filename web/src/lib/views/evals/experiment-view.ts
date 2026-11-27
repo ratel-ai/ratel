@@ -5,6 +5,7 @@ import {
   type FrozenCase,
   type Trial,
 } from "./domain/experiment";
+import type { RunScore } from "./domain/history";
 import type { SuiteTable } from "./suite-view";
 
 /** One case of an experiment with its raw counts. */
@@ -20,6 +21,8 @@ export function experimentView(
   trials: readonly Trial[],
   url: string,
   suite: SuiteTable | null = null,
+  /** The score of the eval of a run of one eval: the mean of its variants. */
+  run: RunScore | null = null,
 ) {
   const byCase = trialsByCase(trials);
   return {
@@ -45,31 +48,65 @@ export function experimentView(
         reason: trial.result === "invalid" ? trial.reason : null,
         traceId: trial.traceId,
         sandboxRunId: trial.sandboxRunId,
+        variant: trial.variant,
         scorers: trial.scorers.map(({ name, gating, status }) => ({ name, gating, status })),
       })),
     })),
-    ...(suite ? suiteFields(suite) : {}),
+    ...(suite ? suiteFields(suite, run) : {}),
+    evalId: experiment.evalId,
+    dataset: experiment.dataset,
+    changes: experiment.changes,
+    ...(run
+      ? {
+          score: run.score,
+          delta: run.delta,
+          variants: run.variants.map(({ scorers, ...variant }) => ({
+            ...variant,
+            scorers: scorers.map(({ hash: _, ...scorer }) => scorer),
+          })),
+        }
+      : {}),
     createdAt: experiment.createdAt.toISOString(),
     finishedAt: experiment.finishedAt?.toISOString() ?? null,
   };
 }
 
-/** The suite in the wire shape: no hash, and a delta or the reason why there is none. */
-function suiteFields({ baselineId, verdict, rows }: SuiteTable) {
+/**
+ * The suite in the wire shape: no hash, and a delta or the reason why there is none. For a run of
+ * one eval, the score and the delta of its eval are of the run: the mean of its variants.
+ */
+function suiteFields({ baselineId, verdict, rows }: SuiteTable, run: RunScore | null) {
   return {
     baselineId,
     verdict,
-    evals: rows.map(({ delta, scorers, ...row }) => ({
-      evalId: row.evalId,
-      name: row.name,
-      version: row.number,
-      cases: row.cases,
-      counts: row.counts,
-      score: row.score,
-      scorers: scorers.map(({ hash: _, ...scorer }) => scorer),
-      delta: delta?.ok ? { score: delta.score, scorers: delta.scorers } : null,
-      deltaRefusal: delta && !delta.ok ? { reason: delta.reason, message: delta.message } : null,
-    })),
+    evals: rows.map(({ delta, scorers, ...row }) => {
+      const base = {
+        evalId: row.evalId,
+        name: row.name,
+        version: row.number,
+        cases: row.cases,
+        counts: row.counts,
+        scorers: scorers.map(({ hash: _, ...scorer }) => scorer),
+      };
+      if (run) {
+        const own = run.delta;
+        return {
+          ...base,
+          score: run.score,
+          delta:
+            own && "score" in own
+              ? { score: own.score, scorers: delta?.ok ? delta.scorers : [] }
+              : null,
+          deltaRefusal: own && "reason" in own ? { reason: own.reason, message: own.message } : null,
+        };
+      }
+      return {
+        ...base,
+        score: row.score,
+        delta: delta?.ok ? { score: delta.score, scorers: delta.scorers } : null,
+        deltaRefusal: delta && !delta.ok ? { reason: delta.reason, message: delta.message } : null,
+      };
+    }),
   };
 }
 

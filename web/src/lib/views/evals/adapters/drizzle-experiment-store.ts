@@ -6,13 +6,16 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNull,
   lt,
   ne,
   notExists,
+  or,
   sql,
 } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
+import type { CaseVersion } from "../domain/case";
 import {
   type Experiment,
   type ExperimentState,
@@ -21,10 +24,11 @@ import {
   type TrialOutcome,
   type TrialState,
   trialsOfCase,
+  variantsOf,
 } from "../domain/experiment";
 import type { TrialResult } from "../domain/score";
 import type { ExperimentStore } from "../ports/experiment-store";
-import { evalCaseVersions, evalExperiments, evalTrials } from "../schema";
+import { evalCaseVersions, evalExperiments, evalRunRows, evalTrials } from "../schema";
 import { toVersion } from "./drizzle-case-store";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "transaction">;
@@ -56,19 +60,47 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
             ),
           );
         if ((running?.count ?? 0) >= maxRunning) return null;
+        const { runRows = [], ...experiment } = input;
         const [row] = await tx
           .insert(evalExperiments)
-          .values({ ...input, params: storable(input.params) })
+          .values({
+            ...experiment,
+            params: storable(experiment.params),
+            variants: storable(experiment.variants),
+            changes: storable(experiment.changes),
+          })
           .returning();
         if (!row) throw new Error("the experiment row is missing");
+        const runRowValues = runRows.map((one, position) => ({
+          id: one.id,
+          experimentId: row.id,
+          position,
+          ...storable({
+            name: one.name,
+            input: { value: one.content.input ?? null },
+            earlierTurns: one.content.earlierTurns,
+            toolFixtures: one.content.toolFixtures,
+            expectedOutput: one.content.expectedOutput,
+            sourceOutput: one.sourceOutput,
+          }),
+          sourceTurnId: one.sourceTurnId,
+        }));
+        for (let start = 0; start < runRowValues.length; start += CHUNK) {
+          await tx.insert(evalRunRows).values(runRowValues.slice(start, start + CHUNK));
+        }
         let position = 0;
+        // Each row, then each variant, then each trial: the rows start in their order.
+        const variants = variantsOf(input);
         const rows = input.caseVersions.flatMap((frozen) =>
-          Array.from({ length: trialsOfCase(input, frozen) }, (_, index) => ({
-            experimentId: row.id,
-            caseVersionId: frozen.versionId,
-            position: position++,
-            index,
-          })),
+          variants.flatMap(({ index: variant }) =>
+            Array.from({ length: trialsOfCase(input, frozen) }, (_, index) => ({
+              experimentId: row.id,
+              caseVersionId: frozen.versionId,
+              position: position++,
+              index,
+              variant,
+            })),
+          ),
         );
         for (let start = 0; start < rows.length; start += CHUNK) {
           await tx.insert(evalTrials).values(rows.slice(start, start + CHUNK));
@@ -90,6 +122,27 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
         .select()
         .from(evalExperiments)
         .where(eq(evalExperiments.projectId, projectId))
+        .orderBy(desc(evalExperiments.createdAt), desc(evalExperiments.id))
+        .limit(limit);
+      return rows.map(toExperiment);
+    },
+
+    async listOfEval(projectId, evalId, limit) {
+      const rows = await db
+        .select()
+        .from(evalExperiments)
+        .where(
+          and(
+            eq(evalExperiments.projectId, projectId),
+            or(
+              eq(evalExperiments.evalId, evalId),
+              and(
+                isNull(evalExperiments.evalId),
+                sql`${evalExperiments.evalVersions} @> ${JSON.stringify([{ evalId }])}::jsonb`,
+              ),
+            ),
+          ),
+        )
         .orderBy(desc(evalExperiments.createdAt), desc(evalExperiments.id))
         .limit(limit);
       return rows.map(toExperiment);
@@ -151,11 +204,12 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
 
     async caseVersions(versionIds) {
       if (versionIds.length === 0) return [];
-      const rows = await db
-        .select()
-        .from(evalCaseVersions)
-        .where(inArray(evalCaseVersions.id, [...versionIds]));
-      return rows.map(toVersion);
+      const ids = [...versionIds];
+      const [rows, runRows] = await Promise.all([
+        db.select().from(evalCaseVersions).where(inArray(evalCaseVersions.id, ids)),
+        db.select().from(evalRunRows).where(inArray(evalRunRows.id, ids)),
+      ]);
+      return [...rows.map(toVersion), ...runRows.map(runRowVersion)];
     },
 
     async listRunning(limit) {
@@ -173,7 +227,9 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
         .select()
         .from(evalCaseVersions)
         .where(eq(evalCaseVersions.id, versionId));
-      return row ? toVersion(row) : null;
+      if (row) return toVersion(row);
+      const [runRow] = await db.select().from(evalRunRows).where(eq(evalRunRows.id, versionId));
+      return runRow ? runRowVersion(runRow) : null;
     },
 
     claimStarts({ id: experimentId, projectId }, open, now) {
@@ -312,6 +368,23 @@ function stopped(experimentId: string, state: TrialState, before: Date) {
     eq(evalTrials.state, state),
     lt(evalTrials.claimedAt, before),
   );
+}
+
+/** A row of a run, read as a case version: its own case, version 1. */
+function runRowVersion(row: typeof evalRunRows.$inferSelect): CaseVersion {
+  const { id, input, earlierTurns, toolFixtures, expectedOutput, sourceTurnId, sourceOutput } = row;
+  return {
+    id,
+    caseId: sourceTurnId ?? id,
+    number: 1,
+    input: input.value ?? null,
+    earlierTurns,
+    toolFixtures,
+    expectedOutput,
+    sourceTurnId,
+    sourceOutput,
+    updatedAt: row.createdAt,
+  };
 }
 
 function toExperiment(row: typeof evalExperiments.$inferSelect): Experiment {

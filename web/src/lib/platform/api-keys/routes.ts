@@ -49,6 +49,15 @@ export const BEARER_ROUTE_SCOPES = {
   "GET /api/v1/evals/baseline": "evals:read",
   "PUT /api/v1/evals/baseline": "evals:write",
   "DELETE /api/v1/evals/baseline": "evals:write",
+  "GET /api/v1/evals/datasets": "evals:read",
+  "POST /api/v1/evals/datasets": "evals:write",
+  "GET /api/v1/evals/datasets/[datasetId]": "evals:read",
+  "POST /api/v1/evals/datasets/[datasetId]/rows": "evals:write",
+  "GET /api/v1/evals/definitions": "evals:read",
+  "POST /api/v1/evals/definitions": "evals:write",
+  "GET /api/v1/evals/definitions/[evalId]": "evals:read",
+  "GET /api/v1/evals/scorers": "evals:read",
+  "POST /api/v1/evals/runs": "evals:write",
 } as const satisfies Record<string, ApiKeyScope>;
 
 export type BearerRoute = keyof typeof BEARER_ROUTE_SCOPES;

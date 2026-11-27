@@ -195,6 +195,7 @@ async function create(
     })),
   );
   if (created === "eval_not_found") return refuse(404, "not_found", "There is no such eval.");
+  if (created === "not_fixed") return notFixed();
   await Promise.all(
     created.map(() => deps.track({ name: "eval_case_created", source: origin.source }, member)),
   );
@@ -218,6 +219,7 @@ async function evalOf(target: Target, member: Member, deps: CasesApiDeps): Promi
     content,
     createdBy: member.externalId,
   });
+  if (made === "dataset_not_found") return null;
   if (made !== "name_taken") {
     await deps.track({ name: "eval_created", source: "save_case" }, member);
     return made.id;
@@ -269,6 +271,14 @@ function isId(id: string): boolean {
 
 function notFound(): Response {
   return refuse(404, "not_found", "Not found.");
+}
+
+function notFixed(): Response {
+  return refuse(
+    409,
+    "not_fixed",
+    "The dataset of this eval is a query. A query dataset has no rows of its own: give the eval a fixed dataset first.",
+  );
 }
 
 function changed(): Response {

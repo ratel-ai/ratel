@@ -9,6 +9,7 @@ import {
 import { runCheck } from "@/lib/views/scorers/check";
 import type { ScorerDefinition, ScorerTrace } from "@/lib/views/scorers/types";
 import type { EvalScorer } from "./eval";
+import { EXPECTED_OUTPUT_VALUE } from "./predefined-scorers";
 
 /** What one trial did: what the scorers read. */
 export type TrialRecord = {
@@ -50,14 +51,18 @@ export type ScorerSnapshot = EvalScorer & { hash: string };
 
 /**
  * The result of a trial from its scorers. A gating scorer that fails makes it `fail`. Otherwise a
- * gating scorer with no result makes it `invalid`. An advisory scorer never changes it.
+ * gating scorer with no result makes it `invalid`. An advisory scorer never changes it. A check
+ * whose value is `EXPECTED_OUTPUT_VALUE` compares with the expected output of the row.
  */
 export function scoreTrial(
   trial: TrialRecord,
   scorers: readonly EvalScorer[],
   judged: ReadonlyMap<string, JudgeOutcome>,
+  expectedOutput: string | null = null,
 ): TrialScore {
-  const results = scorers.map((scorer) => scoreOne(trial, scorer, judged.get(scorer.id)));
+  const results = scorers.map((scorer) =>
+    scoreOne(trial, scorer, judged.get(scorer.id), expectedOutput),
+  );
   const gating = results.filter((result) => result.gating);
   const unscored = gating.find(({ status }) => status === "not_scored");
   if (gating.some(({ status }) => status === "fail")) {
@@ -111,9 +116,18 @@ function scoreOne(
   trial: TrialRecord,
   { id, name, gating, definition }: EvalScorer,
   judged: JudgeOutcome | undefined,
+  expectedOutput: string | null,
 ): ScorerResult {
   const base = { scorerId: id, name, kind: definition.kind, gating };
-  if (definition.kind === "check") return { ...base, ...checkTrial(definition.config, trial) };
+  if (definition.kind === "check") {
+    if (definition.config.value !== EXPECTED_OUTPUT_VALUE) {
+      return { ...base, ...checkTrial(definition.config, trial) };
+    }
+    if (expectedOutput === null) {
+      return { ...base, status: "not_scored", reason: "The row has no expected output." };
+    }
+    return { ...base, ...checkTrial({ ...definition.config, value: expectedOutput }, trial) };
+  }
   if (!judged) return { ...base, status: "not_scored", reason: "The judge did not run." };
   if (judged.status === "not_scored") {
     return { ...base, status: "not_scored", reason: judged.reason };

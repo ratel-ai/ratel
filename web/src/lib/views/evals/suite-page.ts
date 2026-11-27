@@ -1,7 +1,7 @@
 import type { Compared } from "./baseline";
 import { currentVersion as currentRow, type EvalCase } from "./domain/case";
 import type { CaseChange, CaseStatus } from "./domain/compare";
-import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
+import { currentVersion, type EvalDefinition, type EvalScorer, ownScorers } from "./domain/eval";
 import type { Counts, Trial } from "./domain/experiment";
 import { deltaKey, type ScorerScore } from "./domain/suite";
 import type { ExperimentRow } from "./page-model";
@@ -197,13 +197,13 @@ export function evalPageModel({
     id: definition.id,
     name: definition.name,
     taskId: definition.taskId,
-    version: { id, number, sandboxName, params, trials, scorers },
+    version: { id, number, sandboxName, params, trials, scorers: ownScorers(scorers) },
     runId: run?.experiment.id ?? null,
     run: detail
       ? runCell(detail.row, detail.row.delta ? (baseline?.experiment.id ?? null) : null)
       : null,
     dataset: cases
-      .filter(({ evalId }) => evalId === definition.id)
+      .filter(({ datasetId }) => datasetId === currentVersion(definition).datasetId)
       .map((evalCase): DatasetRow => {
         const shown = currentRow(evalCase);
         const scored = inRun.get(evalCase.id);

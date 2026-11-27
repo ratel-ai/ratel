@@ -76,7 +76,15 @@ test("a task with no eval gets a new eval with the task's default scorers and th
     // The name of the task is taken: the new eval gets a number.
     name: "Refund an order 2",
     taskId: REFUNDS.id,
-    content: { sandboxName: "support-demo", params: {}, trials: 3, scorers: [NO_REFUND] },
+    content: {
+      datasetId: null,
+      sandboxName: "support-demo",
+      sandboxVersionId: null,
+      matrix: {},
+      params: {},
+      trials: 3,
+      scorers: [NO_REFUND],
+    },
   });
 });
 

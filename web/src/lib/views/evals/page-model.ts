@@ -2,7 +2,7 @@ import type { Member } from "@/lib/console/scope/member-access";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
 import type { ParamSpec } from "@/lib/views/sandboxes/run-form";
 import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./domain/case";
-import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
+import { currentVersion, type EvalDefinition, type EvalScorer, ownScorers } from "./domain/eval";
 import {
   type Counts,
   countTrials,
@@ -64,7 +64,7 @@ export function caseEditorModel(
     evals: evals.map((definition) => ({
       id: definition.id,
       name: definition.name,
-      scorers: currentVersion(definition).scorers,
+      scorers: ownScorers(currentVersion(definition).scorers),
     })),
     current: versionView(evalCase && currentRow(evalCase)),
   };

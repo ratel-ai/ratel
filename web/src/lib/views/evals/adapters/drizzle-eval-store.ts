@@ -9,9 +9,14 @@ import {
   sameContent,
 } from "../domain/eval";
 import type { EvalStore } from "../ports/eval-store";
-import { evalDefinitions, evalDefinitionVersions } from "../schema";
+import { evalDatasets, evalDefinitions, evalDefinitionVersions } from "../schema";
+import { freeDatasetName } from "./drizzle-dataset-store";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** A rollback with no row added: the dataset is not in the project. */
+class DatasetNotFound extends Error {}
 type EvalRow = typeof evalDefinitions.$inferSelect;
 type VersionRow = typeof evalDefinitionVersions.$inferSelect;
 
@@ -30,14 +35,19 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
             .values({ ...storable({ name, taskId }), projectId, createdBy })
             .returning();
           if (!row) throw new Error("the eval row is missing");
+          const datasetId =
+            content.datasetId === null
+              ? await newFixedDataset(tx, projectId, row.name, createdBy)
+              : await ownDataset(tx, projectId, content.datasetId);
           const [version] = await tx
             .insert(evalDefinitionVersions)
-            .values({ ...columns(content), evalId: row.id, number: 1, createdBy })
+            .values({ ...columns({ ...content, datasetId }), evalId: row.id, number: 1, createdBy })
             .returning();
           if (!version) throw new Error("the eval version row is missing");
           return toEval(row, [version]);
         });
       } catch (error) {
+        if (error instanceof DatasetNotFound) return "dataset_not_found";
         if (isUniqueViolation(error)) return "name_taken";
         throw error;
       }
@@ -96,9 +106,14 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
             .where(eq(evalDefinitions.id, evalId))
             .returning();
           if (!row) throw new Error("the eval row is missing");
-          if (!sameContent(storable(content), toVersion(newest))) {
+          const datasetId =
+            content.datasetId === null
+              ? newest.datasetId
+              : await ownDataset(tx, projectId, content.datasetId);
+          const next = { ...content, datasetId };
+          if (!sameContent(storable(next), toVersion(newest))) {
             await tx.insert(evalDefinitionVersions).values({
-              ...columns(content),
+              ...columns(next),
               evalId,
               number: newest.number + 1,
               createdBy: userId,
@@ -108,11 +123,39 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
           return withVersions(tx, row);
         });
       } catch (error) {
+        if (error instanceof DatasetNotFound) return "dataset_not_found";
         if (isUniqueViolation(error)) return "name_taken";
         throw error;
       }
     },
   };
+}
+
+/** A new fixed dataset for a new eval, with the first free name like the eval's. */
+async function newFixedDataset(
+  tx: Tx,
+  projectId: string,
+  evalName: string,
+  createdBy: string,
+): Promise<string> {
+  const name = await freeDatasetName(tx, projectId, evalName);
+  const [row] = await tx
+    .insert(evalDatasets)
+    .values({ projectId, name, kind: "fixed", settings: {}, createdBy })
+    .returning({ id: evalDatasets.id });
+  if (!row) throw new Error("the dataset row is missing");
+  return row.id;
+}
+
+/** The id of a dataset of the project, locked while the eval refers to it. */
+async function ownDataset(tx: Tx, projectId: string, datasetId: string): Promise<string> {
+  const [row] = await tx
+    .select({ id: evalDatasets.id })
+    .from(evalDatasets)
+    .where(and(eq(evalDatasets.projectId, projectId), eq(evalDatasets.id, datasetId)))
+    .for("share");
+  if (!row) throw new DatasetNotFound();
+  return row.id;
 }
 
 async function withVersions(db: Pick<Db, "select">, row: EvalRow): Promise<EvalDefinition> {
@@ -124,8 +167,9 @@ async function withVersions(db: Pick<Db, "select">, row: EvalRow): Promise<EvalD
   return toEval(row, versions);
 }
 
-function columns({ sandboxName, params, trials, scorers }: EvalContent) {
-  return storable({ sandboxName, params, trials, scorers });
+function columns(content: EvalContent) {
+  const { datasetId, sandboxName, sandboxVersionId, params, matrix, trials, scorers } = content;
+  return storable({ datasetId, sandboxName, sandboxVersionId, params, matrix, trials, scorers });
 }
 
 function toEval(row: EvalRow, versions: VersionRow[]): EvalDefinition {
@@ -134,6 +178,20 @@ function toEval(row: EvalRow, versions: VersionRow[]): EvalDefinition {
 }
 
 function toVersion(row: VersionRow): EvalVersion {
-  const { id, evalId, number, sandboxName, params, trials, scorers, createdBy, createdAt } = row;
-  return { id, evalId, number, sandboxName, params, trials, scorers, createdBy, createdAt };
+  const { id, evalId, number, datasetId, sandboxName, sandboxVersionId, params, matrix } = row;
+  const { trials, scorers, createdBy, createdAt } = row;
+  return {
+    id,
+    evalId,
+    number,
+    datasetId,
+    sandboxName,
+    sandboxVersionId,
+    params,
+    matrix,
+    trials,
+    scorers,
+    createdBy,
+    createdAt,
+  };
 }

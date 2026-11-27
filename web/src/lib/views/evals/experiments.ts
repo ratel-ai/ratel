@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import { getLogger } from "@/lib/platform/logger";
@@ -9,23 +11,48 @@ import type {
 } from "@/lib/views/sandboxes";
 import { EVAL_TRIAL_PREFIX } from "@/lib/views/sandboxes/domain/run";
 import { refusedParam } from "@/lib/views/sandboxes/run-form";
-import { type CaseVersion, runInputOf } from "./domain/case";
-import { currentVersion, type EvalDefinition, runProblem } from "./domain/eval";
+import { type CaseVersion, caseContentSchema, runInputOf } from "./domain/case";
+import { type DatasetRow, type ResolveRefusal, resolveDataset } from "./datasets";
+import {
+  type Dataset,
+  type FrozenDataset,
+  MAX_ROW_LIMIT,
+  type ResolvedRow,
+  tooManyRows,
+} from "./domain/dataset";
+import {
+  currentVersion,
+  type EvalDefinition,
+  type EvalScorerRef,
+  evalScorersSchema,
+  type FrozenEval,
+  freezeEval,
+  MAX_JUDGES,
+  runProblem,
+} from "./domain/eval";
 import {
   type Experiment,
+  type FrozenCase,
   type FrozenSuite,
-  freezeSuite,
+  frozenCase,
   MAX_EXPERIMENT_TRIALS,
   paramsOfTrial,
+  type RunChanges,
   type Trial,
   type TrialOutcome,
   unscored,
+  type Variant,
 } from "./domain/experiment";
-import { type JudgeOutcome, scoreTrial, type TrialRecord } from "./domain/score";
+import { combinations, type Matrix, matrixProblem } from "./domain/matrix";
+import { resolveScorers } from "./domain/scorer-library";
+import { type JudgeOutcome, type ScorerSnapshot, scoreTrial, snapshotOf, type TrialRecord } from "./domain/score";
 import { type JudgeDeps, judgeTrial } from "./judge";
 import type { CaseStore } from "./ports/case-store";
+import type { DatasetSources } from "./ports/dataset-sources";
+import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
-import type { ExperimentStore } from "./ports/experiment-store";
+import type { ExperimentStore, NewRunRow } from "./ports/experiment-store";
+import type { ScorerLibraryPort } from "./ports/scorer-library";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
 export type SandboxPort = {
@@ -42,11 +69,18 @@ export type SandboxPort = {
 
 export type ExperimentDeps = {
   experiments: ExperimentStore;
-  cases: Pick<CaseStore, "list">;
+  cases: Pick<CaseStore, "list" | "listDataset">;
   evals: Pick<EvalStore, "list">;
+  datasets: Pick<DatasetStore, "get" | "getByName">;
+  /** What a query dataset reads of the traces, the tasks and RQL. */
+  sources: DatasetSources;
+  /** The project's scorers of the scorer library. */
+  library: ScorerLibraryPort;
   sandboxes: SandboxPort;
   judge: JudgeDeps;
   now: () => Date;
+  /** The id of a new row of a run. */
+  newId?: () => string;
 };
 
 export type StartExperiment = {
@@ -69,6 +103,56 @@ export type StartExperiment = {
   name?: string;
 };
 
+/** A row that a run adds for itself: typed values. */
+export type ExtraRow = {
+  name?: string;
+  input: unknown;
+  expectedOutput?: string | null;
+};
+
+/** What one run changes for itself only (decision `runs-per-eval`). The eval does not change. */
+export type EvalRunChanges = {
+  /** Another dataset, by its id or its name. */
+  dataset?: string;
+  /** Rows that the run adds to the rows of the dataset. */
+  rows?: ExtraRow[];
+  /** Other scorers of the library. */
+  scorers?: EvalScorerRef[];
+  /** A version id of the sandbox of the eval, or `latest`. */
+  sandboxVersion?: string;
+  /** Values that go over the default params of the eval. */
+  params?: Record<string, unknown>;
+  /** Another matrix. `{}` runs with no matrix. */
+  matrix?: Matrix;
+  trials?: number;
+};
+
+export type StartEvalRun = {
+  /** The eval, by its id or its name. */
+  eval: string;
+  changes?: EvalRunChanges;
+  /** The sandbox of the caller: `latest` uses it for an eval that names no sandbox. */
+  sandbox?: string;
+  startedBy: string;
+  /** Only the rows of a fixed dataset with this label. */
+  label?: string;
+  name?: string;
+};
+
+export type StartEachEval = Omit<StartEvalRun, "eval"> & {
+  /** The evals, by id or name. Absent: each eval of `sandbox` (or of the project with none). */
+  evals?: string[];
+};
+
+/** The run of one eval when a run starts for each eval. */
+export type EachEvalResult = {
+  evalId: string;
+  name: string;
+  result: StartExperimentResult;
+  /** Why a change of the request did not apply to this eval, or null. */
+  note: string | null;
+};
+
 export type StartExperimentResult =
   | { ok: true; experiment: Experiment }
   | { ok: false; reason: StartRefusal; message: string };
@@ -80,7 +164,11 @@ export type StartRefusal =
   | "too_many_running"
   | "too_many_trials"
   | "invalid_params"
-  | "wrong_sandbox";
+  | "wrong_sandbox"
+  | "invalid_matrix"
+  | "invalid_scorers"
+  | "invalid_rows"
+  | Exclude<ResolveRefusal, "no_cases">;
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -94,9 +182,10 @@ const LATEST_OF = 100;
 const logger = getLogger("evals/experiments");
 
 /**
- * Freezes the evals, the newest version of each of their cases, and their scorers. The suite is each eval of the sandbox
- * of the version (or of no sandbox). Chosen evals run by name. The trials start with
- * `advanceExperiment`.
+ * A suite run of `protocol/evals/v1` (`POST /evals/experiments`): each chosen eval, or each eval of
+ * the sandbox, in one experiment, with the default params of each eval and the params of the run
+ * over them. A matrix of an eval does not apply: a run of one eval (`startEvalRun`) has it. The
+ * trials start with `advanceExperiment`.
  */
 export async function startExperiment(
   subject: UsageSubject,
@@ -116,10 +205,7 @@ export async function startExperiment(
   if (!(await deps.sandboxes.enabled(projectId))) {
     return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
   }
-  const [allEvals, allCases] = await Promise.all([
-    deps.evals.list(projectId),
-    deps.cases.list(projectId),
-  ]);
+  const allEvals = await deps.evals.list(projectId);
   const found = await findVersion(projectId, sandboxVersion, sandbox, allEvals, evals, deps);
   if (!found.ok) return found;
   const { version } = found;
@@ -130,15 +216,33 @@ export async function startExperiment(
   if (runRefusal) return refused("invalid_params", runRefusal);
   const chosen = chooseEvals(allEvals, evals, version.name);
   if (!chosen.ok) return chosen;
-  const frozen = freezeSuite(chosen.evals, allCases, label ?? null, {
-    params,
-    ...(trialsPerCase === undefined ? {} : { trials: trialsPerCase }),
-  });
-  const left = leftOut(chosen.evals, evals, frozen);
-  if (left) return refused("no_cases", left);
-  for (const { name: evalName, params: evalParams } of frozen.evalVersions) {
-    const refusal = refusedParam(version.params, evalParams);
-    if (refusal) return refused("invalid_params", `${evalName}: ${refusal}`);
+  const frozen: FrozenSuite = { caseVersions: [], evalVersions: [], scorerSnapshots: {} };
+  const runRows: NewRunRow[] = [];
+  for (const definition of chosen.evals) {
+    const prepared = await prepareEval(
+      projectId,
+      definition,
+      { params, ...(trialsPerCase === undefined ? {} : { trials: trialsPerCase }), matrix: {} },
+      label ?? null,
+      deps,
+    );
+    if (!prepared.ok) {
+      // The suite leaves out an eval that cannot run. A chosen eval is refused.
+      if (evals === undefined && SKIPPED.has(prepared.reason)) continue;
+      // v1 calls an eval that cannot run `no_cases`.
+      const reason = prepared.reason === "invalid_scorers" ? "no_cases" : prepared.reason;
+      return refused(reason, `The eval "${definition.name}" cannot run. ${prepared.message}`);
+    }
+    const refusal = refusedParam(version.params, prepared.frozenEval.params);
+    if (refusal) return refused("invalid_params", `${definition.name}: ${refusal}`);
+    // A suite run of v1 has no matrix: each eval runs with its default params.
+    const { matrix: _, ...frozenEval } = prepared.frozenEval;
+    frozen.evalVersions.push(frozenEval);
+    for (const one of prepared.cases) {
+      frozen.caseVersions.push(one);
+      frozen.scorerSnapshots[one.versionId] = prepared.snapshots;
+    }
+    runRows.push(...prepared.runRows);
   }
   const cases = frozen.caseVersions.length;
   if (cases === 0) {
@@ -146,7 +250,7 @@ export async function startExperiment(
       ? refused("no_cases", "No eval has a case and a gating scorer. Add a case first.")
       : refused("no_cases", `No case has the label ${label}.`);
   }
-  const trials = totalTrials(frozen);
+  const trials = totalTrials(frozen, 1);
   if (trials > MAX_EXPERIMENT_TRIALS) {
     return refused("too_many_trials", `An experiment has at most ${MAX_EXPERIMENT_TRIALS} trials.`);
   }
@@ -154,6 +258,7 @@ export async function startExperiment(
     ...frozen,
     projectId,
     organizationId,
+    evalId: null,
     sandboxVersionId: version.id,
     sandboxName: version.name,
     name: name ?? null,
@@ -163,8 +268,347 @@ export async function startExperiment(
     gitDirty: version.git?.dirty ?? false,
     params,
     trialsPerCase: trialsPerCase ?? Math.max(...frozen.evalVersions.map((one) => one.trials)),
+    dataset: null,
+    variants: [],
+    changes: {},
+    runRows,
     startedBy,
   };
+  return create(input, trials, deps);
+}
+
+/**
+ * Starts a run of one eval (decision `runs-per-eval`). It freezes the eval version, the rows of its
+ * dataset (a query dataset is resolved now), a snapshot of each scorer of the library, the runtime
+ * version and the variants of the matrix. The changes apply to this run only.
+ */
+export async function startEvalRun(
+  subject: UsageSubject,
+  start: StartEvalRun,
+  deps: ExperimentDeps,
+): Promise<StartExperimentResult> {
+  const { projectId } = subject;
+  if (!(await deps.sandboxes.enabled(projectId))) {
+    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+  }
+  const all = await deps.evals.list(projectId);
+  const definition = all.find((one) => one.id === start.eval || one.name === start.eval);
+  if (!definition) return refused("not_found", `There is no eval named "${start.eval}".`);
+  return startOne(subject, definition, start, deps);
+}
+
+/**
+ * Starts one run for each eval: the evals named, else each eval of the sandbox of the caller (and
+ * each eval with no sandbox), else each eval of the project. A version of one sandbox applies only
+ * to the evals of that sandbox: each other eval runs on its own runtime, and its result says so.
+ * An eval with no row or no gating scorer is left out when no eval is named.
+ */
+export async function startEachEval(
+  subject: UsageSubject,
+  start: StartEachEval,
+  deps: ExperimentDeps,
+): Promise<{ ok: true; runs: EachEvalResult[]; skipped: EachEvalResult[] } | Extract<StartExperimentResult, { ok: false }>> {
+  const { projectId } = subject;
+  if (!(await deps.sandboxes.enabled(projectId))) {
+    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+  }
+  const all = await deps.evals.list(projectId);
+  const wantedVersion = start.changes?.sandboxVersion;
+  const pinned =
+    wantedVersion && wantedVersion !== "latest"
+      ? await deps.sandboxes.getVersion(projectId, wantedVersion)
+      : null;
+  if (wantedVersion && wantedVersion !== "latest" && !pinned) {
+    return refused("not_found", "There is no such sandbox version.");
+  }
+  const sandboxOfRun = start.sandbox ?? pinned?.name ?? null;
+  let chosen: EvalDefinition[];
+  if (start.evals) {
+    chosen = [];
+    for (const wanted of new Set(start.evals)) {
+      const found = all.find((one) => one.id === wanted || one.name === wanted);
+      if (!found) return refused("not_found", `There is no eval named "${wanted}".`);
+      chosen.push(found);
+    }
+  } else {
+    chosen = all.filter((one) => {
+      const own = currentVersion(one).sandboxName;
+      return sandboxOfRun === null || own === null || own === sandboxOfRun;
+    });
+  }
+  if (chosen.length === 0) {
+    return refused("not_found", sandboxOfRun ? `No eval runs on the sandbox ${sandboxOfRun}.` : "The project has no eval. Create one first.");
+  }
+  const runs: EachEvalResult[] = [];
+  const skipped: EachEvalResult[] = [];
+  for (const definition of chosen) {
+    const own = currentVersion(definition).sandboxName;
+    // A version of another sandbox does not apply: the eval keeps its own runtime.
+    const otherSandbox = pinned !== null && own !== null && own !== pinned.name;
+    const changes: EvalRunChanges = { ...start.changes };
+    if (otherSandbox) delete changes.sandboxVersion;
+    const note = otherSandbox
+      ? `The version ${pinned.id} is of the sandbox ${pinned.name}. This eval runs on the sandbox ${own}, so it used its own runtime.`
+      : null;
+    const result = await startOne(subject, definition, { ...start, eval: definition.id, changes }, deps);
+    const entry = { evalId: definition.id, name: definition.name, result, note };
+    if (!result.ok && start.evals === undefined && SKIPPED.has(result.reason)) skipped.push(entry);
+    else runs.push(entry);
+  }
+  if (runs.length === 0) {
+    const [first] = skipped;
+    if (first && !first.result.ok) return refused(first.result.reason, first.result.message);
+  }
+  return { ok: true, runs, skipped };
+}
+
+/** The refusals that leave an eval out of a suite: it has no row, or no gating scorer. */
+const SKIPPED: ReadonlySet<StartRefusal> = new Set(["no_cases", "invalid_scorers"]);
+
+async function startOne(
+  { projectId, organizationId }: UsageSubject,
+  definition: EvalDefinition,
+  start: StartEvalRun,
+  deps: ExperimentDeps,
+): Promise<StartExperimentResult> {
+  const own = currentVersion(definition);
+  const changes = start.changes ?? {};
+  const runtime = await runtimeOf(projectId, definition, changes.sandboxVersion, start.sandbox, deps);
+  if (!runtime.ok) return runtime;
+  const { version } = runtime;
+  const prepared = await prepareEval(projectId, definition, changes, start.label ?? null, deps);
+  if (!prepared.ok) return refused(prepared.reason, prepared.message);
+  const declared = new Set(version.params.map(({ name }) => name));
+  const matrix = prepared.frozenEval.matrix ?? {};
+  const problem = matrixProblem(matrix, declared);
+  if (problem) return refused("invalid_matrix", problem);
+  const variants: Variant[] = combinations(matrix).map((values, index) => ({
+    index,
+    values,
+    params: { ...prepared.frozenEval.params, ...values },
+  }));
+  for (const variant of variants) {
+    const refusal = refusedParam(version.params, variant.params);
+    if (refusal) return refused("invalid_params", refusal);
+  }
+  const frozen: FrozenSuite = {
+    caseVersions: prepared.cases,
+    evalVersions: [prepared.frozenEval],
+    scorerSnapshots: Object.fromEntries(prepared.cases.map(({ versionId }) => [versionId, prepared.snapshots])),
+  };
+  const trials = totalTrials(frozen, variants.length);
+  if (trials > MAX_EXPERIMENT_TRIALS) {
+    return refused(
+      "too_many_trials",
+      `The run has ${trials} trials (rows times variants times trials). A run has at most ${MAX_EXPERIMENT_TRIALS}.`,
+    );
+  }
+  const recorded: RunChanges = {
+    ...(prepared.dataset.datasetId !== own.datasetId ? { datasetId: prepared.dataset.datasetId } : {}),
+    ...(changes.rows?.length ? { extraRows: changes.rows.length } : {}),
+    ...(changes.scorers ? { scorers: changes.scorers } : {}),
+    ...(changes.sandboxVersion ? { sandboxVersionId: version.id } : {}),
+    ...(changes.params ? { params: changes.params } : {}),
+    ...(changes.matrix ? { matrix: changes.matrix } : {}),
+    ...(changes.trials === undefined ? {} : { trials: changes.trials }),
+  };
+  return create(
+    {
+      ...frozen,
+      projectId,
+      organizationId,
+      evalId: definition.id,
+      sandboxVersionId: version.id,
+      sandboxName: version.name,
+      name: start.name ?? null,
+      labelFilter: start.label ?? null,
+      gitCommit: version.git?.commit ?? "",
+      gitDirty: version.git?.dirty ?? false,
+      params: prepared.frozenEval.params,
+      trialsPerCase: prepared.frozenEval.trials,
+      dataset: prepared.dataset,
+      variants,
+      changes: recorded,
+      runRows: prepared.runRows,
+      startedBy: start.startedBy,
+    },
+    trials,
+    deps,
+  );
+}
+
+type Prepared =
+  | {
+      ok: true;
+      frozenEval: FrozenEval;
+      cases: FrozenCase[];
+      runRows: NewRunRow[];
+      snapshots: ScorerSnapshot[];
+      dataset: FrozenDataset;
+    }
+  | { ok: false; reason: StartRefusal; message: string };
+
+/** The frozen version, rows and scorers of one eval for a run, with the changes of the run. */
+async function prepareEval(
+  projectId: string,
+  definition: EvalDefinition,
+  changes: EvalRunChanges,
+  label: string | null,
+  deps: ExperimentDeps,
+): Promise<Prepared> {
+  const own = currentVersion(definition);
+  const refs = evalScorersSchema.safeParse(changes.scorers ?? own.scorers);
+  if (!refs.success) {
+    return { ok: false, reason: "invalid_scorers", message: refs.error.issues[0]?.message ?? "The scorers are not valid." };
+  }
+  const gating = runProblem({ scorers: refs.data });
+  if (gating) return { ok: false, reason: "invalid_scorers", message: gating };
+  const scorers = resolveScorers(refs.data, await deps.library.projectScorers(projectId));
+  if (!scorers.ok) return { ok: false, reason: "invalid_scorers", message: scorers.message };
+  if (scorers.scorers.filter(({ definition: one }) => one.kind === "judge").length > MAX_JUDGES) {
+    return { ok: false, reason: "invalid_scorers", message: `A run has at most ${MAX_JUDGES} judges.` };
+  }
+  const dataset = await datasetOf(projectId, changes.dataset ?? own.datasetId, deps);
+  if (!dataset) return { ok: false, reason: "not_found", message: "There is no such dataset." };
+  const resolved = await resolveDataset(projectId, dataset, label, { ...deps, now: deps.now });
+  if (!resolved.ok) return { ok: false, reason: resolved.reason, message: resolved.message };
+  const extra = extraRows(changes.rows ?? []);
+  if (!extra.ok) return { ok: false, reason: "invalid_rows", message: extra.message };
+  const rows: DatasetRow[] = [...resolved.rows, ...extra.rows.map((row) => ({ kind: "run" as const, row }))];
+  const over = tooManyRows(rows.length, MAX_ROW_LIMIT);
+  if (over) return { ok: false, reason: "too_many_rows", message: over };
+  if (rows.length === 0) {
+    const why =
+      resolved.skipped > 0
+        ? `The dataset gave ${resolved.skipped} turns with no captured input, and no row.`
+        : label === null
+          ? `The dataset "${dataset.name}" has no row. Add one first.`
+          : `No row of the dataset "${dataset.name}" has the label ${label}.`;
+    return { ok: false, reason: "no_cases", message: why };
+  }
+  const newId = deps.newId ?? (() => randomUUID());
+  const cases: FrozenCase[] = [];
+  const runRows: NewRunRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "case") {
+      cases.push(frozenCase(row.evalCase, row.caseVersion, definition.id));
+      continue;
+    }
+    const id = newId();
+    runRows.push({ ...row.row, id });
+    cases.push({
+      caseId: row.row.sourceTurnId ?? id,
+      versionId: id,
+      number: 1,
+      name: row.row.name,
+      evalId: definition.id,
+      row: "run",
+    });
+  }
+  const frozenEval = {
+    ...freezeEval(definition, {
+      ...(changes.params ? { params: changes.params } : {}),
+      ...(changes.trials === undefined ? {} : { trials: changes.trials }),
+    }),
+    matrix: changes.matrix ?? own.matrix,
+  };
+  return {
+    ok: true,
+    frozenEval,
+    cases,
+    runRows,
+    snapshots: scorers.scorers.map(snapshotOf),
+    dataset: {
+      datasetId: dataset.id,
+      name: dataset.name,
+      kind: dataset.definition.kind,
+      settings: (({ kind: _, ...settings }) => settings)(dataset.definition),
+      rows: resolved.rows.length,
+      resolvedAt: deps.now().toISOString(),
+    },
+  };
+}
+
+async function datasetOf(
+  projectId: string,
+  wanted: string | null,
+  deps: ExperimentDeps,
+): Promise<Dataset | null> {
+  if (wanted === null) return null;
+  const byId = z.uuid().safeParse(wanted).success ? await deps.datasets.get(projectId, wanted) : null;
+  return byId ?? (await deps.datasets.getByName(projectId, wanted));
+}
+
+/** The rows that a run adds: typed values, checked as a row of a dataset is. */
+function extraRows(
+  rows: readonly ExtraRow[],
+): { ok: true; rows: ResolvedRow[] } | { ok: false; message: string } {
+  const out: ResolvedRow[] = [];
+  for (const [index, row] of rows.entries()) {
+    const content = caseContentSchema.safeParse({
+      input: row.input,
+      expectedOutput: row.expectedOutput ?? null,
+    });
+    if (!content.success || content.data.input === null) {
+      return { ok: false, message: `The added row ${index + 1} has no input, or it is too large.` };
+    }
+    out.push({
+      name: row.name ?? `Added row ${index + 1}`,
+      content: content.data,
+      sourceTurnId: null,
+      sourceOutput: null,
+    });
+  }
+  return { ok: true, rows: out };
+}
+
+/**
+ * The runtime version of a run of one eval: the version that the run gives, else the version that
+ * the eval pins, else the newest ready version of its sandbox. A version of another sandbox is
+ * refused.
+ */
+async function runtimeOf(
+  projectId: string,
+  definition: EvalDefinition,
+  wanted: string | undefined,
+  sandboxOfCaller: string | undefined,
+  { sandboxes }: ExperimentDeps,
+): Promise<{ ok: true; version: SandboxVersionSummary } | Extract<StartExperimentResult, { ok: false }>> {
+  const own = currentVersion(definition);
+  const versionId = wanted && wanted !== "latest" ? wanted : wanted === "latest" ? null : own.sandboxVersionId;
+  const sandbox = own.sandboxName ?? sandboxOfCaller ?? null;
+  let version: SandboxVersionSummary | null;
+  if (versionId) {
+    version = await sandboxes.getVersion(projectId, versionId);
+    if (!version) return refused("not_found", "There is no such sandbox version.");
+    if (own.sandboxName !== null && version.name !== own.sandboxName) {
+      return refused(
+        "wrong_sandbox",
+        `The version is of the sandbox ${version.name}. The eval "${definition.name}" runs on ${own.sandboxName}.`,
+      );
+    }
+  } else {
+    const versions = await sandboxes.listVersions(projectId, LATEST_OF);
+    version =
+      versions.find(({ status, name }) => status === "ready" && (sandbox === null || name === sandbox)) ??
+      null;
+    if (!version) {
+      return sandbox === null
+        ? refused("not_ready", "No sandbox version is ready. Push one first.")
+        : refused("not_ready", `No version of the sandbox ${sandbox} is ready. Push one first.`);
+    }
+  }
+  if (version.status !== "ready") {
+    return refused("not_ready", `The sandbox version is ${version.status}. Use one that is ready.`);
+  }
+  return { ok: true, version };
+}
+
+async function create(
+  input: Parameters<ExperimentStore["create"]>[0],
+  trials: number,
+  deps: ExperimentDeps,
+): Promise<StartExperimentResult> {
   const experiment = await deps.experiments.create(input, MAX_RUNNING_EXPERIMENTS);
   if (!experiment) {
     const message = `The project has ${MAX_RUNNING_EXPERIMENTS} running experiments. Wait for one to end.`;
@@ -172,10 +616,12 @@ export async function startExperiment(
   }
   logger.info(
     {
-      project_id: projectId,
+      project_id: input.projectId,
       experiment_id: experiment.id,
-      evals: frozen.evalVersions.length,
-      cases,
+      eval_id: input.evalId,
+      evals: input.evalVersions.length,
+      cases: input.caseVersions.length,
+      variants: Math.max(1, input.variants.length),
       trials,
     },
     "eval experiment started",
@@ -297,7 +743,7 @@ export async function scoreRun(
     judged.set(id, outcome);
   });
   await Promise.all(judges);
-  const score = scoreTrial(record, scorers, judged);
+  const score = scoreTrial(record, scorers, judged, version.expectedOutput);
   return { ...base, result: score.result, reason: score.invalidReason, scorers: score.scorers };
 }
 
@@ -319,7 +765,7 @@ async function startTrial(
         projectId,
         organizationId,
         requestedBy: `${EVAL_TRIAL_PREFIX}${trial.id}`,
-        params: paramsOfTrial(experiment, trial.caseVersionId),
+        params: paramsOfTrial(experiment, trial.caseVersionId, trial.variant),
         fixtures: version.toolFixtures,
       },
     );
@@ -410,25 +856,9 @@ function chooseEvals(
   return { ok: true, evals };
 }
 
-/** Why a chosen eval is not in the run, or null. The suite leaves such evals out. */
-function leftOut(
-  evals: readonly EvalDefinition[],
-  names: readonly string[] | undefined,
-  frozen: FrozenSuite,
-): string | null {
-  if (names === undefined) return null;
-  const kept = new Set(frozen.evalVersions.map(({ evalId }) => evalId));
-  const missing = evals.find(({ id }) => !kept.has(id));
-  if (!missing) return null;
-  const problem = runProblem(currentVersion(missing));
-  return problem
-    ? `The eval "${missing.name}" cannot run. ${problem}`
-    : `The eval "${missing.name}" has no case. Add one first.`;
-}
-
-function totalTrials({ caseVersions, evalVersions }: FrozenSuite): number {
+function totalTrials({ caseVersions, evalVersions }: FrozenSuite, variants: number): number {
   const trials = new Map(evalVersions.map(({ evalId, trials: count }) => [evalId, count]));
-  return caseVersions.reduce((sum, { evalId }) => sum + (trials.get(evalId ?? "") ?? 0), 0);
+  return caseVersions.reduce((sum, { evalId }) => sum + (trials.get(evalId ?? "") ?? 0), 0) * variants;
 }
 
 /**

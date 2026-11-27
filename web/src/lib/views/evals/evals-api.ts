@@ -6,7 +6,14 @@ import {
   refuse,
   reply,
 } from "@/lib/console/scope/member-access";
-import { currentVersion, evalContentSchema, evalDetailsSchema } from "./domain/eval";
+import {
+  currentVersion,
+  type EvalContent,
+  type EvalVersion,
+  evalContentSchema,
+  evalDetailsSchema,
+  libraryRefs,
+} from "./domain/eval";
 import { readJson } from "./experiments-api";
 import type { EvalStore } from "./ports/eval-store";
 
@@ -33,6 +40,7 @@ export function handleCreateEval(
       .evals()
       .create({ ...body.data, projectId: member.projectId, createdBy: member.externalId });
     if (made === "name_taken") return nameTaken();
+    if (made === "dataset_not_found") return datasetNotFound();
     const version = currentVersion(made);
     return reply(201, { evalId: made.id, versionId: version.id, number: version.number });
   });
@@ -45,10 +53,14 @@ export function handleEditEval(
   deps: EvalsApiDeps,
 ): Promise<Response> {
   return write(projectId, "edit_eval", deps, async (member) => {
-    const body = editSchema.safeParse(await readJson(request));
+    const json = await readJson(request);
+    const body = editSchema.safeParse(json);
     if (!body.success) return invalid(body.error);
     if (!z.uuid().safeParse(evalId).success) return notFound();
     const { base, ...edit } = body.data;
+    const current = await deps.evals().get(member.projectId, evalId);
+    if (!current) return notFound();
+    edit.content = keptContent(edit.content, json, currentVersion(current));
     const saved = await deps.evals().update(member.projectId, evalId, edit, base, {
       userId: member.externalId,
       now: deps.now(),
@@ -58,9 +70,38 @@ export function handleEditEval(
       return refuse(409, "changed", "Another person changed this eval. Read it again.");
     }
     if (saved === "name_taken") return nameTaken();
+    if (saved === "dataset_not_found") return datasetNotFound();
     const version = currentVersion(saved);
     return reply(200, { evalId, versionId: version.id, number: version.number });
   });
+}
+
+/**
+ * The console editor knows the eval's own scorers, its sandbox, params and trials. What it does not
+ * send stays as the newest version has it: the matrix, the pinned version, and the references to
+ * the library.
+ */
+function keptContent(content: EvalContent, json: unknown, newest: EvalVersion): EvalContent {
+  const given =
+    typeof json === "object" && json !== null && "content" in json
+      ? ((json as { content?: unknown }).content ?? {})
+      : {};
+  const has = (key: string) => typeof given === "object" && given !== null && key in given;
+  const onlyOwn = content.scorers.every((ref) => ref.source !== "project" && ref.source !== "predefined");
+  return {
+    ...content,
+    matrix: has("matrix") ? content.matrix : newest.matrix,
+    sandboxVersionId: has("sandboxVersionId") ? content.sandboxVersionId : newest.sandboxVersionId,
+    scorers: !has("scorers")
+      ? newest.scorers
+      : onlyOwn
+        ? [...content.scorers, ...libraryRefs(newest.scorers)]
+        : content.scorers,
+  };
+}
+
+function datasetNotFound(): Response {
+  return refuse(404, "dataset_not_found", "The project has no such dataset.");
 }
 
 function write(

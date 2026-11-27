@@ -251,6 +251,12 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["evals_get_trial", false],
   ["evals_compare", false],
   ["evals_pin_baseline", true],
+  // Datasets and the scorer library (decisions `datasets-first-class`, `scorer-library`).
+  ["evals_list_datasets", false],
+  ["evals_get_dataset", false],
+  ["evals_create_dataset", true],
+  ["evals_add_to_dataset", true],
+  ["evals_list_scorers", false],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {
@@ -284,6 +290,11 @@ const EXPECTED_API_KEY_SCOPES: Readonly<Record<string, string>> = {
   evals_get_trial: "evals:read",
   evals_compare: "evals:read",
   evals_pin_baseline: "evals:write",
+  evals_list_datasets: "evals:read",
+  evals_get_dataset: "evals:read",
+  evals_create_dataset: "evals:write",
+  evals_add_to_dataset: "evals:write",
+  evals_list_scorers: "evals:read",
 };
 
 test("feature tools ask the API-key scope of their REST route", () => {

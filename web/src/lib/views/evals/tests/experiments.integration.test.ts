@@ -36,6 +36,7 @@ import {
   createEvalsDb,
   evalContent,
   inEval,
+  modelDeps,
   NO_REFUND,
   ORGANIZATION_ID,
   OTHER_PROJECT_ID,
@@ -97,6 +98,7 @@ async function setup() {
     cases,
     evals,
     experiments,
+    ...modelDeps(db),
     sandboxes: {
       enabled: async () => true,
       listVersions: async () => versions,

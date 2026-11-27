@@ -36,7 +36,10 @@ export type ComparisonResult =
       };
     };
 
-/** A person makes a completed experiment the baseline of its project. */
+/**
+ * A person makes a completed experiment a baseline: of its eval (decision `runs-per-eval`), or of
+ * the project for a suite run from before runs had one eval.
+ */
 export async function pinBaseline(
   projectId: string,
   experimentId: string,
@@ -52,13 +55,14 @@ export async function pinBaseline(
     return { ok: false, reason: "not_completed", message };
   }
   const baseline = { experimentId: experiment.id, pinnedBy, pinnedAt: deps.now() };
-  await deps.baselines.pin(projectId, baseline);
+  await deps.baselines.pin(projectId, baseline, experiment.evalId);
   return { ok: true, baseline };
 }
 
 /**
  * An experiment against another one: the experiment that the reader chose, else the pinned baseline
- * of the project. The verdict and the refusals are the same for both.
+ * of its eval (of the project for a suite run from before). The verdict and the refusals are the
+ * same for both.
  */
 export async function compareWithBaseline(
   projectId: string,
@@ -68,12 +72,15 @@ export async function compareWithBaseline(
 ): Promise<ComparisonResult> {
   const candidate = await find(projectId, experimentId, deps);
   if (!candidate) return refused("not_found", "There is no such experiment.");
-  const pinned = await deps.baselines.get(projectId);
+  const pinned = await deps.baselines.get(projectId, candidate.evalId);
   const otherId = baselineId ?? pinned?.experimentId ?? null;
   const other = otherId === null ? null : await find(projectId, otherId, deps);
   if (!other) {
+    const none = candidate.evalId
+      ? "The eval of this run has no pinned baseline. Pin a run of the eval first."
+      : "The project has no pinned baseline. Pin an experiment first.";
     return baselineId === null
-      ? refused("no_baseline", "The project has no pinned baseline. Pin an experiment first.")
+      ? refused("no_baseline", none)
       : refused("not_found", "There is no such experiment to compare with.");
   }
   const pin = pinned?.experimentId === other.id ? pinned : null;
@@ -93,12 +100,28 @@ export async function compareWithBaseline(
   return { ok: true, pin, ...sides, comparison };
 }
 
-/** The pinned baseline run with its trials. Null when none is pinned. */
-export async function pinnedRun(projectId: string, deps: BaselineDeps): Promise<Compared | null> {
-  const pinned = await deps.baselines.get(projectId);
+/**
+ * The pinned baseline run with its trials: of an eval, or of the project with none. Null when none
+ * is pinned.
+ */
+export async function pinnedRun(
+  projectId: string,
+  deps: BaselineDeps,
+  evalId: string | null = null,
+): Promise<Compared | null> {
+  const pinned = await deps.baselines.get(projectId, evalId);
   const experiment = pinned && (await deps.experiments.get(projectId, pinned.experimentId));
   if (!experiment) return null;
   return { experiment, trials: await deps.experiments.trials(experiment.id) };
+}
+
+/** The baseline that a run compares with: the pin of its eval, else the pin of the project. */
+export function baselineOf(
+  projectId: string,
+  experiment: Pick<Experiment, "evalId">,
+  deps: BaselineDeps,
+): Promise<Compared | null> {
+  return pinnedRun(projectId, deps, experiment.evalId);
 }
 
 async function find(projectId: string, experimentId: string, { experiments }: BaselineDeps) {

@@ -8,7 +8,7 @@ import { MIGRATIONS_DIR } from "@/lib/platform/db/test-support";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
-import { currentVersion } from "../domain/eval";
+import { currentVersion, ownScorers } from "../domain/eval";
 import { experimentPageModel } from "../page-model";
 import { NO_REFUND, ORGANIZATION_ID, OTHER_PROJECT_ID, PROJECT_ID } from "./support";
 
@@ -127,7 +127,7 @@ test("the migration puts each case into an eval of its task label and its scorer
   const { db, ids } = await beforeAndAfter();
   const evals = await createDrizzleEvalStore(db).list(PROJECT_ID);
   assert.deepEqual(
-    evals.map((one) => [one.name, one.taskId, currentVersion(one).scorers.map(({ id }) => id)]),
+    evals.map((one) => [one.name, one.taskId, ownScorers(currentVersion(one).scorers).map(({ id }) => id)]),
     [
       ["refunds", null, ["no-refund"]],
       ["refunds #2", null, ["no-refund", "polite"]],
@@ -292,6 +292,10 @@ async function insertOldCase(
   }
 }
 
+/** This migration, then each later one: the stores read the schema of now. */
 async function migrate(client: PGlite) {
-  await client.exec(readFileSync(join(MIGRATIONS_DIR, MIGRATION), "utf8"));
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((file) => file.endsWith(".sql") && file >= MIGRATION)
+    .sort();
+  for (const file of files) await client.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
 }
