@@ -19,7 +19,7 @@ written in (`rqlVersion`, a whole number from 1); `synthesis/rql` checks the ver
 
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`,
-`customMonitoring`) and the optional
+`customMonitoring`, `sandboxes`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
 force each one on or off; only that file knows the environment variable of each. Without the port
 each switch is its configured value for the deployment, off when unset (in the open-source
@@ -32,7 +32,12 @@ table of an edition that sells plans: the organization's plan and subscription s
 (`summary`), the cheapest plan whose Agent health window reaches a number of days, the cheapest
 that shows Agent health in full (optional, named by the locks), and a plan's name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
 
-`CoreServices` (same file) is the other direction: what only the core implements, lent to the
+`usage-limits.ts` is the one seam for limits and usage: a caller checks a named limit, records what
+it used with a reference, or reads a daily budget, and never sees a plan or a price. It holds the
+hard limits. `usage-limits.contract.ts` is the test every adapter passes and
+`usage-limits.fake.ts` the in-memory adapter for tests. The composition port is optional.
+
+`CoreServices` (`composition.ts`) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool
 Picker ranks, `forgetOrganization`, what an edition calls before it deletes an organization, `forcedFlag`, the value the configuration forces for a core switch (an edition's

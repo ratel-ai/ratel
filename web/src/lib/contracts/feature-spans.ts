@@ -21,7 +21,8 @@ export type FeatureName =
   | "scorers"
   | "alerts"
   | "explore"
-  | "rql";
+  | "rql"
+  | "sandboxes";
 
 export type FeatureSpanOptions = {
   attributes?: Attributes;

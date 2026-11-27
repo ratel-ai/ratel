@@ -1,0 +1,35 @@
+{
+  "manifest": {
+    "v": 1,
+    "name": "support-agent",
+    "entry": "src/agent.ts",
+    "base": "node:24-slim",
+    "install": [
+      "npm install"
+    ],
+    "secrets": [
+      "OPENAI_API_KEY"
+    ],
+    "tools": [
+      {
+        "name": "lookup_order",
+        "sideEffect": false,
+        "fake": false
+      },
+      {
+        "name": "refund_order",
+        "description": "Refunds an order",
+        "sideEffect": true,
+        "fake": true
+      }
+    ]
+  },
+  "git": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dirty": false
+  },
+  "bundle": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 1024
+  }
+}

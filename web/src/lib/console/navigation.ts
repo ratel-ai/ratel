@@ -96,6 +96,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   focusedConsole = false,
+  sandboxPage = false,
   customMonitoring = false,
 }: {
   projectId: string | undefined;
@@ -116,6 +117,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
+  /** `sandboxes` on for the shown organization: Ratel sandbox before Catalog and Settings. */
+  sandboxPage?: boolean;
   /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
   customMonitoring?: boolean;
 }): NavItem[] {
@@ -411,7 +414,12 @@ export function consoleNav({
     : [];
   return [
     ...(root
-      ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole, customMonitoring })
+      ? stageRailNav(root, core, setupRows, {
+          entityPages,
+          focusedConsole,
+          customMonitoring,
+          sandboxPage,
+        })
       : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
@@ -439,7 +447,13 @@ function stageRailNav(
     entityPages,
     focusedConsole,
     customMonitoring,
-  }: { entityPages: boolean; focusedConsole: boolean; customMonitoring: boolean },
+    sandboxPage,
+  }: {
+    entityPages: boolean;
+    focusedConsole: boolean;
+    customMonitoring: boolean;
+    sandboxPage: boolean;
+  },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -531,6 +545,18 @@ function stageRailNav(
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
+    ...(sandboxPage
+      ? [
+          {
+            id: "sandbox",
+            label: "Ratel sandbox",
+            href: `${root}/sandbox`,
+            icon: "apis" as const,
+            keywords: ["sandbox", "push", "versions", "secrets", "run"],
+            section: "settings" as const,
+          },
+        ]
+      : []),
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("mcp-setup"),

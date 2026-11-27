@@ -26,6 +26,8 @@ import { trackServerEvent } from "@/lib/platform/telemetry";
 import { enqueueClusterIntentsJob } from "@/lib/readings/intent-engine/jobs";
 import { enqueueFoldIntentGraphJob } from "@/lib/readings/intent-graph/queries";
 
+import { withRunTokens } from "@/lib/views/sandboxes/run-token";
+
 // OTLP protobuf decode (protobufjs) + node:crypto (key hashing + dedup) — keep off
 // the edge runtime.
 export const runtime = "nodejs";
@@ -50,7 +52,8 @@ async function handlePost(req: Request) {
     scope: BEARER_ROUTE_SCOPES["POST /api/v1/traces"],
     isDbConfigured,
     hashApiKey,
-    findActiveApiKeyByHash,
+    // A sandbox run sends its traces with its run token (the `sandboxes` flag).
+    findActiveApiKeyByHash: withRunTokens(findActiveApiKeyByHash),
     touchApiKey,
     insertEventsWithMetrics,
     insertOtelSpans,

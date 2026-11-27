@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "name": "support-agent",
+  "base": "node:24-slim",
+  "install": [
+    "npm install"
+  ],
+  "secrets": [
+    "OPENAI_API_KEY"
+  ],
+  "tools": [
+    {
+      "name": "lookup_order",
+      "sideEffect": false,
+      "fake": false
+    },
+    {
+      "name": "refund_order",
+      "description": "Refunds an order",
+      "sideEffect": true,
+      "fake": true
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import type { AnalysisFilterPort } from "@/lib/contracts/analysis-filter";
 import type { ApiKeyCreationPort } from "@/lib/contracts/api-key-creation";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
+import type { BundleStore } from "@/lib/contracts/bundle-store";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
 import type { CoreFlag, FeatureFlagsPort } from "@/lib/contracts/feature-flags";
@@ -18,6 +19,7 @@ import type { SlackAppPort } from "@/lib/contracts/slack-app";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
 import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
+import type { UsageLimitsPort } from "@/lib/contracts/usage-limits";
 
 /**
  * The port set a composition supplies (ADR-0004). It lives among the contracts because both
@@ -326,6 +328,17 @@ export type CompositionPorts = {
    * the open-source default: no filter.
    */
   analysisFilter?: AnalysisFilterPort;
+  /**
+   * The limits of each project and the record of what it used. Absent, the core's own adapter
+   * (`lib/adapters/oss/usage-limits.ts`) enforces the hard limits and keeps no usage records.
+   * Read through `usageLimits` (`lib/platform/usage-limits.ts`).
+   */
+  usageLimits?: UsageLimitsPort;
+  /**
+   * Where pushed sandbox bundles are. Absent, the core keeps them in a folder of the machine
+   * (`sandboxes.bundleDir`), which the web and the worker process must share.
+   */
+  sandboxBundles?: BundleStore;
   /**
    * Absent in the open-source edition, where an organization saves its own Slack app in its
    * settings. With it, the edition supplies the app and the settings show no app fields.

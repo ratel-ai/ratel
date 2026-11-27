@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "name": "support-agent",
+  "entry": "src/agent.ts",
+  "base": "node:24-slim",
+  "install": [],
+  "secrets": [],
+  "tools": []
+}

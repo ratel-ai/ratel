@@ -31,6 +31,8 @@ export const API_KEY_SCOPES = [
   "mcp:read",
   "mcp:write",
   "content:read",
+  "sandboxes:read",
+  "sandboxes:write",
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
@@ -41,7 +43,7 @@ export const ALL_SCOPES = "*";
 export type StoredApiKeyScope = ApiKeyScope | typeof ALL_SCOPES;
 
 type ScopeInfo = { label: string; description: string; group: ScopeGroup };
-export type ScopeGroup = "Ingest" | "Catalog" | "Runtime" | "Usage" | "MCP";
+export type ScopeGroup = "Ingest" | "Catalog" | "Runtime" | "Usage" | "MCP" | "Sandboxes";
 
 /** Labels for the advanced picker and the 403 reason. Plain words, no engine names. */
 export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
@@ -112,6 +114,16 @@ export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
     group: "MCP",
     label: "Read captured content",
     description: "Asks, answers and tool payloads over MCP, once content reading is on",
+  },
+  "sandboxes:read": {
+    group: "Sandboxes",
+    label: "Read sandboxes",
+    description: "GET /api/v1/sandboxes",
+  },
+  "sandboxes:write": {
+    group: "Sandboxes",
+    label: "Push sandboxes",
+    description: "POST /api/v1/sandboxes/versions (ratel sandbox push)",
   },
 };
 

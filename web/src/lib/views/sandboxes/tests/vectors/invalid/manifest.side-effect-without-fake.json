@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "name": "support-agent",
+  "entry": "src/agent.ts",
+  "base": "node:24-slim",
+  "install": [
+    "npm install"
+  ],
+  "secrets": [
+    "OPENAI_API_KEY"
+  ],
+  "tools": [
+    {
+      "name": "refund_order",
+      "sideEffect": true,
+      "fake": false
+    }
+  ]
+}

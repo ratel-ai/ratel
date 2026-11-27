@@ -12,6 +12,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { type Config, getConfig } from "@/config";
+import { LONG_JOB_KINDS } from "@/lib/jobs/kinds";
 import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
@@ -230,13 +231,17 @@ export async function claimNextQueuedJob(
         )}]::text[])`
       : sql``;
   const cap = options.runningPerProject ?? jobsRunningPerProject();
-  // Imports (run_import, RC-40) have their own lane in the worker and can take many minutes. A
+  const longKinds = sql`(${sql.join(
+    LONG_JOB_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  )})`;
+  // Long jobs (imports, RC-40, and sandbox image builds) have their own lane in the worker and can take many minutes. A
   // running one does not count, or it would hold back the project's analysis (including the
   // build the import itself asks for), and the cap does not hold one back either: a project runs
   // one import at most.
   const capFilter =
     cap > 0
-      ? sql`and (q.kind = 'run_import' or (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running' and r.kind <> 'run_import') < ${cap})`
+      ? sql`and (q.kind in ${longKinds} or (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running' and r.kind not in ${longKinds}) < ${cap})`
       : sql``;
   const avoid = options.avoidProjects ?? [];
   const tier = jobTierSql(sql`q.kind`);

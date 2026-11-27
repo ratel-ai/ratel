@@ -1,4 +1,5 @@
 import { type SQL, sql } from "drizzle-orm";
+import { LONG_JOB_KINDS } from "@/lib/jobs/kinds";
 import type { JobKind } from "@/lib/jobs/runner";
 
 /**
@@ -32,6 +33,7 @@ export const JOB_TIER: Record<JobKind, 0 | 1 | 2> = {
   fold_intent_graph: 1,
   match_quality_run: 1,
   run_import: 1,
+  sandbox_image_build: 0,
   explore_tool_usage: 2,
   craft_tools: 2,
   categorize_queries: 2,
@@ -55,6 +57,7 @@ export const JOB_BUDGET_MS: Record<JobKind, number> = {
   fold_intent_graph: 2 * 60_000,
   match_quality_run: 8 * 60_000,
   run_import: 30 * 60_000,
+  sandbox_image_build: 15 * 60_000,
   explore_tool_usage: 3 * 60_000,
   craft_tools: 3 * 60_000,
   categorize_queries: 3 * 60_000,
@@ -81,7 +84,7 @@ export function jobBudgetMs(kind: string): number {
  * purpose, and an import waits for its own lane.
  */
 export const QUEUE_LAG_KINDS: readonly string[] = (Object.keys(JOB_TIER) as JobKind[]).filter(
-  (kind) => JOB_TIER[kind] < 2 && kind !== "run_import",
+  (kind) => JOB_TIER[kind] < 2 && !(LONG_JOB_KINDS as readonly string[]).includes(kind),
 );
 
 /** The tier as a SQL expression over a jobs row's `kind`, for the claim's order. */
