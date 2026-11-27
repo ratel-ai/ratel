@@ -5,6 +5,7 @@ import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
+import { listScorers } from "@/lib/views/scorers/store";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
@@ -13,6 +14,7 @@ import { createTaskLinks } from "./adapters/task-links";
 import { createTraceSource } from "./adapters/trace-source";
 import type { CasesApiDeps } from "./cases-api";
 import type { DatasetsApiDeps } from "./datasets-api";
+import type { EvalDialogDeps } from "./eval-dialog-api";
 import type { EvalsApiDeps } from "./evals-api";
 import { evalsEnabledForProject } from "./gate";
 import { loadTurnContent } from "./turn-content";
@@ -66,4 +68,15 @@ export const datasetsApiDeps: DatasetsApiDeps = {
   ...evalsAccess,
   datasets: () => createDrizzleDatasetStore(getDb()),
   source: () => createTraceSource(getDb(), { readOnlyTools, now: () => new Date() }),
+};
+
+/** The sandbox versions that the "New eval" dialog reads: enough to find each sandbox's newest. */
+const DIALOG_VERSIONS = 100;
+
+export const evalDialogDeps: EvalDialogDeps = {
+  ...evalsAccess,
+  evals: () => createDrizzleEvalStore(getDb()),
+  datasets: () => createDrizzleDatasetStore(getDb()),
+  library: () => ({ projectScorers: (projectId) => listScorers(projectId, getDb()) }),
+  versions: (projectId) => listSandboxVersions(projectId, DIALOG_VERSIONS),
 };

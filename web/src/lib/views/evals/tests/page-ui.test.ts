@@ -6,7 +6,13 @@ import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
 import { DatasetsList } from "@/components/console/evals/DatasetsList";
 import { DatasetView } from "@/components/console/evals/DatasetView";
+import { EvalsOverview } from "@/components/console/evals/EvalsOverview";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
+import {
+  emptyDraft,
+  NewEvalFields,
+  type NewEvalOptions,
+} from "@/components/console/evals/NewEvalDialog";
 import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
 import { SuiteView } from "@/components/console/evals/SuiteView";
 import { TrialPanel } from "@/components/console/evals/TrialPanel";
@@ -17,6 +23,7 @@ import { datasetPageModel, datasetsPageModel } from "../dataset-pages";
 import type { CaseVersion } from "../domain/case";
 import type { Experiment, Trial } from "../domain/experiment";
 import { pairedTrials } from "../domain/paired-trials";
+import { evalsPageModel } from "../evals-page";
 import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
 import {
   type CaseEditorModel,
@@ -526,4 +533,107 @@ test("a dataset page links each trace row to its trace, and a query page says a 
   assert.match(queryText, /What it resolves now/);
   assert.match(queryHtml, /select trace_id from traces/);
   assert.doesNotMatch(queryText, /Add rows/);
+});
+
+test("the Evals page is a chart, a filter and a table of four columns, with New eval", () => {
+  const model = evalsPageModel({
+    projectId: PROJECT_ID,
+    definitions: [{ id: "e1", createdAt: new Date(NOW) }],
+    overview: [
+      {
+        evalId: "e1",
+        name: "Order questions",
+        cases: 6,
+        scorers: 2,
+        baselineScore: 0.5,
+        newestScore: 0.75,
+        series: [
+          { experimentId: "r1", at: "2026-11-24T10:00:00.000Z", score: 0.5 },
+          { experimentId: "r2", at: "2026-11-25T09:00:00.000Z", score: 0.75 },
+        ],
+      },
+    ],
+  });
+  const html = render(
+    createElement(EvalsOverview, {
+      model,
+      options: { sandboxes: [], datasets: [], tasks: [], scorers: [] },
+      canEdit: true,
+      now: NOW,
+    }),
+  );
+  const text = visibleText(html);
+  for (const word of [
+    "New eval",
+    "Order questions",
+    "Cases",
+    "Scorers",
+    "Baseline score",
+    "50%",
+    "75%",
+  ]) {
+    assert.match(text, new RegExp(word));
+  }
+  assert.match(html, /aria-label="Score of each eval by run"/);
+  assert.match(html, /<polyline/);
+  assert.match(html, /Filter evals/);
+  assert.doesNotMatch(text, /Start run|Run evals|New case|[Ee]xperiment/);
+});
+
+test("the New eval dialog shows Production agent as a runtime that comes later", () => {
+  const options: NewEvalOptions = {
+    sandboxes: [
+      {
+        name: "support-demo",
+        versions: [
+          {
+            id: "v1",
+            commit: "a".repeat(40),
+            createdAt: NOW,
+            params: [
+              {
+                name: "model",
+                type: "enum",
+                default: "small",
+                description: null,
+                options: ["small", "large"],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    datasets: [{ id: "d1", name: "Order asks", kindLabel: "Fixed" }],
+    tasks: [],
+    scorers: [],
+  };
+  const html = render(
+    createElement(NewEvalFields, {
+      projectId: PROJECT_ID,
+      options,
+      draft: emptyDraft(options),
+      set: () => {},
+      chooseSandbox: () => {},
+      problem: null,
+    }),
+  );
+  const text = visibleText(html);
+  assert.match(text, /Production agent/);
+  assert.match(text, /Coming soon/);
+  assert.match(
+    html,
+    /<button[^>]*disabled[^>]*value="production"|<button[^>]*value="production"[^>]*disabled/,
+  );
+  for (const word of [
+    "Runtime",
+    "Dataset",
+    "Parameters",
+    "Matrix",
+    "Scorers",
+    "This project",
+    "Pre-defined",
+    "Trials",
+  ]) {
+    assert.match(text, new RegExp(word));
+  }
 });

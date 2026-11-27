@@ -1,6 +1,13 @@
+import { z } from "zod";
 import { isTrialCheckPath } from "@/lib/contracts/check";
 import type { Scorer } from "@/lib/views/scorers/types";
-import { currentVersion, type EvalScorer, evalScorerSchema, type ScorerRef } from "./domain/eval";
+import {
+  currentVersion,
+  type EvalScorer,
+  evalScorerSchema,
+  type ScorerRef,
+  scorerRefSchema,
+} from "./domain/eval";
 import { buildPredefined, PREDEFINED_SCORERS } from "./domain/predefined-scorers";
 import type { EvalStore } from "./ports/eval-store";
 import type { ScorerLibrary } from "./ports/scorer-library";
@@ -30,6 +37,18 @@ export type LibraryEntry = {
   /** The eval that holds a scorer from an eval. */
   evalName: string | null;
 };
+
+/** A scorer of a request: a scorer of its own, or a reference to the library. */
+export const scorerRequestSchema = z.union([
+  evalScorerSchema,
+  z.object({
+    id: z.string().min(1).max(100),
+    name: z.string().trim().min(1).max(100),
+    gating: z.boolean().default(true),
+    ref: scorerRefSchema,
+  }),
+]);
+export type ScorerRequest = z.output<typeof scorerRequestSchema>;
 
 export type ResolvedScorers = { ok: true; scorers: EvalScorer[] } | { ok: false; message: string };
 
@@ -123,6 +142,25 @@ export async function scorerFromRef(
   const found = definitionOfRef(scorer.ref, project);
   if (!found.ok) return { ok: false, message: `The scorer "${scorer.name}": ${found.why}` };
   return { ok: true, scorer: { ...scorer, definition: found.definition } };
+}
+
+/** The scorers of a request with a definition each: a reference gets the one of the library. */
+export async function withDefinitions(
+  projectId: string,
+  scorers: readonly ScorerRequest[],
+  library: ScorerLibrary,
+): Promise<ResolvedScorers> {
+  const made: EvalScorer[] = [];
+  for (const scorer of scorers) {
+    if ("definition" in scorer) {
+      made.push(scorer);
+      continue;
+    }
+    const found = await scorerFromRef(projectId, scorer, library);
+    if (!found.ok) return found;
+    made.push(found.scorer);
+  }
+  return { ok: true, scorers: made };
 }
 
 function definitionOfRef(

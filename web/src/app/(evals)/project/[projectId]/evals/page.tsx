@@ -1,36 +1,47 @@
 import { notFound, redirect } from "next/navigation";
-import { SuiteView } from "@/components/console/evals/SuiteView";
+import { EvalsOverview } from "@/components/console/evals/EvalsOverview";
+import type { DialogSandbox } from "@/components/console/evals/NewEvalDialog";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { composition } from "@/lib/composition/ports";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
-import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
+import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
+import { createDrizzleDatasetStore } from "@/lib/views/evals/adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
+import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
+import { loadPickerOptions } from "@/lib/views/evals/adapters/turn-picker";
+import { KIND_LABELS } from "@/lib/views/evals/dataset-pages";
+import { evalsPageModel } from "@/lib/views/evals/evals-page";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
-import { loadRuns } from "@/lib/views/evals/page-loads";
-import { readyVersions } from "@/lib/views/evals/page-model";
-import { suitePageModel } from "@/lib/views/evals/suite-page";
-import { listSandboxVersions } from "@/lib/views/sandboxes";
+import { loadEvalsOverview } from "@/lib/views/evals/history-load";
+import { experimentHref } from "@/lib/views/evals/paths";
+import { listScorerLibrary } from "@/lib/views/evals/scorer-library";
+import { listSandboxVersions, type SandboxVersionSummary } from "@/lib/views/sandboxes";
+import { listScorers } from "@/lib/views/scorers/store";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Evals" };
 
-const VERSIONS = 50;
+const VERSIONS = 100;
 
-/** The suite table: each eval with the score of a run (`?run=`, else the newest) and its delta. */
+/**
+ * The Evals page: a chart of the score of each eval over its runs, and a table of the evals. The
+ * old address of a suite run (`?run=`) opens that run; `?new=1` opens the "New eval" dialog.
+ */
 export default async function EvalsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ run?: string | string[] }>;
+  searchParams: Promise<{ run?: string | string[]; new?: string | string[] }>;
 }) {
   const [{ projectId }, query] = await Promise.all([params, searchParams]);
   // Next renders a page next to its layout: the layout's 404 does not stop this data.
   if (!(await evalsEnabledForProject(projectId))) notFound();
+  const runId = Array.isArray(query.run) ? query.run[0] : query.run;
+  if (runId) redirect(experimentHref(projectId, runId));
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Evals">
@@ -40,34 +51,70 @@ export default async function EvalsPage({
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const runId = Array.isArray(query.run) ? (query.run[0] ?? null) : (query.run ?? null);
-  const [evals, cases, loaded, versions] = await withFeatureSpan(
+  const canEdit = !(await isRestrictedBySupportSession());
+  const loaded = await withFeatureSpan(
     "evals",
     "load_page",
-    () => {
+    async () => {
       const db = getDb();
-      return Promise.all([
-        createDrizzleEvalStore(db).list(project.id),
-        createDrizzleCaseStore(db).list(project.id),
-        loadRuns(project.id, runId),
+      const evals = createDrizzleEvalStore(db);
+      const datasets = createDrizzleDatasetStore(db);
+      const [overview, summaries, picker, versions, scorers] = await Promise.all([
+        loadEvalsOverview(project.id, {
+          evals,
+          datasets,
+          baselines: createDrizzleBaselineStore(db),
+          experiments: createDrizzleExperimentStore(db),
+        }),
+        datasets.list(project.id),
+        loadPickerOptions(project.id, db),
         listSandboxVersions(project.id, VERSIONS),
+        listScorerLibrary(project.id, {
+          library: { projectScorers: (id) => listScorers(id, db) },
+          evals,
+        }),
       ]);
+      return { overview, summaries, picker, versions, scorers };
     },
     { attributes: { "project.id": project.id } },
   );
-  const model = suitePageModel({ projectId: project.id, evals, cases, ...loaded });
-  const pinned = loaded.pin?.experimentId ?? null;
-  const JudgeSettings = (await composition.ui?.())?.EvalJudgeSettings;
+  const { overview, summaries, picker, versions, scorers } = loaded;
   return (
-    <SuiteView
-      model={model}
-      canEdit={!(await isRestrictedBySupportSession())}
-      versions={readyVersions(versions)}
-      experiments={loaded.runs}
-      baseline={pinned === null ? "none" : pinned === model.runId ? "this" : "other"}
+    <EvalsOverview
+      model={evalsPageModel({
+        projectId: project.id,
+        definitions: overview.definitions,
+        overview: overview.rows,
+      })}
+      options={{
+        sandboxes: dialogSandboxes(versions),
+        datasets: summaries.map(({ id, name, query: { kind } }) => ({
+          id,
+          name,
+          kindLabel: KIND_LABELS[kind],
+        })),
+        tasks: picker.tasks,
+        scorers,
+      }}
+      canEdit={canEdit}
+      openNew={query.new !== undefined}
       now={new Date().toISOString()}
-    >
-      {JudgeSettings ? <JudgeSettings projectId={project.id} /> : null}
-    </SuiteView>
+    />
   );
+}
+
+/** Each sandbox with its ready versions, the newest first; a sandbox with none is left out. */
+function dialogSandboxes(versions: readonly SandboxVersionSummary[]): DialogSandbox[] {
+  const ready = versions.filter(({ status }) => status === "ready");
+  return [...Map.groupBy(ready, ({ name }) => name)].map(([name, ofSandbox]) => ({
+    name,
+    versions: [...ofSandbox]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map(({ id, git, createdAt, params }) => ({
+        id,
+        commit: git?.commit ?? "",
+        createdAt: createdAt.toISOString(),
+        params,
+      })),
+  }));
 }

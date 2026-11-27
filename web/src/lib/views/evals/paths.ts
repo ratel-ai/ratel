@@ -24,8 +24,9 @@ export function evalHref(projectId: string, evalId: string, runId: string | null
   return runId ? `${path}?run=${runId}` : path;
 }
 
+/** The Evals page with the "New eval" dialog open. */
 export function newEvalHref(projectId: string): string {
-  return `${evalsHref(projectId)}/new`;
+  return `${evalsHref(projectId)}?new=1`;
 }
 
 /** One trial of a run, next to the baseline trial of the same row. */

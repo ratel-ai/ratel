@@ -14,21 +14,20 @@ import {
   type EvalDefinition,
   evalContentSchema,
   evalDetailsSchema,
-  evalScorerSchema,
   MAX_EVAL_TRIALS,
   matrixSchema,
-  scorerRefSchema,
 } from "./domain/eval";
 import type { Experiment } from "./domain/experiment";
 import { type EachRunPart, type EvalRunChanges, startEachEvalRun, startEvalRun } from "./eval-runs";
 import type { StartRefusal } from "./experiments";
 import { forKey, type KeyDeps, notFound, readJson, urlOf } from "./experiments-api";
-import { datasetsView, evalHistory, evalsOverview, withPinnedRuns } from "./history-view";
+import { loadEvalsOverview, oneRun, recentRuns } from "./history-load";
+import { datasetsView, evalHistory, withPinnedRuns } from "./history-view";
 import type { BaselineStore } from "./ports/baseline-store";
 import type { DatasetStore, NewRow } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import { rowOfSandboxRun } from "./sandbox-rows";
-import { scorerFromRef } from "./scorer-library";
+import { scorerRequestSchema, withDefinitions } from "./scorer-library";
 
 /**
  * The evals, their runs and the datasets, with a project key (`protocol/evals/v1`, decision
@@ -39,8 +38,6 @@ export type RunsApiDeps = KeyDeps & {
   catalog: () => { evals: EvalStore; datasets: DatasetStore; baselines: BaselineStore };
 };
 
-/** The runs of the project that the history reads, the newest. */
-const HISTORY_RUNS = 100;
 const MAX_ROWS = 100;
 
 const STATUS: Record<StartRefusal, number> = {
@@ -83,19 +80,9 @@ const rowSchema = z.discriminatedUnion("kind", [
     expectedOutput: z.string().max(20_000).nullable().default(null),
   }),
 ]);
-/** A scorer of a request: a library reference, or a scorer of its own. */
-const scorerSchema = z.union([
-  evalScorerSchema,
-  z.object({
-    id: z.string().min(1).max(100),
-    name: z.string().trim().min(1).max(100),
-    gating: z.boolean().default(true),
-    ref: scorerRefSchema,
-  }),
-]);
 const oneRunSchema = changesSchema.extend({
   rows: z.array(rowSchema).max(MAX_ROWS).optional(),
-  scorers: z.array(scorerSchema).max(50).optional(),
+  scorers: z.array(scorerRequestSchema).max(50).optional(),
 });
 const eachRunSchema = changesSchema.extend({
   evals: z.array(z.string().trim().min(1).max(200)).min(1).max(100).optional(),
@@ -107,7 +94,7 @@ const createEvalSchema = evalDetailsSchema.extend({
   params: z.record(z.string(), paramValue).optional(),
   matrix: matrixSchema.optional(),
   trials: z.number().int().min(1).max(MAX_EVAL_TRIALS).optional(),
-  scorers: z.array(scorerSchema).max(50).default([]),
+  scorers: z.array(scorerRequestSchema).max(50).default([]),
 });
 const createDatasetSchema = datasetDetailsSchema.extend({
   query: datasetQuerySchema.default({ kind: "fixed" }),
@@ -119,24 +106,12 @@ const addRowsSchema = z.object({ rows: z.array(rowSchema).min(1).max(MAX_ROWS) }
 export function handleEvalsOverviewByKey(deps: RunsApiDeps): Promise<Response> {
   return forKey(deps, "list_evals", async ({ projectId }) => {
     const { evals, datasets, baselines } = deps.catalog();
-    const [definitions, summaries, recent] = await Promise.all([
-      evals.list(projectId),
-      datasets.list(projectId),
-      recentRuns(projectId, deps),
-    ]);
-    const pins = await Promise.all(
-      definitions.map(async ({ id }) => [id, (await baselines.get(projectId, id))?.experimentId]),
-    );
-    const runs = await withPinnedRuns(
-      recent,
-      pins.map(([, run]) => run),
-      (id) => oneRun(projectId, id, deps),
-    );
-    const rows = evalsOverview({
-      evals: definitions,
-      rowCounts: new Map(summaries.map(({ id, rowCount }) => [id, rowCount])),
-      runs,
-      baselines: new Map(pins.flatMap(([id, run]) => (id && run ? [[id, run]] : []))),
+    const { experiments } = deps.experiments();
+    const { rows } = await loadEvalsOverview(projectId, {
+      evals,
+      datasets,
+      baselines,
+      experiments,
     });
     return reply(200, { v: 1, evals: rows });
   });
@@ -150,9 +125,9 @@ export function handleEvalByKey(wanted: string, deps: RunsApiDeps): Promise<Resp
     if (!definition) return notFound();
     const pin = await baselines.get(projectId, definition.id);
     const runs = await withPinnedRuns(
-      await recentRuns(projectId, deps),
+      await recentRuns(projectId, deps.experiments()),
       [pin?.experimentId],
-      (id) => oneRun(projectId, id, deps),
+      (id) => oneRun(projectId, id, deps.experiments()),
     );
     const baseline = runs.find(({ experiment }) => experiment.id === pin?.experimentId) ?? null;
     const history = evalHistory({ definition, runs, baseline });
@@ -170,7 +145,7 @@ export function handleCreateEvalByKey(request: Request, deps: RunsApiDeps): Prom
     const datasetId =
       dataset === undefined ? null : await findDatasetId(projectId, dataset, datasets);
     if (dataset !== undefined && datasetId === null) return datasetNotFound();
-    const scorers = await withDefinitions(projectId, asked, deps);
+    const scorers = await withDefinitions(projectId, asked, deps.experiments().library);
     if (!scorers.ok) return refuse(400, "invalid_scorers", scorers.message);
     const content = evalContentSchema.safeParse({ ...rest, datasetId, scorers: scorers.scorers });
     if (!content.success) return invalid(content.error);
@@ -202,7 +177,7 @@ export function handleStartEvalRunByKey(
     const rows = askedRows ? await newRows(subject.projectId, askedRows, deps) : undefined;
     if (rows && !rows.ok) return refuse(404, "not_found", rows.message);
     const scorers = askedScorers
-      ? await withDefinitions(subject.projectId, askedScorers, deps)
+      ? await withDefinitions(subject.projectId, askedScorers, deps.experiments().library)
       : undefined;
     if (scorers && !scorers.ok) return refuse(400, "invalid_scorers", scorers.message);
     const run: EvalRunChanges = {
@@ -329,23 +304,6 @@ export function handleAddRowsByKey(
   });
 }
 
-async function recentRuns(projectId: string, deps: RunsApiDeps) {
-  const { experiments } = deps.experiments();
-  const list = await experiments.list(projectId, HISTORY_RUNS);
-  return Promise.all(
-    list.map(async (experiment) => ({
-      experiment,
-      trials: await experiments.trials(experiment.id),
-    })),
-  );
-}
-
-async function oneRun(projectId: string, experimentId: string, deps: RunsApiDeps) {
-  const { experiments } = deps.experiments();
-  const experiment = await experiments.get(projectId, experimentId);
-  return experiment ? { experiment, trials: await experiments.trials(experiment.id) } : null;
-}
-
 async function findEval(
   projectId: string,
   wanted: string,
@@ -401,26 +359,6 @@ async function newRows(
     });
   }
   return { ok: true, rows: made };
-}
-
-/** The scorers of a request with a definition each: a reference gets the one of the library. */
-async function withDefinitions(
-  projectId: string,
-  scorers: ReadonlyArray<z.output<typeof scorerSchema>>,
-  deps: RunsApiDeps,
-) {
-  const { library } = deps.experiments();
-  const made = [];
-  for (const scorer of scorers) {
-    if ("definition" in scorer) {
-      made.push(scorer);
-      continue;
-    }
-    const found = await scorerFromRef(projectId, scorer, library);
-    if (!found.ok) return found;
-    made.push(found.scorer);
-  }
-  return { ok: true as const, scorers: made };
 }
 
 async function startedView(experiment: Experiment, subject: UsageSubject, deps: RunsApiDeps) {
