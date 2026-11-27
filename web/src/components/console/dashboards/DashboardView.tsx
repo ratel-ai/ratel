@@ -7,9 +7,28 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@ratel/
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { EmptyState } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
-import { ChartColumn, Copy, Download, Ellipsis, House, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ChartColumn,
+  Copy,
+  Download,
+  Ellipsis,
+  House,
+  Maximize2,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, startTransition, useCallback, useOptimistic, useState } from "react";
+import {
+  type ReactNode,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+} from "react";
 import { exportDashboardAction } from "@/app/(console)/project/[projectId]/dashboards/actions";
 import { addDashboardWidgetToOverview } from "@/app/(console)/project/[projectId]/overview-actions";
 import { type CardEdit, CardFrame, focusToolbar } from "@/components/console/grid/CardFrame";
@@ -31,6 +50,13 @@ import {
 } from "@/lib/synthesis/traces/v2/filters";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
 import { DEFAULT_TRACE_RANGE } from "@/lib/synthesis/traces/view";
+import {
+  collapseStep,
+  expandedOf,
+  expandsCard,
+  NEW_WIDGET_ID,
+  withExpanded,
+} from "@/lib/views/dashboards/expanded";
 import {
   barChange,
   barSearch,
@@ -57,21 +83,26 @@ import type {
 } from "@/lib/views/dashboards/types";
 import {
   isFilterable,
+  NEW_SQL_TEXT,
   queryFilter,
   queryMetric,
   queryScorerId,
+  sqlWidgetQuery,
   widgetName,
 } from "@/lib/views/dashboards/widget";
 import { explorePanelHref } from "@/lib/views/explore/links";
+import { ExpandedWidget } from "./ExpandedWidget";
 import { NameDialog } from "./NameDialog";
 import { useDashboardAction } from "./use-dashboard-action";
+import { previewKey } from "./use-widget-preview";
 import { BrokenWidgetBody, WidgetCardBody } from "./WidgetCardBody";
-import { WidgetEditor } from "./WidgetEditor";
 import { WidgetLinkItems } from "./WidgetLinkItems";
 
 const EDIT_ID = "dashboard-edit";
 const DONE_ID = "dashboard-done";
 const ADD_ID = "dashboard-add-widget";
+/** A new widget is a metric widget: a table of the newest traces, until a metric is picked. */
+const NEW_WIDGET: WidgetInput = { title: "", query: sqlWidgetQuery(NEW_SQL_TEXT), chart: "table" };
 
 /** One dashboard: its widgets on the shared card grid, over the time window in the URL. */
 export function DashboardView({
@@ -85,6 +116,7 @@ export function DashboardView({
   alerts,
   draft,
   overview = false,
+  readOnly = false,
   startEditing = false,
 }: {
   projectId: string;
@@ -102,18 +134,23 @@ export function DashboardView({
   draft: WidgetInput | null;
   /** The Overview takes widgets of dashboards (`focusedConsole`). */
   overview?: boolean;
+  /** A support session: a widget opens with its properties, and nothing saves. */
+  readOnly?: boolean;
   /** Draws edit mode at first, in a test. */
   startEditing?: boolean;
 }) {
   const router = useRouter();
   // Null while scorers are off.
   const scorers = useScorers();
-  const { search, pending, go } = useTraceNavigation();
+  const { pathname, search, pending, go } = useTraceNavigation();
   const { change, saving } = useDashboardAction(projectId);
-  // The editor's widget outlives `editing`, so the dialog keeps its content as it closes.
-  const [editing, setEditing] = useState(draft !== null);
+  // A scorer's page starts a new widget from it: taken once, so the next new one starts clean.
   const [start, setStart] = useState(draft);
-  const [edited, setEdited] = useState<{ id: string; widget: WidgetInput } | null>(null);
+  // The address this page pushed to expand a widget: Close goes Back to the grid while it is current.
+  const pushed = useRef<string | null>(null);
+  // The card to give the focus to once the grid is back.
+  const focusAfter = useRef<{ id: string | null } | null>(null);
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const [filtersRefused, setFiltersRefused] = useState<string | null>(null);
   // In this page only: a reload is view mode.
   const [arranging, setArranging] = useState(startEditing);
@@ -135,33 +172,84 @@ export function DashboardView({
     range: shownRange(timeWindow.preset, defaults.range),
   };
 
-  function openEditor(stored: Widget | null) {
-    if (stored) {
-      const { id, layout: _, missingScorer: __, ...widget } = stored;
-      setEdited({ id, widget });
-    } else {
-      setEdited(null);
-    }
-    setEditing(true);
+  // The expanded widget is in the address: a link opens it, and Back closes it.
+  const expandedId = expandedOf(search);
+  const expandedStored =
+    expandedId && expandedId !== NEW_WIDGET_ID
+      ? placed.find((widget): widget is Widget => widget.id === expandedId && !isBroken(widget))
+      : undefined;
+  const expanded: { id: string | null; widget: WidgetInput } | null =
+    expandedId === NEW_WIDGET_ID
+      ? { id: null, widget: start ?? NEW_WIDGET }
+      : expandedStored
+        ? { id: expandedStored.id, widget: inputOf(expandedStored) }
+        : null;
+
+  // The numbers the page came with, for the open widget: one Map while they stay the same, so its
+  // preview does not start again at each render.
+  const servedKey =
+    expandedStored && expanded ? previewKey(expanded.widget, timeWindow, filters) : null;
+  const servedResult = expandedStored ? (resultOf.get(expandedStored.id) ?? null) : null;
+  const served = useMemo(
+    () => (servedKey === null ? undefined : new Map([[servedKey, servedResult]])),
+    [servedKey, servedResult],
+  );
+
+  // A draft from a scorer's page opens as a new widget, in place of its own parameter.
+  useEffect(() => {
+    if (!draft) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete(ADD_SCORER_PARAM);
+    window.history.replaceState(
+      null,
+      "",
+      `${pathname}${withExpanded(`?${params}`, NEW_WIDGET_ID)}`,
+    );
+  }, [draft, pathname]);
+
+  /** Expands a widget in place, or a new one: a new entry of the history, the page as it is. */
+  function expand(id: string) {
+    const href = `${pathname}${withExpanded(window.location.search, id)}`;
+    window.history.pushState(null, "", href);
+    pushed.current = href;
   }
 
-  /** The draft is taken once: the address and the next "Add widget" start clean. */
-  function onEditorOpenChange(open: boolean) {
-    setEditing(open);
-    if (open || !start) return;
+  /** Back to the grid, with the focus on the card it was. */
+  function collapse() {
+    focusAfter.current = { id: expanded?.id ?? null };
     setStart(null);
-    const url = new URL(window.location.href);
-    url.searchParams.delete(ADD_SCORER_PARAM);
-    window.history.replaceState(null, "", url);
+    const current = `${window.location.pathname}${window.location.search}`;
+    const step = collapseStep(current, pushed.current);
+    pushed.current = null;
+    if (step === "back") window.history.back();
+    else
+      window.history.replaceState(
+        null,
+        "",
+        `${pathname}${withExpanded(window.location.search, null)}`,
+      );
   }
+
+  // Once the grid is back, the focus goes to the card that was open, or to Add widget.
+  useEffect(() => {
+    if (expanded || !focusAfter.current) return;
+    const { id } = focusAfter.current;
+    focusAfter.current = null;
+    const target =
+      (id ? document.querySelector<HTMLElement>(`[data-card="${CSS.escape(id)}"] button`) : null) ??
+      document.getElementById(ADD_ID) ??
+      document.querySelector<HTMLElement>("[data-add-widget]");
+    target?.focus();
+  });
 
   async function save(widget: WidgetInput) {
+    const id = expanded?.id;
     const saved = await change(
-      edited
-        ? { action: "edit-widget", dashboardId, widgetId: edited.id, widget }
+      id
+        ? { action: "edit-widget", dashboardId, widgetId: id, widget }
         : { action: "add-widget", dashboardId, widget },
     );
-    if (saved) onEditorOpenChange(false);
+    if (saved) collapse();
   }
 
   /** The new places show at once; a refused one goes back. */
@@ -280,13 +368,7 @@ export function DashboardView({
         doneId={DONE_ID}
         onLeave={leave}
       >
-        <Button
-          id={ADD_ID}
-          aria-label="Add widget"
-          aria-haspopup="dialog"
-          size="sm"
-          onClick={() => openEditor(null)}
-        >
+        <Button id={ADD_ID} aria-label="Add widget" size="sm" onClick={() => expand(NEW_WIDGET_ID)}>
           <Plus aria-hidden />
           <span className="max-sm:hidden">Add widget</span>
         </Button>
@@ -402,13 +484,34 @@ export function DashboardView({
               </Button>
             }
           />
+        ) : expanded ? (
+          <ExpandedWidget
+            // A new open starts from the stored widget.
+            key={expanded.id ?? NEW_WIDGET_ID}
+            projectId={projectId}
+            initial={expanded.widget}
+            isNew={expanded.id === null}
+            served={served}
+            facets={facets}
+            range={timeWindow}
+            filters={filters}
+            saving={saving}
+            readOnly={readOnly}
+            onSave={(widget) => void save(widget)}
+            onClose={collapse}
+          />
         ) : widgets.length === 0 ? (
           <EmptyState
             icon={ChartColumn}
             title="No widgets yet"
             description="Add a chart of any metric, a flow, a step flow, a funnel, a cluster view or a map."
             action={
-              <Button variant="primary" size="sm" onClick={() => openEditor(null)}>
+              <Button
+                data-add-widget=""
+                variant="primary"
+                size="sm"
+                onClick={() => expand(NEW_WIDGET_ID)}
+              >
                 <Plus className="size-3.5" aria-hidden />
                 Add widget
               </Button>
@@ -436,103 +539,109 @@ export function DashboardView({
                 const title = widgetName(widget);
                 const editItem = (
                   <MenuItem
-                    icon={<Pencil />}
+                    icon={<Maximize2 />}
                     disabled={!available(widget)}
-                    onClick={() => openEditor(widget)}
+                    onClick={() => expand(widget.id)}
                   >
-                    Edit widget
+                    {readOnly ? "Open widget" : "Edit widget"}
                   </MenuItem>
                 );
                 return (
-                  <CardFrame
-                    id={widget.id}
-                    title={title}
-                    edit={cardEdit(widget, title, editItem)}
-                    titleRow={
-                      <>
-                        {Object.keys(filters).length > 0 &&
-                        !isFilterable(widget.query) &&
-                        widget.query.kind !== "clusters" &&
-                        // The page's filter applies to RQL text when it runs.
-                        widget.query.kind !== "sql" ? (
-                          <p className="shrink-0 text-xs text-fg-subtle">Not filtered</p>
-                        ) : null}
-                        <FilterNote
-                          filter={queryFilter(widget.query)}
-                          scorer={
-                            scorers?.find(({ id }) => id === queryScorerId(widget.query))?.name
-                          }
-                        />
-                        <Menu>
-                          <MenuTrigger
-                            render={
-                              <IconButton
-                                label={`${title} actions`}
-                                size="icon-sm"
-                                icon={<Ellipsis />}
-                              />
+                  // A click on the card opens it; a drag, a link or a menu in it keeps its own.
+                  // biome-ignore lint/a11y/noStaticElementInteractions: the keyboard opens it from the card's menu.
+                  // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard opens it from the card's menu.
+                  <div
+                    className={cn("h-full", !arranging && available(widget) && "cursor-pointer")}
+                    onPointerDown={(event) => {
+                      pressedAt.current = { x: event.clientX, y: event.clientY };
+                    }}
+                    onClick={(event) => {
+                      const from = pressedAt.current;
+                      pressedAt.current = null;
+                      if (arranging || !available(widget) || !from) return;
+                      const target = event.target as Element;
+                      if (expandsCard(from, { x: event.clientX, y: event.clientY }, target))
+                        expand(widget.id);
+                    }}
+                  >
+                    <CardFrame
+                      id={widget.id}
+                      title={title}
+                      edit={cardEdit(widget, title, editItem)}
+                      titleRow={
+                        <>
+                          {Object.keys(filters).length > 0 &&
+                          !isFilterable(widget.query) &&
+                          widget.query.kind !== "clusters" &&
+                          // The page's filter applies to RQL text when it runs.
+                          widget.query.kind !== "sql" ? (
+                            <p className="shrink-0 text-xs text-fg-subtle">Not filtered</p>
+                          ) : null}
+                          <FilterNote
+                            filter={queryFilter(widget.query)}
+                            scorer={
+                              scorers?.find(({ id }) => id === queryScorerId(widget.query))?.name
                             }
                           />
-                          <MenuContent align="end">
-                            {editItem}
-                            {overview ? (
-                              <MenuItem
-                                icon={<House />}
-                                disabled={pinning}
-                                onClick={() => void addToOverview(widget.id, title)}
-                              >
-                                Add to Overview
-                              </MenuItem>
-                            ) : null}
-                            <MenuSeparator />
-                            <WidgetLinkItems
-                              projectId={projectId}
-                              widget={widget}
-                              filters={filters}
-                              range={timeWindow}
-                              exploreHref={
-                                available(widget) && !widget.missingScorer
-                                  ? explorePanelHref(projectId, widget, {
-                                      filters,
-                                      range: timeWindow,
-                                    })
-                                  : null
+                          <Menu>
+                            <MenuTrigger
+                              render={
+                                <IconButton
+                                  label={`${title} actions`}
+                                  size="icon-sm"
+                                  icon={<Ellipsis />}
+                                />
                               }
-                              alerts={alerts && available(widget) && !widget.missingScorer}
                             />
-                          </MenuContent>
-                        </Menu>
-                      </>
-                    }
-                  >
-                    <WidgetCardBody
-                      projectId={projectId}
-                      widget={widget}
-                      result={resultOf.get(widget.id) ?? null}
-                      range={timeWindow}
-                      filters={filters}
-                      available={available(widget)}
-                      missingScorer={widget.missingScorer}
-                    />
-                  </CardFrame>
+                            <MenuContent align="end">
+                              {editItem}
+                              {overview ? (
+                                <MenuItem
+                                  icon={<House />}
+                                  disabled={pinning}
+                                  onClick={() => void addToOverview(widget.id, title)}
+                                >
+                                  Add to Overview
+                                </MenuItem>
+                              ) : null}
+                              <MenuSeparator />
+                              <WidgetLinkItems
+                                projectId={projectId}
+                                widget={widget}
+                                filters={filters}
+                                range={timeWindow}
+                                exploreHref={
+                                  available(widget) && !widget.missingScorer
+                                    ? explorePanelHref(projectId, widget, {
+                                        filters,
+                                        range: timeWindow,
+                                      })
+                                    : null
+                                }
+                                alerts={alerts && available(widget) && !widget.missingScorer}
+                              />
+                            </MenuContent>
+                          </Menu>
+                        </>
+                      }
+                    >
+                      <WidgetCardBody
+                        projectId={projectId}
+                        widget={widget}
+                        result={resultOf.get(widget.id) ?? null}
+                        range={timeWindow}
+                        filters={filters}
+                        available={available(widget)}
+                        missingScorer={widget.missingScorer}
+                      />
+                    </CardFrame>
+                  </div>
                 );
               }}
             </CardGrid>
           </div>
         )}
       </PageBody>
-      <WidgetEditor
-        open={editing}
-        onOpenChange={onEditorOpenChange}
-        projectId={projectId}
-        initial={edited?.widget ?? null}
-        start={start}
-        facets={facets}
-        range={timeWindow}
-        filters={filters}
-        saving={saving}
-        onSave={(widget) => void save(widget)}
-      />
       <span className="sr-only" aria-live="polite">
         {said}
       </span>
@@ -561,6 +670,11 @@ export function DashboardView({
       />
     </Page>
   );
+}
+
+/** What a stored widget is, without its place on the grid. */
+function inputOf({ id: _, layout: __, missingScorer: ___, ...widget }: Widget): WidgetInput {
+  return widget;
 }
 
 /** The default range reads as no choice of its own. */

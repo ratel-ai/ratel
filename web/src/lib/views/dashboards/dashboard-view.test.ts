@@ -68,7 +68,27 @@ test("quiet by default: the handles, the menus and Remove come with edit mode", 
   assert.equal((edit.match(/data-grid-body="" inert=""/g) ?? []).length, 3);
 });
 
-function html(props: Partial<ComponentProps<typeof DashboardView>> = {}): string {
+test("the widget in the address opens in place of the grid, with its properties, and the page keeps its filter bar", () => {
+  const open = html({}, "?range=7d&widget=speed");
+  assert.doesNotMatch(open, /data-grid-card=/, "no grid");
+  assert.match(open, /id="expanded-widget-title"[^>]*>Speed</);
+  assert.match(open, /aria-label="Properties"/);
+  assert.match(open, />Save</);
+  assert.match(open, /aria-label="Close widget"/);
+  assert.doesNotMatch(open, /role="dialog"/, "no modal dialog");
+  // A new widget opens the same way; a broken or unknown one leaves the grid.
+  assert.match(html({}, "?widget=new"), />Add widget</);
+  for (const id of ["old", "gone"]) assert.match(html({}, `?widget=${id}`), /data-grid-card=/);
+});
+
+test("a support session sees the properties of an open widget and cannot save them", () => {
+  const open = html({ readOnly: true }, "?widget=speed");
+  assert.match(open, /<fieldset aria-label="Properties" disabled=""/);
+  assert.match(open, /Read only in a support session/);
+  assert.doesNotMatch(open, />Save</);
+});
+
+function html(props: Partial<ComponentProps<typeof DashboardView>> = {}, search = ""): string {
   const at = "2026-11-24T12:00:00.000Z";
   return render(
     createElement(DashboardView, {
@@ -83,6 +103,7 @@ function html(props: Partial<ComponentProps<typeof DashboardView>> = {}): string
       draft: null,
       ...props,
     }),
+    { pathname: `/project/${PROJECT_ID}/dashboards/d1`, search },
   );
 }
 
