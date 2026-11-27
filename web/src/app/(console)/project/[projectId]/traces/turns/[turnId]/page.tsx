@@ -1,12 +1,16 @@
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
 import { RunToTest } from "@/components/console/tasks/RunToTest";
 import { TurnDetailView } from "@/components/console/traces/TurnDetailView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { traceTurns } from "@/lib/ledger/schema";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
+import { evalsEnabledForProject } from "@/lib/views/evals/gate";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { runIsInEvalSet } from "@/lib/views/task-evals/run-to-test";
 import { loadTurnDetail } from "@/lib/views/traces/turn-detail";
@@ -19,7 +23,7 @@ export const metadata = { title: "Turn" };
  * lands. `?focus=<event id>` rings the call the example is about; the link's
  * hash scrolls to it. Owned (ADR-0004): the project comes from the console
  * scope, Agent health is always on in this edition, so there is no gate, and "run to test" (a closed
- * turn's run into its task's eval set) follows `evalGate`.
+ * turn's run into its task's eval set) follows `evalGate`. "Save as eval case" follows `evals`.
  */
 export default async function TurnTracePage({
   params,
@@ -70,11 +74,21 @@ export default async function TurnTracePage({
         { operation: "trace_turn_test" },
       )
     : null;
+  const canSave =
+    (await evalsEnabledForProject(project.id)) &&
+    !(await isRestrictedBySupportSession()) &&
+    (await contentOptIn(project.id));
+  const saveAction = canSave ? <SaveAsEvalCase projectId={project.id} turnId={turnId} /> : null;
   const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
   const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (
     <>
-      {testAction ? <div className="mb-4 flex justify-end">{testAction}</div> : null}
+      {testAction || saveAction ? (
+        <div className="mb-4 flex justify-end gap-2">
+          {testAction}
+          {saveAction}
+        </div>
+      ) : null}
       <TurnDetailView
         projectId={project.id}
         turn={turn}

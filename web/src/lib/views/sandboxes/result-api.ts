@@ -2,7 +2,8 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { bearerFromHeader } from "@/lib/platform/api-keys/authenticate";
 import { getLogger } from "@/lib/platform/logger";
-import { type RunResult, runResultSchema, storable } from "./domain/run";
+import { storable } from "@/lib/platform/storable";
+import { type RunResult, runResultSchema } from "./domain/run";
 import { type RunDeps, stopInstanceOf } from "./runs";
 
 /** `POST /api/v1/sandbox-runs/[id]/result`: the runner of an instance posts the result of its run. */

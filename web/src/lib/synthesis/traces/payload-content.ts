@@ -60,6 +60,19 @@ export async function loadPayloadContent(
   traceId: string,
   db: PayloadDb = getDb(),
 ): Promise<PayloadContent | null> {
+  const calls = await loadPayloadCalls(projectId, traceId, db);
+  const content = buildPayloadContent(calls);
+  const ask = content.ask ?? (await derivedAsks(projectId, [traceId], db)).get(traceId) ?? null;
+  if (calls.length === 0 && ask === null) return null;
+  return { view: content.view, ask };
+}
+
+/** The trace's stored calls, in event time order. A long trace gives its first and latest ones. */
+export async function loadPayloadCalls(
+  projectId: string,
+  traceId: string,
+  db: PayloadDb = getDb(),
+): Promise<PayloadCall[]> {
   const inTrace = and(
     eq(events.projectId, projectId),
     eq(events.traceId, traceId),
@@ -87,6 +100,7 @@ export async function loadPayloadContent(
           .from(events)
           .where(
             and(
+              eq(events.projectId, projectId),
               inTrace,
               inArray(
                 events.id,
@@ -95,22 +109,14 @@ export async function loadPayloadContent(
             ),
           )
       : [];
-  const calls = rows.flatMap((row): PayloadCall[] =>
-    row.payload ? [{ ...row, payload: row.payload }] : [],
-  );
-  const content = buildPayloadContent(calls);
-  const ask = content.ask ?? (await derivedAsks(projectId, [traceId], db)).get(traceId) ?? null;
-  if (calls.length === 0 && ask === null) return null;
-  return { view: content.view, ask };
+  return rows
+    .flatMap((row): PayloadCall[] => (row.payload ? [{ ...row, payload: row.payload }] : []))
+    .sort(inEventTime);
 }
 
 /** The content view and the ask of a trace's calls, in event time order. */
 export function buildPayloadContent(calls: readonly PayloadCall[]): PayloadContent {
-  const ordered = [...calls].sort(
-    (left, right) =>
-      left.occurredAt.getTime() - right.occurredAt.getTime() ||
-      compare(left.eventId, right.eventId),
-  );
+  const ordered = [...calls].sort(inEventTime);
   // Every call repeats the history: keep each message once, where it first
   // appeared, so the view sent to the page grows with the run, not with calls × history.
   // A model with memory sends the earlier turns of the session as history:
@@ -253,6 +259,12 @@ async function derivedAsks(
   return out;
 }
 
+function inEventTime(left: PayloadCall, right: PayloadCall): number {
+  return (
+    left.occurredAt.getTime() - right.occurredAt.getTime() || compare(left.eventId, right.eventId)
+  );
+}
+
 /** Keys of the messages (role and text) and ids of the tool calls the first call with an ask carried before it. */
 function earlierHistory(ordered: readonly PayloadCall[]): {
   messages: Set<string>;
@@ -278,14 +290,14 @@ function earlierHistory(ordered: readonly PayloadCall[]): {
 }
 
 /** The call's messages; a row stored before `input_message_count` keeps its reply in `output` alone. */
-function callMessages(payload: CloudEvent): CloudMessage[] {
+export function callMessages(payload: CloudEvent): CloudMessage[] {
   const messages = payload.messages ?? [];
   return payload.input_message_count === undefined
     ? [...messages, ...(payload.output ?? [])]
     : messages;
 }
 
-function callInput(payload: CloudEvent): CloudMessage[] {
+export function callInput(payload: CloudEvent): CloudMessage[] {
   const messages = payload.messages ?? [];
   return payload.input_message_count === undefined
     ? messages

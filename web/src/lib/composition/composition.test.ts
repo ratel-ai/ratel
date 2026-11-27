@@ -299,6 +299,7 @@ describe("registry root", () => {
         "before:sandbox_builds",
         "before:sandbox_runs",
         "before:alerts_evaluate",
+        "before:eval_experiments",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",
         "after:ingest_batches_drain",

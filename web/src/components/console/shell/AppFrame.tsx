@@ -101,6 +101,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
   const customMonitoring = Boolean(
     organization && data.customMonitoringOrganizations?.includes(organization.id),
   );
+  const evalsPage = Boolean(organization && data.evalsOrganizations?.includes(organization.id));
   const items = useMemo(
     () =>
       consoleNav({
@@ -113,6 +114,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         focusedConsole,
         sandboxPage,
         customMonitoring,
+        evalsPage,
       }),
     [
       project,
@@ -124,6 +126,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       focusedConsole,
       sandboxPage,
       customMonitoring,
+      evalsPage,
     ],
   );
   const activeId = activeNavItemId(pathname, items);

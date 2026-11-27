@@ -98,6 +98,7 @@ export function consoleNav({
   focusedConsole = false,
   sandboxPage = false,
   customMonitoring = false,
+  evalsPage = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -121,6 +122,8 @@ export function consoleNav({
   sandboxPage?: boolean;
   /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
   customMonitoring?: boolean;
+  /** `evals` on for the shown organization: Evals before Ratel sandbox. */
+  evalsPage?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -419,6 +422,7 @@ export function consoleNav({
           focusedConsole,
           customMonitoring,
           sandboxPage,
+          evalsPage,
         })
       : core),
     ...additions.map((item) => ({
@@ -448,11 +452,13 @@ function stageRailNav(
     focusedConsole,
     customMonitoring,
     sandboxPage,
+    evalsPage,
   }: {
     entityPages: boolean;
     focusedConsole: boolean;
     customMonitoring: boolean;
     sandboxPage: boolean;
+    evalsPage: boolean;
   },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
@@ -545,6 +551,18 @@ function stageRailNav(
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
+    ...(evalsPage
+      ? [
+          {
+            id: "evals",
+            label: "Evals",
+            href: `${root}/evals`,
+            icon: "improvements" as const,
+            keywords: ["evals", "cases", "experiments", "trials"],
+            section: "settings" as const,
+          },
+        ]
+      : []),
     ...(sandboxPage
       ? [
           {

@@ -5,6 +5,7 @@ import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { BundleStore } from "@/lib/contracts/bundle-store";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
+import type { EvalJudgePort } from "@/lib/contracts/eval-judge";
 import type { CoreFlag, FeatureFlagsPort } from "@/lib/contracts/feature-flags";
 import type {
   ImportedRunsPort,
@@ -171,6 +172,8 @@ export type EditionUi = {
   ProjectPageSkeleton?: ComponentType;
   /** Project settings > General, under the core's own sections (Cloud: analysis sampling). */
   ProjectGeneralSettings?: ComponentType<{ projectId: string }>;
+  /** A section at the foot of the Evals page: who judges, and the project's own key. Absent otherwise. */
+  EvalJudgeSettings?: ComponentType<{ projectId: string }>;
   /** Organization settings > General, read-only otherwise. */
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */
@@ -339,6 +342,11 @@ export type CompositionPorts = {
    * (`sandboxes.bundleDir`), which the web and the worker process must share.
    */
   sandboxBundles?: BundleStore;
+  /**
+   * The judge of evals. Absent, the core asks its configured decision engine
+   * (`lib/views/evals/adapters/decision-judge.ts`).
+   */
+  evalJudge?: EvalJudgePort;
   /**
    * Absent in the open-source edition, where an organization saves its own Slack app in its
    * settings. With it, the edition supplies the app and the settings show no app fields.

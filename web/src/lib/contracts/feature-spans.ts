@@ -22,7 +22,8 @@ export type FeatureName =
   | "alerts"
   | "explore"
   | "rql"
-  | "sandboxes";
+  | "sandboxes"
+  | "evals";
 
 export type FeatureSpanOptions = {
   attributes?: Attributes;

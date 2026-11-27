@@ -48,6 +48,7 @@ import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 import { alertsRegistration } from "@/lib/views/alerts/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
+import { evalsRegistration } from "@/lib/views/evals/register";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { sandboxesRegistration } from "@/lib/views/sandboxes/register";
 import { scorersRegistration } from "@/lib/views/scorers/register";
@@ -167,6 +168,8 @@ const CORE: Registration[] = [
   sandboxesRegistration,
   scorersRegistration,
   alertsRegistration,
+  // After the sandboxes: their sweep ends the runs that a trial waits for.
+  evalsRegistration,
 ];
 
 export function collectRegistrations(

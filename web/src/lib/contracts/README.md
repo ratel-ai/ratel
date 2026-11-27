@@ -14,12 +14,12 @@ sentence); without it the copy keeps its neutral words.
 and what that kind asks; never the time window), with `parseQuery` and the `MEASURES` vocabulary.
 Kind `sql` is RQL text (`text`, at most `MAX_SQL_TEXT` characters) with the RQL version it was
 written in (`rqlVersion`, a whole number from 1); `synthesis/rql` checks the version and runs it.
-`check.ts` is what a check reads and how it compares, for check scorers and funnel steps. `views/dashboards/json-schemas.ts` derives the JSON Schemas under
+`check.ts` is what a check reads and how it compares, for check scorers, funnel steps and evals. `views/dashboards/json-schemas.ts` derives the JSON Schemas under
 `docs/schemas`.
 
 `feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`, `focusedConsole`,
-`customMonitoring`, `sandboxes`) and the optional
+`customMonitoring`, `sandboxes`, `evals`) and the optional
 `featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
 force each one on or off; only that file knows the environment variable of each. Without the port
 each switch is its configured value for the deployment, off when unset (in the open-source
@@ -36,6 +36,10 @@ that shows Agent health in full (optional, named by the locks), and a plan's nam
 it used with a reference, or reads a daily budget, and never sees a plan or a price. It holds the
 hard limits. `usage-limits.contract.ts` is the test every adapter passes and
 `usage-limits.fake.ts` the in-memory adapter for tests. The composition port is optional.
+
+`eval-judge.ts` is the judge of evals: one yes or no question about a trial, with a reason from a
+fixed list. The port supplies the model and says who pays. `eval-judge.contract.ts` is the test every
+adapter passes. The composition port is optional.
 
 `CoreServices` (`composition.ts`) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`

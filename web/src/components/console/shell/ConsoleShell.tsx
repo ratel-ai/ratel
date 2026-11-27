@@ -11,6 +11,7 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
+import { evalsOrganizationIds } from "@/lib/views/evals/gate";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 import { sandboxOrganizationIds } from "@/lib/views/sandboxes/gate";
 
@@ -34,11 +35,13 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
     focusedConsoleOrganizations,
     customMonitoringOrganizations,
     sandboxOrganizations,
+    evalsOrganizations,
   ] = await Promise.all([
     entityPagesOrganizationIds(organizations),
     focusedConsoleOrganizationIds(organizations),
     customMonitoringOrganizationIds(organizations),
     sandboxOrganizationIds(organizations),
+    evalsOrganizationIds(organizations),
   ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
@@ -71,6 +74,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           focusedConsoleOrganizations,
           customMonitoringOrganizations,
           sandboxOrganizations,
+          evalsOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {
