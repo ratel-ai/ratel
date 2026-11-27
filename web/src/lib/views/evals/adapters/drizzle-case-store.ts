@@ -75,6 +75,7 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
             eq(evalCases.projectId, projectId),
             isNull(evalCases.resolvedTurnId),
             eq(evalCases.runOnly, false),
+            isNull(evalCases.removedAt),
             ofEval,
           ),
         )

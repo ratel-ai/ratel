@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
+import { DatasetsList } from "@/components/console/evals/DatasetsList";
+import { DatasetView } from "@/components/console/evals/DatasetView";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
 import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
 import { SuiteView } from "@/components/console/evals/SuiteView";
@@ -11,6 +13,7 @@ import { TrialPanel } from "@/components/console/evals/TrialPanel";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
+import { datasetPageModel, datasetsPageModel } from "../dataset-pages";
 import type { CaseVersion } from "../domain/case";
 import type { Experiment, Trial } from "../domain/experiment";
 import { pairedTrials } from "../domain/paired-trials";
@@ -61,9 +64,11 @@ test("evals are off by default, and FF_EVALS=1 turns them on", async () => {
   assert.deepEqual(await evalsOrganizationIds([{ id: "o1" }], { config }), ["o1"]);
 });
 
-test("the rail has Evals only with the flag on", () => {
+test("the rail has Evals and Datasets only with the flag on", () => {
   assert.ok(labels(true).includes("Evals"));
+  assert.ok(labels(true).includes("Datasets"));
   assert.ok(!labels(false).includes("Evals"));
+  assert.ok(!labels(false).includes("Datasets"));
 });
 
 test("the editor of a case shows the version that counts, and saves a new version", () => {
@@ -421,3 +426,104 @@ function suiteEval(id: string) {
     ],
   };
 }
+
+test("the Datasets page lists each dataset with its kind, cases or query, and its evals", () => {
+  const rows = datasetsPageModel(PROJECT_ID, [
+    {
+      datasetId: "d1",
+      name: "Refund asks",
+      description: "Asks for a refund",
+      kind: "fixed",
+      rows: 3,
+      query: null,
+      updatedAt: NOW,
+      evals: [{ evalId: "e1", name: "Refunds" }],
+    },
+    {
+      datasetId: "d2",
+      name: "Errors",
+      description: null,
+      kind: "rql",
+      rows: null,
+      query: "select trace_id from traces where has_error",
+      updatedAt: NOW,
+      evals: [],
+    },
+  ]);
+  const html = render(
+    createElement(DatasetsList, {
+      projectId: PROJECT_ID,
+      rows,
+      options: { turns: [], tasks: [] },
+      canEdit: true,
+      now: NOW,
+    }),
+  );
+  const text = visibleText(html);
+  for (const word of [
+    "New dataset",
+    "Refund asks",
+    "Asks for a refund",
+    "3 cases",
+    "RQL query",
+    "Refunds",
+    "No eval",
+  ]) {
+    assert.match(text, new RegExp(word));
+  }
+  assert.match(html, /select trace_id from traces where has_error/);
+  assert.match(html, new RegExp(`/project/${PROJECT_ID}/datasets/d1`));
+  assert.doesNotMatch(text, /experiment/i);
+});
+
+test("a dataset page links each trace row to its trace, and a query page says a run freezes the rows", () => {
+  const at = new Date(NOW);
+  const dataset = {
+    id: "d1",
+    projectId: PROJECT_ID,
+    name: "Refund asks",
+    description: null,
+    createdBy: "u",
+    createdAt: at,
+    updatedAt: at,
+  };
+  const fixed = datasetPageModel({
+    projectId: PROJECT_ID,
+    dataset: { ...dataset, query: { kind: "fixed" } },
+    rows: [
+      {
+        id: "r1",
+        projectId: PROJECT_ID,
+        datasetId: "d1",
+        evalId: null,
+        name: "From a turn",
+        labels: [],
+        createdAt: at,
+        versions: [{ ...version({ input: { message: "refund A200" } }), updatedAt: at }],
+      },
+    ],
+    evals: [],
+  });
+  const options = { turns: [], tasks: [] };
+  const html = render(
+    createElement(DatasetView, { model: fixed, options, canEdit: true, now: NOW }),
+  );
+  assert.match(visibleText(html), /refund A200/);
+  assert.match(visibleText(html), /Add rows/);
+  assert.match(visibleText(html), /Remove/);
+  assert.match(html, new RegExp(`/project/${PROJECT_ID}/traces/turns/t1`));
+  const query = datasetPageModel({
+    projectId: PROJECT_ID,
+    dataset: { ...dataset, query: { kind: "rql", text: "select trace_id from traces", limit: 50 } },
+    rows: [],
+    evals: [],
+  });
+  const queryHtml = render(
+    createElement(DatasetView, { model: query, options, canEdit: true, now: NOW }),
+  );
+  const queryText = visibleText(queryHtml);
+  assert.match(queryText, /A run freezes the rows/);
+  assert.match(queryText, /What it resolves now/);
+  assert.match(queryHtml, /select trace_id from traces/);
+  assert.doesNotMatch(queryText, /Add rows/);
+});

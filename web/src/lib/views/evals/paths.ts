@@ -32,3 +32,16 @@ export function newEvalHref(projectId: string): string {
 export function trialHref(projectId: string, runId: string, trialId: string): string {
   return `${experimentHref(projectId, runId)}/trials/${trialId}`;
 }
+
+export function datasetsHref(projectId: string): string {
+  return `/project/${projectId}/datasets`;
+}
+
+export function datasetHref(projectId: string, datasetId: string): string {
+  return `${datasetsHref(projectId)}/${datasetId}`;
+}
+
+/** The trace turn that a row was saved from. */
+export function turnHref(projectId: string, turnId: string): string {
+  return `/project/${projectId}/traces/turns/${turnId}`;
+}

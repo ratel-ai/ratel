@@ -952,3 +952,28 @@ test("railParts splits a rail into the scrolling list and the pinned footer, in 
     ),
   );
 });
+
+test("the eval area adds Evals, Datasets and Sandboxes, within the raised budget of DESIGN.md", () => {
+  for (const customMonitoring of [false, true]) {
+    const off = consoleNav({ projectId: P1, additions: [], customMonitoring });
+    const on = consoleNav({
+      projectId: P1,
+      additions: [],
+      customMonitoring,
+      evalsPage: true,
+      sandboxPage: true,
+    });
+    const list = (items: typeof on) => items.filter(({ section }) => section !== "footer");
+    assert.equal(list(on).length, list(off).length + 3);
+    assert.ok(list(on).length <= (customMonitoring ? 17 : 13));
+    const ids = on.map(({ id }) => id);
+    assert.deepEqual(
+      ids.filter((id) => ["evals", "datasets", "sandboxes"].includes(id)),
+      ["evals", "datasets", "sandboxes"],
+    );
+    assert.equal(on.find(({ id }) => id === "datasets")?.href, `/project/${P1}/datasets`);
+    assert.equal(activeNavItemId(`/project/${P1}/datasets/d1`, on), "datasets");
+    const icons = on.map(({ icon }) => icon);
+    assert.equal(icons.filter((icon) => icon === "datasets").length, 1);
+  }
+});

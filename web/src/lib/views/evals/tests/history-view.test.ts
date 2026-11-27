@@ -161,6 +161,7 @@ test("the datasets list has the kind, the rows or the query, the update time and
   assert.deepEqual(rows[0], {
     datasetId: "refunds-data",
     name: "refunds-data",
+    description: null,
     kind: "fixed",
     rows: 3,
     query: null,

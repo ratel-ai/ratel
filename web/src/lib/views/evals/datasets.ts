@@ -15,7 +15,12 @@ export type ResolveRefusal =
   | "no_rows";
 
 export type ResolveResult =
-  | { ok: true; rows: ResolvedRow[] }
+  | {
+      ok: true;
+      rows: ResolvedRow[];
+      /** The distinct turns that the query found, before the rows were built. */
+      found: number;
+    }
   | { ok: false; reason: ResolveRefusal; message: string };
 
 const TRACE_COLUMN = "trace_id";
@@ -26,12 +31,13 @@ const PARALLEL = 5;
  * Resolves the rows of a query dataset when a run starts. Each row is a turn with a frozen copy of
  * its input, its earlier messages and the fixtures of its tools, as a row saved from a turn has. A
  * turn with no captured input is left out. Turn content rules apply: a project that does not let
- * Ratel read captured text gets no row.
+ * Ratel read captured text gets no row. `take` builds only the first rows, for a preview.
  */
 export async function resolveDataset(
   projectId: string,
   query: DatasetQuery,
   source: TraceSource,
+  { take }: { take?: number } = {},
 ): Promise<ResolveResult> {
   if (!isQueryKind(query)) return refused("not_a_query", "A fixed dataset holds its rows.");
   if (!(await source.readContent(projectId))) {
@@ -42,7 +48,8 @@ export async function resolveDataset(
   }
   const found = await turnsOf(projectId, query, source);
   if (!found.ok) return found;
-  const turnIds = [...new Set(found.turnIds)].slice(0, query.limit);
+  const distinct = [...new Set(found.turnIds)].slice(0, query.limit);
+  const turnIds = take === undefined ? distinct : distinct.slice(0, take);
   const readOnly = await source.readOnlyTools(projectId);
   const rows: Array<ResolvedRow | null> = new Array(turnIds.length).fill(null);
   await inParallel(turnIds, async (turnId, index) => {
@@ -54,7 +61,7 @@ export async function resolveDataset(
   if (kept.length === 0) {
     return refused("no_rows", "The query found no turn with a captured input.");
   }
-  return { ok: true, rows: kept };
+  return { ok: true, rows: kept, found: distinct.length };
 }
 
 async function turnsOf(

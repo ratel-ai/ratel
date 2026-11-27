@@ -73,6 +73,7 @@ export type EvalHistory = {
 export type DatasetRow = {
   datasetId: string;
   name: string;
+  description: string | null;
   kind: DatasetQuery["kind"];
   /** The rows of a fixed dataset. Null for a query kind. */
   rows: number | null;
@@ -145,6 +146,7 @@ export function datasetsView(
   return datasets.map((dataset) => ({
     datasetId: dataset.id,
     name: dataset.name,
+    description: dataset.description,
     kind: dataset.query.kind,
     rows: dataset.query.kind === "fixed" ? dataset.rowCount : null,
     query: queryText(dataset.query),

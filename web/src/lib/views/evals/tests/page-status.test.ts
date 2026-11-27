@@ -23,6 +23,8 @@ const PAGES = [
   "evals/[evalId]",
   "evals/new",
   "evals/experiments/[experimentId]/trials/[trialId]",
+  "datasets",
+  "datasets/[datasetId]",
 ];
 const EXPERIMENT_ID = "22222222-2222-4222-8222-222222222222";
 
@@ -49,7 +51,9 @@ for (const name of PAGES) {
       default: (props: { params: Promise<{ projectId: string }> }) => Promise<ReactNode>;
     };
     await assert.rejects(
-      Page({ params: Promise.resolve({ projectId: PROJECT_ID, caseId: "new" }) }),
+      Page({
+        params: Promise.resolve({ projectId: PROJECT_ID, caseId: "new", datasetId: EXPERIMENT_ID }),
+      }),
       (error: { digest?: string }) => String(error.digest).endsWith(";404"),
     );
   });

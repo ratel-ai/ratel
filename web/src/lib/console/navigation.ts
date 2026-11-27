@@ -122,7 +122,7 @@ export function consoleNav({
   sandboxPage?: boolean;
   /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
   customMonitoring?: boolean;
-  /** `evals` on for the shown organization: Evals before Sandboxes. */
+  /** `evals` on for the shown organization: Evals and Datasets before Sandboxes. */
   evalsPage?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
@@ -559,6 +559,14 @@ function stageRailNav(
             href: `${root}/evals`,
             icon: "improvements" as const,
             keywords: ["evals", "cases", "experiments", "trials"],
+            section: "settings" as const,
+          },
+          {
+            id: "datasets",
+            label: "Datasets",
+            href: `${root}/datasets`,
+            icon: "datasets" as const,
+            keywords: ["datasets", "rows", "cases", "traces", "rql", "inputs"],
             section: "settings" as const,
           },
         ]

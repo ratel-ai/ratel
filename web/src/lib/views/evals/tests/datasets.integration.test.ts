@@ -17,6 +17,7 @@ import {
   fakeLibrary,
   fakeTraceSource,
   ORGANIZATION_ID,
+  OTHER_PROJECT_ID,
   PROJECT_ID,
   seedEval,
 } from "./support";
@@ -272,3 +273,55 @@ function depsOf(db: any, traces: TraceSource): ExperimentDeps {
     now: () => new Date(),
   };
 }
+
+test("a removed row leaves the dataset and its count, and only a fixed dataset removes one", async () => {
+  const { db } = await createEvalsDb();
+  const datasets = createDrizzleDatasetStore(db);
+  const made = await datasets.create({
+    projectId: PROJECT_ID,
+    name: "Removals",
+    description: null,
+    query: { kind: "fixed" },
+    createdBy: "user_1",
+  });
+  if (made === "name_taken") throw new Error("taken");
+  const added = await datasets.addRows(
+    PROJECT_ID,
+    made.id,
+    [
+      { kind: "values", name: "keep", row: { values: { a: 1 }, expectedOutput: null } },
+      { kind: "values", name: "drop", row: { values: { a: 2 }, expectedOutput: null } },
+    ],
+    "user_1",
+  );
+  if (!Array.isArray(added)) throw new Error("not added");
+  const drop = added[1];
+  assert.ok(drop);
+  const before = (await datasets.get(PROJECT_ID, made.id))?.updatedAt;
+  assert.equal(await datasets.removeRow(OTHER_PROJECT_ID, made.id, drop.id), "not_found");
+  assert.equal(await datasets.removeRow(PROJECT_ID, made.id, crypto.randomUUID()), "not_found");
+  assert.equal(await datasets.removeRow(PROJECT_ID, made.id, drop.id), "removed");
+  assert.equal(await datasets.removeRow(PROJECT_ID, made.id, drop.id), "not_found");
+  assert.deepEqual(
+    (await datasets.rows(PROJECT_ID, made.id)).map(({ name }) => name),
+    ["keep"],
+  );
+  const [listed] = await datasets.list(PROJECT_ID);
+  assert.equal(listed?.rowCount, 1);
+  assert.ok((listed?.updatedAt.getTime() ?? 0) >= (before?.getTime() ?? Infinity));
+  assert.equal(
+    (await createDrizzleCaseStore(db).list(PROJECT_ID)).some(({ id }) => id === drop.id),
+    false,
+  );
+  // The row stays for a run that froze it.
+  assert.ok(await createDrizzleCaseStore(db).get(PROJECT_ID, drop.id));
+  const query = await datasets.create({
+    projectId: PROJECT_ID,
+    name: "A query",
+    description: null,
+    query: datasetQuerySchema.parse({ kind: "last_traces" }),
+    createdBy: "user_1",
+  });
+  if (query === "name_taken") throw new Error("taken");
+  assert.equal(await datasets.removeRow(PROJECT_ID, query.id, drop.id), "not_fixed");
+});

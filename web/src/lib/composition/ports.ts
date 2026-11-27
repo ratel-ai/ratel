@@ -45,6 +45,7 @@ export type NavIconName =
   | "ship"
   | "self-corrections"
   | "apis"
+  | "datasets"
   | "edition";
 
 /** An organization page an edition adds: `/org/<slug>/<path>`. */
