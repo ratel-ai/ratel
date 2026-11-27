@@ -35,13 +35,20 @@ const STATUS: Record<StartRefusal, number> = {
 
 const paramValue = z.union([z.string(), z.number(), z.boolean()]);
 /** Rows for this run only: chosen traces, or a query that Ratel resolves now. */
+/** The rows that one run adds for itself: each one is loaded in the request. */
+const MAX_ADDED_ROWS = 100;
 const addRowsSchema = z.union([
-  z.object({ turnIds: z.array(z.uuid()).min(1).max(100) }),
+  z.object({ turnIds: z.array(z.uuid()).min(1).max(MAX_ADDED_ROWS) }),
   z.object({
-    query: datasetQuerySchema.refine(
-      ({ kind }) => kind === "last_traces" || kind === "auto",
-      "add the last traces, or traces that Ratel chooses",
-    ),
+    query: datasetQuerySchema
+      .refine(
+        ({ kind }) => kind === "last_traces" || kind === "auto",
+        "add the last traces, or traces that Ratel chooses",
+      )
+      .refine(
+        (query) => !("limit" in query) || query.limit <= MAX_ADDED_ROWS,
+        `a run adds at most ${MAX_ADDED_ROWS} rows for itself`,
+      ),
   }),
 ]);
 const runSchema = z.object({

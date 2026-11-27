@@ -173,6 +173,9 @@ test("rows from the last traces join this run only, and refusals carry their rea
     addRows: { query: { kind: "rql", text: "select trace_id from traces" } },
   });
   assert.equal(rql.status, 400);
+  const tooMany = await post({ addRows: { query: { kind: "last_traces", limit: 101 } } });
+  assert.equal(tooMany.status, 400);
+  assert.match(tooMany.body.message, /at most 100 rows/);
   const missing = await post({ datasetId: crypto.randomUUID() });
   assert.equal(missing.status, 404);
 });

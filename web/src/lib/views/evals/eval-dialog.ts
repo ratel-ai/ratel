@@ -300,8 +300,8 @@ export function runRequestOf(
     request.addRows = { turnIds: rows.turnIds };
   } else if (rows.mode !== "none") {
     const limit = Number(rows.limit.trim());
-    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
-      return { ok: false, message: "Give a number of traces from 1 to 500." };
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return { ok: false, message: "Give a number of traces from 1 to 100." };
     }
     request.addRows = { query: { kind: rows.mode === "last" ? "last_traces" : "auto", limit } };
   }

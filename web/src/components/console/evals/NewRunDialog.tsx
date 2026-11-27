@@ -203,7 +203,7 @@ export function NewRunDialog({
                     aria-label="Number of traces"
                     type="number"
                     min={1}
-                    max={500}
+                    max={100}
                     className="w-24"
                     value={draft.addRows.limit}
                     onChange={(event) =>

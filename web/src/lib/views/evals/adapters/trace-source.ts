@@ -2,6 +2,8 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { QUERY_VERSION } from "@/lib/contracts/query";
 import { traceTurns } from "@/lib/ledger/schema";
 import type { getDb } from "@/lib/platform/db/client";
+import { featureEnabled } from "@/lib/platform/experimental-features";
+import { projects } from "@/lib/platform/projects/schema";
 import { runQuery } from "@/lib/synthesis/metrics/query";
 import { RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
@@ -26,8 +28,14 @@ const CANDIDATES_PER_ROW = 4;
  */
 export function createTraceSource(
   db: Db,
-  deps: { readOnlyTools: TraceSource["readOnlyTools"]; now: () => Date },
+  deps: {
+    readOnlyTools: TraceSource["readOnlyTools"];
+    now: () => Date;
+    /** Whether RQL is on for the project: the `customMonitoring` flag, as for `run_rql`. */
+    rqlEnabled?: (projectId: string) => Promise<boolean>;
+  },
 ): TraceSource {
+  const rqlEnabled = deps.rqlEnabled ?? ((projectId: string) => rqlOn(db, projectId));
   const closedTurns = (projectId: string, limit: number, taskId?: string) =>
     db
       .select({
@@ -60,6 +68,12 @@ export function createTraceSource(
     },
 
     async runRql(projectId, text) {
+      if (!(await rqlEnabled(projectId))) {
+        return {
+          ok: false,
+          message: "RQL is not on for this project, so an RQL dataset cannot resolve here.",
+        };
+      }
       const until = deps.now();
       const since = new Date(until.getTime() - RQL_LIMITS.maxWindowDays * DAY_MS);
       try {
@@ -114,4 +128,18 @@ export function createTraceSource(
     loadTurn: loadTurnContent,
     readOnlyTools: deps.readOnlyTools,
   };
+}
+
+/** The `customMonitoring` flag of the project's organization: the flag of `run_rql`. */
+async function rqlOn(db: Db, projectId: string): Promise<boolean> {
+  const [project] = await db
+    .select({ organizationId: projects.organizationId })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (!project) return false;
+  return featureEnabled("customMonitoring", {
+    organizationId: project.organizationId,
+    projectId,
+    actor: `project:${projectId}`,
+  });
 }
