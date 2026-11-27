@@ -27,7 +27,7 @@ import {
 } from "@/lib/views/sandboxes";
 
 /**
- * The Ratel sandbox tools (decision `mcp-surface`): find a pushed version of an agent, read how to
+ * The Sandboxes tools (decision `mcp-surface`): find a pushed version of an agent, read how to
  * call it, run it with an input and read the output. They call only the public interface of
  * `views/sandboxes`. They are listed only for a caller with the `evals` flag (one flag for the
  * sandbox and the evals), and each call checks the flag for its project again.
@@ -94,9 +94,9 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_list",
       domain: "sandboxes",
-      title: "List Ratel sandboxes",
+      title: "List sandboxes",
       description:
-        "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name and its newest versions with their status. It also returns the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+        "Use this tool to find the agents that you pushed to Ratel (the sandboxes). It returns each sandbox name and its newest versions with their status. It also returns the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
       keywords: ["sandbox", "pushed agents", "sandbox versions"],
       scope: "project",
       mutates: false,
@@ -120,7 +120,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_get_version",
       domain: "sandboxes",
-      title: "Read a Ratel sandbox version",
+      title: "Read a sandbox version",
       description:
         "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, the tools with their modes, and the declared secrets with their source: sandbox, project or missing. It never returns a secret value.",
       keywords: ["sandbox", "declared params", "input example", "smoke check"],
@@ -156,7 +156,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_run",
       domain: "sandboxes",
-      title: "Run a Ratel sandbox version",
+      title: "Run a sandbox version",
       description:
         "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. It returns the run id and the status. A complete run also has the input, the output and the tool calls. For a run that is not complete, call sandbox_get_run.",
       keywords: ["sandbox", "run agent", "try an input"],
@@ -208,7 +208,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_get_run",
       domain: "sandboxes",
-      title: "Read a Ratel sandbox run",
+      title: "Read a sandbox run",
       description:
         "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output and the params. It also returns the tool calls, the error of a failed run and the end of the container logs.",
       keywords: ["sandbox", "run result", "container logs"],
@@ -233,7 +233,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
 
 async function requireSandboxes(deps: SandboxOperationDeps, projectId: string): Promise<void> {
   if (await deps.enabled(projectId)) return;
-  throw new McpOperationError("forbidden", "Ratel sandbox is not on for this project.", {
+  throw new McpOperationError("forbidden", "Sandboxes are not on for this project.", {
     reason: "sandboxes_off",
   });
 }

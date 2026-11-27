@@ -6,12 +6,9 @@ import { Disclosure } from "@ratel/design-system/disclosure";
 import { Field, Textarea } from "@ratel/design-system/input";
 import { Section } from "@ratel/design-system/section";
 import { Select } from "@ratel/design-system/select";
-import { toast } from "@ratel/design-system/toast";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { formatRelativeTime } from "@/lib/synthesis/traces/v2/format";
-import { caseHref } from "@/lib/views/evals/paths";
 import type { RunRow, VersionRow } from "@/lib/views/sandboxes/page-model";
 import {
   expectedOutputOf,
@@ -46,7 +43,10 @@ const TOOL_MODE = { live: MODE.real, recorded: MODE.fixture, simulated: MODE.fak
 
 type ToolCall = NonNullable<RunRow["result"]>["toolCalls"][number];
 
-/** Try a ready version: an input and typed params on the left, the output first on the right. */
+/**
+ * The Playground of one sandbox: a ready version, an input and typed params on the left, the output
+ * first on the right.
+ */
 export function SandboxRunOnce({
   projectId,
   versions,
@@ -90,8 +90,8 @@ export function SandboxRunOnce({
 
   return (
     <Section
-      title="Try a version"
-      description="Give an input and the params. Each run starts one new instance, runs the agent once and stops it."
+      title="Playground"
+      description="Choose a version, give an input and the params. Each run starts one new instance, runs the agent once and stops it."
     >
       {version ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -105,7 +105,7 @@ export function SandboxRunOnce({
                   onValueChange={setVersionId}
                   options={ready.map((candidate) => ({
                     value: candidate.id,
-                    label: `${candidate.name} · ${candidate.commit?.slice(0, 12) ?? "no commit"} · ${candidate.id.slice(0, 8)}`,
+                    label: `${candidate.id === ready[0]?.id ? "Newest · " : ""}${candidate.commit?.slice(0, 12) ?? "no commit"} · ${candidate.id.slice(0, 8)}`,
                   }))}
                   className="w-full"
                 />
@@ -296,7 +296,7 @@ function RunResult({
           <span className="ml-auto">
             <SaveAsEvalCase
               projectId={projectId}
-              label="Save as case"
+              label="Save as eval case"
               source={{
                 traceId: run.traceId,
                 name: caseNameOf(run.input),

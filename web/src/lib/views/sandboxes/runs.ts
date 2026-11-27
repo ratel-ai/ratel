@@ -383,7 +383,7 @@ function infraReason(error: unknown): string {
     return `The sandbox service has too many requests now. Run again in ${wait}.`;
   }
   if (error instanceof ProviderAtCapacity) {
-    return "Ratel sandbox runs as many machines as it can now. Run again in a few minutes.";
+    return "Sandboxes run as many machines as they can now. Run again in a few minutes.";
   }
   if (error instanceof ProviderUnavailable) {
     return "The sandbox service did not answer. Run again later.";

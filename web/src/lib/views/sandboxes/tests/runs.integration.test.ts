@@ -433,7 +433,7 @@ for (const [what, agent, code, status, message] of ERRORS) {
 test("a rate limit, a full account or a broken service at the VM start fails the run with a reason to run again, with no provider name", async () => {
   const cases: Array<[Error, RegExp]> = [
     [new ProviderRateLimited("boat: 429 too many", 30), /again in 30 s/],
-    [new ProviderAtCapacity("boat is full"), /as many machines as it can/],
+    [new ProviderAtCapacity("boat is full"), /as many machines as they can/],
     [new ProviderUnavailable("boat 503"), /did not answer/],
     [new Error("boat broke"), /did not work/],
   ];
@@ -460,8 +460,8 @@ test("a rate limit, a full account or a broken service at the VM start fails the
 
 test("a refusal of the sandbox service fails the run with provider_refused, no provider name and no retry advice", async () => {
   const cases: Array<[number, string]> = [
-    [402, "The sandbox service refused the request: the Ratel sandbox account is not active."],
-    [403, "The sandbox service refused the request: the Ratel sandbox account lacks a permission."],
+    [402, "The sandbox service refused the request: the sandbox account is not active."],
+    [403, "The sandbox service refused the request: the sandbox account lacks a permission."],
   ];
   for (const [status, reason] of cases) {
     const t = await setup();

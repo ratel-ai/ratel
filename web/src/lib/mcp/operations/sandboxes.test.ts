@@ -190,7 +190,7 @@ for (const id of IDS) {
       }),
     );
     assert.equal(result.error, "forbidden");
-    assert.match(result.message, /Ratel sandbox is not on for this project/);
+    assert.match(result.message, /Sandboxes are not on for this project/);
     assert.deepEqual(asked, [PROJECT]);
   });
 
@@ -569,4 +569,12 @@ test("sandbox_get_run: a large output keeps a preview and is marked truncated", 
   assert.equal(typeof result.data.output, "string");
   assert.ok((result.data.output as string).length < 10_000);
   assert.equal(result.truncated, true);
+});
+
+test("no tool text says Ratel sandbox as the name of the area, or names the provider", () => {
+  const text = JSON.stringify(
+    sandboxOperations(fakeDeps()).map(({ id, title, description }) => ({ id, title, description })),
+  );
+  assert.doesNotMatch(text, /Ratel sandbox/i);
+  assert.doesNotMatch(text, /boat/i);
 });

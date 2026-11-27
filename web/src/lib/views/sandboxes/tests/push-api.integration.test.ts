@@ -191,7 +191,10 @@ test("a push stores the version with its config, image, commit and tarball", asy
   assert.deepEqual(version.image, IMAGE);
   assert.deepEqual(version.git, { commit: COMMIT, dirty: true });
   assert.deepEqual(version.bundle, bundleInfo(BUNDLE));
-  assert.equal(version.url, `https://ratel.example/project/${PROJECT_ID}/sandbox`);
+  assert.equal(
+    version.url,
+    `https://ratel.example/project/${PROJECT_ID}/sandboxes/${CONFIG.name}/versions`,
+  );
   assert.equal("manifest" in version, false);
   assert.deepEqual(t.uploaded, [body.versionId]);
 });
@@ -290,7 +293,7 @@ test("a refusal of the sandbox service gives failed with a safe reason through t
   assert.equal(version.status, "failed");
   assert.equal(
     version.reason,
-    "The sandbox service refused the request: the Ratel sandbox account is not active.",
+    "The sandbox service refused the request: the sandbox account is not active.",
   );
   assert.doesNotMatch(JSON.stringify(version), /boat|again/i);
 });
