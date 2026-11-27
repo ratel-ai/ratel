@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { getLogger } from "@/lib/platform/logger";
-import { snapshotVersionId } from "../domain/snapshot-name";
+import { snapshotPrefix, snapshotVersionId } from "../domain/snapshot-name";
 import {
   type ExecRequest,
   type ExecResult,
@@ -51,6 +51,8 @@ const READY = new Set(["ready", "idle", "running"]);
 const STARTING = new Set(["init", "provisioning", "provisioned", "cloning"]);
 const STOPPED = new Set(["archiving", "archived", "error"]);
 const AT_CAPACITY = new Set(["limit_reached", "member_limit_reached"]);
+/** A 403 of the plan, not of the key: e.g. `trial_saved_snapshots_not_allowed`, `machine_class_plan_required`. */
+const PLAN_REFUSAL = /^trial_|_plan_required$/;
 /** A command sent while the VM still starts. Sending it again is safe. */
 const NOT_READY_YET = new Set(["boat_starting", "sandbox_starting"]);
 const DEPLOYMENT_LABEL = "ratel-deployment";
@@ -67,6 +69,10 @@ const JOB_SLACK_S = 60;
 /** `timeout` ends with 124 when the time is over. */
 const JOB_TIMED_OUT = "124";
 const CREATE_ATTEMPTS = 3;
+/** The tries of a call after a lost connection, when the call is safe to send again. */
+const NETWORK_ATTEMPTS = 3;
+/** Sending one of these again does no harm. POST is not: a command may already have run. */
+const IDEMPOTENT = new Set(["GET", "PUT", "DELETE"]);
 const EXEC_ATTEMPTS = 4;
 const UPLOAD_URL_TTL_S = 3600;
 /** Docker comes a few seconds after the VM is ready. */
@@ -145,6 +151,9 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
         `/sandboxes/${enc(vmRef)}/files/upload-url`,
         {
           json: { path: request.path, ttlSeconds: UPLOAD_URL_TTL_S },
+          // It only issues a URL, so it is safe to ask again.
+          attempts: NETWORK_ATTEMPTS,
+          retryWhen: (status) => status === 0,
         },
       );
       await api.upload(url, request);
@@ -213,18 +222,14 @@ export function createBoatProvider(options: BoatProviderOptions): SandboxProvide
     },
 
     async listSnapshots() {
+      // The list takes only `name`, `namePrefix` and `org`, and has no pages: a `limit` is a 400.
+      const query: [string, string][] = [["namePrefix", snapshotPrefix(options.deploymentId)]];
+      const page: unknown = await api.call<unknown>("GET", "/saved-snapshots", { query });
       const found: SnapshotInfo[] = [];
-      let cursor: string | null = null;
-      do {
-        const query: [string, string][] = [["limit", "200"]];
-        if (cursor) query.push(["cursor", cursor]);
-        const page: unknown = await api.call<unknown>("GET", "/saved-snapshots", { query });
-        for (const name of snapshotNamesOf(page)) {
-          const versionId = snapshotVersionId(options.deploymentId, name);
-          if (versionId) found.push({ snapshotRef: name, versionId });
-        }
-        cursor = nextCursorOf(page);
-      } while (cursor);
+      for (const name of snapshotNamesOf(page)) {
+        const versionId = snapshotVersionId(options.deploymentId, name);
+        if (versionId) found.push({ snapshotRef: name, versionId });
+      }
       return found;
     },
   };
@@ -416,13 +421,17 @@ function createApi(options: BoatProviderOptions) {
     try {
       return await doFetch(url, { method, headers, body });
     } catch (error) {
+      logger.warn({ method, error_code: networkCodeOf(error) }, "sandbox service call lost");
       throw new ProviderUnavailable("The sandbox service did not answer.", { cause: error });
     }
   }
 
   return {
     async call<T = unknown>(method: string, path: string, call: CallOptions = {}): Promise<T> {
-      const attempts = call.attempts ?? 1;
+      // A call that is safe to send again goes again after a lost connection (status 0).
+      const safe = IDEMPOTENT.has(method);
+      const attempts = call.attempts ?? (safe ? NETWORK_ATTEMPTS : 1);
+      const retryWhen = call.retryWhen ?? (safe ? (status: number) => status === 0 : undefined);
       for (let attempt = 1; ; attempt++) {
         let failure: Error;
         let status = 0;
@@ -439,7 +448,7 @@ function createApi(options: BoatProviderOptions) {
           if (!(error instanceof ProviderUnavailable)) throw error;
           failure = error;
         }
-        if (attempt >= attempts || !call.retryWhen?.(status, code)) throw failure;
+        if (attempt >= attempts || !retryWhen?.(status, code)) throw failure;
         await sleep(pollMs);
       }
     },
@@ -488,6 +497,12 @@ function errorOf(response: Response, body: unknown): Error {
   if (status === 402) {
     return new ProviderRefused(`The sandbox service account needs billing (${detail}).`, status);
   }
+  if (status === 403 && PLAN_REFUSAL.test(code)) {
+    return new ProviderRefused(
+      `The plan of the sandbox service account does not allow this call (${detail}).`,
+      status,
+    );
+  }
   if (status === 403) {
     return new ProviderRefused(
       `The sandbox service refused a permission of the API key (${detail}).`,
@@ -529,13 +544,6 @@ function snapshotNamesOf(page: unknown): string[] {
   });
 }
 
-/** The cursor of the next page, or null when there is no next page or the shape is not known. */
-function nextCursorOf(page: unknown): string | null {
-  const info = (page as { pageInfo?: { hasMore?: unknown; nextCursor?: unknown } } | null)
-    ?.pageInfo;
-  return info?.hasMore === true && typeof info.nextCursor === "string" ? info.nextCursor : null;
-}
-
 async function jsonOf(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text) return {};
@@ -555,6 +563,13 @@ async function bytesOf(body: WriteFileRequest["body"]): Promise<Uint8Array> {
 
 function enc(value: string): string {
   return encodeURIComponent(value);
+}
+
+/** The code of a lost connection (`ECONNRESET`, `UND_ERR_SOCKET`…), with no text of the service. */
+function networkCodeOf(error: unknown): string {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+  const code = cause?.code ?? (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z_]{1,40}$/.test(code) ? code : errorType(error);
 }
 
 function errorType(error: unknown): string {

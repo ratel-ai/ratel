@@ -230,6 +230,11 @@ test("a prepare goes preparing, then ready with the smoke result, a snapshot and
     `docker tag 'agent:latest' ${tag} && rm -f ${IMAGE_FILE}`,
   ]);
   const commands = commandsOf(smoke?.vmRef);
+  // The smoke VM comes from the snapshot: Docker loads its images after the VM is ready.
+  assert.equal(
+    commands.shift(),
+    `for i in $(seq 1 60); do docker image inspect ${tag} >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1`,
+  );
   assert.equal(
     commands[0],
     `docker run -d --name ${name} -p 127.0.0.1::8080 --env-file ${ENV_FILE} ${tag}; code=$?; rm -f ${ENV_FILE}; [ $code -eq 0 ] || exit $code; docker port ${name} 8080/tcp | head -n 1`,
