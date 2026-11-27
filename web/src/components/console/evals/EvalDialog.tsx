@@ -27,6 +27,9 @@ import { QUERY_HELP, type QueryDraft, QueryFields } from "./QueryFields";
 import { evalsApi, send } from "./request";
 import { ScorerPicker } from "./ScorerPicker";
 
+/** A select cannot hold an empty value: this one stands for "no task". */
+const NO_TASK = "__none__";
+
 const DATASET_KINDS = [
   { value: "existing", label: "A dataset", description: "One of the datasets of the project." },
   { value: "last_traces", label: "Last traces", description: QUERY_HELP.last_traces },
@@ -138,10 +141,12 @@ export function EvalDialog({
               <Select
                 id={control.id}
                 aria-label="Task"
-                value={draft.taskId}
-                onValueChange={(taskId) => setDraft({ ...draft, taskId })}
+                value={draft.taskId === "" ? NO_TASK : draft.taskId}
+                onValueChange={(taskId) =>
+                  setDraft({ ...draft, taskId: taskId === NO_TASK ? "" : taskId })
+                }
                 options={[
-                  { value: "", label: "No task" },
+                  { value: NO_TASK, label: "No task" },
                   ...dialog.tasks.map(({ id, name }) => ({ value: id, label: name })),
                 ]}
               />

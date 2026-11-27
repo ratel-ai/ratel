@@ -3,6 +3,8 @@ import { QUERY_VERSION } from "@/lib/contracts/query";
 import { traceTurns } from "@/lib/ledger/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import { runQuery } from "@/lib/synthesis/metrics/query";
+// Fills `metricSeams.sql`: an RQL dataset runs its query through `runQuery`.
+import "@/lib/synthesis/rql/query";
 import { RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { selectTaskEvalRuns } from "@/lib/views/task-evals/selection";

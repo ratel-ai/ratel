@@ -36,7 +36,7 @@ export function ParamsFields({
   const count = counted?.count ?? 0;
   return (
     <fieldset className="flex flex-col gap-3">
-      <legend className="mb-1.5 text-xs font-medium text-fg-muted">Parameters</legend>
+      <legend className="sr-only">Parameters</legend>
       {params.map((param) =>
         matrixOn ? (
           <Field

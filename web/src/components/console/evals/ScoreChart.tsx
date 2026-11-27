@@ -38,6 +38,7 @@ const Y_AXIS = 40;
 const NOMINAL_WIDTH = 640;
 /** One run alone sits in the middle of a window this wide. */
 const LONE_WINDOW_MS = 2 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
 
 type Run = { runId: string; at: number; points: Array<{ line: ChartLine; value: number }> };
 
@@ -367,8 +368,14 @@ function nearest<T>(items: readonly T[], distance: (item: T) => number): number 
   return best;
 }
 
-/** Ticks at even times across the window. */
+/** Ticks across the window: each UTC midnight for a window of days, else even times. */
 function timeTicks(start: number, end: number, count: number): number[] {
+  if (end - start > 2 * DAY_MS) {
+    const days: number[] = [];
+    for (let at = Math.ceil(start / DAY_MS) * DAY_MS; at <= end; at += DAY_MS) days.push(at);
+    const step = Math.max(1, Math.ceil(days.length / count));
+    return days.filter((_, index) => index % step === 0);
+  }
   const step = (end - start) / count;
   return Array.from({ length: count + 1 }, (_, index) => start + step * index);
 }
@@ -381,7 +388,7 @@ function timeLabel(at: number, span: number): string {
     day: "numeric",
     timeZone: "UTC",
   });
-  return span > 4 * 24 * 60 * 60_000 ? day : `${day} ${iso.slice(11, 16)}`;
+  return span > 2 * DAY_MS ? day : `${day} ${iso.slice(11, 16)}`;
 }
 
 function colorOf(line: ChartLine): string {

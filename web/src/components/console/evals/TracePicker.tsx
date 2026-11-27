@@ -61,6 +61,7 @@ export function TracePicker({
         {turns.map((turn) => (
           <li key={turn.turnId} className="border-b border-line px-3 py-1.5 last:border-b-0">
             <Checkbox
+              className="w-full min-w-0"
               checked={chosen.includes(turn.turnId)}
               disabled={withheld}
               onCheckedChange={(on) =>
@@ -69,7 +70,7 @@ export function TracePicker({
                 )
               }
               label={
-                <span className="flex min-w-0 flex-col">
+                <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-fg">
                     {turn.ask ?? `Turn ${turn.turnId.slice(0, 8)}`}
                   </span>

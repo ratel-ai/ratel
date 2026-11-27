@@ -10,6 +10,9 @@ import type { DatasetQuery } from "@/lib/views/evals/domain/dataset";
 import { checkDataset, type DatasetDraft, type Errors } from "@/lib/views/evals/eval-form";
 import { evalsApi, send } from "./request";
 
+/** A select cannot hold an empty value: this one stands for "any task". */
+const ANY_TASK = "__any__";
+
 export type QueryDraft = Exclude<DatasetDraft, { kind: "existing" }>;
 
 /** What each query kind reads, in one line. */
@@ -69,12 +72,14 @@ export function QueryFields({
             <Select
               id={control.id}
               aria-label="Task"
-              value={draft.taskId}
+              value={draft.kind === "auto" && draft.taskId === "" ? ANY_TASK : draft.taskId}
               placeholder="Choose a task"
-              onValueChange={(taskId) => onChange({ ...draft, taskId })}
+              onValueChange={(taskId) =>
+                onChange({ ...draft, taskId: taskId === ANY_TASK ? "" : taskId })
+              }
               options={
                 draft.kind === "auto"
-                  ? [{ value: "", label: "Any task" }, ...taskOptions]
+                  ? [{ value: ANY_TASK, label: "Any task" }, ...taskOptions]
                   : taskOptions
               }
             />

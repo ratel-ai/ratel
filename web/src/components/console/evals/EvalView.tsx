@@ -182,6 +182,7 @@ function RunsTable({
     {
       id: "dataset",
       header: "Dataset",
+      width: "12rem",
       hiddenBelow: "md",
       cell: (run) => (
         <span className="flex flex-col">
@@ -192,7 +193,9 @@ function RunsTable({
           ) : (
             <span className="truncate text-fg">{run.dataset.name}</span>
           )}
-          <span className="text-xs text-fg-subtle">{run.dataset.rows} frozen rows</span>
+          <span className="text-xs whitespace-nowrap text-fg-subtle">
+            {run.dataset.rows} frozen {run.dataset.rows === 1 ? "row" : "rows"}
+          </span>
         </span>
       ),
     },
@@ -251,7 +254,7 @@ function RunsTable({
       align: "right",
       cell: (run) =>
         run.isBaseline ? (
-          <Badge tone="accent">
+          <Badge tone="neutral">
             <Pin className="size-3" aria-hidden /> Baseline
           </Badge>
         ) : run.delta !== null ? (

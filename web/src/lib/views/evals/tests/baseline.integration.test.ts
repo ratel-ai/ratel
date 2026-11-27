@@ -206,10 +206,7 @@ test("the comparison has the verdict, the rule and the changed cases, with no ca
   assert.equal(view.verdict, "regressed");
   assert.match(view.rule, /^Regressed: a case went from pass to fail\./);
   assert.equal(view.baseline.experimentId, base);
-  assert.equal(
-    view.url,
-    `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}`,
-  );
+  assert.equal(view.url, `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}`);
   assert.deepEqual(
     [view.changedCases.length, view.changedCases[0].name, view.changedCases[0].change],
     [1, "late order", "regressed"],

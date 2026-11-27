@@ -76,7 +76,7 @@ export function RunView({ model, evalName }: { model: RunPageModel; evalName: st
                     {model.variants.map((variant) => (
                       <th
                         key={variant.index}
-                        colSpan={model.scorers.length + 2}
+                        colSpan={model.scorers.length + 1}
                         scope="colgroup"
                         className="border-l border-line px-3 py-2 text-left font-medium text-fg"
                       >
@@ -91,33 +91,30 @@ export function RunView({ model, evalName }: { model: RunPageModel; evalName: st
                   </tr>
                 ) : null}
                 <tr className="border-b border-line text-xs text-fg-subtle">
-                  <th scope="col" className="min-w-56 px-3 py-2 text-left font-medium">
+                  <th scope="col" className="min-w-48 px-3 py-2 text-left font-medium">
                     Row and input
                   </th>
-                  <th scope="col" className="min-w-40 px-3 py-2 text-left font-medium">
+                  <th scope="col" className="min-w-36 px-3 py-2 text-left font-medium">
                     Expected output
                   </th>
                   {model.variants.map((variant) => (
                     <Fragment key={variant.index}>
                       <th
                         scope="col"
-                        className="min-w-48 border-l border-line px-3 py-2 text-left font-medium"
+                        className="min-w-44 border-l border-line px-3 py-2 text-left font-medium"
                       >
-                        Output
+                        Output and trials
                       </th>
                       {model.scorers.map((scorer) => (
                         <th
                           key={scorer.name}
                           scope="col"
-                          className="px-3 py-2 text-right font-medium whitespace-nowrap"
+                          className="max-w-32 px-3 py-2 text-right font-medium"
                         >
                           {scorer.name}
                           {scorer.gating ? "" : " (scores only)"}
                         </th>
                       ))}
-                      <th scope="col" className="px-3 py-2 text-left font-medium">
-                        Trials
-                      </th>
                     </Fragment>
                   ))}
                 </tr>
@@ -167,23 +164,7 @@ function Cell({ cell, scorers }: { cell: RunVariantCell; scorers: RunPageModel["
         ) : (
           <span className="line-clamp-3 break-words text-fg">{cell.output}</span>
         )}
-      </td>
-      {scorers.map((scorer) => {
-        const score = cell.scorers[scorer.name];
-        return (
-          <td key={scorer.name} className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-            {score && score.rated > 0 ? (
-              <span className={score.pass === score.rated ? "text-fg" : "text-fg-muted"}>
-                {score.pass}/{score.rated}
-              </span>
-            ) : (
-              <span className="text-fg-faint">Not scored</span>
-            )}
-          </td>
-        );
-      })}
-      <td className="px-3 py-2">
-        <span className="flex flex-wrap gap-1.5">
+        <span className="mt-1.5 flex flex-wrap gap-1.5">
           {cell.trials.map((trial) => {
             const result = trial.result ? RESULT[trial.result] : null;
             return (
@@ -203,6 +184,20 @@ function Cell({ cell, scorers }: { cell: RunVariantCell; scorers: RunPageModel["
           })}
         </span>
       </td>
+      {scorers.map((scorer) => {
+        const score = cell.scorers[scorer.name];
+        return (
+          <td key={scorer.name} className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+            {score && score.rated > 0 ? (
+              <span className={score.pass === score.rated ? "text-fg" : "text-fg-muted"}>
+                {score.pass}/{score.rated}
+              </span>
+            ) : (
+              <span className="text-fg-faint">Not scored</span>
+            )}
+          </td>
+        );
+      })}
     </>
   );
 }
