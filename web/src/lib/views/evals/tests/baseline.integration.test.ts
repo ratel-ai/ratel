@@ -148,7 +148,7 @@ test("nothing pins a baseline automatically: not a start, not an end, not a comp
   const response = await handleCompareByKey(id, t.key());
   assert.deepEqual([response.status, (await response.json()).error], [409, "no_baseline"]);
   const read = await handleGetBaselineByKey(t.key("GET /api/v1/evals/baseline"));
-  assert.deepEqual(await read.json(), { baseline: null });
+  assert.deepEqual(await read.json(), { baseline: null, evals: [] });
   assert.equal(await t.baselines.get(PROJECT_ID), null);
 });
 
@@ -302,7 +302,7 @@ test("a key of another project reads no comparison and no baseline, and cannot p
   const other = { projectId: OTHER_PROJECT_ID };
   assert.equal((await handleCompareByKey(next, t.key(COMPARE, other))).status, 404);
   const read = await handleGetBaselineByKey(t.key("GET /api/v1/evals/baseline", other));
-  assert.deepEqual(await read.json(), { baseline: null });
+  assert.deepEqual(await read.json(), { baseline: null, evals: [] });
   const put = await handlePinByKey(pin(next), t.key("PUT /api/v1/evals/baseline", other));
   assert.equal(put.status, 404);
   await handleUnpinByKey(UNPIN, t.key("DELETE /api/v1/evals/baseline", other));

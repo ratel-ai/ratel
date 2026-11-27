@@ -52,8 +52,19 @@ export function handleUnpinByKey(request: Request, deps: BaselineKeyDeps): Promi
 
 export function handleGetBaselineByKey(deps: BaselineKeyDeps): Promise<Response> {
   return forKey(deps, "get_baseline", async ({ projectId }) => {
-    const baseline = await deps.baselines().baselines.get(projectId);
-    return reply(200, { baseline: baseline && baselineView(projectId, baseline, deps) });
+    const { baselines } = deps.baselines();
+    const [baseline, ofEvals] = await Promise.all([
+      baselines.get(projectId),
+      baselines.ofEvals(projectId),
+    ]);
+    // `baseline` is the pin of the suite runs from before; `evals` has the pin of each eval.
+    return reply(200, {
+      baseline: baseline && baselineView(projectId, baseline, deps),
+      evals: [...ofEvals].map(([evalId, pin]) => ({
+        evalId,
+        ...baselineView(projectId, pin, deps),
+      })),
+    });
   });
 }
 
