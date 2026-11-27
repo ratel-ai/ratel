@@ -16,11 +16,13 @@ import {
   listSandboxVersionDetails,
   newestReadySandboxVersion,
   type SandboxRun,
+  type SandboxSecretSource,
   type SandboxVersionDetail,
   type StartRunOptions,
   type StartRunResult,
   sandboxesEnabledForProject,
   sandboxRunStatus,
+  sandboxSecretSources,
   startRun,
 } from "@/lib/views/sandboxes";
 
@@ -47,6 +49,12 @@ export interface SandboxOperationDeps {
   now(): number;
   /** The content rule of `content-access.ts`: run inputs, outputs and logs are captured text. */
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
+  /** Where the value of each declared secret comes from. Never a value. */
+  secretSources(
+    projectId: string,
+    sandboxName: string,
+    names: readonly string[],
+  ): Promise<Array<{ name: string; source: SandboxSecretSource }>>;
 }
 
 /** How long `sandbox_run` waits for the result. It stays far below the 60 second limit of a call. */
@@ -73,6 +81,7 @@ const defaultDeps: SandboxOperationDeps = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
+  secretSources: sandboxSecretSources,
 };
 
 const versionIdParam = uuidParam().describe(
@@ -113,7 +122,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       domain: "sandboxes",
       title: "Read a Ratel sandbox version",
       description:
-        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options. It also returns the tools with their modes.",
+        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, the tools with their modes, and the declared secrets with their source: sandbox, project or missing. It never returns a secret value.",
       keywords: ["sandbox", "declared params", "input example", "smoke check"],
       scope: "project",
       mutates: false,
@@ -123,14 +132,24 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
         await requireSandboxes(deps, ctx.projectId);
         const version = await deps.getVersion(ctx.projectId, params.versionId);
         if (!version) throw notFound("sandbox version");
-        const view = versionView(version);
+        const secrets = await deps.secretSources(
+          ctx.projectId,
+          version.name,
+          version.config.secrets ?? [],
+        );
+        const view = { ...versionView(version), secrets };
+        const missing = secrets
+          .filter(({ source }) => source === "missing")
+          .map(({ name }) => name);
         return {
           data: view,
           ...(view.smoke?.logs.truncated ? { truncated: true } : {}),
           hint:
-            version.status === "ready"
-              ? `Call sandbox_run with versionId "${version.id}", an input like input.example, and only the params in params.`
-              : `This version is ${version.status}. Only a ready version runs. Call sandbox_list to find a ready version.`,
+            version.status !== "ready"
+              ? `This version is ${version.status}. Only a ready version runs. Call sandbox_list to find a ready version.`
+              : missing.length > 0
+                ? `A run is refused until these secrets are set for the sandbox or the project on the Sandboxes page: ${missing.join(", ")}.`
+                : `Call sandbox_run with versionId "${version.id}", an input like input.example, and only the params in params.`,
         };
       },
     }),

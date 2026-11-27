@@ -6,7 +6,6 @@ import {
   integer,
   jsonb,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -78,20 +77,34 @@ export const sandboxVersions = pgTable(
   ],
 );
 
-/** The secrets of a project's sandboxes. The value is sealed (`lib/platform/sealed-secrets.ts`). */
+/**
+ * The secrets of a project's sandboxes, at two levels: a row with no sandbox name is a project
+ * secret, a row with one is a secret of that sandbox and wins over the project secret of the same
+ * name. The value is sealed (`lib/platform/sealed-secrets.ts`) and bound to its level.
+ */
 export const sandboxSecrets = pgTable(
   "sandbox_secrets",
   {
+    id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    // No foreign key: the name of a sandbox is what its pushes share.
+    sandboxName: text("sandbox_name"),
     name: text("name").notNull(),
     sealedValue: text("sealed_value").notNull(),
     // The identity provider's user id.
     updatedBy: text("updated_by").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.projectId, t.name] })],
+  (t) => [
+    uniqueIndex("sandbox_secrets_project_name_idx")
+      .on(t.projectId, t.name)
+      .where(sql`${t.sandboxName} is null`),
+    uniqueIndex("sandbox_secrets_sandbox_name_idx")
+      .on(t.projectId, t.sandboxName, t.name)
+      .where(sql`${t.sandboxName} is not null`),
+  ],
 );
 
 /** One run of a version in a new container of a run VM. */

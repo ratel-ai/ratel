@@ -123,7 +123,11 @@ export async function startRun(
   if (Buffer.byteLength(JSON.stringify(request)) > MAX_REQUEST_BYTES) {
     return refused("input_too_large", "The input, the params and the fixtures are too large.");
   }
-  const secrets = await openSecretValues(projectId, secretNamesOf(version.config), deps);
+  const secrets = await openSecretValues(
+    { projectId, sandboxName: version.name },
+    secretNamesOf(version.config),
+    deps,
+  );
   if (!secrets.ok) return secrets;
 
   const token = `rtl_run_${randomBytes(32).toString("base64url")}`;

@@ -148,7 +148,11 @@ async function build(
   // The smoke result, also when the build fails after it.
   const seen: { smoke: SmokeResult | null; abandoned: boolean } = { smoke: null, abandoned: false };
   try {
-    const secrets = await openSecretValues(projectId, secretNamesOf(version.config), deps);
+    const secrets = await openSecretValues(
+      { projectId, sandboxName: version.name },
+      secretNamesOf(version.config),
+      deps,
+    );
     if (!secrets.ok) throw new BuildFailed(secrets.message);
     const current: Build = {
       version,

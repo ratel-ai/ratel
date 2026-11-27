@@ -169,6 +169,7 @@ async function setup(over: Setup = {}) {
   return {
     client,
     deps,
+    secrets,
     runs,
     vms,
     provider,
@@ -694,6 +695,46 @@ test("a start that cannot run is refused with the reason", async () => {
   assert.ok(!missing.ok && missing.reason === "missing_secrets");
   assert.match(missing.message, /OPENAI_API_KEY/);
   assert.equal(t.provider.starts.length, 0);
+});
+
+test("a sandbox value wins over the project value, a value of another sandbox does not apply, and a missing name is refused with its name", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const setAt = async (sandboxName: string, value: string) => {
+    const owner = { projectId: PROJECT_ID, name: "OPENAI_API_KEY", sandboxName };
+    await t.secrets.set(PROJECT_ID, owner.name, sealSecret(KEY, owner, value), "u", sandboxName);
+  };
+  await setAt("other-agent", "other-sandbox-value");
+  const atProject = await t.ran();
+  assert.equal(
+    t.envOf(atProject.instanceRef ?? "", atProject.id).OPENAI_API_KEY,
+    `${SECRET}-OPENAI_API_KEY`,
+  );
+  await setAt(CONFIG.name, "sandbox-value");
+  const atSandbox = await t.ran();
+  assert.equal(t.envOf(atSandbox.instanceRef ?? "", atSandbox.id).OPENAI_API_KEY, "sandbox-value");
+  await t.client.exec("delete from sandbox_secrets where sandbox_name is null");
+  const onlySandbox = await t.ran();
+  assert.equal(
+    t.envOf(onlySandbox.instanceRef ?? "", onlySandbox.id).OPENAI_API_KEY,
+    "sandbox-value",
+  );
+  await t.secrets.remove(PROJECT_ID, "OPENAI_API_KEY", CONFIG.name);
+  const missing = await t.start();
+  assert.ok(!missing.ok && missing.reason === "missing_secrets");
+  assert.equal(missing.message, "Set these secrets first: OPENAI_API_KEY.");
+});
+
+test("a project value copied onto the sandbox level does not open", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const { rows } = await t.client.query<{ sealed_value: string }>(
+    "select sealed_value from sandbox_secrets where name = 'OPENAI_API_KEY'",
+  );
+  await t.secrets.set(PROJECT_ID, "OPENAI_API_KEY", rows[0]?.sealed_value ?? "", "u", CONFIG.name);
+  const moved = await t.start();
+  assert.ok(!moved.ok && moved.reason === "missing_secrets");
+  assert.match(moved.message, /OPENAI_API_KEY does not open/);
 });
 
 test("a strict start refuses params and tools that ratel.yaml does not declare, and names them", async () => {
