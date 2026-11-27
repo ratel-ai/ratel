@@ -69,6 +69,8 @@ export interface SpansViewProps {
   nextCursor: string | null;
   paged: boolean;
   empty: TracesEmptyKind | null;
+  /** The project has a usable API key: the "no-telemetry" state then sends the first trace. */
+  hasApiKey?: boolean;
   latestAt: string | null;
   widerPreset: { id: RangePreset; label: string } | null;
 }
@@ -167,6 +169,7 @@ export function SpansView(props: SpansViewProps) {
               kind={empty}
               unit="spans"
               projectId={projectId}
+              hasApiKey={props.hasApiKey}
               latestAt={props.latestAt}
               onClearFilters={() => go((current) => withoutFilters("spans", current))}
               onWiden={

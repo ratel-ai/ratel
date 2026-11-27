@@ -1,5 +1,6 @@
 import { PageBody } from "@ratel/design-system/page-header";
 import { type ApiKeySummary, toApiKeySummary } from "@/lib/platform/api-key-actions";
+import { apiKeysBlockedUntil, keysBlockedMessage } from "@/lib/platform/api-key-creation";
 import { apiUrl } from "@/lib/platform/app-config";
 import { listApiKeysForProject } from "@/lib/platform/projects/queries";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
@@ -16,7 +17,7 @@ import { SdkQuickstart } from "./SdkQuickstart";
 export async function ApiKeysSettings({ projectId }: { projectId: string }) {
   const { project, organization } = await requireProjectScope(projectId);
   const now = new Date();
-  const [keys, inSupportSession] = await Promise.all([
+  const [keys, inSupportSession, blockedUntil] = await Promise.all([
     loadOrFallback<ApiKeySummary[] | null>({
       operation: "settings_api_keys",
       distinctId: `project:${project.id}`,
@@ -25,6 +26,13 @@ export async function ApiKeysSettings({ projectId }: { projectId: string }) {
         (await listApiKeysForProject(project.id)).map((key) => toApiKeySummary(key, now)),
     }),
     isRestrictedBySupportSession(),
+    // Only the note: creating asks again, and refuses when it cannot know.
+    loadOrFallback<Date | null>({
+      operation: "settings_api_keys_blocked",
+      distinctId: `project:${project.id}`,
+      fallback: null,
+      load: () => apiKeysBlockedUntil(organization.id),
+    }),
   ]);
 
   return (
@@ -35,6 +43,7 @@ export async function ApiKeysSettings({ projectId }: { projectId: string }) {
           projectSlug={project.slug}
           organizationId={organization.id}
           restricted={inSupportSession}
+          blockedNote={blockedUntil ? keysBlockedMessage(blockedUntil) : null}
           now={now.toISOString()}
         />
       ) : (

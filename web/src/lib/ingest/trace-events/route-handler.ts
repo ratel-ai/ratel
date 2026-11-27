@@ -205,7 +205,15 @@ export interface StoredRuntimeEvents {
  */
 export async function storeRuntimeEvents(
   events: unknown[],
-  context: { projectId: string; organization: Organization | null; appendOnly: boolean },
+  context: {
+    projectId: string;
+    organization: Organization | null;
+    appendOnly: boolean;
+    /** When a queued batch was accepted (ADR-0010): the clock that bounds the facts. Absent, now. */
+    receivedAt?: Date;
+    /** A batch without a new event starts its jobs too: the try that stored it can have ended before. */
+    redelivers?: boolean;
+  },
   deps: StoreRuntimeEventsDeps,
 ): Promise<StoredRuntimeEvents> {
   const { projectId, organization } = context;
@@ -240,11 +248,13 @@ export async function storeRuntimeEvents(
       intentGraphRuntimeStatus: parsed.valid.some((event) => event.type === "usage_ranking_status"),
       // A shippable key only adds rows (RC-590): see ApiKeyPolicy.appendOnlyIngest.
       appendOnly: context.appendOnly,
+      ...(context.receivedAt ? { receivedAt: context.receivedAt } : {}),
     },
   );
   await deps.insertTraceEventRejects(projectId, rejectRows);
   const duplicates = parsed.valid.length - accepted;
-  if (accepted > 0 && parsed.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
+  const starting = context.redelivers ? parsed.valid.length : accepted;
+  if (starting > 0 && parsed.valid.some((event) => FOLD_TRIGGER_TYPES.has(event.type))) {
     await scheduleIntentGraphFold(deps, projectId, "/api/v1/events");
   }
   await deps.trackServerEvent?.(
@@ -262,7 +272,7 @@ export async function storeRuntimeEvents(
     projectId,
     organization,
     eventTypes: parsed.valid.map((event) => event.type),
-    accepted,
+    accepted: starting,
     logError: deps.logError,
     reportServerException: deps.reportServerException,
   });

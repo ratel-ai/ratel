@@ -6,7 +6,8 @@
  * - Watch: no such issue (often too few runs to raise one), but it finishes
  *   fewer than `WATCH.finishRate` of its runs, a step fails at least
  *   `WATCH.stepFailureShare` of its calls, or the agent corrects itself at
- *   least `WATCH.correctionsPer100` times per 100 runs.
+ *   least `WATCH.correctionsPer100` times per 100 turns (a task's run is one
+ *   turn, so this is the Self-corrections page's unit).
  * - Healthy: none of these.
  *
  * Pure; the numbers it reads come from the task's reading.
@@ -21,6 +22,15 @@ export const WATCH = Object.freeze({
   stepFailureShare: 0.1,
   /** A step's failure share counts from this many calls. */
   stepMinCalls: 5,
+  /**
+   * Self-corrections per 100 turns. Watch stands in for the `self_correcting`
+   * issue on tasks too small to raise it: that issue needs `minN` turns,
+   * `minK` with a self-correction and a Wilson low bound of `minLow`
+   * (config-defaults: 20, 5, 0.1), so the smallest share it fires at is
+   * 5 of 20 turns. A turn with a self-correction carries at least one, so
+   * that share is at least 25 per 100 turns. `status.test.ts` keeps the two
+   * in step.
+   */
   correctionsPer100: 25,
 });
 
@@ -44,6 +54,7 @@ export interface TaskStatusInput {
   issueKinds: ReadonlySet<string>;
   finishRate: number | null;
   weakest: { failureShare: number; calls: number } | null;
+  /** Self-corrections per 100 of the task's turns. */
   correctionsPer100: number | null;
 }
 

@@ -1,11 +1,11 @@
 import { cn } from "@ratel/design-system/cn";
-import { KeyRound } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SearchingBadger } from "@/components/console/badgers/honeybadgers";
 import { OpenImportButton } from "@/components/console/health/imports/OpenImportButton";
 import { buttonVariants } from "@/components/console/health/primitives/button";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
+import { ApiKeyCta, FirstTraceLink } from "@/components/console/settings/ApiKeyCta";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import {
   agentHealthHref,
@@ -42,6 +42,8 @@ export interface CollectingStateProps {
   canImport?: boolean;
   /** Where a plan with a longer window can be picked; null hides the link. */
   billingHref?: string | null;
+  /** The project has a usable API key (`hasUsableApiKey`): not asked for another. */
+  hasApiKey?: boolean;
   now?: Date;
 }
 
@@ -73,11 +75,12 @@ export function CollectingState({
   windowDays = DEFAULT_WINDOW_DAYS,
   canImport = false,
   billingHref = null,
+  hasApiKey = false,
   now = new Date(),
 }: CollectingStateProps) {
   if (!state)
     return turns <= 0 ? (
-      <NoTelemetry projectId={projectId} floor={floor} />
+      <NoTelemetry projectId={projectId} hasApiKey={hasApiKey} floor={floor} />
     ) : (
       <Collecting turns={turns} floor={floor} />
     );
@@ -89,7 +92,14 @@ export function CollectingState({
     case "tool_spans":
       return null;
     case "nothing_yet":
-      return <NoTelemetry projectId={projectId} floor={floor} canImport={canImport} />;
+      return (
+        <NoTelemetry
+          projectId={projectId}
+          hasApiKey={hasApiKey}
+          floor={floor}
+          canImport={canImport}
+        />
+      );
     case "too_few": {
       // The meter counts finished turns; the ones in progress are said beside it.
       const note = [inProgressLine(state), widerLine(state.wider, plans)].filter(Boolean).join(" ");
@@ -106,7 +116,7 @@ export function CollectingState({
       return (
         <Notice state="imported_no_tools" copy={copy}>
           {canImport && <OpenImportButton />}
-          <ApiKeyLink projectId={projectId} />
+          <ApiKeyLinks projectId={projectId} hasApiKey={hasApiKey} />
         </Notice>
       );
     case "unavailable":
@@ -123,7 +133,7 @@ export function CollectingState({
           ) : (
             <>
               {canImport && <OpenImportButton />}
-              <ApiKeyLink projectId={projectId} />
+              <ApiKeyLinks projectId={projectId} hasApiKey={hasApiKey} />
             </>
           )}
         </Notice>
@@ -131,24 +141,24 @@ export function CollectingState({
   }
 }
 
-function ApiKeyLink({ projectId }: { projectId: string }) {
+/** Create a key; or, with one, send the first trace with the key beside it. */
+function ApiKeyLinks({ projectId, hasApiKey }: { projectId: string; hasApiKey: boolean }) {
   return (
-    <Link
-      href={`/project/${encodeURIComponent(projectId)}/settings/api-keys`}
-      className={LINK_BUTTON}
-    >
-      <KeyRound className="size-3.5" aria-hidden />
-      Get an API key
-    </Link>
+    <>
+      {hasApiKey && <FirstTraceLink icon className={LINK_BUTTON} />}
+      <ApiKeyCta projectId={projectId} hasApiKey={hasApiKey} icon className={LINK_BUTTON} />
+    </>
   );
 }
 
 function NoTelemetry({
   projectId,
+  hasApiKey,
   floor,
   canImport = false,
 }: {
   projectId: string;
+  hasApiKey: boolean;
   floor: number;
   canImport?: boolean;
 }) {
@@ -184,7 +194,7 @@ function NoTelemetry({
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         {canImport && <OpenImportButton />}
-        <ApiKeyLink projectId={projectId} />
+        <ApiKeyLinks projectId={projectId} hasApiKey={hasApiKey} />
       </div>
     </section>
   );

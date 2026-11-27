@@ -3,7 +3,7 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { ArrowRight, CircleCheck, Hourglass, Inbox, Lock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AttentionList } from "@/components/console/home/AttentionList";
+import { AttentionList, HealthUnlockRow } from "@/components/console/home/AttentionList";
 import { AlertsWidget } from "@/components/console/home/focused/AlertsWidget";
 import { HealthWidget } from "@/components/console/home/focused/HealthWidget";
 import {
@@ -15,6 +15,7 @@ import {
 import { focusedStats, isSdkOnly } from "@/components/console/home/overview-stats";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
 import { fmtCount } from "@/lib/platform/format";
+import { healthUnlockLine } from "@/lib/views/health/unlock";
 import type {
   FocusedAttention,
   FocusedOverviewData,
@@ -127,7 +128,7 @@ function NeedsAttention({
   reload: string;
   peekHref?: PeekHref;
 }) {
-  const { moreIssues, healthHref, partial } = attention;
+  const { moreIssues, healthHref, partial, healthLock } = attention;
   const items = attention.items.map((item) =>
     item.target.kind === "peek" && peekHref
       ? { ...item, target: { kind: "link" as const, href: peekHref(item.target.peek) } }
@@ -144,6 +145,9 @@ function NeedsAttention({
           Some checks did not load.
         </p>
       ) : null}
+      {healthLock ? (
+        <HealthUnlockRow lock={healthLock} href={healthHref} className="border-t border-line" />
+      ) : null}
       {moreIssues > 0 ? (
         <Link
           href={healthHref}
@@ -159,7 +163,7 @@ function NeedsAttention({
 
 /** An empty list says "nothing" only where everything was checked. */
 function NothingListed({
-  attention: { state, moreIssues, healthHref },
+  attention: { state, moreIssues, healthHref, healthLock },
   at,
 }: {
   attention: FocusedAttention;
@@ -175,6 +179,16 @@ function NothingListed({
           title="Nothing to check yet"
           description={`${at.tracesSeen === "none" ? "There are no traces yet." : `Nothing arrived in the last ${at.window} days.`} Send traces, and failed runs, issues and fixes show up here.`}
           action={<TracesAction {...at} />}
+        />
+      );
+    case "collecting":
+      return (
+        <WidgetEmpty
+          name="attention-collecting"
+          icon={Hourglass}
+          title={healthLock ? healthUnlockLine(healthLock) : "Agent health is still collecting"}
+          description="The issues it finds show up here once it unlocks. Failed runs and fixes show up already."
+          action={openHealth}
         />
       );
     case "early":
