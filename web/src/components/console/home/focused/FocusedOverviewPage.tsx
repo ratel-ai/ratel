@@ -10,6 +10,7 @@ import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
+import { hasUsableApiKey } from "@/lib/console/has-api-key";
 import { BASE_URL } from "@/lib/platform/app-config";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
@@ -51,6 +52,8 @@ export async function FocusedOverviewPage({
     projectEntitiesEnabled(organization),
     featureEnabled("customMonitoring", { projectId: project.id, organizationId: organization.id }),
   ]);
+  // The setup guide shows until the first event, and points at the key onboarding made.
+  const hasApiKey = !data.hasTelemetry && (await hasUsableApiKey(project.id));
   return (
     <FocusedOverviewView
       data={data}
@@ -84,7 +87,8 @@ export async function FocusedOverviewPage({
       }
       setup={
         <SetupGuide
-          root={data.root}
+          projectId={project.id}
+          hasApiKey={hasApiKey}
           endpoint={`${BASE_URL}/v1/traces`}
           serviceName={project.slug}
         />

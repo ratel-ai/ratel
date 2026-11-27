@@ -4,7 +4,7 @@ import { Button } from "@ratel/design-system/button";
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { EmptyState } from "@ratel/design-system/states";
 import { CalendarRange, SearchX } from "lucide-react";
-import Link from "next/link";
+import { ApiKeyCta, FirstTraceLink } from "@/components/console/settings/ApiKeyCta";
 import { TRACES_DOCS } from "@/lib/console/docs-links";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
@@ -16,12 +16,15 @@ const NOUN = { runs: "runs", spans: "spans", logs: "logs" } as const;
 /**
  * Every way a Traces list can be empty (DESIGN.md, Empty states): nothing
  * sent yet, events but no traces, nothing in this window, or nothing matching
- * the filters. Each says what to do next, with one action.
+ * the filters. Each says what to do next, with one action. Nothing sent yet
+ * asks for a key only when the project has none; with one, the action is
+ * sending the first trace.
  */
 export function TracesEmpty({
   kind,
   unit,
   projectId,
+  hasApiKey = false,
   latestAt,
   onClearFilters,
   onWiden,
@@ -29,6 +32,8 @@ export function TracesEmpty({
   kind: TracesEmptyKind;
   unit: keyof typeof NOUN;
   projectId: string;
+  /** The project has a usable key (`hasUsableApiKey`), read for "no-telemetry". */
+  hasApiKey?: boolean;
   /** The newest retained record, for "nothing in this window". */
   latestAt?: string | null;
   onClearFilters?: () => void;
@@ -55,14 +60,27 @@ export function TracesEmpty({
           title={`No ${noun} yet`}
           description="Send your first trace with the SDK and it shows up here within seconds."
           action={
-            <Link
-              href={`/project/${encodeURIComponent(projectId)}/settings/api-keys`}
-              className={buttonVariants({ variant: "primary" })}
-            >
-              Create API key
-            </Link>
+            hasApiKey ? (
+              <FirstTraceLink className={buttonVariants({ variant: "primary" })} />
+            ) : (
+              <ApiKeyCta
+                projectId={projectId}
+                hasApiKey={false}
+                className={buttonVariants({ variant: "primary" })}
+              />
+            )
           }
-          secondary={docs}
+          secondary={
+            hasApiKey ? (
+              <ApiKeyCta
+                projectId={projectId}
+                hasApiKey
+                className={buttonVariants({ variant: "ghost" })}
+              />
+            ) : (
+              docs
+            )
+          }
         />
       );
     case "events-only":
