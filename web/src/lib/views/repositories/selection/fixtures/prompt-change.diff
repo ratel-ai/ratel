@@ -1,0 +1,8 @@
+diff --git a/src/prompts/shipping_policy.md b/src/prompts/shipping_policy.md
+index 1234567..89abcde 100644
+--- a/src/prompts/shipping_policy.md
++++ b/src/prompts/shipping_policy.md
+@@ -1,2 +1,2 @@
+ # Shipping
+-Orders ship in 3 days.
++Orders ship in 2 working days.

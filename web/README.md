@@ -75,7 +75,9 @@ Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, 
 `toolRunInsights`, `focusedConsole`, `customMonitoring`, `evals`): in the file `flags.<key>`, in
 the environment `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`,
 `FF_TOOL_RUN_INSIGHTS`, `FF_FOCUSED_CONSOLE`, `FF_CUSTOM_MONITORING` (it also turns on RQL) and
-`FF_EVALS`. `evals` gates Ratel sandboxes and the evals on them together. A flag
+`FF_EVALS`. `evals` gates Ratel sandboxes and the evals on them together. `githubRepositories`
+(`FF_GITHUB_REPOSITORIES`) gates linked GitHub repositories: the commits `ratel push --ci` records,
+and the webhook with `GITHUB_WEBHOOK_SECRET`. A flag
 takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and

@@ -160,6 +160,7 @@ test("each flag has its own env var and file key", () => {
     FF_FOCUSED_CONSOLE: "1",
     FF_CUSTOM_MONITORING: "1",
     FF_EVALS: "1",
+    FF_GITHUB_REPOSITORIES: "1",
   };
   const fromEnv = resolveConfig({ env }).flags;
   const fromFile = resolveConfig({
@@ -185,6 +186,9 @@ test("one flag, evals, gates Ratel sandboxes and evals: no other flag is theirs"
       "focusedConsole",
       "customMonitoring",
       "evals",
+      // Linked GitHub repositories (RTL-408): commits recorded on top of evals' versions, not a
+      // switch for sandboxes or evals themselves.
+      "githubRepositories",
     ],
   );
   assert.deepEqual(Object.keys(resolveConfig().flags).sort(), [...CORE_FLAGS].sort());
