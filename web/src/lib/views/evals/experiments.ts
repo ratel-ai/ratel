@@ -339,7 +339,8 @@ export async function startEachEval(
     for (const wanted of new Set(start.evals)) {
       const found = all.find((one) => one.id === wanted || one.name === wanted);
       if (!found) return refused("not_found", `There is no eval named "${wanted}".`);
-      chosen.push(found);
+      // An eval named by its id and by its name runs one time.
+      if (!chosen.some(({ id }) => id === found.id)) chosen.push(found);
     }
   } else {
     chosen = all.filter((one) => {
