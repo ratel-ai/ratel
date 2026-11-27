@@ -4,11 +4,9 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { CaseEditor } from "@/components/console/evals/CaseEditor";
-import { PairedTrials } from "@/components/console/evals/CompareCase";
-import { CompareView } from "@/components/console/evals/CompareView";
-import { EvalsView } from "@/components/console/evals/EvalsView";
 import { ExperimentView } from "@/components/console/evals/ExperimentView";
 import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
+import { SuiteView } from "@/components/console/evals/SuiteView";
 import { TrialPanel } from "@/components/console/evals/TrialPanel";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
@@ -22,16 +20,12 @@ import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "..
 import {
   type CaseEditorModel,
   type CaseVersionView,
-  type ComparedCaseRow,
-  caseLabels,
-  caseRow,
-  comparePageModel,
-  DIFF_CHARS,
   experimentPageModel,
   PREVIEW_CHARS,
   readyVersions,
-  runnableCases,
 } from "../page-model";
+import { suitePageModel } from "../suite-page";
+import { POLITE, run } from "./runs";
 import { content, NO_REFUND } from "./support";
 
 const NOW = "2026-11-25T10:00:00.000Z";
@@ -76,92 +70,6 @@ test("evals are off by default, and FF_EVALS=1 turns them on", async () => {
 test("the rail has Evals only with the flag on", () => {
   assert.ok(labels(true).includes("Evals"));
   assert.ok(!labels(false).includes("Evals"));
-});
-
-test("the cases table shows the input, the expected output, the labels and which version counts", () => {
-  const row = {
-    id: "c1",
-    name: "Late refund",
-    labels: ["task: refunds"],
-    createdAt: NOW,
-    input: '{"message":"refund A200"}',
-    turns: 2,
-    expectedOutput: "It is refunded.",
-  };
-  const html = render(
-    createElement(EvalsView, {
-      baselineId: null,
-      projectId: PROJECT_ID,
-      canEdit: true,
-      now: NOW,
-      cases: [
-        { ...row, approved: 1, draft: 2 },
-        { ...row, id: "c2", name: "Status", labels: ["status"], approved: null, draft: 1 },
-      ],
-      experiments: [],
-      versions: [
-        {
-          id: "v1",
-          name: "support-demo",
-          commit: "b".repeat(40),
-          params: [
-            {
-              name: "tone",
-              type: "enum",
-              default: "formal",
-              description: null,
-              options: ["formal", "friendly"],
-            },
-            { name: "depth", type: "number", default: 2, description: "How deep", options: [] },
-          ],
-        },
-      ],
-    }),
-  );
-  const text = visibleText(html);
-  for (const part of [
-    "Late refund",
-    "refund A200",
-    "+2 turns",
-    "It is refunded.",
-    "Approved v1",
-    "Draft v2",
-    "task: refunds",
-    "New case",
-    "Experiment name",
-    "1 approved case, 3 trials.",
-  ]) {
-    assert.ok(text.includes(part), part);
-  }
-  assert.ok(html.includes("<table"), "a table");
-  assert.ok(html.includes('type="number"'), "a typed control for depth");
-  assert.doesNotMatch(text, /Params \(JSON\)/);
-});
-
-test("a case row cuts its input and expected output, and counts the cases a label takes", () => {
-  const long = "x".repeat(400);
-  const evalCase = {
-    id: "c1",
-    projectId: PROJECT_ID,
-    name: "Long",
-    labels: ["a"],
-    createdAt: new Date(NOW),
-    createdBy: "u",
-    versions: [{ ...version(), input: { message: long }, expectedOutput: long }],
-  } as unknown as Parameters<typeof caseRow>[0];
-  const row = caseRow(evalCase);
-  assert.equal(row.input.length, PREVIEW_CHARS);
-  assert.ok(row.input.endsWith("…"));
-  assert.equal(row.expectedOutput?.length, PREVIEW_CHARS);
-  const rows = [
-    { labels: ["a"], approved: 1 },
-    { labels: ["a", "b"], approved: null },
-    { labels: ["b"], approved: 2 },
-  ];
-  assert.equal(runnableCases(rows, null), 2);
-  assert.equal(runnableCases(rows, "a"), 1);
-  assert.equal(runnableCases(rows, "c"), 0);
-  assert.deepEqual(caseLabels(rows), ["a", "b"]);
 });
 
 test("the editor of an approved case with a draft shows both", () => {
@@ -404,7 +312,7 @@ test("a trial of the side panel shows its scorers with reasons, and a link to it
   assert.match(html, new RegExp(`traces/${"c".repeat(32)}`));
 });
 
-test("Run evals lists ready versions only, and is not there in a support session", () => {
+test("the suite table: a row for each eval, scorer columns, the delta, the invalid count and the verdict line", () => {
   const version = (id: string, status: "ready" | "failed") => ({
     id,
     projectId: PROJECT_ID,
@@ -421,95 +329,41 @@ test("Run evals lists ready versions only, and is not there in a support session
     versions.map(({ id }) => id),
     ["2"],
   );
+  const BASE = run("base", { refunds: { cases: { a: ["fail", "pass"] } } });
+  const NEXT = run("next", {
+    refunds: { cases: { a: ["pass", "invalid"] } },
+    status: { scorers: [NO_REFUND, POLITE], cases: { s: ["pass"] } },
+  });
+  const model = suitePageModel({
+    projectId: PROJECT_ID,
+    evals: [suiteEval("refunds"), suiteEval("status")],
+    cases: [],
+    runs: [],
+    run: NEXT,
+    baseline: BASE,
+  });
   const view = (canEdit: boolean) =>
     visibleText(
       render(
-        createElement(EvalsView, {
-          baselineId: null,
-          projectId: PROJECT_ID,
+        createElement(SuiteView, {
+          model,
           canEdit,
-          now: NOW,
-          cases: [],
-          experiments: [],
           versions,
+          experiments: [],
+          baseline: "other",
+          now: NOW,
         }),
       ),
     );
-  assert.ok(view(true).includes("No case is approved yet."));
-  assert.ok(!view(false).includes("Run evals"));
-});
-
-const compared = (id: string, cases: Record<string, TrialResult>) => {
-  const experiment: Experiment = {
-    id,
-    projectId: PROJECT_ID,
-    organizationId: "o1",
-    name: null,
-    labelFilter: null,
-    sandboxVersionId: "sv1",
-    sandboxName: "support-demo",
-    gitCommit: id.repeat(40),
-    gitDirty: false,
-    params: {},
-    trialsPerCase: 1,
-    evalVersions: [],
-    caseVersions: Object.keys(cases).map((name) => ({
-      caseId: name,
-      versionId: name,
-      number: 1,
-      name,
-    })),
-    scorerSnapshots: {},
-    startedBy: "u",
-    state: "completed",
-    createdAt: new Date(NOW),
-    finishedAt: new Date(NOW),
-  };
-  const trials = Object.entries(cases).map(
-    ([name, result]): Trial => ({
-      id: `${id}-${name}`,
-      experimentId: id,
-      caseVersionId: name,
-      index: 0,
-      state: "done",
-      result,
-      reason: null,
-      scorers: [],
-      costUsd: 0.0123,
-      durationMs: 1_500,
-      traceId: null,
-      sandboxRunId: null,
-    }),
-  );
-  return { experiment, trials };
-};
-
-test("the comparison page: the verdict and its rule, the changed cases, then the others", () => {
-  const baseline = compared("a", { better: "fail", same: "pass", worse: "pass" });
-  const candidate = compared("b", { better: "pass", same: "pass", worse: "fail" });
-  const comparison = compare(baseline, candidate);
-  assert.ok(comparison.ok);
-  const pin = { experimentId: "a", pinnedBy: "user_1", pinnedAt: new Date(NOW) };
-  const ids = { projectId: PROJECT_ID, experimentId: "b" };
-  const result = { ok: true as const, pin, baseline, candidate, comparison };
-  const model = comparePageModel(ids, result, "user_1");
-  const text = visibleText(render(createElement(CompareView, { model, now: NOW })));
-  const order = ["Regressed", comparison.rule, "Changed cases", "worse", "better", "Other cases"];
-  const at = order.map((part) => text.indexOf(part));
-  assert.ok(!at.includes(-1), text);
-  assert.deepEqual(
-    at,
-    [...at].sort((left, right) => left - right),
-  );
-  for (const part of ["1 regressed", "pinned by you", "1 pass", "1.5 s mean", "$0.0123 total"]) {
-    assert.ok(text.includes(part), part);
+  const text = view(true);
+  for (const header of ["Eval", "Score", "No refund", "Polite", "Δ baseline", "Invalid"]) {
+    assert.ok(text.includes(header), header);
   }
-  const asOther = comparePageModel(
-    ids,
-    { ...result, pin: { ...pin, pinnedBy: "key:1" } },
-    "user_2",
-  );
-  assert.equal(asOther.ok && asOther.pin?.by, "a project key");
+  assert.match(text, /Improved/);
+  assert.match(text, /\+50 pts/);
+  assert.match(text, /New eval/);
+  assert.match(text, /Run suite/);
+  assert.doesNotMatch(view(false), /Run suite|New eval/);
 });
 
 test("the trials of a case are paired by index, with gaps and with one side", () => {
@@ -527,131 +381,8 @@ test("the trials of a case are paired by index, with gaps and with one side", ()
   assert.deepEqual(ids(pairedTrials([trial("b0", 0)], null)), [[0, "b0", undefined]]);
 });
 
-test("an open case shows each pair with its scorer reasons, its trace and the side that is missing", () => {
-  const { trials } = compared("a", { one: "pass" });
-  const [trial] = trials;
-  assert.ok(trial);
-  const scorer = {
-    scorerId: "s",
-    name: "No refund",
-    kind: "check" as const,
-    gating: true,
-    status: "pass" as const,
-    reason: "tools ne refund_order: the value is [].",
-  };
-  const row: ComparedCaseRow = {
-    caseId: "one",
-    name: "one",
-    change: "removed",
-    baseline: {
-      versionId: "one",
-      number: 1,
-      status: "pass",
-      counts: { pass: 1, fail: 0, invalid: 0, open: 0 },
-      costUsd: null,
-      meanDurationMs: null,
-      trials: [{ ...trial, traceId: "d".repeat(32), scorers: [scorer], output: null }],
-    },
-    candidate: null,
-  };
-  const html = render(createElement(PairedTrials, { projectId: PROJECT_ID, row }));
-  const text = visibleText(html);
-  for (const part of [
-    "Baseline, trial 1",
-    "Candidate, trial 1",
-    "Not in this experiment",
-    scorer.reason,
-    "Loading",
-  ]) {
-    assert.ok(text.includes(part), part);
-  }
-  assert.match(html, new RegExp(`traces/${"d".repeat(32)}`));
-});
-
-test("a chosen experiment: the setup differences, then both outputs with a word diff", () => {
-  const baseline = compared("a", { worse: "pass", same: "pass" });
-  const candidate = compared("b", { worse: "fail", same: "pass" });
-  baseline.experiment.params = { tone: "friendly", maxWords: 40 };
-  candidate.experiment.params = { tone: "formal", maxWords: 40, offerRefund: false };
-  candidate.experiment.sandboxVersionId = "sv2";
-  candidate.experiment.name = "Formal, no refunds";
-  const comparison = compare(baseline, candidate);
-  assert.ok(comparison.ok);
-  const outputs = new Map([
-    ["a-worse", "Your order A107 is late. I refunded it for you."],
-    ["b-worse", "Dear customer, your order A107 is late."],
-  ]);
-  const choices = [{ id: "a", label: "support-demo · aaaa · 2026-11-25 10:00", pinned: false }];
-  const model = comparePageModel(
-    { projectId: PROJECT_ID, experimentId: "b" },
-    { ok: true, pin: null, baseline, candidate, comparison },
-    "user_1",
-    { outputs, choices, chosenId: "a" },
-  );
-  assert.ok(model.ok);
-  assert.deepEqual(model.params, [
-    { name: "offerRefund", baseline: null, candidate: "false" },
-    { name: "tone", baseline: '"friendly"', candidate: '"formal"' },
-  ]);
-  assert.equal(model.versionChanged, true);
-  const html = render(createElement(CompareView, { model, now: NOW }));
-  const text = visibleText(html);
-  const order = ["Regressed", comparison.rule, "What changed in the setup", "Changed cases"];
-  const at = order.map((part) => text.indexOf(part));
-  assert.ok(!at.includes(-1), text);
-  assert.deepEqual(
-    at,
-    [...at].sort((left, right) => left - right),
-  );
-  for (const part of ["not the pinned baseline", "offerRefund", "default", "Version", "sv2"]) {
-    assert.ok(text.includes(part), part);
-  }
-  // Removed words are marked on the baseline side, added words on the candidate side.
-  assert.match(html, /<mark[^>]*line-through[^>]*>[^<]*refunded/);
-  assert.match(html, /<mark[^>]*>Dear /);
-  assert.ok(text.includes("Your order A107 is late."));
-  const long = comparePageModel(
-    { projectId: PROJECT_ID, experimentId: "b" },
-    { ok: true, pin: null, baseline, candidate, comparison },
-    "user_1",
-    { outputs: new Map([["b-worse", "x".repeat(DIFF_CHARS + 1)]]) },
-  );
-  assert.ok(long.ok);
-  const cutOutput = long.changed[0]?.candidate?.trials[0]?.output ?? "";
-  assert.equal(cutOutput.length, DIFF_CHARS + 1);
-  assert.ok(cutOutput.endsWith("…"));
-  assert.ok(html.includes('aria-label="Compare with"'));
-});
-
-test("a refused comparison shows the reason and the scorers that differ", () => {
-  const scorers = [
-    { caseId: "c1", caseName: "Late refund", name: "No refund", difference: "changed" as const },
-  ];
-  const pin = { experimentId: "base-1", pinnedBy: "u", pinnedAt: new Date(NOW) };
-  const model = comparePageModel(
-    { projectId: PROJECT_ID, experimentId: "b" },
-    {
-      ok: false,
-      refusal: {
-        reason: "scorers_differ",
-        message: "The scorers differ.",
-        scorers,
-        pin,
-        otherId: "base-1",
-      },
-    },
-    "u",
-  );
-  const html = render(createElement(CompareView, { model, now: NOW }));
-  const text = visibleText(html);
-  assert.match(html, /evals\/experiments\/base-1"/);
-  for (const part of ["the scorers differ", "No refund", "Late refund", "The definition changed"]) {
-    assert.ok(text.includes(part), part);
-  }
-});
-
-test("a completed experiment can be pinned, and compared when another one is the baseline", () => {
-  const { experiment, trials } = compared("b", { one: "pass" });
+test("a completed run can be pinned, and opens its deltas when another one is the baseline", () => {
+  const { experiment, trials } = run("b", { refunds: { cases: { one: ["pass"] } } });
   const text = (baseline: "this" | "other" | "none", canEdit = true) =>
     visibleText(
       render(
@@ -664,8 +395,31 @@ test("a completed experiment can be pinned, and compared when another one is the
       ),
     );
   assert.match(text("none"), /Pin as baseline/);
-  assert.doesNotMatch(text("none"), /Compare with baseline/);
-  assert.match(text("other"), /Pin as baseline\s*Compare with baseline/);
+  assert.doesNotMatch(text("none"), /Deltas against the baseline/);
+  assert.match(text("other"), /Pin as baseline\s*Deltas against the baseline/);
   assert.match(text("this"), /Unpin baseline/);
   assert.doesNotMatch(text("other", false), /Pin as baseline/);
 });
+
+function suiteEval(id: string) {
+  return {
+    id,
+    projectId: PROJECT_ID,
+    name: id,
+    taskId: null,
+    createdAt: new Date(0),
+    versions: [
+      {
+        sandboxName: null,
+        params: {},
+        trials: 3,
+        scorers: [NO_REFUND],
+        id: `${id}-v1`,
+        evalId: id,
+        number: 1,
+        createdBy: "u",
+        createdAt: new Date(0),
+      },
+    ],
+  };
+}

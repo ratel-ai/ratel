@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createElement, type ReactNode, Suspense } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
+import { suiteHref } from "../paths";
 
 /**
  * The HTTP status of the pages of evals. Next commits to 200 when the first bytes of a page stream,
@@ -19,7 +20,11 @@ const PAGES = [
   "evals/cases/[caseId]",
   "evals/experiments/[experimentId]",
   "evals/experiments/[experimentId]/compare",
+  "evals/[evalId]",
+  "evals/new",
+  "evals/experiments/[experimentId]/trials/[trialId]",
 ];
+const EXPERIMENT_ID = "22222222-2222-4222-8222-222222222222";
 
 type Layout = (props: {
   children: ReactNode;
@@ -49,6 +54,16 @@ for (const name of PAGES) {
     );
   });
 }
+
+test("the old comparison address leads to the suite table of the run", () => {
+  // With the flag on, the page only redirects: it reads no data.
+  const page = readFileSync(findPage("evals/experiments/[experimentId]/compare"), "utf8");
+  assert.match(page, /notFound\(\);\s*redirect\(suiteHref\(projectId, experimentId\)\);/);
+  assert.equal(
+    suiteHref(PROJECT_ID, EXPERIMENT_ID),
+    `/project/${PROJECT_ID}/evals?run=${EXPERIMENT_ID}`,
+  );
+});
 
 /** The stream of the page inside its layouts. Rejects when no byte was sent before an error. */
 async function streamPage(name: string) {

@@ -19,10 +19,12 @@ const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 /** One case: its draft in the editor, and the approved version. `new` is a case from nothing. */
 export default async function EvalCasePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string; caseId: string }>;
+  searchParams?: Promise<{ eval?: string | string[] }>;
 }) {
-  const { projectId, caseId } = await params;
+  const [{ projectId, caseId }, query] = await Promise.all([params, searchParams]);
   // Next renders a page next to its layout: the layout's 404 does not stop this data.
   if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
@@ -46,7 +48,8 @@ export default async function EvalCasePage({
   );
   if (!found && caseId !== "new") notFound();
   const canEdit = !(await isRestrictedBySupportSession());
-  const model = caseEditorModel({ projectId: project.id, canEdit }, found, evals);
+  const chosen = Array.isArray(query?.eval) ? query.eval[0] : query?.eval;
+  const model = caseEditorModel({ projectId: project.id, canEdit }, found, evals, chosen ?? null);
   // Another draft is another form.
   return <CaseEditor key={model.draft?.id ?? model.approved?.id ?? "new"} model={model} />;
 }

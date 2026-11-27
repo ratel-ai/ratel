@@ -10,6 +10,7 @@ import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
 import { createTaskLinks } from "./adapters/task-links";
 import type { CasesApiDeps } from "./cases-api";
+import type { EvalsApiDeps } from "./evals-api";
 import { evalsEnabledForProject } from "./gate";
 import { loadTurnContent } from "./turn-content";
 
@@ -51,3 +52,9 @@ async function readOnlyTools(projectId: string): Promise<ReadonlySet<string>> {
   }
   return new Set([...newest].flatMap(([name, sideEffect]) => (sideEffect ? [] : [name])));
 }
+
+export const evalsApiDeps: EvalsApiDeps = {
+  ...evalsAccess,
+  evals: () => createDrizzleEvalStore(getDb()),
+  now: () => new Date(),
+};

@@ -12,34 +12,29 @@ import type { ReadyVersion } from "@/lib/views/evals/page-model";
 import { experimentHref } from "@/lib/views/evals/paths";
 import { type ParamDraft, paramDraftOf, paramsOfDraft } from "@/lib/views/sandboxes/run-form";
 
-const DEFAULT_TRIALS = 3;
-const ALL = "__all__";
+const SUITE = "__suite__";
 
-/** Starts an experiment: a ready version, the cases of a label or all, typed params, trials, a name. */
+/**
+ * Starts a run: a ready version, the suite (each eval of the sandbox) or one eval, the params that
+ * differ from the defaults, trials for each case (empty: the trials of each eval), a name.
+ */
 export function RunEvals({
   projectId,
   versions,
-  labels,
-  label,
-  onLabelChange,
-  cases,
+  evals,
 }: {
   projectId: string;
   versions: ReadyVersion[];
-  /** The labels of the cases. */
-  labels: string[];
-  /** The label that chooses the cases. Null: all approved cases. */
-  label: string | null;
-  onLabelChange: (label: string | null) => void;
-  /** The number of approved cases that the run takes. */
-  cases: number;
+  /** The names of the evals of the project. */
+  evals: string[];
 }) {
   const [versionId, setVersionId] = useState(versions[0]?.id ?? "");
+  const [chosen, setChosen] = useState(SUITE);
   const version = versions.find((candidate) => candidate.id === versionId) ?? versions[0];
   return (
     <Section
-      title="Run evals"
-      description="Runs each approved case on your agent. Each trial has a new sandbox instance."
+      title="Run suite"
+      description="Runs each approved case of the chosen evals on your agent. Each trial has a new sandbox instance."
     >
       {version ? (
         <div className="flex flex-col gap-4 rounded-lg border border-line bg-raised p-4">
@@ -59,16 +54,16 @@ export function RunEvals({
                 />
               )}
             </Field>
-            <Field label="Cases">
+            <Field label="Evals">
               {(control) => (
                 <Select
                   id={control.id}
-                  aria-label="Cases"
-                  value={label ?? ALL}
-                  onValueChange={(value) => onLabelChange(value === ALL ? null : value)}
+                  aria-label="Evals"
+                  value={chosen}
+                  onValueChange={setChosen}
                   options={[
-                    { value: ALL, label: "All approved cases" },
-                    ...labels.map((name) => ({ value: name, label: `Label: ${name}` })),
+                    { value: SUITE, label: "The suite: each eval of this sandbox" },
+                    ...evals.map((name) => ({ value: name, label: name })),
                   ]}
                   className="w-full"
                 />
@@ -79,8 +74,8 @@ export function RunEvals({
             key={version.id}
             projectId={projectId}
             version={version}
-            label={label}
-            cases={cases}
+            evalName={chosen === SUITE ? null : chosen}
+            evals={evals.length}
           />
         </div>
       ) : (
@@ -101,22 +96,22 @@ export function RunEvals({
 function StartForm({
   projectId,
   version,
-  label,
-  cases,
+  evalName,
+  evals,
 }: {
   projectId: string;
   version: ReadyVersion;
-  label: string | null;
-  cases: number;
+  /** Null: the suite. */
+  evalName: string | null;
+  evals: number;
 }) {
   const router = useRouter();
-  const [trials, setTrials] = useState(String(DEFAULT_TRIALS));
+  const [trials, setTrials] = useState("");
   const [name, setName] = useState("");
   const [params, setParams] = useState<ParamDraft>(() => paramDraftOf(version.params));
   const [paramErrors, setParamErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const runs = cases * (Number(trials) || 0);
 
   async function start() {
     const parsed = paramsOfDraft(version.params, params);
@@ -130,9 +125,10 @@ function StartForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sandboxVersion: version.id,
-          trials: Number(trials),
-          params: parsed.value,
-          ...(label ? { label } : {}),
+          ...(trials ? { trials: Number(trials) } : {}),
+          // Only what the person changed: the other params are the defaults of each eval.
+          params: changedParams(version, parsed.value),
+          ...(evalName ? { evals: [evalName] } : {}),
           ...(name.trim() ? { name: name.trim() } : {}),
         }),
       });
@@ -167,7 +163,7 @@ function StartForm({
         <p className="text-xs text-fg-subtle">This version declares no parameter.</p>
       )}
       <div className="flex flex-wrap items-start gap-3 border-t border-line pt-4">
-        <Field label="Experiment name" className="w-full max-w-sm">
+        <Field label="Run name" className="w-full max-w-sm">
           {(control) => (
             <Input
               {...control}
@@ -178,7 +174,7 @@ function StartForm({
             />
           )}
         </Field>
-        <Field label="Trials for each case" className="w-36">
+        <Field label="Trials for each case" className="w-44">
           {(control) => (
             <Input
               {...control}
@@ -186,6 +182,7 @@ function StartForm({
               min={1}
               max={20}
               value={trials}
+              placeholder="The eval's"
               onChange={(event) => setTrials(event.target.value)}
             />
           )}
@@ -194,19 +191,30 @@ function StartForm({
           variant="primary"
           className="mt-5"
           onClick={start}
-          disabled={pending || cases === 0}
+          disabled={pending || evals === 0}
         >
-          {pending ? "Starting…" : "Run evals"}
+          {pending ? "Starting…" : evalName ? `Run ${evalName}` : "Run suite"}
         </Button>
       </div>
       <p className={error ? "text-xs text-danger" : "text-xs text-fg-subtle"}>
         {error ??
-          (cases === 0
-            ? label
-              ? `No approved case has the label ${label}.`
-              : "No case is approved yet."
-            : `${cases} approved ${cases === 1 ? "case" : "cases"}${label ? ` with the label ${label}` : ""}, ${runs} trials.`)}
+          (evals === 0
+            ? "No eval yet. Save a trace turn as an eval case, or make a new eval."
+            : "Each eval uses its own params and trials, unless you change them here.")}
       </p>
     </>
+  );
+}
+
+/** The params whose value is not the default of the version. */
+function changedParams(
+  version: ReadyVersion,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const defaults = new Map(version.params.map((param) => [param.name, param.default]));
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([key, value]) => JSON.stringify(value) !== JSON.stringify(defaults.get(key) ?? null),
+    ),
   );
 }

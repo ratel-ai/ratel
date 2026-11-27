@@ -5,22 +5,25 @@ import { buttonVariants } from "@ratel/design-system/button-variants";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { compareHref } from "@/lib/views/evals/paths";
+import { suiteHref } from "@/lib/views/evals/paths";
 
 /** Which experiment is the baseline: this one, another one, or none. */
 export type BaselineState = "this" | "other" | "none";
 
-/** Pins a completed experiment, removes the pin, and opens the comparison. */
+/** Pins a completed run, removes the pin, and opens the suite table with the deltas. */
 export function BaselineActions({
   projectId,
   experimentId,
   baseline,
   canEdit,
+  showSuiteLink = true,
 }: {
   projectId: string;
   experimentId: string;
   baseline: BaselineState;
   canEdit: boolean;
+  /** False on the suite table: the deltas are there. */
+  showSuiteLink?: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -59,12 +62,12 @@ export function BaselineActions({
           {baseline === "this" ? "Unpin baseline" : "Pin as baseline"}
         </Button>
       ) : null}
-      {baseline === "other" ? (
+      {baseline === "other" && showSuiteLink ? (
         <Link
-          href={compareHref(projectId, experimentId)}
+          href={suiteHref(projectId, experimentId)}
           className={buttonVariants({ variant: "primary" })}
         >
-          Compare with baseline
+          Deltas against the baseline
         </Link>
       ) : null}
     </>

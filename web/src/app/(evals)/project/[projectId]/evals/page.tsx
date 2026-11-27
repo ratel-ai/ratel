@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { EvalsView } from "@/components/console/evals/EvalsView";
+import { SuiteView } from "@/components/console/evals/SuiteView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { composition } from "@/lib/composition/ports";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
@@ -7,23 +7,28 @@ import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
-import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
-import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
-import { emptyCounts } from "@/lib/views/evals/domain/experiment";
+import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
-import { caseRow, experimentRow, readyVersions } from "@/lib/views/evals/page-model";
+import { loadRuns } from "@/lib/views/evals/page-loads";
+import { readyVersions } from "@/lib/views/evals/page-model";
+import { suitePageModel } from "@/lib/views/evals/suite-page";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Evals" };
 
-const EXPERIMENTS = 20;
 const VERSIONS = 50;
 
-/** The project's eval cases and experiments (the `evals` flag). */
-export default async function EvalsPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = await params;
+/** The suite table: each eval with the score of a run (`?run=`, else the newest) and its delta. */
+export default async function EvalsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ run?: string | string[] }>;
+}) {
+  const [{ projectId }, query] = await Promise.all([params, searchParams]);
   // Next renders a page next to its layout: the layout's 404 does not stop this data.
   if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
@@ -35,38 +40,34 @@ export default async function EvalsPage({ params }: { params: Promise<{ projectI
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const [cases, experiments, versions, baseline] = await withFeatureSpan(
+  const runId = Array.isArray(query.run) ? (query.run[0] ?? null) : (query.run ?? null);
+  const [evals, cases, loaded, versions] = await withFeatureSpan(
     "evals",
     "load_page",
-    async () => {
+    () => {
       const db = getDb();
-      const store = createDrizzleExperimentStore(db);
-      const experimentRows = async () => {
-        const rows = await store.list(project.id, EXPERIMENTS);
-        const counts = await store.counts(rows.map(({ id }) => id));
-        return rows.map((row) => experimentRow(row, counts.get(row.id) ?? emptyCounts()));
-      };
       return Promise.all([
+        createDrizzleEvalStore(db).list(project.id),
         createDrizzleCaseStore(db).list(project.id),
-        experimentRows(),
+        loadRuns(project.id, runId),
         listSandboxVersions(project.id, VERSIONS),
-        createDrizzleBaselineStore(db).get(project.id),
       ]);
     },
     { attributes: { "project.id": project.id } },
   );
+  const model = suitePageModel({ projectId: project.id, evals, cases, ...loaded });
+  const pinned = loaded.pin?.experimentId ?? null;
   const JudgeSettings = (await composition.ui?.())?.EvalJudgeSettings;
   return (
-    <EvalsView
-      projectId={project.id}
+    <SuiteView
+      model={model}
       canEdit={!(await isRestrictedBySupportSession())}
-      cases={cases.map(caseRow)}
-      experiments={experiments}
-      baselineId={baseline?.experimentId ?? null}
       versions={readyVersions(versions)}
+      experiments={loaded.runs}
+      baseline={pinned === null ? "none" : pinned === model.runId ? "this" : "other"}
       now={new Date().toISOString()}
     >
       {JudgeSettings ? <JudgeSettings projectId={project.id} /> : null}
-    </EvalsView>
+    </SuiteView>
   );
 }
