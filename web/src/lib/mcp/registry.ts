@@ -102,6 +102,8 @@ export interface McpOperation<Schema extends AnyParamsSchema = AnyParamsSchema> 
    * server without views lists exactly what it did.
    */
   appOnly?: boolean;
+  /** Params that hold a secret: never recorded with the call's telemetry. */
+  secretParams?: readonly string[];
   params: Schema;
   execute(ctx: OperationContext, params: z.infer<Schema>): Promise<OperationResult>;
 }

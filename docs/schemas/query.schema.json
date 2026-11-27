@@ -1,0 +1,1727 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ratel query",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "metric"
+        },
+        "measures": {
+          "minItems": 1,
+          "maxItems": 1,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "trace_count"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "count"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "error_rate"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "rate"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "latency"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "p50",
+                      "p95"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "tokens"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum",
+                      "avg"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "cost"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum",
+                      "avg"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "context_tokens"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "context_cost"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "scorer_pass_rate"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "rate"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "scorer_average"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "avg"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "scorer_count"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "count"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "description": "One measure and its aggregation."
+        },
+        "dimensions": {
+          "default": [],
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "model",
+              "service",
+              "environment",
+              "agent",
+              "tool",
+              "scorer"
+            ]
+          }
+        },
+        "filters": {
+          "default": {},
+          "description": "All clauses together with the filters of the page or dashboard: 3,072 bytes of JSON at most.",
+          "type": "object",
+          "properties": {
+            "models": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "tools": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "services": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "environments": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "agents": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "mcpServers": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "ok"
+              ]
+            },
+            "minCostUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "minTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "and": {
+              "description": "More clauses: a trace must match every one, also on the same property.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "models": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "tools": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "services": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "environments": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "agents": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "mcpServers": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "failed",
+                      "ok"
+                    ]
+                  },
+                  "minCostUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "scorer": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "bucket": {
+          "description": "Chosen from the window when absent.",
+          "type": "string",
+          "enum": [
+            "hour",
+            "day"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "measures"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "flow"
+        },
+        "node": {
+          "type": "string",
+          "enum": [
+            "tool",
+            "skill",
+            "agent"
+          ]
+        },
+        "start": {
+          "description": "Paths start at its first appearance; other traces are out.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "end": {
+          "description": "Paths end at its first appearance; other traces are out.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "steps": {
+          "default": 5,
+          "description": "The nodes kept of each path.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 8
+        },
+        "edges": {
+          "default": 50,
+          "description": "The edges kept, the most traces first.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "filters": {
+          "default": {},
+          "description": "All clauses together with the filters of the page or dashboard: 3,072 bytes of JSON at most.",
+          "type": "object",
+          "properties": {
+            "models": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "tools": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "services": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "environments": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "agents": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "mcpServers": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "ok"
+              ]
+            },
+            "minCostUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "minTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "and": {
+              "description": "More clauses: a trace must match every one, also on the same property.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "models": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "tools": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "services": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "environments": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "agents": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "mcpServers": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "failed",
+                      "ok"
+                    ]
+                  },
+                  "minCostUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "node"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "step_flow"
+        },
+        "node": {
+          "type": "string",
+          "enum": [
+            "tool",
+            "skill",
+            "agent",
+            "mcp_server",
+            "model"
+          ]
+        },
+        "start": {
+          "default": "agent",
+          "description": "What the start column tells apart. intent: the intent each trace was placed in.",
+          "type": "string",
+          "enum": [
+            "none",
+            "agent",
+            "intent"
+          ]
+        },
+        "mode": {
+          "default": "every_call",
+          "description": "every_call: forward from the start. before: back from the first visit of target.",
+          "type": "string",
+          "enum": [
+            "every_call",
+            "before"
+          ]
+        },
+        "target": {
+          "description": "For mode before: the node whose earlier steps are shown.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "steps": {
+          "default": 3,
+          "description": "The steps with a column of their own; the rest fold into Later.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6
+        },
+        "nodes": {
+          "default": 7,
+          "description": "The nodes named in a column, the most traces first; the rest fold into one.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "filters": {
+          "default": {},
+          "description": "All clauses together with the filters of the page or dashboard: 3,072 bytes of JSON at most.",
+          "type": "object",
+          "properties": {
+            "models": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "tools": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "services": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "environments": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "agents": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "mcpServers": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "ok"
+              ]
+            },
+            "minCostUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "minTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "and": {
+              "description": "More clauses: a trace must match every one, also on the same property.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "models": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "tools": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "services": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "environments": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "agents": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "mcpServers": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "failed",
+                      "ok"
+                    ]
+                  },
+                  "minCostUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "node"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "funnel"
+        },
+        "order": {
+          "default": "in_order",
+          "type": "string",
+          "enum": [
+            "in_order",
+            "any_order"
+          ]
+        },
+        "steps": {
+          "minItems": 2,
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "condition": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "tool"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "skill"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "attribute"
+                      },
+                      "path": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "op": {
+                        "type": "string",
+                        "enum": [
+                          "eq",
+                          "ne",
+                          "contains",
+                          "gt",
+                          "gte",
+                          "lt",
+                          "lte",
+                          "exists"
+                        ]
+                      },
+                      "value": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "boolean"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "path",
+                      "op"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "scorer"
+                      },
+                      "scorer": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "result": {
+                        "type": "string",
+                        "enum": [
+                          "passed",
+                          "failed"
+                        ]
+                      },
+                      "atLeast": {
+                        "description": "For a scorer of 1 to 5.",
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 5
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "scorer"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "no_error"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "required": [
+              "name",
+              "condition"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "filters": {
+          "default": {},
+          "description": "All clauses together with the filters of the page or dashboard: 3,072 bytes of JSON at most.",
+          "type": "object",
+          "properties": {
+            "models": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "tools": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "services": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "environments": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "agents": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "mcpServers": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "ok"
+              ]
+            },
+            "minCostUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "minTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "and": {
+              "description": "More clauses: a trace must match every one, also on the same property.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "models": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "tools": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "services": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "environments": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "agents": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "mcpServers": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "failed",
+                      "ok"
+                    ]
+                  },
+                  "minCostUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "steps"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "clusters"
+        },
+        "view": {
+          "type": "string",
+          "enum": [
+            "asks",
+            "tools"
+          ]
+        },
+        "clusters": {
+          "description": "By name, as tools, skills and tasks.",
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "tools": {
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "skills": {
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "tasks": {
+          "maxItems": 1000,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "minSize": {
+          "description": "Asks in a cluster.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "view"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "geography"
+        },
+        "measures": {
+          "minItems": 1,
+          "maxItems": 1,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "trace_count"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "count"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "error_rate"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "rate"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "latency"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "p50",
+                      "p95"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "tokens"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum",
+                      "avg"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "cost"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum",
+                      "avg"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "context_tokens"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "context_cost"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "sum"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "scorer_pass_rate"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "rate"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "scorer_average"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "avg"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "string",
+                    "const": "scorer_count"
+                  },
+                  "aggregation": {
+                    "type": "string",
+                    "enum": [
+                      "count"
+                    ]
+                  }
+                },
+                "required": [
+                  "measure",
+                  "aggregation"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "description": "One measure of traces and its aggregation."
+        },
+        "level": {
+          "default": "world",
+          "type": "string",
+          "enum": [
+            "world",
+            "country"
+          ]
+        },
+        "country": {
+          "description": "The country whose regions are shown.",
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "filters": {
+          "default": {},
+          "description": "All clauses together with the filters of the page or dashboard: 3,072 bytes of JSON at most.",
+          "type": "object",
+          "properties": {
+            "models": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "tools": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "services": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "environments": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "agents": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "mcpServers": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "failed",
+                "ok"
+              ]
+            },
+            "minCostUsd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "minTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "and": {
+              "description": "More clauses: a trace must match every one, also on the same property.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "models": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "tools": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "services": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "environments": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "agents": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "mcpServers": {
+                    "maxItems": 1000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2000
+                    }
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "failed",
+                      "ok"
+                    ]
+                  },
+                  "minCostUsd": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "minTokens": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "scorer": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "measures"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "number",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "sql"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000,
+          "description": "One RQL SELECT statement."
+        },
+        "rqlVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The RQL version the text was written in. A saved query is compiled again at load."
+        }
+      },
+      "required": [
+        "version",
+        "kind",
+        "text",
+        "rqlVersion"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

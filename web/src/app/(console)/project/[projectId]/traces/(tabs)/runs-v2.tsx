@@ -1,3 +1,4 @@
+import { ExploreLink } from "@/components/console/explore/ExploreLink";
 import { RunsView } from "@/components/console/traces/RunsView";
 import type { TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
@@ -32,12 +33,16 @@ import {
 import { runStats, toRunRow } from "@/lib/synthesis/traces/v2/runs";
 import { buildVolumeModel, needsHourlyVolume } from "@/lib/synthesis/traces/v2/volume";
 import {
+  exactInstants,
   resolveTraceListView,
   resolveTraceRange,
   serializeTraceCursor,
   type TraceListSearchParams,
   toTraceSummaryView,
 } from "@/lib/synthesis/traces/view";
+import { exactly } from "@/lib/views/dashboards/range";
+import { exploreTracesHref } from "@/lib/views/explore/links";
+import { dashboardsEnabled } from "../../dashboards/context";
 
 const EXPERIMENT_MODE: Readonly<Record<ExperimentMode, string>> = {
   split: "Runs in this window are split between its variants.",
@@ -76,11 +81,12 @@ export async function RunsPageV2({
     ...view.queryOptions,
     traces: traceFilterFromSearch(search, filterOptions),
   };
+  const exact = exactInstants(params);
   const distinctId = `project:${project.id}`;
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
 
-  const [page, facets, aggregate, experiments] = await Promise.all([
+  const [page, facets, aggregate, experiments, explore] = await Promise.all([
     withStatementTimeout((db) => listTraces(project.id, view.queryOptions, db), {
       operation: "trace_list",
     }),
@@ -137,6 +143,7 @@ export async function RunsPageV2({
           { operation: "trace_experiments", timeoutMs },
         ),
     }),
+    dashboardsEnabled(project.id),
   ]);
 
   // Separate reads under separate timeouts: a slow one costs only its own column.
@@ -202,6 +209,24 @@ export async function RunsPageV2({
   return (
     <RunsView
       projectId={project.id}
+      actions={
+        <>
+          {exact ? (
+            <span className="text-xs text-fg-subtle">
+              {instantLabel(exact.since)} to {instantLabel(exact.until)} UTC
+            </span>
+          ) : null}
+          {explore ? (
+            <ExploreLink
+              href={exploreTracesHref(
+                project.id,
+                search,
+                exact ? exactly(exact.since, exact.until) : view.range,
+              )}
+            />
+          ) : null}
+        </>
+      }
       now={now.toISOString()}
       timeWindow={{
         preset: view.range.preset,
@@ -260,4 +285,9 @@ function windowQuery(range: { preset: string; from: string; to: string }): strin
   return range.preset === "custom"
     ? `?range=custom&from=${range.from}&to=${range.to}`
     : `?range=${range.preset}`;
+}
+
+/** "2026-11-24 12:00": seconds only where there are some. */
+function instantLabel(at: Date): string {
+  return at.toISOString().slice(0, 19).replace("T", " ").replace(/:00$/, "");
 }

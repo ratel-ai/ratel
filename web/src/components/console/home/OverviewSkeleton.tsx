@@ -4,7 +4,7 @@ import { Skeleton } from "@ratel/design-system/states";
 import type { ReactNode } from "react";
 import { GridCells } from "@/components/console/grid/GridCells";
 import { useFocusedConsole } from "@/components/console/shell/focused-console-context";
-import { DEFAULT_LAYOUT, visibleWidgets } from "@/lib/views/overview-layout/domain/layout";
+import { UNFLAGGED_LAYOUT, visibleWidgets } from "@/lib/views/overview-layout/domain/layout";
 
 /**
  * Overview while it loads: the same header, stat row, product tiles, list
@@ -36,7 +36,7 @@ export function OverviewSkeleton() {
 function FocusedCards() {
   return (
     <div data-skeleton="focused">
-      <GridCells cards={visibleWidgets(DEFAULT_LAYOUT)}>
+      <GridCells cards={visibleWidgets(UNFLAGGED_LAYOUT)}>
         {() => <Skeleton className="h-full min-h-44 w-full rounded-lg" />}
       </GridCells>
     </div>

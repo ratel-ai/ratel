@@ -67,6 +67,51 @@ test("latency_outlier compares a tool's p95 with the project median and the abso
   );
 });
 
+test("latency_outlier states the tool's own typical call and the time really spent in it", () => {
+  // 18 calls of 5 s and 2 of 30 s: typical is 5 s, not the project's 200 ms,
+  // and the waiting is the 150 s really spent, not 20 calls at the p95.
+  const call = (i: number) =>
+    fresh()
+      .search(["match"])
+      .invoke("match")
+      .end("match", { tookMs: i < 18 ? 5_000 : 30_000 });
+  const fast = () => fresh().search(["quick"]).invoke("quick").end("quick", { tookMs: 200 });
+  const turns = signalTurns([...times(20, call), ...times(100, fast)]);
+  const [signal] = kinds(detectHealth(statsOf(turns), contextFor(turns)), "latency_outlier");
+  assert.ok(signal);
+  assert.equal(signal.metrics.toolMedianMs, 5_000);
+  assert.equal(signal.metrics.medianMs, 200, "the project median stays for the bar");
+  assert.equal(signal.impact, 150, "18 x 5 s + 2 x 30 s");
+});
+
+test("latency_outlier leaves out tools built to wait", () => {
+  const fast = () => fresh().search(["quick"]).invoke("quick").end("quick", { tookMs: 200 });
+  // A long-poll by name: slow is its job.
+  const poll = (i: number) =>
+    fresh()
+      .search(["wait_for_chat"])
+      .invoke("wait_for_chat")
+      .end("wait_for_chat", { tookMs: 15_000 + (i % 5) * 9_000 });
+  const named = signalTurns([...times(30, poll), ...times(100, fast)]);
+  assert.equal(
+    kinds(detectHealth(statsOf(named), contextFor(named)), "latency_outlier").length,
+    0,
+    "a wait tool",
+  );
+  // A timeout cap: many calls end at the same ceiling.
+  const capped = (i: number) =>
+    fresh()
+      .search(["listen"])
+      .invoke("listen")
+      .end("listen", { tookMs: i % 3 === 0 ? 60_000 : 4_000 + i });
+  const ceiling = signalTurns([...times(30, capped), ...times(100, fast)]);
+  assert.equal(
+    kinds(detectHealth(statsOf(ceiling), contextFor(ceiling)), "latency_outlier").length,
+    0,
+    "calls pile up at a cap",
+  );
+});
+
 test("dead_tool needs an old, busy ledger and agreement from the usage counters", () => {
   const turns = signalTurns(times(200, () => fresh().search(["used"]).invoke("used")));
   const catalog: CatalogEntryFact[] = ["used", "dead_a", "dead_b"].map((id) => ({

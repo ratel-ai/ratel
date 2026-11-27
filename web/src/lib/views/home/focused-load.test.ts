@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { focusedStats } from "@/components/console/home/overview-stats";
+import { metricQuery } from "@/lib/contracts/query";
 import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
 import { MOCK_HEALTH_MODEL } from "@/lib/views/health/mock-fixture";
 import {
   type FocusedReads,
+  healthCard,
   loadFocusedOverview,
   type MetricsData,
 } from "@/lib/views/home/focused-load";
@@ -79,6 +81,9 @@ const BASE: FocusedReads = {
   intents: async () => null,
   tasks: async () => null,
   dailyAggregates: async () => [],
+  alerting: async () => [],
+  alertRules: async () => ({ total: 0, on: 0, noData: 0 }),
+  dashboards: async () => ({}),
   context: async () => ({ split: null, suggestions: [], promptCacheHitRate: null }),
 };
 const ALWAYS = ["sdkLatestAt", "telemetry"];
@@ -191,8 +196,9 @@ test("a failed read costs its own widget only", async () => {
   const noHealth = (await load({ health: fail })).data;
   assert.deepEqual(noHealth.health?.card, {
     kind: "state",
+    reason: "failed",
     line: "The Health score did not load.",
-    failed: true,
+    progress: null,
   });
   assert.equal(noHealth.attention?.partial, true);
   assert.equal(labels(noHealth.metrics)[1], "Failed runs");
@@ -248,4 +254,82 @@ test("a low-confidence reading is read once, whichever widgets share it", async 
     );
     assert.equal(ran.filter((name) => name === "health").length, 1, ids.join("+"));
   }
+});
+
+test("what the traces say of an empty widget: none yet, none in this window, or some", async () => {
+  const at = (latestSpanAt: Date | null) => async () => ({
+    hasEvents: true,
+    hasSpans: latestSpanAt !== null,
+    latestEventAt: NOW,
+    latestSpanAt,
+  });
+  const seen = async (over: Partial<FocusedReads>) => (await load(over, only())).data.tracesSeen;
+  assert.equal(await seen({ telemetry: at(null) }), "none");
+  assert.equal(await seen({ telemetry: at(new Date("2026-11-04T12:00:00.000Z")) }), "before");
+  assert.equal(await seen({ telemetry: at(NOW) }), "in_window");
+  assert.equal(await seen({ telemetry: fail }), null, "unread is not none");
+});
+
+test("an empty Needs attention says whether anything was checked", async () => {
+  const clear = { ...MOCK_HEALTH_MODEL, signals: [], lockedCount: 0 };
+  const state = async (over: Partial<FocusedReads>) =>
+    (await load({ pendingRewrites: async () => 0, ...over }, only("attention"))).data.attention
+      ?.state;
+  const runs = { ...RUNS, errorCount: 0 };
+  const quiet = { traces: async () => runs, health: async () => clear };
+  assert.equal(await state(quiet), "clear");
+  const none = async () => ({ ...clear, turns: 0 });
+  assert.equal(await state({ traces: async () => NO_RUNS, health: none }), "no_data");
+  assert.equal(await state({ ...quiet, health: async () => ({ ...clear, turns: 3 }) }), "early");
+  assert.equal(await state({ ...quiet, health: none }), "early");
+  assert.equal(
+    await state({ ...quiet, health: async () => ({ ...clear, computedAt: null }) }),
+    "early",
+  );
+  assert.equal(
+    await state({ ...quiet, health: async () => ({ ...clear, lockedCount: 4 }) }),
+    "locked",
+  );
+});
+
+test("the alert rules are counted only when none fires, and a failed count is no count", async () => {
+  const counts = { total: 2, on: 1, noData: 0 };
+  const rule = {
+    id: "r1",
+    name: "Errors",
+    query: metricQuery("error_rate", "rate"),
+    operator: "above" as const,
+    threshold: 0.5,
+    lastValue: 0.6,
+    stateChangedAt: NOW,
+  };
+  const rules = async (over: Partial<FocusedReads>) => {
+    const { data, ran } = await load(over, only("alerts"));
+    assert.ok(data.alerts && data.alerts !== "failed");
+    return { rules: data.alerts.rules, counted: ran.includes("alertRules") };
+  };
+  assert.deepEqual(await rules({ alertRules: async () => counts }), {
+    rules: counts,
+    counted: true,
+  });
+  assert.deepEqual(await rules({ alertRules: fail }), { rules: null, counted: true });
+  assert.deepEqual(await rules({ alerting: async () => [rule] }), { rules: null, counted: false });
+});
+
+test("without a score, the card says which reason it is and how many turns are missing", () => {
+  const of = (over: Partial<typeof MOCK_HEALTH_MODEL>) => {
+    const card = healthCard({ ...MOCK_HEALTH_MODEL, floor: 50, ...over });
+    return card.kind === "state" ? [card.reason, card.progress] : card.kind;
+  };
+  assert.deepEqual(of({ turns: 12 }), ["too_few", { turns: 12, floor: 50 }]);
+  assert.deepEqual(of({ turns: 0 }), ["no_turns", { turns: 0, floor: 50 }]);
+  assert.deepEqual(of({ turns: 0, waitingOn: "tool_spans" }), ["no_tool_calls", null]);
+  assert.deepEqual(of({ computedAt: null }), ["first_reading", null]);
+  assert.deepEqual(of({ emptyEarlyReading: true }), ["first_reading", null]);
+  assert.deepEqual(of({ score: null }), ["no_score", null]);
+  const workflows = MOCK_HEALTH_MODEL.workflows ?? ({ items: [], unserved: [] } as never);
+  for (const blocked of ["no_tool_calls", "mixed_runs"] as const)
+    assert.deepEqual(of({ workflows: { ...workflows, blocked } }), [blocked, null]);
+  const failed = healthCard(null);
+  assert.equal(failed.kind === "state" && failed.reason, "failed");
 });

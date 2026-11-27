@@ -3,6 +3,8 @@ import { afterEach, beforeEach, test } from "node:test";
 import { composition } from "@/lib/composition";
 import LegacyBillingPage from "./page";
 
+/** A stub component for an edition slot: it renders nothing. */
+const Nothing = () => null;
 const editionUi = composition.ui;
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -26,9 +28,9 @@ test("the old /billing address is a 404 without the edition's billing page", asy
 
 test("with the edition's page but no organization to land in, it is still a 404", async () => {
   composition.ui = async () => ({
-    RootProvider: () => null,
-    AccountMenuItems: () => null,
-    OrganizationBillingPage: () => null,
+    RootProvider: Nothing,
+    AccountMenuItems: Nothing,
+    OrganizationBillingPage: Nothing,
   });
   await assert.rejects(
     LegacyBillingPage({ searchParams: Promise.resolve({}) }),

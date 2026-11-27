@@ -643,8 +643,9 @@ test("the first run reads a week, says it is early and queues the full one (RC-2
   assert.equal(full.windowDays, 90, "the follow-up reads the plan's whole window");
   const fullRun = await latestSignalRun(PROJECT_ID, db);
   assert.equal(fullRun?.trigger, "full_reading");
+  assert.ok(fullRun);
   assert.equal(
-    (fullRun?.summary as { earlyReading?: boolean }).earlyReading,
+    (fullRun.summary as { earlyReading?: boolean }).earlyReading,
     undefined,
     "the full reading is not early",
   );
@@ -658,10 +659,9 @@ test("the first run reads a week, says it is early and queues the full one (RC-2
     quick({ importRunning: async () => true }),
   );
   assert.equal(next.windowDays, 90);
-  assert.equal(
-    ((await latestSignalRun(PROJECT_ID, db))?.summary as { earlyReading?: boolean }).earlyReading,
-    undefined,
-  );
+  const nextRun = await latestSignalRun(PROJECT_ID, db);
+  assert.ok(nextRun);
+  assert.equal((nextRun.summary as { earlyReading?: boolean }).earlyReading, undefined);
 });
 
 test("a full-window reading made while an import still runs stays early, and waits for the import (RC-224)", async () => {
@@ -678,10 +678,9 @@ test("a full-window reading made while an import still runs stays early, and wai
   await computeProjectTraceSignals(PROJECT_ID, { trigger: "first_build" }, deps);
   const full = await computeProjectTraceSignals(PROJECT_ID, { trigger: "full_reading" }, deps);
   assert.equal(full.windowDays, 90);
-  assert.equal(
-    ((await latestSignalRun(PROJECT_ID, db))?.summary as { earlyReading?: boolean }).earlyReading,
-    true,
-  );
+  const fullRun = await latestSignalRun(PROJECT_ID, db);
+  assert.ok(fullRun);
+  assert.equal((fullRun.summary as { earlyReading?: boolean }).earlyReading, true);
   assert.deepEqual(
     queued,
     [PROJECT_ID],
@@ -745,7 +744,8 @@ test("each reading stores its Health score, and the page reads it with the chang
     jobDeps(db, NOW, [], { storeHealthScore }),
   );
   const first = await latestSignalRun(PROJECT_ID, db);
-  const stored = (first?.summary as { healthScore?: { version: number; value: number } })
+  assert.ok(first);
+  const stored = (first.summary as { healthScore?: { version: number; value: number } })
     .healthScore;
   assert.equal(stored?.version, HEALTH_SCORE_VERSION);
   assert.ok(stored && stored.value > 0 && stored.value < 100, "the problem fixtures cost points");

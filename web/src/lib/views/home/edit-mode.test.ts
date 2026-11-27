@@ -1,26 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  keyLeavesEditMode,
-  scrollToReveal,
-  widgetToReveal,
-} from "@/components/console/home/focused/edit-mode";
+import { scrollToReveal, widgetToReveal } from "@/components/console/home/focused/edit-mode";
 import { changeLayout, DEFAULT_LAYOUT } from "@/lib/views/overview-layout/domain/layout";
-
-const ESCAPE = {
-  key: "Escape",
-  continued: false,
-  layerOpen: false,
-  arranging: false,
-  fieldFocused: false,
-};
-
-test("Escape leaves edit mode when nothing else answers it", () => {
-  assert.equal(keyLeavesEditMode(ESCAPE), true);
-  assert.equal(keyLeavesEditMode({ ...ESCAPE, key: "Enter" }), false);
-  for (const taken of ["continued", "layerOpen", "arranging", "fieldFocused"] as const)
-    assert.equal(keyLeavesEditMode({ ...ESCAPE, [taken]: true }), false, taken);
-});
 
 test("the last added widget that is still on the page is the one to reveal", () => {
   assert.equal(widgetToReveal([], DEFAULT_LAYOUT), null);

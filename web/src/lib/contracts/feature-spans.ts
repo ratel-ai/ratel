@@ -17,7 +17,11 @@ export type FeatureName =
   | "admin_mcp"
   | "agents_pages"
   | "tool_run_insights"
-  | "hosted_apis";
+  | "hosted_apis"
+  | "scorers"
+  | "alerts"
+  | "explore"
+  | "rql";
 
 export type FeatureSpanOptions = {
   attributes?: Attributes;

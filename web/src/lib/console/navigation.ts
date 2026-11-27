@@ -31,12 +31,23 @@ export interface NavItem {
   keywords?: readonly string[];
   /** The rail item to select when this destination matches. Defaults to this item's id. */
   activeId?: string;
-  /** The rail section it sits in; the rail leaves a gap between sections. Absent means `main`. */
-  section?: "settings" | "edition" | `group:${string}`;
+  /**
+   * The rail section it sits in; the rail leaves a gap between sections. Absent means `main`.
+   * `footer` items leave the scrolling list: they are pinned at the rail's foot, above the account.
+   */
+  section?: "settings" | "footer" | "edition" | `group:${string}`;
   /** The section's heading, on its first item (an edition's project group). */
   sectionLabel?: string;
   /** Sub-pages folded under this item; its own href is the group's landing page. */
   children?: readonly NavItem[];
+}
+
+/** The rail's scrolling list and its pinned footer, each in rail order. */
+export function railParts(items: readonly NavItem[]): { list: NavItem[]; footer: NavItem[] } {
+  return {
+    list: items.filter((item) => item.section !== "footer"),
+    footer: items.filter((item) => item.section === "footer"),
+  };
 }
 
 /** Every item, children included, in rail order. */
@@ -85,6 +96,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   focusedConsole = false,
+  customMonitoring = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -104,6 +116,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
+  /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
+  customMonitoring?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -351,6 +365,21 @@ export function consoleNav({
             ),
           ),
         {
+          id: "mcp-setup",
+          label: "MCP",
+          href: `${root}/mcp-setup`,
+          icon: "integrations",
+          keywords: [
+            "mcp",
+            "connect",
+            "claude",
+            "cursor",
+            "model context protocol",
+            "integrations",
+          ],
+          section: "footer",
+        },
+        {
           id: "settings",
           label: "Settings",
           href: `${root}/settings`,
@@ -381,7 +410,9 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole }) : core),
+    ...(root
+      ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole, customMonitoring })
+      : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -397,14 +428,18 @@ export function consoleNav({
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
- * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
+ * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
+ * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the list, unlabelled; MCP sits in the footer.
  */
 function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  { entityPages, focusedConsole }: { entityPages: boolean; focusedConsole: boolean },
+  {
+    entityPages,
+    focusedConsole,
+    customMonitoring,
+  }: { entityPages: boolean; focusedConsole: boolean; customMonitoring: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -483,15 +518,62 @@ function stageRailNav(
         ],
       }
     : classicTraces;
+  const overview = pick("overview");
   return [
-    ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
+    ...stage(
+      "monitor",
+      "Monitor",
+      customMonitoring
+        ? withMonitoringPages(root, { overview, health, traces })
+        : [overview, health, traces],
+    ),
     ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
+    pick("mcp-setup"),
     pick("settings"),
+  ];
+}
+
+/**
+ * Monitor with the `customMonitoring` pages, each an item of its own: they are destinations as much as
+ * the pages beside them. Overview gives up `/dashboards`, which is then a page and not an old address.
+ */
+function withMonitoringPages(
+  root: string,
+  { overview, health, traces }: { overview: NavItem; health: NavItem; traces: NavItem },
+): NavItem[] {
+  const dashboards: NavItem = {
+    id: "dashboards",
+    label: "Dashboards",
+    href: `${root}/dashboards`,
+    icon: "dashboards",
+    // A scorer has no list page: it is picked where it is used. One scorer's page lights Dashboards.
+    also: [`${root}/scorers`],
+    keywords: ["dashboards", "widgets", "charts", "metrics", "scorers", "scores", "judge"],
+  };
+  return [
+    { ...overview, also: overview.also?.filter((path) => path !== dashboards.href) },
+    dashboards,
+    {
+      id: "explore",
+      label: "Explore",
+      href: `${root}/explore`,
+      icon: "explore",
+      keywords: ["query", "analyze", "playground", "charts", "funnel", "flow"],
+    },
+    health,
+    traces,
+    {
+      id: "alerts",
+      label: "Alerts",
+      href: `${root}/alerts`,
+      icon: "alerts",
+      keywords: ["threshold", "notifications", "slack", "monitors"],
+    },
   ];
 }
 

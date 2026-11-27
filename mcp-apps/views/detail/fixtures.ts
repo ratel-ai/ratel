@@ -1,10 +1,14 @@
 import {
+  alertDetail,
+  alerts,
   fixDetail,
   fixes,
   intentDetail,
   intents,
   projectOverview,
   projects,
+  scorerDetail,
+  scorers,
   sdkEventDetail,
   sdkEvents,
   skillDetail,
@@ -91,6 +95,18 @@ const fixtures: ViewFixtures = {
     tool: "get_project_overview",
     result: okResult(projectOverview(project, false), windowed),
   },
+  get_scorer: { tool: "get_scorer", result: okResult(scorerDetail(scorers(2)[0])) },
+  "get_scorer · dense": {
+    tool: "get_scorer",
+    result: okResult(scorerDetail(scorers(2)[1], 25)),
+  },
+  "get_scorer · empty": {
+    tool: "get_scorer",
+    result: okResult(scorerDetail({ ...scorers(1)[0], result: "" }, 0)),
+  },
+  get_alert: { tool: "get_alert", result: okResult(alertDetail(alerts(1)[0])) },
+  "get_alert · dense": { tool: "get_alert", result: okResult(alertDetail(alerts(2)[0], 25)) },
+  "get_alert · empty": { tool: "get_alert", result: okResult(alertDetail(alerts(3)[2], 0)) },
 };
 
 export default fixtures;

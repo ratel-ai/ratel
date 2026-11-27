@@ -1,0 +1,46 @@
+import {
+  supplementaryReadTimeoutMs,
+  withStatementTimeout,
+} from "@/lib/platform/db/statement-timeout";
+import { loadOrFallback } from "@/lib/platform/resilient-read";
+import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
+import {
+  EMPTY_TRACE_FILTER_FACETS,
+  getTraceFilterFacets,
+} from "@/lib/synthesis/traces/trace-filters";
+import {
+  loadScorerPicker,
+  type ScorerPickerData,
+  UNREAD_SCORERS,
+} from "@/lib/views/scorers/picker";
+
+/** What the widget fields offer: the filter values of the range, and the scorer picker (null while scorers are off). */
+export async function loadWidgetForm(
+  projectId: string,
+  range: { since: Date; until?: Date },
+  features: MetricFeatures,
+) {
+  const distinctId = `project:${projectId}`;
+  const [facets, scorers] = await Promise.all([
+    loadOrFallback({
+      operation: "dashboard_facets",
+      distinctId,
+      fallback: EMPTY_TRACE_FILTER_FACETS,
+      load: () =>
+        withStatementTimeout(
+          (db) => getTraceFilterFacets(projectId, range, db, undefined, { entities: true }),
+          { operation: "dashboard_facets", timeoutMs: supplementaryReadTimeoutMs() },
+        ),
+    }),
+    features.customMonitoring
+      ? loadOrFallback<ScorerPickerData>({
+          operation: "dashboard_scorers",
+          distinctId,
+          // A failed read says so, not scorers off and not an empty project.
+          fallback: UNREAD_SCORERS,
+          load: () => loadScorerPicker(projectId),
+        })
+      : null,
+  ]);
+  return { facets, scorers };
+}

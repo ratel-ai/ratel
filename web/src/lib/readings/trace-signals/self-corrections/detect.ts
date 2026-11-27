@@ -103,6 +103,15 @@ export const ASKED_AGAIN_MAX_GAP_MS = getConfig().traceSignals.askedAgainGapMs;
  */
 export const ASKED_AGAIN_MIN_TEXT_JACCARD = getConfig().traceSignals.askedAgainTextJaccard;
 
+/**
+ * Content words (`tokenize`) an ask needs before two of them can be compared.
+ * A reply like "sì", "ok grazie" or a bare site name answers whatever the agent
+ * just asked, so two equal replies in a row are two answers, not one ask
+ * repeated: on one WhatsApp agent such replies made every `asked_again` card
+ * false. Config `traceSignals.askedAgainMinWords`, default 3.
+ */
+export const ASKED_AGAIN_MIN_ASK_WORDS = getConfig().traceSignals.askedAgainMinWords;
+
 export interface SelfCorrection {
   kind: SelfCorrectionKind;
   /** 1-based ordinal, in this turn, of the step that shows it (see the kinds above). */
@@ -241,7 +250,8 @@ export function detectInTurn(
 /**
  * Whether two asks in the users' own words are the same: equal once case and
  * spacing are normalized, or sharing at least `threshold` of their content
- * words. Null when either is empty.
+ * words. Null when either is empty or too short to be an ask
+ * ({@link ASKED_AGAIN_MIN_ASK_WORDS}).
  */
 export function sameAskText(
   a: string | null | undefined,
@@ -251,8 +261,13 @@ export function sameAskText(
   const left = normalizeAsk(a ?? "");
   const right = normalizeAsk(b ?? "");
   if (left === "" || right === "") return null;
+  const leftWords = new Set(tokenize(left));
+  const rightWords = new Set(tokenize(right));
+  if (leftWords.size < ASKED_AGAIN_MIN_ASK_WORDS || rightWords.size < ASKED_AGAIN_MIN_ASK_WORDS) {
+    return null;
+  }
   if (left === right) return true;
-  return jaccard(new Set(tokenize(left)), new Set(tokenize(right))) >= threshold;
+  return jaccard(leftWords, rightWords) >= threshold;
 }
 
 /** Two searches can be compared when both carry a query hash, or both list hits. */

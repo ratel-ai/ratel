@@ -280,8 +280,8 @@ test("the user's own words decide when both turns carry them", () => {
   const { ta, tb } = pair(2 * 60_000, roadmap, { hits: ["create_task"], query: "something else" });
   assert.equal(
     askedAgain(
-      { ...ta, askText: "Find the Q3 roadmap review" },
-      { ...tb, askText: "  find the q3   ROADMAP review " },
+      { ...ta, askText: "Find the Q3 roadmap review doc" },
+      { ...tb, askText: "  find the q3   ROADMAP review doc " },
       trusted,
     ),
     true,
@@ -289,15 +289,15 @@ test("the user's own words decide when both turns carry them", () => {
   const same = pair(2 * 60_000, roadmap, roadmap);
   assert.equal(
     askedAgain(
-      { ...same.ta, askText: "find the Q3 roadmap review" },
-      { ...same.tb, askText: "change the priority of the Q3 roadmap review" },
+      { ...same.ta, askText: "find the Q3 roadmap review doc" },
+      { ...same.tb, askText: "change the priority of the Q3 roadmap review doc" },
       trusted,
     ),
     false,
     "a follow-up on the same object is a new need, whatever the searches say",
   );
   assert.equal(
-    askedAgain({ ...same.ta, askText: "find the Q3 roadmap review" }, same.tb, trusted),
+    askedAgain({ ...same.ta, askText: "find the Q3 roadmap review doc" }, same.tb, trusted),
     true,
     "text on one side only: the searches decide",
   );
@@ -313,11 +313,32 @@ test("sameAskText: normalized equality, or most content words shared", () => {
     true,
   );
   assert.equal(
-    sameAskText("find the Q3 roadmap review", "change the priority of the Q3 roadmap review"),
+    sameAskText(
+      "find the Q3 roadmap review doc",
+      "change the priority of the Q3 roadmap review doc",
+    ),
     false,
   );
   assert.equal(sameAskText("", "anything"), null, "an empty ask cannot be compared");
   assert.equal(sameAskText("   ", "   "), null);
+});
+
+test("sameAskText: a one- or two-word reply cannot show an ask repeated", () => {
+  // WhatsApp-style confirmations answer a new question each time: two "sì" in a
+  // row are two answers, not the same ask twice.
+  assert.equal(sameAskText("sì", "sì"), null);
+  assert.equal(sameAskText("conferma", "conferma"), null);
+  assert.equal(sameAskText("ok grazie", "ok grazie"), null);
+  assert.equal(
+    sameAskText("San Pietro 12", "San Pietro 12"),
+    null,
+    "a bare name is a reply, not an ask",
+  );
+  assert.equal(
+    sameAskText("export the board as pdf", "export the board as pdf"),
+    true,
+    "three content words are enough",
+  );
 });
 
 // --- sessions and trust -------------------------------------------------------

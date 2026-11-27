@@ -78,6 +78,7 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
+  customMonitoring: "FF_CUSTOM_MONITORING",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -89,6 +90,7 @@ const SHARE_FLOORS: ReadonlySet<string> = new Set([
   "sequence_chain.minConditional",
   "sequence_chain.dependencyShare",
   "sequence_chain.workflowViaSearch",
+  "sequence_chain.alwaysShare",
   "sibling_confusion.minCoHitShare",
   "sibling_confusion.minSplit",
   "error_loop.minLow",
@@ -125,7 +127,11 @@ const CONFIG_SCHEMA = schema({
     publicUrl: optional("APP_PUBLIC_URL", trimmed),
     environment: setting("APP_ENV", trimmed, D.app.environment),
     organizationName: optional("RATEL_ORG_NAME", trimmed),
-    role: setting("APP_ROLE", z.preprocess(lower, z.enum(["all", "api", "worker"])), D.app.role),
+    role: setting(
+      "APP_ROLE",
+      z.preprocess(lower, z.enum(["all", "api", "worker", "ingest", "persist"])),
+      D.app.role,
+    ),
   },
   /** Open-source edition only: every experimental flag on. */
   experimentalFeatures: setting("RATEL_EXPERIMENTAL_FEATURES", flagValue, D.experimentalFeatures),
@@ -154,6 +160,11 @@ const CONFIG_SCHEMA = schema({
     /** Unset: on for the open-source edition, off for the others. */
     migrateOnBoot: optional("DATABASE_MIGRATE_ON_BOOT", flagValue),
     migrationsDir: optional("MIGRATIONS_DIR", trimmed),
+    /**
+     * The database RQL queries run on (a read replica, or a user of its own); unset, `url`. RQL
+     * always has a small pool of its own, so it never takes a connection of the primary pool.
+     */
+    rqlUrl: optional("RQL_DATABASE_URL", trimmed, { sensitive: true }),
   },
   jobs: {
     /** Unset: in process for the open-source edition, external for the others. */
@@ -168,6 +179,16 @@ const CONFIG_SCHEMA = schema({
     ),
     importsRunInWorker: setting("IMPORTS_RUN_IN_WORKER", one, D.jobs.importsRunInWorker),
     dataRetention: setting("DATA_RETENTION_ENABLED", one, D.jobs.dataRetention),
+  },
+  secrets: {
+    /** Seals the secrets the app reads back (`lib/platform/secret-box.ts`); unset, none is stored. */
+    key: optional("RATEL_SECRET_KEY", configured.pipe(z.string().min(32).optional()), {
+      sensitive: true,
+    }),
+  },
+  slack: {
+    /** Where Slack's consent page and API are: another address for GovSlack. */
+    url: setting("SLACK_URL", trimmed.pipe(z.url({ protocol: /^https?$/ })), D.slack.url),
   },
   logging: {
     /** Unset: `debug` in development, else `info`. */
@@ -241,11 +262,29 @@ const CONFIG_SCHEMA = schema({
     ),
     /** Stored raw OTLP bytes one project may add per UTC day; 0 stores nothing. */
     otlpRawDailyBytes: setting("OTLP_RAW_DAILY_BYTES", nonNegativeInt, D.ingest.otlpRawDailyBytes),
+    /** A DB-IP Lite file (MMDB): resolves IP addresses to a country and a region. Unset, they are not. */
+    geoDatabasePath: optional("GEO_DATABASE_PATH", trimmed),
     otlpRawRetentionDays: setting(
       "OTLP_RAW_RETENTION_DAYS",
       positive,
       D.ingest.otlpRawRetentionDays,
     ),
+    /** Queue accepted batches and persist them from workers (RTL-314, `lib/ingest/queue`). */
+    experimentalQueue: setting("EXPERIMENTAL_INGEST_QUEUE", one, D.ingest.experimentalQueue),
+    /** Batches one project may have persisting at once, across every process. 0 turns the cap off. */
+    persistPerProject: setting(
+      "INGEST_PERSIST_PER_PROJECT",
+      nonNegativeInt,
+      D.ingest.persistPerProject,
+    ),
+    /** Batches one process persists at once. */
+    persistConcurrency: setting(
+      "INGEST_PERSIST_CONCURRENCY",
+      positiveInt,
+      D.ingest.persistConcurrency,
+    ),
+    /** Tries before a batch is marked failed. */
+    batchMaxAttempts: setting("INGEST_BATCH_MAX_ATTEMPTS", positiveInt, D.ingest.batchMaxAttempts),
   },
   anthropic: {
     /** `bedrock`, or unset for the API; any other value turns Claude off. */
@@ -340,6 +379,12 @@ const CONFIG_SCHEMA = schema({
       share,
       D.traceSignals.askedAgainTextJaccard,
     ),
+    askedAgainMinWords: setting(
+      "TRACE_SIGNALS_ASKED_AGAIN_MIN_WORDS",
+      positiveInt,
+      D.traceSignals.askedAgainMinWords,
+    ),
+    fanOutGapMs: setting("TRACE_SIGNALS_FAN_OUT_GAP_MS", nonNegative, D.traceSignals.fanOutGapMs),
     pairToolMinTurns: setting(
       "TRACE_SIGNALS_PAIR_TOOL_MIN_TURNS",
       positiveCount,

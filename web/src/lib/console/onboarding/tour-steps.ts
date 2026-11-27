@@ -22,7 +22,7 @@
  * Agent health's anchor, `data-tour="agent-health"`, is rendered by the rail
  * only while the `cloud-agent-health` flag is on, so the flag gates the step
  * with no second check here; until the rail renders it, the step is simply
- * dropped. Agent health is a top-level project entry right under Overview, so
+ * dropped. Agent health is a top-level project entry in Monitor, so
  * its row is on screen wherever the tour runs (a folded entry would be
  * skipped, see `isSpotlightable`).
  */
@@ -54,7 +54,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: "agent-health",
     target: "agent-health",
     title: "Agent health: what your agent gets wrong",
-    body: "Right under Overview. It reads your agent's own traces and names what trips it up: detours, tools that crowd out the right one, and what in your catalog to change.",
+    body: "It reads your agent's own traces and names what trips it up: detours, tools that crowd out the right one, and what in your catalog to change.",
     placement: "right",
   },
   {

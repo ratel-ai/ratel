@@ -30,10 +30,17 @@ import type {
 } from "@/lib/synthesis/traces/queries";
 import { resolveTraceListView } from "@/lib/synthesis/traces/view";
 import { createDrizzleAgentStore } from "@/lib/views/agents/adapters/drizzle-store";
+import type { AlertingRule, AlertRuleCounts } from "@/lib/views/alerts/types";
 import { pageGap } from "@/lib/views/health/data-gaps-model";
 import { type IssueCategory, issueCategories } from "@/lib/views/health/issue-categories";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
+import { alertsWidget, type FocusedAlerts } from "@/lib/views/home/alerting";
 import type { Attention } from "@/lib/views/home/attention";
+import {
+  type DashboardItems,
+  type DashboardItemsRange,
+  readDashboardItems,
+} from "@/lib/views/home/dashboard-items";
 import {
   type FixesSlice,
   type IntentsRead,
@@ -62,6 +69,8 @@ import {
   latestEventAt,
   newest,
   type OverviewReadScope,
+  readAlerting,
+  readAlertRuleCounts,
   readDailyAggregates,
   readDailyTraces,
   readFixes,
@@ -80,7 +89,9 @@ import {
   type SdkDay,
 } from "@/lib/views/home/overview-reads";
 import {
+  type DashboardItemId,
   DEFAULT_LAYOUT,
+  isDashboardItem,
   type OverviewLayout,
   visibleWidgets,
 } from "@/lib/views/overview-layout/domain/layout";
@@ -105,7 +116,26 @@ export type HealthCard =
       /** The points each level of the score costs. */
       lost: readonly Pick<IssueCategory, "level" | "label" | "lost">[];
     }
-  | { kind: "state"; line: string; failed: boolean };
+  | {
+      kind: "state";
+      reason: NoScoreReason;
+      line: string;
+      /** How far the turns are, where more of them give a score. */
+      progress: { turns: number; floor: number } | null;
+    };
+
+/** Why there is no score. More traces alone resolve only `no_turns` and `too_few`. */
+export type NoScoreReason =
+  | "failed"
+  | "no_turns"
+  | "too_few"
+  | "first_reading"
+  | "no_tool_calls"
+  | "mixed_runs"
+  | "no_score";
+
+/** The project's traces against the window: none ever, only before it, or in it. */
+export type TracesSeen = "none" | "before" | "in_window";
 
 export interface FocusedHealth {
   href: string;
@@ -124,13 +154,23 @@ export interface FocusedAttention extends Attention {
   healthHref: string;
   /** Some of what it checks could not be read: an empty list is then not "nothing". */
   partial: boolean;
+  /** What an empty list means. */
+  state: AttentionState;
 }
+
+/**
+ * `clear`: checked, and nothing needs a person. `early`: Agent health has no whole reading yet.
+ * `no_data`: nothing arrived in the window. `locked`: the plan hides the issues there are.
+ */
+export type AttentionState = "clear" | "early" | "no_data" | "locked";
 
 export interface FocusedOverviewContext {
   split: ContextSplit | null;
   suggestions: Suggestion[];
   promptCacheHitRate: number | null;
 }
+
+export type { FocusedAlerts };
 
 /** A widget whose read failed. */
 export type Failed = "failed";
@@ -145,12 +185,17 @@ export interface FocusedOverviewData {
   telemetryRead: boolean;
   /** False only when nothing has ever arrived: the page is the setup guide. */
   hasTelemetry: boolean;
+  /** Null when it could not be read. */
+  tracesSeen: TracesSeen | null;
   layout: OverviewLayout;
   /** Each widget is null when it is removed. */
   metrics: MetricsData | Failed | null;
   topology: Topology | Failed | null;
   health: FocusedHealth | null;
   attention: FocusedAttention | null;
+  alerts: FocusedAlerts | Failed | null;
+  /** The dashboard widgets on the Overview, by entry. Null when there is none. */
+  dashboards: DashboardItems | Failed | null;
   /** Null unless the Panel is open and its read came back. */
   context: FocusedOverviewContext | null;
 }
@@ -175,6 +220,14 @@ export interface FocusedReads {
   intents: (at: OverviewReadScope) => Promise<IntentsRead | null>;
   tasks: (at: OverviewReadScope) => Promise<TasksRead | null>;
   dailyAggregates: (at: OverviewReadScope) => Promise<DailyAggregateRow[]>;
+  alerting: (at: OverviewReadScope) => Promise<AlertingRule[]>;
+  /** Read only when no rule alerts. */
+  alertRules: (at: OverviewReadScope) => Promise<AlertRuleCounts>;
+  dashboards: (
+    at: OverviewReadScope,
+    ids: readonly DashboardItemId[],
+    range: DashboardItemsRange,
+  ) => Promise<DashboardItems>;
   context: (at: OverviewReadScope, days: readonly string[]) => Promise<FocusedOverviewContext>;
 }
 
@@ -207,6 +260,7 @@ export async function loadFocusedOverview({
   db?: OverviewReadScope["db"];
 }): Promise<FocusedOverviewData> {
   const { range } = resolveTraceListView({ range: overviewRangeParam(window) }, now);
+  const rangeParam = overviewRangeParam(window);
   const windowDays = parseWindowDays(String(window), limits.agentHealthWindowDays);
   const scope: OverviewReadScope = {
     projectId: project.id,
@@ -242,17 +296,34 @@ export async function loadFocusedOverview({
   const ifVisible = <T>(id: OverviewLayout[number]["id"], load: () => Promise<T>) =>
     widgets.has(id) ? load() : null;
 
-  const [telemetry, sdkLatestAt, metrics, topology, health, attention, context] = await Promise.all(
-    [
-      read("telemetry", (run) => run(scope)),
-      read("sdkLatestAt", (run) => run(scope)),
-      ifVisible("metrics", metricsWidget),
-      ifVisible("topology", () => read("topology", (run) => run(scope))),
-      ifVisible("health", healthWidget),
-      ifVisible("attention", attentionWidget),
-      contextOpen ? read("context", (run) => run(scope, range.days)) : null,
-    ],
-  );
+  const items = [...widgets].filter(isDashboardItem);
+  const { preset, from, to } = range;
+
+  const [
+    telemetry,
+    sdkLatestAt,
+    metrics,
+    topology,
+    health,
+    attention,
+    alerts,
+    dashboards,
+    context,
+  ] = await Promise.all([
+    read("telemetry", (run) => run(scope)),
+    read("sdkLatestAt", (run) => run(scope)),
+    ifVisible("metrics", metricsWidget),
+    ifVisible("topology", () => read("topology", (run) => run(scope))),
+    ifVisible("health", healthWidget),
+    ifVisible("attention", attentionWidget),
+    ifVisible("alerts", alertsData),
+    items.length === 0
+      ? null
+      : read("dashboards", (run) =>
+          run(scope, items, { preset: preset === "custom" ? rangeParam : preset, from, to }),
+        ),
+    contextOpen ? read("context", (run) => run(scope, range.days)) : null,
+  ]);
   const lastEventAt = newest(
     telemetry === FAILED ? null : latestEventAt(telemetry),
     sdkLatestAt === FAILED ? null : sdkLatestAt,
@@ -266,11 +337,14 @@ export async function loadFocusedOverview({
     lastEventAt,
     telemetryRead,
     hasTelemetry: !telemetryRead || lastEventAt !== null,
+    tracesSeen: telemetry === FAILED ? null : tracesSeen(telemetry, range.since),
     layout,
     metrics,
     topology: topology === FAILED ? "failed" : topology,
     health,
     attention,
+    alerts,
+    dashboards: dashboards === FAILED ? "failed" : dashboards,
     context: context === FAILED ? null : context,
   };
 
@@ -320,6 +394,13 @@ export async function loadFocusedOverview({
     };
   }
 
+  async function alertsData(): Promise<FocusedAlerts | Failed> {
+    const rules = await read("alerting", (run) => run(scope));
+    if (rules === FAILED) return "failed";
+    const counts = rules.length > 0 ? null : await read("alertRules", (run) => run(scope));
+    return alertsWidget(project.id, rules, counts === FAILED ? null : counts, now);
+  }
+
   async function attentionWidget(): Promise<FocusedAttention> {
     const fixesRead = read("fixes", (run) => run(scope));
     const [traces, health, fixes, pendingRewrites, intents, tasks, aggregates] = await Promise.all([
@@ -335,24 +416,28 @@ export async function loadFocusedOverview({
       read("dailyAggregates", (run) => run(scope)),
     ]);
     const dashboard = buildDashboardModel(aggregates === FAILED ? [] : aggregates, [...range.days]);
+    const attention = overviewAttention({
+      projectId: project.id,
+      window,
+      traces: orNull(traces),
+      health: health === FAILED ? applyPlanLimits(pendingHealthModel(windowDays), limits) : health,
+      healthWindow: windowDays,
+      fixes: orNull(fixes),
+      pendingRewrites: orNull(pendingRewrites),
+      tasks: tasksGlance(project.id, tasks === FAILED ? READ_FAILED : tasks),
+      unanswered: intentsGlance(project.id, intents === FAILED ? READ_FAILED : intents).unanswered,
+      contextSuggestions: buildSuggestions(dashboard),
+      contextSplit: buildContextSplit(dashboard),
+    });
     return {
-      ...overviewAttention({
-        projectId: project.id,
-        window,
-        traces: orNull(traces),
-        health:
-          health === FAILED ? applyPlanLimits(pendingHealthModel(windowDays), limits) : health,
-        healthWindow: windowDays,
-        fixes: orNull(fixes),
-        pendingRewrites: orNull(pendingRewrites),
-        tasks: tasksGlance(project.id, tasks === FAILED ? READ_FAILED : tasks),
-        unanswered: intentsGlance(project.id, intents === FAILED ? READ_FAILED : intents)
-          .unanswered,
-        contextSuggestions: buildSuggestions(dashboard),
-        contextSplit: buildContextSplit(dashboard),
-      }),
+      ...attention,
       healthHref: agentHealthHref(project.id, windowDays),
       partial: [traces, health, pendingRewrites, intents, tasks, aggregates].includes(FAILED),
+      state: attentionState(
+        attention,
+        health === FAILED ? null : health,
+        (traces !== FAILED && traces.count > 0) || (aggregates !== FAILED && aggregates.length > 0),
+      ),
     };
   }
 }
@@ -370,16 +455,17 @@ export function withoutLowConfidence(model: HealthPageModel): HealthPageModel {
 
 /** The score as Agent health shows it, or in one line why there is none. Null: the read failed. */
 export function healthCard(model: HealthPageModel | null): HealthCard {
-  if (!model) return state("The Health score did not load.", true);
+  if (!model) return state("failed", "The Health score did not load.");
   const ready = healthReadiness(model) === "ready";
   if (ready && (model.computedAt === null || model.emptyEarlyReading))
-    return state("Your first reading is being built.");
+    return state("first_reading", "Your first reading is being built.");
   if (ready) {
     const gap = pageGap(model);
-    if (gap === "no_tool_calls") return state("No score yet: no tool calls are recorded.");
+    if (gap === "no_tool_calls")
+      return state("no_tool_calls", "No score yet: no tool calls are recorded.");
     if (gap === "mixed_runs")
-      return state("No score yet: runs are mixed together without turn ids.");
-    if (!model.score) return state("This reading has no score.");
+      return state("mixed_runs", "No score yet: runs are mixed together without turn ids.");
+    if (!model.score) return state("no_score", "This reading has no score.");
     return {
       kind: "score",
       score: model.score,
@@ -393,9 +479,25 @@ export function healthCard(model: HealthPageModel | null): HealthCard {
     };
   }
   if (model.turns > 0)
-    return state(`Too few turns: ${model.turns} of the ${model.floor} a score needs.`);
-  if (model.waitingOn === "tool_spans") return state("Collecting: no tool calls have arrived yet.");
-  return state("Collecting: no turns in this window yet.");
+    return state("too_few", `Too few turns: ${model.turns} of the ${model.floor} a score needs.`, {
+      turns: model.turns,
+      floor: model.floor,
+    });
+  if (model.waitingOn === "tool_spans")
+    return state("no_tool_calls", "Collecting: no tool calls have arrived yet.");
+  return state("no_turns", "Collecting: no turns in this window yet.", {
+    turns: 0,
+    floor: model.floor,
+  });
+}
+
+/** By the newest span: no read of its own. */
+export function tracesSeen(
+  { hasSpans, latestSpanAt }: Pick<TracesIngestDiagnostics, "hasSpans" | "latestSpanAt">,
+  since: Date,
+): TracesSeen {
+  if (!hasSpans || latestSpanAt === null) return "none";
+  return latestSpanAt < since ? "before" : "in_window";
 }
 
 /** The pool's reads. */
@@ -431,6 +533,9 @@ export const FOCUSED_READS: FocusedReads = {
   intents: readIntentsGlance,
   tasks: readTasksGlance,
   dailyAggregates: readDailyAggregates,
+  alerting: readAlerting,
+  alertRules: readAlertRuleCounts,
+  dashboards: readDashboardItems,
   context: async (at, days) => {
     const [daily, cache] = await Promise.all([readDailyAggregates(at), readPromptCache(at)]);
     const dashboard = buildDashboardModel(daily, [...days]);
@@ -452,10 +557,25 @@ function once<T>(load: () => Promise<T>): () => Promise<T> {
   };
 }
 
+function attentionState(
+  { items, moreIssues }: Attention,
+  health: HealthPageModel | null,
+  arrived: boolean,
+): AttentionState {
+  if (items.length === 0 && moreIssues > 0) return "locked";
+  if (!arrived && (health?.turns ?? 0) === 0) return "no_data";
+  const card = healthCard(health);
+  return card.kind === "state" && card.reason !== "no_score" ? "early" : "clear";
+}
+
 function orNull<T>(value: Read<T>): T | null {
   return value === FAILED ? null : value;
 }
 
-function state(line: string, failed = false): HealthCard {
-  return { kind: "state", line, failed };
+function state(
+  reason: NoScoreReason,
+  line: string,
+  progress: Extract<HealthCard, { kind: "state" }>["progress"] = null,
+): HealthCard {
+  return { kind: "state", reason, line, progress };
 }

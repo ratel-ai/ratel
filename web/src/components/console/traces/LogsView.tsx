@@ -13,6 +13,7 @@ import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { TabSummary } from "@/components/console/traces-sessions/TabSummary";
+import { TRACES_DOCS } from "@/lib/console/docs-links";
 import { formatAttributeValue } from "@/lib/synthesis/traces/format";
 import type { TraceFacetValue } from "@/lib/synthesis/traces/queries";
 import { withCursor, withoutCursor, withoutFilters } from "@/lib/synthesis/traces/v2/filters";
@@ -24,7 +25,6 @@ import { useTraceNavigation } from "./navigation";
 import { ListFooter } from "./RunsTable";
 import { SpanAttributesList } from "./SpanInspector";
 import { TraceFilterBar } from "./TraceFilterBar";
-import { TRACES_DOCS } from "./TracesEmpty";
 import { type TimeWindow, TracesHeader } from "./TracesHeader";
 
 /** A log row as the page sends it: dates as ISO strings. */

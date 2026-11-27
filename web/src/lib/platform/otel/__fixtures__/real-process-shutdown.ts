@@ -1,7 +1,7 @@
 // Fixture for shutdown.process.test.ts — NOT a test file (no `.test.ts`).
 //
 // Installs the app's real termination handlers on the real `process`, exactly as
-// instrumentation.node.ts does in the deployed container (with NEXT_MANUAL_SIG_HANDLE=1
+// instrumentation-node.ts does in the deployed container (with NEXT_MANUAL_SIG_HANDLE=1
 // so Next registers none of its own). It then keeps the event loop alive, so the
 // ONLY way this process can terminate is through our signal handler. The parent
 // test sends a real SIGTERM/SIGINT and asserts the flush ran, then the process
