@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true, sandboxes: true, evals: true });
+const operations = assembleOperations({ focusedConsole: true, evals: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -204,7 +204,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
-  // Ratel sandbox (decision `mcp-surface`), behind the `sandboxes` flag. sandbox_run starts a VM run.
+  // Ratel sandbox (decision `mcp-surface`), behind the `evals` flag. sandbox_run starts a VM run.
   ["sandbox_list", false],
   ["sandbox_get_version", false],
   ["sandbox_run", true],

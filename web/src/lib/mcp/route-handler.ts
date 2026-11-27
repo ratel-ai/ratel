@@ -21,7 +21,6 @@ import {
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
 import { focusedConsoleForCaller } from "@/lib/mcp/operations/overview";
-import { sandboxesForCaller } from "@/lib/mcp/operations/sandboxes";
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpOrigin, mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
@@ -115,9 +114,7 @@ export interface McpRouteDeps {
   mcpApps?: (auth: McpAuthContext, options?: McpAppsFlagOptions) => Promise<boolean>;
   /** `focusedConsole`, for this caller: whether the recap Overview's tools exist. */
   focusedConsole?: (auth: McpAuthContext) => Promise<boolean>;
-  /** `sandboxes`, for this caller: whether the Ratel sandbox tools exist. */
-  sandboxes?: (auth: McpAuthContext) => Promise<boolean>;
-  /** `evals`, for this caller: whether the eval tools exist. */
+  /** `evals`, for this caller: whether the Ratel sandbox tools and the eval tools exist. */
   evals?: (auth: McpAuthContext) => Promise<boolean>;
   /** The built views, checked against the registry (lib/mcp/apps/load.ts). */
   appCatalog?: () => McpAppCatalog;
@@ -441,12 +438,11 @@ async function runMessages(
   /** The client shows views: the model is told the person already sees the data. */
   clientRendersViews: boolean,
 ): Promise<JSONRPCMessage[]> {
-  const [focusedConsole, sandboxes, evals] = await Promise.all([
+  const [focusedConsole, evals] = await Promise.all([
     (deps.focusedConsole ?? focusedConsoleForCaller)(auth),
-    (deps.sandboxes ?? sandboxesForCaller)(auth),
     (deps.evals ?? evalsForCaller)(auth),
   ]);
-  const registry = buildRequestRegistry({ focusedConsole, sandboxes, evals });
+  const registry = buildRequestRegistry({ focusedConsole, evals });
   const apps = built && viewsFor(built, (tool) => tool === "whoami" || registry.has(tool));
   const server = createRatelMcpServer({
     auth,

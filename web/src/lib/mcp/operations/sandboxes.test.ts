@@ -151,14 +151,20 @@ const PARAMS: Record<string, Record<string, unknown>> = {
 
 // — Listing and flag ——————————————————————————————————————————————————————————
 
-test("sandboxes: the tools are listed only when the flag is on for the caller", () => {
-  const on = assembleOperations({ sandboxes: true }).map((operation) => operation.id);
-  const off = assembleOperations({ sandboxes: false }).map((operation) => operation.id);
+test("sandboxes: the tools are listed only when the one flag evals is on for the caller", () => {
+  const on = assembleOperations({ evals: true }).map((operation) => operation.id);
+  const off = assembleOperations({ evals: false }).map((operation) => operation.id);
   for (const id of IDS) {
     assert.ok(on.includes(id), `${id} is listed with the flag on`);
     assert.ok(!off.includes(id), `${id} is not listed with the flag off`);
   }
-  assert.ok(!assembleOperations().some((operation) => operation.id.startsWith("sandbox_")));
+  assert.ok(
+    on.some((id) => id.startsWith("evals_")),
+    "the eval tools come with the same flag",
+  );
+  for (const ids of [off, assembleOperations().map((operation) => operation.id)]) {
+    assert.ok(!ids.some((id) => id.startsWith("sandbox_") || id.startsWith("evals_")));
+  }
 });
 
 test("sandboxes: only sandbox_run mutates, and read-only assembly drops it", () => {
@@ -166,7 +172,7 @@ test("sandboxes: only sandbox_run mutates, and read-only assembly drops it", () 
     .filter((operation) => operation.mutates)
     .map((operation) => operation.id);
   assert.deepEqual(mutating, ["sandbox_run"]);
-  const readOnly = assembleOperations({ sandboxes: true, includeWrites: false });
+  const readOnly = assembleOperations({ evals: true, includeWrites: false });
   assert.ok(!readOnly.some((operation) => operation.id === "sandbox_run"));
 });
 

@@ -45,9 +45,10 @@ export interface AssembleOptions {
   includeWrites?: boolean;
   /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
   focusedConsole?: boolean;
-  /** List the Ratel sandbox tools (`sandboxes` flag of the caller). Off, they do not exist. */
-  sandboxes?: boolean;
-  /** List the eval tools (`evals` flag of the caller). Off, they do not exist. */
+  /**
+   * List the Ratel sandbox tools and the eval tools (`evals` flag of the caller, one flag for
+   * both). Off, they do not exist.
+   */
   evals?: boolean;
 }
 
@@ -87,8 +88,7 @@ export function assembleOperations(
     ...joinsOperations(),
     ...playgroundOperations(),
     ...shipOperations(),
-    ...(options.sandboxes ? sandboxOperations() : []),
-    ...(options.evals ? evalsOperations() : []),
+    ...(options.evals ? [...sandboxOperations(), ...evalsOperations()] : []),
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),

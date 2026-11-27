@@ -15,7 +15,7 @@ import { assembleOperations } from "@/lib/mcp/operations";
  * got harder to navigate, not that the test is fussy.
  */
 // The flagged tools too: their names must route as well as the rest.
-const operations = assembleOperations({ focusedConsole: true, sandboxes: true, evals: true });
+const operations = assembleOperations({ focusedConsole: true, evals: true });
 const byId = new Map(operations.map((operation) => [operation.id, operation]));
 
 const claims = new Map<string, string[]>();

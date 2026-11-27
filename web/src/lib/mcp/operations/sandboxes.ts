@@ -20,7 +20,6 @@ import {
   type StartRunOptions,
   type StartRunResult,
   sandboxesEnabledForProject,
-  sandboxOrganizationIds,
   sandboxRunStatus,
   startRun,
 } from "@/lib/views/sandboxes";
@@ -28,8 +27,8 @@ import {
 /**
  * The Ratel sandbox tools (decision `mcp-surface`): find a pushed version of an agent, read how to
  * call it, run it with an input and read the output. They call only the public interface of
- * `views/sandboxes`. They are listed only for a caller with the `sandboxes` flag, and each call
- * checks the flag for its project again.
+ * `views/sandboxes`. They are listed only for a caller with the `evals` flag (one flag for the
+ * sandbox and the evals), and each call checks the flag for its project again.
  *
  * A call is stateless and must answer in 60 seconds. So `sandbox_run` waits a short time for the
  * result, then returns the run id and a hint to poll `sandbox_get_run`.
@@ -209,20 +208,6 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       },
     }),
   ];
-}
-
-/**
- * Whether the sandbox tools are listed for a caller: the flag is on for the project of its key, or
- * for one of its organizations. A failed decision hides them.
- */
-export async function sandboxesForCaller(auth: McpAuthContext): Promise<boolean> {
-  try {
-    if (auth.kind === "api-key") return await sandboxesEnabledForProject(auth.projectId);
-    const organizations = auth.memberships.map(({ organizationId }) => ({ id: organizationId }));
-    return (await sandboxOrganizationIds(organizations)).length > 0;
-  } catch {
-    return false;
-  }
 }
 
 // — Helpers ——————————————————————————————————————————————————————————————————
