@@ -360,6 +360,7 @@ test("the suite table: a row for each eval, scorer columns, the delta, the inval
     assert.ok(text.includes(header), header);
   }
   assert.match(text, /Improved/);
+  assert.doesNotMatch(text, /Improved\s*Improved:/, "the badge says the verdict one time");
   assert.match(text, /\+50 pts/);
   assert.match(text, /New eval/);
   assert.match(text, /Run suite/);

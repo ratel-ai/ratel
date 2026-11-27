@@ -169,7 +169,7 @@ function VerdictLine({ model }: { model: SuitePageModel }) {
   return (
     <div className="flex flex-col gap-1 text-ui" data-verdict={verdict.verdict}>
       <p className="text-fg-muted">
-        <Badge tone={shown.tone}>{shown.label}</Badge> {verdict.rule}
+        <Badge tone={shown.tone}>{shown.label}</Badge> {ruleText(verdict.rule, shown.label)}
       </p>
       {verdict.excludedMessage ? (
         <p className="text-xs text-fg-subtle">Left out: {verdict.excludedMessage}</p>
@@ -301,6 +301,11 @@ export function Delta({ value, small = false }: { value: number; small?: boolean
       {points} pts
     </span>
   );
+}
+
+/** The rule without its leading verdict word: the badge says it. */
+function ruleText(rule: string, label: string): string {
+  return rule.startsWith(`${label}: `) ? rule.slice(label.length + 2) : rule;
 }
 
 export function percent(rate: number | null): string {
