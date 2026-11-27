@@ -1,6 +1,6 @@
 {
-  "id": "3f65a623-75a1-4363-bc71-6fd942c532cf",
-  "prevId": "70708a52-e5bd-4283-8233-ce73a3975e54",
+  "id": "70708a52-e5bd-4283-8233-ce73a3975e54",
+  "prevId": "57941404-228d-4b43-8fe3-6173a383fde4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4669,6 +4669,97 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.org_holds": {
+      "name": "org_holds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "since": {
+          "name": "since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "org_holds_organization_idx": {
+          "name": "org_holds_organization_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"org_holds\".\"organization_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "org_holds_project_idx": {
+          "name": "org_holds_project_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"org_holds\".\"project_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "org_holds_project_id_projects_id_fk": {
+          "name": "org_holds_project_id_projects_id_fk",
+          "tableFrom": "org_holds",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "org_holds_one_scope": {
+          "name": "org_holds_one_scope",
+          "value": "num_nonnulls(\"org_holds\".\"organization_id\", \"org_holds\".\"project_id\") = 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.api_keys": {
@@ -11576,23 +11667,11 @@
           "primaryKey": false,
           "notNull": true
         },
-        "dataset_id": {
-          "name": "dataset_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "eval_id": {
           "name": "eval_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
-        },
-        "resolved_turn_id": {
-          "name": "resolved_turn_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "name": {
           "name": "name",
@@ -11657,43 +11736,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "eval_cases_dataset_idx": {
-          "name": "eval_cases_dataset_idx",
-          "columns": [
-            {
-              "expression": "dataset_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "eval_cases_dataset_turn_idx": {
-          "name": "eval_cases_dataset_turn_idx",
-          "columns": [
-            {
-              "expression": "dataset_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "resolved_turn_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"eval_cases\".\"resolved_turn_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -11710,132 +11752,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "eval_cases_dataset_id_eval_datasets_id_fk": {
-          "name": "eval_cases_dataset_id_eval_datasets_id_fk",
-          "tableFrom": "eval_cases",
-          "tableTo": "eval_datasets",
-          "columnsFrom": [
-            "dataset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "eval_cases_eval_id_eval_definitions_id_fk": {
           "name": "eval_cases_eval_id_eval_definitions_id_fk",
           "tableFrom": "eval_cases",
           "tableTo": "eval_definitions",
           "columnsFrom": [
             "eval_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.eval_datasets": {
-      "name": "eval_datasets",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settings": {
-          "name": "settings",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "eval_datasets_project_name_idx": {
-          "name": "eval_datasets_project_name_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "eval_datasets_project_id_projects_id_fk": {
-          "name": "eval_datasets_project_id_projects_id_fk",
-          "tableFrom": "eval_datasets",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
           ],
           "columnsTo": [
             "id"
@@ -11984,12 +11906,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "dataset_id": {
-          "name": "dataset_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -12025,21 +11941,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "eval_definitions_dataset_idx": {
-          "name": "eval_definitions_dataset_idx",
-          "columns": [
-            {
-              "expression": "dataset_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -12054,19 +11955,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "eval_definitions_dataset_id_eval_datasets_id_fk": {
-          "name": "eval_definitions_dataset_id_eval_datasets_id_fk",
-          "tableFrom": "eval_definitions",
-          "tableTo": "eval_datasets",
-          "columnsFrom": [
-            "dataset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },

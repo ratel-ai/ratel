@@ -36,6 +36,7 @@ const MODEL: TaskListModel = {
     allRuns: 50,
     finishRate: 0.8,
     correctionsPer100: null,
+    correctionsWindowDays: null,
     correctionsRecorded: false,
   },
   rows: [ROW, { ...ROW, id: "task-b", name: "Book an inspection", status: "healthy", runs: 10 }],

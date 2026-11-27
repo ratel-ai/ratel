@@ -1,11 +1,12 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { DotEmblem, DotLoader, DotMeter } from "@ratel/design-system/dot-matrix";
 import { Callout, EmptyState } from "@ratel/design-system/states";
-import { CalendarRange, KeyRound, Wrench } from "lucide-react";
+import { CalendarRange, Wrench } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
+import { ApiKeyCta, FirstTraceLink } from "@/components/console/settings/ApiKeyCta";
 import { agentHealthHref, type WindowDays } from "@/lib/readings/trace-signals/view";
 import type {
   BuildingPhase,
@@ -34,6 +35,8 @@ export interface HealthStateV2Props {
   billingHref: string | null;
   /** The edition's names for import sources, by id. */
   sourceLabel?: Readonly<Record<string, string>>;
+  /** The project has a usable API key (`hasUsableApiKey`): not asked for another. */
+  hasApiKey?: boolean;
   now?: Date;
 }
 
@@ -52,6 +55,7 @@ export function HealthStateV2({
   canImport,
   billingHref,
   sourceLabel,
+  hasApiKey = false,
   now = new Date(),
 }: HealthStateV2Props) {
   // With billing off no plan can be picked, so none is named.
@@ -77,6 +81,7 @@ export function HealthStateV2({
         copy={copy}
         canImport={canImport}
         billingHref={billingHref}
+        hasApiKey={hasApiKey}
       />
     </section>
   );
@@ -88,15 +93,38 @@ function StateBody({
   copy,
   canImport,
   billingHref,
+  hasApiKey,
 }: {
   projectId: string;
   state: HealthStateV2State;
   copy: StateCopy;
   canImport: boolean;
   billingHref: string | null;
+  hasApiKey: boolean;
 }) {
-  const getKey = <ApiKeyLink projectId={projectId} primary={!canImport} />;
   const importRuns = canImport ? <OpenImportButtonV2 variant="primary" /> : null;
+  // The importer leads when there is one; else creating the key, or, with one, the first trace.
+  const lead =
+    importRuns ??
+    (hasApiKey ? (
+      <FirstTraceLink icon className={buttonVariants({ variant: "primary" })} />
+    ) : (
+      <ApiKeyCta
+        projectId={projectId}
+        hasApiKey={false}
+        icon
+        className={buttonVariants({ variant: "primary" })}
+      />
+    ));
+  const keyLink =
+    importRuns || hasApiKey ? (
+      <ApiKeyCta
+        projectId={projectId}
+        hasApiKey={hasApiKey}
+        icon
+        className={buttonVariants({ variant: "secondary" })}
+      />
+    ) : undefined;
   switch (state.kind) {
     case "nothing_yet":
       return (
@@ -104,8 +132,8 @@ function StateBody({
           emblem
           title={copy.title}
           description={copy.body}
-          action={importRuns ?? getKey}
-          secondary={importRuns ? getKey : undefined}
+          action={lead}
+          secondary={keyLink}
         />
       );
     case "building":
@@ -116,8 +144,8 @@ function StateBody({
           icon={Wrench}
           title={copy.title}
           description={copy.body}
-          action={importRuns ?? getKey}
-          secondary={importRuns ? getKey : undefined}
+          action={lead}
+          secondary={keyLink}
         />
       );
     case "unavailable":
@@ -168,10 +196,10 @@ function StateBody({
                 billingHref={billingHref}
               />
             ) : (
-              (importRuns ?? getKey)
+              lead
             )
           }
-          secondary={state.suggestion ? undefined : importRuns ? getKey : undefined}
+          secondary={state.suggestion ? undefined : keyLink}
         />
       );
   }
@@ -235,18 +263,6 @@ function WindowAction({
       className={buttonVariants({ variant: "secondary" })}
     >
       See plans
-    </Link>
-  );
-}
-
-function ApiKeyLink({ projectId, primary }: { projectId: string; primary: boolean }) {
-  return (
-    <Link
-      href={`/project/${encodeURIComponent(projectId)}/settings/api-keys`}
-      className={buttonVariants({ variant: primary ? "primary" : "secondary" })}
-    >
-      <KeyRound strokeWidth={1.5} aria-hidden />
-      Get an API key
     </Link>
   );
 }

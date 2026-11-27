@@ -115,7 +115,7 @@ export function TasksTable({
       header: (
         <span className="inline-flex flex-col items-end leading-4">
           Self-corrections
-          <span className="font-normal">per 100 runs</span>
+          <span className="font-normal">per 100 turns</span>
         </span>
       ),
       align: "right",

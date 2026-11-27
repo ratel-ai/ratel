@@ -1,6 +1,7 @@
 import { type Config, getConfig } from "@/config";
 import { CONFIG_DEFAULTS } from "@/config-defaults";
 import { clientAddress } from "@/lib/platform/http/client-address";
+import type { LimitBucket, ResolvedKeyLimits } from "@/lib/platform/internal-auth/key-resolve";
 import {
   createTokenBucketRateLimiter,
   type LocalTokenBucketRateLimiter,
@@ -47,6 +48,47 @@ export type IngestLimitDecision =
   | { allowed: false; retryAfterSeconds: number; limit: "per_key" | "per_source" };
 
 type LimitedKey = { id: string; rateLimitPerMinute: number | null };
+
+/** The events limit of a secret key, per key. */
+export const SECRET_KEY_EVENTS_BUCKET: LimitBucket = { perMinute: 120, burst: 240 };
+
+const BURST_FACTOR = 2;
+
+/** The buckets a key is held to, for a caller that enforces them elsewhere (a gateway). */
+export function resolvedKeyLimits(
+  key: { rateLimitPerMinute: number | null },
+  policy: { sharedKeyLimits: boolean },
+  options: PublishableIngestLimitOptions = publishableLimitOptionsFromConfig(),
+): ResolvedKeyLimits {
+  if (!policy.sharedKeyLimits) return { shared: null, events: SECRET_KEY_EVENTS_BUCKET };
+  const limits = resolvedPublishableLimits(key, options);
+  const bucket = (perMinute: number): LimitBucket => ({
+    perMinute,
+    burst: perMinute * BURST_FACTOR,
+  });
+  return {
+    shared: {
+      requests: { perKey: bucket(limits.keyRequests), perSource: bucket(limits.sourceRequests) },
+      items: { perKey: bucket(limits.keyItems), perSource: bucket(limits.sourceItems) },
+    },
+    events: null,
+  };
+}
+
+function resolvedPublishableLimits(
+  key: { rateLimitPerMinute: number | null },
+  options: PublishableIngestLimitOptions,
+) {
+  const own = key.rateLimitPerMinute && key.rateLimitPerMinute > 0 ? key.rateLimitPerMinute : null;
+  return {
+    keyRequests: own ?? options.perKeyPerMinute,
+    keyItems: own
+      ? own * ITEMS_PER_REQUEST
+      : (options.perKeyItemsPerMinute ?? options.perKeyPerMinute * ITEMS_PER_REQUEST),
+    sourceRequests: options.perSourcePerMinute,
+    sourceItems: options.perSourceItemsPerMinute ?? options.perSourcePerMinute * ITEMS_PER_REQUEST,
+  };
+}
 
 export interface PublishableIngestLimits {
   /** Per request, before the body is read. */
@@ -101,7 +143,11 @@ export function createPublishableIngestLimits(
   options: PublishableIngestLimitOptions,
 ): PublishableIngestLimits {
   const bucket = (limitPerMinute: number) =>
-    createTokenBucketRateLimiter({ limitPerMinute, burst: limitPerMinute * 2, now: options.now });
+    createTokenBucketRateLimiter({
+      limitPerMinute,
+      burst: limitPerMinute * BURST_FACTOR,
+      now: options.now,
+    });
   const sourceItemsPerMinute =
     options.perSourceItemsPerMinute ?? options.perSourcePerMinute * ITEMS_PER_REQUEST;
   const perSource = {
@@ -119,14 +165,8 @@ export function createPublishableIngestLimits(
     }
     return limiter;
   };
-  const requestCeiling = (key: LimitedKey) =>
-    key.rateLimitPerMinute && key.rateLimitPerMinute > 0
-      ? key.rateLimitPerMinute
-      : options.perKeyPerMinute;
-  const itemCeiling = (key: LimitedKey) =>
-    key.rateLimitPerMinute && key.rateLimitPerMinute > 0
-      ? key.rateLimitPerMinute * ITEMS_PER_REQUEST
-      : (options.perKeyItemsPerMinute ?? options.perKeyPerMinute * ITEMS_PER_REQUEST);
+  const requestCeiling = (key: LimitedKey) => resolvedPublishableLimits(key, options).keyRequests;
+  const itemCeiling = (key: LimitedKey) => resolvedPublishableLimits(key, options).keyItems;
 
   function charge(
     request: Request,

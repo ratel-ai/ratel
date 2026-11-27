@@ -1,5 +1,6 @@
 import type { Config } from "@/config";
 import type { RequestErrorContext, RequestErrorRequest } from "@/lib/contracts/telemetry";
+import type { EnvelopeConsumer } from "@/lib/ingest/queue/port/envelope-queue";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 import type { TelemetryShutdown } from "@/lib/platform/otel/shutdown";
 
@@ -56,7 +57,7 @@ export async function registerNodeInstrumentation(
     { createSelfTelemetrySampler },
     { SelfTimeSpanProcessor },
     { createTelemetryShutdown, registerTelemetryShutdownHandlers },
-    { appRole },
+    { appRole, consumesKafkaIngest },
     { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
     { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
     { editionAnalyticsShutdown },
@@ -183,7 +184,8 @@ export async function registerNodeInstrumentation(
   // exception: its own handler waits for the step in flight, so it runs this flush itself
   // (`bootBackground` hands it over) instead of being cut short by an exit from here.
   const role = appRole(settings);
-  if (role !== "worker" && role !== "persist")
+  // So is a process that reads Kafka: it finishes the message in hand first.
+  if (role !== "worker" && role !== "persist" && !consumesKafkaIngest(settings))
     registerTelemetryShutdownHandlers(registeredShutdown);
   registered = true;
   return registeredShutdown;
@@ -278,8 +280,12 @@ export async function assertComposition(): Promise<void> {
  * failure or an external scheduler with no `jobs.cronSecret` exits, like a bad composition:
  * never serve a misconfigured server. Nothing here runs without a `database.url`.
  *
+ * With `ingest.queue` = `kafka`, the process that runs background work (the worker, or the single
+ * `all` process) also stores what a gateway put on Kafka (ADR-0010). A queue that cannot be opened
+ * exits.
+ *
  * `flushTelemetry` is what `registerNodeInstrumentation` returned: the worker runs it after its
- * last step, before it exits.
+ * last step, before it exits, and so does an `all` process that reads Kafka.
  */
 export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promise<void> {
   const { getConfig } = await import("@/config");
@@ -318,13 +324,38 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
         console.error("[cron] tick failed", error instanceof Error ? error.message : error),
     });
   }
+  const consumer = await startIngestConsumer();
   if (plan.tick === "worker") {
     const { startBackgroundWorker } = await import("@/lib/jobs/worker-start");
-    startBackgroundWorker(undefined, { beforeExit: flushTelemetry });
+    startBackgroundWorker(undefined, {
+      beforeExit: flushTelemetry,
+      ...(consumer ? { beside: consumer } : {}),
+    });
+  } else if (consumer) {
+    const { stopConsumerOnSignal } = await import("@/lib/ingest/queue/consumer");
+    stopConsumerOnSignal(consumer, {
+      on: (signal, listener) => process.on(signal, listener),
+      exit: (code) => process.exit(code),
+      ownsExit: Boolean(process.env.NEXT_MANUAL_SIG_HANDLE),
+      beforeExit: flushTelemetry,
+    });
   }
   // A persist-only process (RTL-314): the ingest queue's lane and nothing else.
   if (plan.tick === "persist") {
     const { startBackgroundWorker } = await import("@/lib/jobs/worker-start");
     startBackgroundWorker(undefined, { beforeExit: flushTelemetry, lanesOnly: true });
+  }
+}
+
+/** The Kafka consumer, or null where this process has none. */
+async function startIngestConsumer(): Promise<EnvelopeConsumer | null> {
+  const { consumesKafkaIngest } = await import("@/lib/jobs/role");
+  if (!consumesKafkaIngest()) return null;
+  try {
+    const { startConfiguredIngestConsumer } = await import("./ingest-consumer");
+    return await startConfiguredIngestConsumer();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
   }
 }
