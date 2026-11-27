@@ -24,10 +24,11 @@ import {
 } from "@/lib/views/evals/domain/dataset";
 import { caseFromTurn } from "@/lib/views/evals/domain/from-turn";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
-import { datasetsView, evalHistory } from "@/lib/views/evals/history-view";
+import { datasetsView, evalHistory, withPinnedRuns } from "@/lib/views/evals/history-view";
 import type { DatasetStore, NewRow } from "@/lib/views/evals/ports/dataset-store";
 import type { EvalStore } from "@/lib/views/evals/ports/eval-store";
 import type { ScorerLibrary } from "@/lib/views/evals/ports/scorer-library";
+import { rowOfSandboxRun } from "@/lib/views/evals/sandbox-rows";
 import { listScorerLibrary } from "@/lib/views/evals/scorer-library";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
 import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
@@ -45,6 +46,8 @@ export interface EvalDatasetsDeps {
   library(): ScorerLibrary;
   /** The newest runs of the project with their trials. */
   runs(projectId: string, limit: number): Promise<Compared[]>;
+  /** One run with its trials. */
+  run(projectId: string, experimentId: string): Promise<Compared | null>;
   baselineOf(projectId: string, evalId: string): Promise<string | null>;
   /** A row from a turn. Null when the turn is not there or has no input. Captured text. */
   turnRow(
@@ -75,6 +78,11 @@ const defaultDeps: EvalDatasetsDeps = {
         trials: await experiments.trials(experiment.id),
       })),
     );
+  },
+  run: async (projectId, experimentId) => {
+    const experiments = createDrizzleExperimentStore(getDb());
+    const experiment = await experiments.get(projectId, experimentId);
+    return experiment ? { experiment, trials: await experiments.trials(experiment.id) } : null;
   },
   baselineOf: async (projectId, evalId) =>
     (await createDrizzleBaselineStore(getDb()).get(projectId, evalId))?.experimentId ?? null,
@@ -343,10 +351,11 @@ export function evalDatasetsOperations(deps: EvalDatasetsDeps = defaultDeps): Mc
             ? await evals.get(ctx.projectId, params.eval)
             : null);
         if (!definition) throw notFound("eval");
-        const [runs, pinned] = await Promise.all([
+        const [recent, pinned] = await Promise.all([
           deps.runs(ctx.projectId, HISTORY_RUNS),
           deps.baselineOf(ctx.projectId, definition.id),
         ]);
+        const runs = await withPinnedRuns(recent, [pinned], (id) => deps.run(ctx.projectId, id));
         const baseline = runs.find(({ experiment }) => experiment.id === pinned) ?? null;
         const history = evalHistory({ definition, runs, baseline });
         return {
@@ -422,20 +431,20 @@ async function rowOf(
   if (params.sandboxRunId) {
     const run = await deps.getSandboxRun(ctx.projectId, params.sandboxRunId);
     if (!run) throw notFound("sandbox run");
-    const output = run.result?.output ?? null;
+    const found = rowOfSandboxRun(run);
+    if (!found.ok) throw new McpOperationError("conflict", found.message, { reason: "run_active" });
     return {
       kind: "trace",
       name: params.name ?? `Playground run ${params.sandboxRunId.slice(0, 8)}`,
       ...labels,
       turnId: null,
       content: {
-        input: storable(run.request.input),
+        input: storable(found.input),
         earlierTurns: [],
         toolFixtures: [],
         expectedOutput,
       },
-      sourceOutput:
-        output === null ? null : typeof output === "string" ? output : JSON.stringify(output),
+      sourceOutput: found.output,
     };
   }
   if (!params.name) {

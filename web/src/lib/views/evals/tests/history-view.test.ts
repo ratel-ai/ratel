@@ -5,7 +5,7 @@ import { datasetQuerySchema } from "../domain/dataset";
 import type { EvalDefinition, EvalScorer } from "../domain/eval";
 import type { TrialResult } from "../domain/score";
 import { RUN_SCORE_RULE } from "../domain/suite";
-import { datasetsView, evalHistory, evalsOverview } from "../history-view";
+import { datasetsView, evalHistory, evalsOverview, withPinnedRuns } from "../history-view";
 import type { DatasetSummary } from "../ports/dataset-store";
 import { POLITE, run } from "./runs";
 import { evalContent, NO_REFUND, PROJECT_ID } from "./support";
@@ -176,4 +176,18 @@ test("the datasets list has the kind, the rows or the query, the update time and
       [null, "Ratel chooses 50 traces"],
     ],
   );
+});
+
+test("a pinned baseline older than the newest runs is loaded and kept", async () => {
+  const recent = [evalRun("r2", "refunds", 20, ["pass"])];
+  const old = evalRun("r0", "refunds", 1, ["fail"]);
+  const loaded: string[] = [];
+  const runs = await withPinnedRuns(recent, ["r0", "r2", null], async (id) => {
+    loaded.push(id);
+    return id === "r0" ? old : null;
+  });
+  assert.deepEqual(loaded, ["r0"]);
+  const history = evalHistory({ definition: definition("refunds"), runs, baseline: old });
+  assert.equal(history.baselineId, "r0");
+  assert.deepEqual(history.runs[0]?.delta, { score: 1 });
 });

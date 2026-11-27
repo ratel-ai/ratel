@@ -106,9 +106,17 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
           if (datasetId !== newest.datasetId && !(await inProject(tx, projectId, datasetId))) {
             throw new DatasetNotFound();
           }
-          if (!sameContent(storable({ ...content, datasetId }), toVersion(newest))) {
+          const kept: EvalContent = {
+            ...content,
+            sandboxVersionId:
+              content.sandboxVersionId === undefined
+                ? newest.sandboxVersionId
+                : content.sandboxVersionId,
+            matrix: content.matrix ?? newest.matrix,
+          };
+          if (!sameContent(storable({ ...kept, datasetId }), toVersion(newest))) {
             await tx.insert(evalDefinitionVersions).values({
-              ...columns(content, datasetId),
+              ...columns(kept, datasetId),
               evalId,
               number: newest.number + 1,
               createdBy: userId,

@@ -52,6 +52,10 @@ async function setup(over: Partial<EvalDatasetsDeps> = {}) {
         })),
       );
     },
+    run: async (projectId, id) => {
+      const experiment = await experiments.get(projectId, id);
+      return experiment ? { experiment, trials: await experiments.trials(id) } : null;
+    },
     baselineOf: async () => null,
     turnRow: async (_, turnId) =>
       turnId === TURN

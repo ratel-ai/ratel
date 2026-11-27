@@ -1137,3 +1137,30 @@ test("evals_get_run: the suite table, each eval with its score and its delta, an
   assert.equal(result.data.evals.length, 1);
   assert.ok(result.data.verdict);
 });
+
+test("evals_get_run: a run of one eval compares with the baseline of its eval and shows its variants and run score", async () => {
+  const asked: Array<string | null> = [];
+  const own = experiment({ evalId: EVAL, variants: [{ index: 0, params: { model: "a" } }] });
+  const result = ok<{ evalId: string; variants: unknown[]; run: { score: number | null } | null }>(
+    await call(
+      "evals_get_run",
+      { runId: RUN },
+      {
+        getExperiment: async () => own,
+        pinnedRun: async (_projectId, evalId) => {
+          asked.push(evalId);
+          return null;
+        },
+      },
+    ),
+  );
+  assert.deepEqual(asked, [EVAL]);
+  assert.equal(result.data.evalId, EVAL);
+  assert.equal(result.data.variants.length, 1);
+  assert.ok(result.data.run);
+});
+
+test("evals_start_run: eval and evals together are refused", async () => {
+  const refused = failure(await call("evals_start_run", { eval: "Refunds", evals: ["Status"] }));
+  assert.equal(refused.error, "invalid_params");
+});

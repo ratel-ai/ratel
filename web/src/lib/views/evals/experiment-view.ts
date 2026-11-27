@@ -62,7 +62,11 @@ export function experimentView(
  * The fields of a run of one eval (decision `runs-per-eval`): its eval, its dataset, its variants,
  * its score with the rule, and its delta against the baseline of its eval. Null for a suite run.
  */
-function runFields(experiment: Experiment, trials: readonly Trial[], baseline: Compared | null) {
+export function runFields(
+  experiment: Experiment,
+  trials: readonly Trial[],
+  baseline: Compared | null,
+) {
   const { evalId, datasetId, variants } = experiment;
   if (evalId === null) {
     return { evalId, datasetId, variants, run: null, runDelta: null, runDeltaRefusal: null };

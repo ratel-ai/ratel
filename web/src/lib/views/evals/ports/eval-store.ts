@@ -2,7 +2,14 @@ import type { EvalContent, EvalDefinition, EvalDetails } from "../domain/eval";
 
 export type NewEval = EvalDetails & { projectId: string; content: EvalContent; createdBy: string };
 
-export type EvalEdit = EvalDetails & { content: EvalContent };
+/**
+ * An edit. A field that it does not give keeps the value of the newest version: the dataset, the
+ * pinned runtime version and the matrix.
+ */
+export type EvalEdit = EvalDetails & {
+  content: Omit<EvalContent, "sandboxVersionId" | "matrix"> &
+    Partial<Pick<EvalContent, "sandboxVersionId" | "matrix">>;
+};
 
 export type EvalWriteRefusal = "not_found" | "changed" | "name_taken" | "dataset_not_found";
 

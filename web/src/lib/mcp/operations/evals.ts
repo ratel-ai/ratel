@@ -64,12 +64,13 @@ import {
   startEvalRun,
 } from "@/lib/views/evals/eval-runs";
 import { advance, experimentDeps } from "@/lib/views/evals/experiment-deps";
-import { caseCounts, trialsByCase } from "@/lib/views/evals/experiment-view";
+import { caseCounts, runFields, trialsByCase } from "@/lib/views/evals/experiment-view";
 import type { StartExperimentResult } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
 import type { CaseStore, NewCase } from "@/lib/views/evals/ports/case-store";
 import type { EvalStore, NewEval } from "@/lib/views/evals/ports/eval-store";
+import { rowOfSandboxRun } from "@/lib/views/evals/sandbox-rows";
 import { type SaveOptions, type SaveSource, saveOptions } from "@/lib/views/evals/save-target";
 import { suiteTable } from "@/lib/views/evals/suite-view";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
@@ -98,8 +99,8 @@ export interface EvalsOperationDeps {
   saveOptions(projectId: string, source: SaveSource, task: string | null): Promise<SaveOptions>;
   /** A case made from a turn. Null when the turn is not there or has no input. Captured text. */
   turnCase(projectId: string, turnId: string): Promise<CaseFromTurn | null>;
-  /** The pinned baseline run with its trials. Null when none is pinned. */
-  pinnedRun(projectId: string): Promise<ComparedRun | null>;
+  /** The pinned baseline run of an eval (of the suite runs: null) with its trials. Null: no pin. */
+  pinnedRun(projectId: string, evalId: string | null): Promise<ComparedRun | null>;
   getCase(projectId: string, caseId: string): Promise<EvalCase | null>;
   /** One case for each input, in one transaction. */
   createCases(inputs: readonly NewCase[]): ReturnType<CaseStore["createAll"]>;
@@ -121,7 +122,8 @@ export interface EvalsOperationDeps {
   trials(experimentId: string): Promise<Trial[]>;
   trialEvidence(projectId: string, trialId: string): Promise<TrialEvidence | null>;
   caseVersion(versionId: string): Promise<CaseVersion | null>;
-  getBaseline(projectId: string): Promise<Baseline | null>;
+  /** The pin of an eval. With no eval: the pin of the suite runs. */
+  getBaseline(projectId: string, evalId?: string | null): Promise<Baseline | null>;
   pinBaseline(projectId: string, experimentId: string, pinnedBy: string): Promise<PinResult>;
   compareWithBaseline(projectId: string, experimentId: string): Promise<ComparisonResult>;
   getSandboxRun(projectId: string, runId: string): Promise<SandboxRun | null>;
@@ -158,7 +160,7 @@ const defaultDeps: EvalsOperationDeps = {
     const turn = await loadTurnContent(projectId, turnId);
     return turn ? caseFromTurn(turn, await readOnlyTools(projectId)) : null;
   },
-  pinnedRun: (projectId) => pinnedRun(projectId, baselineDeps()),
+  pinnedRun: (projectId, evalId) => pinnedRun(projectId, baselineDeps(), evalId),
   getCase: (projectId, caseId) => createDrizzleCaseStore(getDb()).get(projectId, caseId),
   createCases: (inputs) => createDrizzleCaseStore(getDb()).createAll(inputs),
   getEvalByName: (projectId, name) => createDrizzleEvalStore(getDb()).getByName(projectId, name),
@@ -193,7 +195,7 @@ const defaultDeps: EvalsOperationDeps = {
   trialEvidence: (projectId, id) =>
     createDrizzleExperimentStore(getDb()).trialEvidence(projectId, id),
   caseVersion: (id) => createDrizzleExperimentStore(getDb()).caseVersion(id),
-  getBaseline: (projectId) => baselineDeps().baselines.get(projectId),
+  getBaseline: (projectId, evalId) => baselineDeps().baselines.get(projectId, evalId ?? null),
   pinBaseline: (projectId, id, by) => pinBaseline(projectId, id, by, baselineDeps()),
   compareWithBaseline: (projectId, id) => compareWithBaseline(projectId, id, baselineDeps()),
   getSandboxRun: getRun,
@@ -633,6 +635,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
+        if (params.eval !== undefined && params.evals !== undefined) {
+          throw invalidParams("Give eval or evals, not both.", [
+            { path: "evals", message: "Give eval or evals, not both." },
+          ]);
+        }
         const organizationId = ctx.organizationId ?? (await deps.organizationIdOf(ctx.projectId));
         if (!organizationId) throw notFound("project");
         const changes = {
@@ -699,14 +706,23 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           deps.listExperiments(ctx.projectId, LIST_LIMIT),
           deps.getBaseline(ctx.projectId),
         ]);
+        // A run of one eval is the baseline when it is the pin of its eval.
+        const evalIds = [...new Set(experiments.flatMap(({ evalId }) => evalId ?? []))];
+        const pins = new Set(
+          (await Promise.all(evalIds.map((id) => deps.getBaseline(ctx.projectId, id)))).flatMap(
+            (pin) => pin?.experimentId ?? [],
+          ),
+        );
+        if (baseline) pins.add(baseline.experimentId);
         const runs = await Promise.all(
           experiments.map(async (experiment) => ({
             runId: experiment.id,
+            evalId: experiment.evalId,
             state: experiment.state,
             sandboxVersionId: experiment.sandboxVersionId,
             sandboxName: experiment.sandboxName,
             counts: countTrials(await deps.trials(experiment.id)),
-            baseline: baseline?.experimentId === experiment.id,
+            baseline: pins.has(experiment.id),
             createdAt: experiment.createdAt.toISOString(),
           })),
         );
@@ -738,11 +754,15 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         const [trials, readable, baseline] = await Promise.all([
           deps.trials(experiment.id),
           deps.mayReadContent(ctx),
-          deps.pinnedRun(ctx.projectId),
+          deps.pinnedRun(ctx.projectId, experiment.evalId),
         ]);
         const view = await runView(deps, ctx.projectId, experiment, trials, readable);
         return {
-          data: { ...view.data, ...suiteView(suiteTable({ experiment, trials }, baseline)) },
+          data: {
+            ...view.data,
+            ...suiteView(suiteTable({ experiment, trials }, baseline)),
+            ...runFields(experiment, trials, baseline),
+          },
           ...(view.truncated ? { truncated: true } : {}),
           hint: [
             experiment.state === "running"
@@ -941,19 +961,9 @@ function versionView(version: CaseVersion, readable: boolean) {
 async function runSource(deps: EvalsOperationDeps, projectId: string, runId: string) {
   const run = await deps.getSandboxRun(projectId, runId);
   if (!run) throw notFound("sandbox run");
-  if (run.status === "queued" || run.status === "running") {
-    throw new McpOperationError(
-      "conflict",
-      `The sandbox run is ${run.status}. Call sandbox_get_run until it ends, then save it.`,
-      { reason: "run_active" },
-    );
-  }
-  const output = run.result?.output ?? run.response?.output ?? null;
-  return {
-    input: run.request.input,
-    output: output === null ? null : typeof output === "string" ? output : JSON.stringify(output),
-    traceId: run.traceId ?? null,
-  };
+  const found = rowOfSandboxRun(run);
+  if (!found.ok) throw new McpOperationError("conflict", found.message, { reason: "run_active" });
+  return { ...found, traceId: run.traceId ?? null };
 }
 
 type CaseSourceParams = {
@@ -1195,6 +1205,7 @@ const START_REFUSAL = {
   query_failed: "invalid_params",
   too_many_rows: "invalid_params",
   invalid_scorers: "invalid_params",
+  shared_dataset: "conflict",
 } as const;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {

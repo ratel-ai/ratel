@@ -24,12 +24,7 @@ import {
   type RunChanges,
   type Variant,
 } from "./domain/experiment";
-import {
-  type ExperimentDeps,
-  MAX_RUNNING_EXPERIMENTS,
-  type StartExperimentResult,
-  type StartRefusal,
-} from "./experiments";
+import type { ExperimentDeps, StartExperimentResult, StartRefusal } from "./experiments";
 import type { NewRow } from "./ports/dataset-store";
 import { resolveScorers } from "./scorer-library";
 
@@ -65,6 +60,12 @@ export type EvalRunChanges = {
 };
 
 const LATEST_OF = 100;
+/**
+ * The running runs of one eval each in a project. A start of each eval makes one run for each eval,
+ * so this limit is higher than the one of suite runs. The open trials of a project stay limited
+ * (`OPEN_TRIALS`), whatever the number of runs.
+ */
+export const MAX_RUNNING_EVAL_RUNS = 100;
 const logger = getLogger("evals/eval-runs");
 
 export async function startEvalRun(
@@ -135,10 +136,10 @@ export async function startEvalRun(
       trialsPerCase: trials,
       startedBy,
     },
-    MAX_RUNNING_EXPERIMENTS,
+    MAX_RUNNING_EVAL_RUNS,
   );
   if (!experiment) {
-    const message = `The project has ${MAX_RUNNING_EXPERIMENTS} running experiments. Wait for one to end.`;
+    const message = `The project has ${MAX_RUNNING_EVAL_RUNS} running runs. Wait for one to end.`;
     return refused("too_many_running", message);
   }
   logEvalRun(experiment, count);

@@ -153,6 +153,21 @@ export function datasetsView(
   }));
 }
 
+/**
+ * The runs with each pinned baseline run that they do not have: a pin can be older than the newest
+ * runs that a history reads.
+ */
+export async function withPinnedRuns(
+  runs: readonly Compared[],
+  pins: ReadonlyArray<string | null | undefined>,
+  load: (experimentId: string) => Promise<Compared | null>,
+): Promise<Compared[]> {
+  const have = new Set(runs.map(({ experiment }) => experiment.id));
+  const missing = [...new Set(pins.flatMap((pin) => (pin && !have.has(pin) ? [pin] : [])))];
+  const loaded = await Promise.all(missing.map(load));
+  return [...runs, ...loaded.filter((run) => run !== null)];
+}
+
 /** What a query kind resolves, in words. */
 export function queryText(query: DatasetQuery): string | null {
   switch (query.kind) {

@@ -93,7 +93,8 @@ export type StartRefusal =
   | "no_content_access"
   | "query_failed"
   | "too_many_rows"
-  | "invalid_scorers";
+  | "invalid_scorers"
+  | "shared_dataset";
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -144,6 +145,8 @@ export async function startExperiment(
   if (runRefusal) return refused("invalid_params", runRefusal);
   const chosen = chooseEvals(allEvals, evals, version.name);
   if (!chosen.ok) return chosen;
+  const shared = sharedDataset(chosen.evals);
+  if (shared) return refused("shared_dataset", shared);
   const resolved = await resolveQueryDatasets(projectId, chosen.evals, startedBy, deps);
   if (!resolved.ok) return resolved;
   const frozen = freezeSuite(chosen.evals, [...allCases, ...resolved.cases], label ?? null, {
@@ -453,6 +456,23 @@ function chooseEvals(
     evals.push(found);
   }
   return { ok: true, evals };
+}
+
+/**
+ * Why the evals of a suite cannot share one run, or null. A trial is of one row version, so two
+ * evals that read the same dataset would score the same trials. A run of each eval has no such
+ * limit (`eval-runs.ts`).
+ */
+function sharedDataset(evals: readonly EvalDefinition[]): string | null {
+  const seen = new Map<string, string>();
+  for (const one of evals) {
+    const other = seen.get(datasetOf(one));
+    if (other) {
+      return `The evals "${other}" and "${one.name}" read the same dataset. Start one run for each eval (POST /api/v1/evals/runs, ratel eval run).`;
+    }
+    seen.set(datasetOf(one), one.name);
+  }
+  return null;
 }
 
 /** Why a chosen eval is not in the run, or null. The suite leaves such evals out. */

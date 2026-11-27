@@ -6,7 +6,12 @@ import {
   refuse,
   reply,
 } from "@/lib/console/scope/member-access";
-import { currentVersion, evalContentSchema, evalDetailsSchema } from "./domain/eval";
+import {
+  currentVersion,
+  evalContentSchema,
+  evalDetailsSchema,
+  matrixValueSchema,
+} from "./domain/eval";
 import { readJson } from "./experiments-api";
 import type { EvalStore } from "./ports/eval-store";
 
@@ -19,7 +24,16 @@ export type EvalsApiDeps = MemberAccessDeps & { evals: () => EvalStore; now: () 
 const definitionSchema = evalDetailsSchema.extend({
   content: evalContentSchema.default(evalContentSchema.parse({})),
 });
-const editSchema = definitionSchema.extend({ base: z.uuid() });
+/** An edit that does not give the pinned runtime version or the matrix keeps them. */
+const editSchema = evalDetailsSchema.extend({
+  content: evalContentSchema
+    .extend({
+      sandboxVersionId: z.uuid().nullable().optional(),
+      matrix: matrixValueSchema.optional(),
+    })
+    .default(evalContentSchema.parse({})),
+  base: z.uuid(),
+});
 
 export function handleCreateEval(
   request: Request,

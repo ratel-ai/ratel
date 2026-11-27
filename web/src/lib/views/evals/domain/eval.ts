@@ -102,13 +102,13 @@ export const evalScorersSchema = z
  * For each chosen param, the values to try. A run has one variant for each combination, at most
  * `MAX_COMBINATIONS`. The declared params of the runtime are checked when a run starts.
  */
-export const matrixSchema = z
+export const matrixValueSchema = z
   .record(z.string().regex(PARAM_NAME), z.array(z.json()).min(1).max(MAX_COMBINATIONS))
   .refine(
     (matrix) => combinationCount(matrix) <= MAX_COMBINATIONS,
     `a matrix has at most ${MAX_COMBINATIONS} combinations`,
-  )
-  .default({});
+  );
+export const matrixSchema = matrixValueSchema.default({});
 export type ParamMatrix = z.infer<typeof matrixSchema>;
 
 /** What a version of an eval freezes. */

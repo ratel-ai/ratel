@@ -11,7 +11,7 @@ import { compareWithBaseline, pinBaseline } from "../baseline";
 import { datasetOf, type EvalScorer } from "../domain/eval";
 import { paramsOfTrial } from "../domain/experiment";
 import { startEachEvalRun, startEvalRun } from "../eval-runs";
-import type { ExperimentDeps } from "../experiments";
+import { type ExperimentDeps, startExperiment } from "../experiments";
 import {
   content,
   createEvalsDb,
@@ -328,4 +328,60 @@ test("a start of each eval makes one run for each eval, and a version of another
   assert.deepEqual(named.ok && named.runs.map(({ eval: one }) => one), ["Billing"]);
   const unknown = await startEachEvalRun(SUBJECT, { evals: ["Nope"], startedBy: "u" }, deps);
   assert.equal(unknown.ok ? null : unknown.reason, "not_found");
+});
+
+test("review fixes: a suite of two evals on one dataset is refused, an edit keeps the pin and the matrix, and runs of one eval pass the suite limit", async () => {
+  const { db, client, deps, refunds, start } = await setup();
+  const evals = createDrizzleEvalStore(db);
+  // An edit that does not give the pinned version or the matrix keeps them.
+  const version = refunds.versions[0];
+  assert.ok(version);
+  const pinned = await evals.update(
+    PROJECT_ID,
+    refunds.id,
+    {
+      name: "Refunds",
+      taskId: null,
+      content: {
+        ...version,
+        datasetId: null,
+        sandboxVersionId: OLDER.id,
+        matrix: { depth: [1, 2] },
+      },
+    },
+    version.id,
+    { userId: "u", now: new Date() },
+  );
+  assert.ok(typeof pinned !== "string");
+  const { sandboxVersionId: _, matrix: __, ...rest } = pinned.versions[0] ?? version;
+  const kept = await evals.update(
+    PROJECT_ID,
+    refunds.id,
+    { name: "Refunds", taskId: null, content: { ...rest, datasetId: null, trials: 2 } },
+    pinned.versions[0]?.id ?? "",
+    { userId: "u", now: new Date() },
+  );
+  assert.ok(typeof kept !== "string");
+  assert.deepEqual(
+    [kept.versions[0]?.sandboxVersionId, kept.versions[0]?.matrix, kept.versions[0]?.trials],
+    [OLDER.id, { depth: [1, 2] }, 2],
+  );
+  // Two evals that read one dataset cannot share a suite run: they would score the same trials.
+  const other = await seedEval(db, { name: "Same rows", content: { sandboxName: "support-demo" } });
+  await client.query("update eval_definition_versions set dataset_id = $1 where eval_id = $2", [
+    datasetOf(refunds),
+    other.id,
+  ]);
+  const suite = await startExperiment(
+    SUBJECT,
+    { sandboxVersion: "latest", params: {}, startedBy: "u" },
+    deps,
+  );
+  assert.equal(suite.ok ? null : suite.reason, "shared_dataset");
+  assert.match(suite.ok ? "" : suite.message, /"Refunds" and "Same rows" read the same dataset/);
+  // More than the 10 running suite runs: each eval gets its run.
+  for (let n = 0; n < 11; n++) {
+    const run = await start({ matrix: {}, trials: 1 });
+    assert.ok(run.ok, run.ok ? "" : run.message);
+  }
 });

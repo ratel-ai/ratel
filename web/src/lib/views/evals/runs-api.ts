@@ -23,10 +23,11 @@ import type { Experiment } from "./domain/experiment";
 import { type EachRunPart, type EvalRunChanges, startEachEvalRun, startEvalRun } from "./eval-runs";
 import type { StartRefusal } from "./experiments";
 import { forKey, type KeyDeps, notFound, readJson, urlOf } from "./experiments-api";
-import { datasetsView, evalHistory, evalsOverview } from "./history-view";
+import { datasetsView, evalHistory, evalsOverview, withPinnedRuns } from "./history-view";
 import type { BaselineStore } from "./ports/baseline-store";
 import type { DatasetStore, NewRow } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
+import { rowOfSandboxRun } from "./sandbox-rows";
 import { scorerFromRef } from "./scorer-library";
 
 /**
@@ -55,6 +56,7 @@ const STATUS: Record<StartRefusal, number> = {
   query_failed: 422,
   too_many_rows: 413,
   invalid_scorers: 400,
+  shared_dataset: 409,
 };
 
 const paramValue = z.union([z.string(), z.number(), z.boolean()]);
@@ -117,13 +119,18 @@ const addRowsSchema = z.object({ rows: z.array(rowSchema).min(1).max(MAX_ROWS) }
 export function handleEvalsOverviewByKey(deps: RunsApiDeps): Promise<Response> {
   return forKey(deps, "list_evals", async ({ projectId }) => {
     const { evals, datasets, baselines } = deps.catalog();
-    const [definitions, summaries, runs] = await Promise.all([
+    const [definitions, summaries, recent] = await Promise.all([
       evals.list(projectId),
       datasets.list(projectId),
       recentRuns(projectId, deps),
     ]);
     const pins = await Promise.all(
       definitions.map(async ({ id }) => [id, (await baselines.get(projectId, id))?.experimentId]),
+    );
+    const runs = await withPinnedRuns(
+      recent,
+      pins.map(([, run]) => run),
+      (id) => oneRun(projectId, id, deps),
     );
     const rows = evalsOverview({
       evals: definitions,
@@ -141,8 +148,12 @@ export function handleEvalByKey(wanted: string, deps: RunsApiDeps): Promise<Resp
     const { evals, baselines } = deps.catalog();
     const definition = await findEval(projectId, wanted, evals);
     if (!definition) return notFound();
-    const runs = await recentRuns(projectId, deps);
     const pin = await baselines.get(projectId, definition.id);
+    const runs = await withPinnedRuns(
+      await recentRuns(projectId, deps),
+      [pin?.experimentId],
+      (id) => oneRun(projectId, id, deps),
+    );
     const baseline = runs.find(({ experiment }) => experiment.id === pin?.experimentId) ?? null;
     const history = evalHistory({ definition, runs, baseline });
     return reply(200, { v: 1, eval: evalView(definition), ...history });
@@ -329,6 +340,12 @@ async function recentRuns(projectId: string, deps: RunsApiDeps) {
   );
 }
 
+async function oneRun(projectId: string, experimentId: string, deps: RunsApiDeps) {
+  const { experiments } = deps.experiments();
+  const experiment = await experiments.get(projectId, experimentId);
+  return experiment ? { experiment, trials: await experiments.trials(experiment.id) } : null;
+}
+
 async function findEval(
   projectId: string,
   wanted: string,
@@ -368,13 +385,19 @@ async function newRows(
     }
     const run = await deps.experiments().sandboxes.getRun(projectId, row.sandboxRunId);
     if (!run) return { ok: false, message: `There is no sandbox run ${row.sandboxRunId}.` };
-    const input = run.request.input;
+    const found = rowOfSandboxRun(run);
+    if (!found.ok) return found;
     made.push({
       kind: "trace",
       name: row.name,
       turnId: null,
-      content: { input, earlierTurns: [], toolFixtures: [], expectedOutput: row.expectedOutput },
-      sourceOutput: null,
+      content: {
+        input: found.input,
+        earlierTurns: [],
+        toolFixtures: [],
+        expectedOutput: row.expectedOutput,
+      },
+      sourceOutput: found.output,
     });
   }
   return { ok: true, rows: made };
