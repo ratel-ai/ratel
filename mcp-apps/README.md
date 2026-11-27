@@ -84,7 +84,7 @@ One prompt per view, in a new chat with the server on:
   `{ ok, data, truncated?, … }` envelope) and their config from their binding:
   `useRatelView().binding.config`.
 - A link to a console page (`/projects/…`) opens on this app's console (the
-  origin the server writes into the view, else cloud.ratel.sh) through the
+  origin the server writes into the view, else app.ratel.sh) through the
   host; `?peek=` links stay in the view.
 - Fonts: the console's Geist comes from next/font, which a view cannot load.
   The build inlines Geist and Geist Mono from the `geist` package, cut to the
@@ -157,7 +157,8 @@ A view shows what its console page shows. Three rules keep it so:
 
 - **Numbers go through the page's formatter.** Where a page rounds its own way,
   the binding names a format that calls that page's function: `share` and
-  `per100` (the task pages, `lib/tasks/format.ts`), `whole` and `meter` (the
+  `per100` (the task pages' self-corrections per 100 turns,
+  `lib/tasks/format.ts`), `whole` and `meter` (the
   intent pages' whole percent), `taskCost` (a task's cost per run) and `points`
   (Agent health's "If fixed"). Do not reach for `percent` on a page that does
   not print the Traces page's percent.
@@ -173,6 +174,10 @@ A view shows what its console page shows. Three rules keep it so:
   tool's own rows.
 
 ## Dedicated views
+
+- `table`: `run_rql` as a table of the RQL query's own columns, each with its RQL type, from the
+  tool's `columns` and `rows`. The columns change with each query, so the list view's fixed columns
+  do not fit. A cut table and an empty one say so. It is published only when the tool exists (`customMonitoring`).
 
 - `trace`: `get_trace` as the console's own TraceView (embedded, as the
   session replay's Trace view shows it), from the trace page's props in the

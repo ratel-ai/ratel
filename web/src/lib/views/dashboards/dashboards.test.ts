@@ -13,9 +13,10 @@ import {
 } from "@/lib/views/dashboards/chart-model";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/links";
+import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import type { MetricWidget } from "@/lib/views/dashboards/types";
-import { scorerWidget } from "@/lib/views/dashboards/widget";
+import { SQL_CHART_PROBLEM, scorerWidget } from "@/lib/views/dashboards/widget";
 
 const FILTER: TraceFilter = {
   models: ["gpt-4o", "a&b"],
@@ -202,3 +203,14 @@ function grouped(series: [string, number[]][]): MetricResult {
     })),
   };
 }
+
+test("a query of kind sql is a widget of chart sql", () => {
+  const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
+  const features = { customMonitoring: true };
+  assert.ok(parseWidget({ title: "", query, chart: "sql" }, features).ok);
+  for (const chart of ["table", "number", "line"])
+    assert.deepEqual(parseWidget({ title: "", query, chart }, features), {
+      ok: false,
+      error: SQL_CHART_PROBLEM,
+    });
+});

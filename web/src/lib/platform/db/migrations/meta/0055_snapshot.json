@@ -1,5 +1,5 @@
 {
-  "id": "2044e975-b48e-44e7-adf9-dbf478c57144",
+  "id": "c11a64c8-b740-4b26-9ddc-f3431dd1ba00",
   "prevId": "42a61cfa-7415-4f8f-a6d0-0a39fdb5cf7f",
   "version": "7",
   "dialect": "postgresql",
@@ -4629,97 +4629,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.org_holds": {
-      "name": "org_holds",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "since": {
-          "name": "since",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "org_holds_organization_idx": {
-          "name": "org_holds_organization_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"org_holds\".\"organization_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "org_holds_project_idx": {
-          "name": "org_holds_project_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"org_holds\".\"project_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "org_holds_project_id_projects_id_fk": {
-          "name": "org_holds_project_id_projects_id_fk",
-          "tableFrom": "org_holds",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "org_holds_one_scope": {
-          "name": "org_holds_one_scope",
-          "value": "num_nonnulls(\"org_holds\".\"organization_id\", \"org_holds\".\"project_id\") = 1"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.api_keys": {
@@ -12226,6 +12135,67 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.task_preset_seeds": {
+      "name": "task_preset_seeds",
+      "schema": "",
+      "columns": {
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seeded_at": {
+          "name": "seeded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "task_preset_seeds_project_id_projects_id_fk": {
+          "name": "task_preset_seeds_project_id_projects_id_fk",
+          "tableFrom": "task_preset_seeds",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "task_preset_seeds_project_id_task_id_kind_pk": {
+          "name": "task_preset_seeds_project_id_task_id_kind_pk",
+          "columns": [
+            "project_id",
+            "task_id",
+            "kind"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.trace_scorer_tasks": {
       "name": "trace_scorer_tasks",
       "schema": "",
@@ -12498,7 +12468,7 @@
       "checkConstraints": {
         "trace_scorers_kind_check": {
           "name": "trace_scorers_kind_check",
-          "value": "\"trace_scorers\".\"kind\" in ('check', 'judge')"
+          "value": "\"trace_scorers\".\"kind\" in ('check', 'judge', 'preset')"
         },
         "trace_scorers_scope_check": {
           "name": "trace_scorers_scope_check",

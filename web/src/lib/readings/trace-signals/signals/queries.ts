@@ -41,6 +41,15 @@ export function isRunTrigger(value: unknown): value is RunTrigger {
 
 /** Consecutive runs that measure a kind without detecting a signal before it resolves. */
 export const MISSES_TO_RESOLVE = 2;
+
+/**
+ * The detectors' evidence-guard release, stamped on every stored signal's
+ * metrics. A signal stored by an older release that the current one no longer
+ * finds resolves at its first miss rather than its second: the guards say it
+ * was not true, so it should not linger a day (false `asked_again`, repeat,
+ * slow-tool and sequence cards).
+ */
+export const GUARDS_VERSION = 1;
 const UPSERT_CHUNK = 100;
 const LIVE_STATUSES = ["queued", "running"] as const;
 const OPEN_STATUSES = ["open", "acknowledged"] as const;
@@ -331,7 +340,7 @@ function toRow(input: PersistRunInput, signal: DetectedSignal): NewTraceSignalRo
     severity: signal.severity,
     impact: signal.impact,
     n: signal.n,
-    metrics: { ...signal.metrics, route: signal.route },
+    metrics: { ...signal.metrics, route: signal.route, guardsVersion: GUARDS_VERSION },
     evidence: { ...signal.evidence },
     firstSeenAt: input.now,
     lastSeenAt: input.now,
@@ -348,7 +357,8 @@ const excluded = (column: string) => sql.raw(`excluded."${column}"`);
  * (keeping `first_seen_at`, reopening a `resolved` one, never changing the
  * status of `acknowledged`, `fixed` or `muted`), count a miss against every
  * open or acknowledged signal of a measured kind that was not detected (the
- * second consecutive miss resolves it), then finish the run with its counts.
+ * second consecutive miss resolves it, the first for one stored before
+ * {@link GUARDS_VERSION}), then finish the run with its counts.
  */
 export async function persistSignalRun(
   input: PersistRunInput,
@@ -403,12 +413,14 @@ export async function persistSignalRun(
     let resolved = 0;
     if (input.measured.size > 0) {
       const missed = sql`${traceSignals.missedRuns} + 1`;
+      const stale = sql`coalesce((${traceSignals.metrics} ->> 'guardsVersion')::int, 0) < ${GUARDS_VERSION}`;
+      const resolves = sql`(${missed} >= ${MISSES_TO_RESOLVE} or ${stale})`;
       const rows = await tx
         .update(traceSignals)
         .set({
           missedRuns: missed,
-          status: sql`case when ${missed} >= ${MISSES_TO_RESOLVE} then 'resolved' else ${traceSignals.status} end`,
-          resolvedAt: sql`case when ${missed} >= ${MISSES_TO_RESOLVE} then ${input.now.toISOString()}::timestamptz else ${traceSignals.resolvedAt} end`,
+          status: sql`case when ${resolves} then 'resolved' else ${traceSignals.status} end`,
+          resolvedAt: sql`case when ${resolves} then ${input.now.toISOString()}::timestamptz else ${traceSignals.resolvedAt} end`,
           updatedAt: input.now,
         })
         .where(

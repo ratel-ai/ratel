@@ -1,6 +1,23 @@
-import type { MetricQuery, Query } from "@/lib/contracts/query";
+import { type MetricQuery, QUERY_KINDS, type Query } from "@/lib/contracts/query";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
+import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+
+/** What a widget can show: every kind. */
+export type WidgetQuery = Query;
+export type WidgetKind = WidgetQuery["kind"];
+export const WIDGET_KINDS = QUERY_KINDS;
+
+/** Why RQL refused a query of kind sql: its message, its stable code and the fix. */
+export interface WidgetRefusal {
+  kind: "refused";
+  message: string;
+  code: string;
+  fix: string;
+}
+
+/** What a widget shows: its numbers, or the refusal of its RQL text. */
+export type WidgetResult = QueryResult | WidgetRefusal;
 
 /** How a metric is drawn. Each other query kind has the one chart of its name. */
 export const METRIC_CHARTS = ["line", "bar", "number", "table"] as const;
@@ -12,6 +29,8 @@ export const WIDGET_CHARTS = [
   "funnel",
   "clusters",
   "geography",
+  // The rows of an RQL query: a table, or a chart when they have one time column.
+  "sql",
 ] as const;
 export type WidgetChart = (typeof WIDGET_CHARTS)[number];
 
@@ -27,19 +46,11 @@ export interface GridPosition {
 export interface WidgetInput {
   /** Shown instead of the query's own name, or empty. */
   title: string;
-  query: Query;
+  query: WidgetQuery;
   chart: WidgetChart;
 }
 
 export type MetricWidget = WidgetInput & { query: MetricQuery };
-
-/** A scorer as the widget form offers it. */
-export interface ScorerOption {
-  id: string;
-  name: string;
-  /** Pass or fail; false: 1 to 5. */
-  verdict: boolean;
-}
 
 export type Widget = WidgetInput & {
   id: string;

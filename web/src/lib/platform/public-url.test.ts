@@ -40,13 +40,13 @@ describe("redirectUrl", () => {
   afterEach(restore);
 
   it("points at the public origin, not the container address Next puts in request.url", () => {
-    process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh/";
+    process.env.APP_PUBLIC_URL = "https://app.ratel.sh/";
     resetConfigForTests();
     const url = redirectUrl(
       "/admin?x=1",
       "https://ip-10-60-10-130.eu-central-1.compute.internal:3000/api/support-session/end",
     );
-    assert.equal(url.href, "https://cloud.ratel.sh/admin?x=1");
+    assert.equal(url.href, "https://app.ratel.sh/admin?x=1");
   });
 
   it("falls back to the request's own origin when nothing is configured", () => {
@@ -67,16 +67,16 @@ describe("isOwnOrigin", () => {
   });
 
   it("accepts the public origin when the request URL is the container's address", () => {
-    process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh/";
+    process.env.APP_PUBLIC_URL = "https://app.ratel.sh/";
     resetConfigForTests();
     assert.equal(
-      isOwnOrigin("https://cloud.ratel.sh", "http://ip-10-0-1-5:3000/api/agent-health/imports"),
+      isOwnOrigin("https://app.ratel.sh", "http://ip-10-0-1-5:3000/api/agent-health/imports"),
       true,
     );
   });
 
   it("accepts the request URL's own origin", () => {
-    process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh";
+    process.env.APP_PUBLIC_URL = "https://app.ratel.sh";
     resetConfigForTests();
     assert.equal(
       isOwnOrigin("http://localhost:3000", "http://localhost:3000/api/agent-health/imports"),
@@ -85,14 +85,14 @@ describe("isOwnOrigin", () => {
   });
 
   it("rejects any other site", () => {
-    process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh";
+    process.env.APP_PUBLIC_URL = "https://app.ratel.sh";
     resetConfigForTests();
     assert.equal(
       isOwnOrigin("https://evil.example", "http://ip-10-0-1-5:3000/api/agent-health/imports"),
       false,
     );
     assert.equal(
-      isOwnOrigin("https://cloud.ratel.sh.evil.example", "http://ip-10-0-1-5:3000/x"),
+      isOwnOrigin("https://app.ratel.sh.evil.example", "http://ip-10-0-1-5:3000/x"),
       false,
     );
   });

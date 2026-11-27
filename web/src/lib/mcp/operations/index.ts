@@ -30,6 +30,7 @@ import {
   locationReadOperations,
   locationWriteOperations,
 } from "@/lib/mcp/operations/monitoring/locations";
+import { rqlOperations } from "@/lib/mcp/operations/monitoring/rql";
 import {
   scorerReadOperations,
   scorerWriteOperations,
@@ -56,6 +57,8 @@ export interface AssembleOptions {
   includeWrites?: boolean;
   /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
   focusedConsole?: boolean;
+  /** List the RQL tools too (`customMonitoring`). Off, they do not exist. */
+  customMonitoring?: boolean;
 }
 
 /**
@@ -100,6 +103,7 @@ export function assembleOperations(
     ...scorerReadOperations(),
     ...alertReadOperations(),
     ...dashboardReadOperations(),
+    ...(options.customMonitoring ? rqlOperations() : []),
     ...locationReadOperations(),
     ...writeOperations(),
     ...(options.focusedConsole ? overviewWriteOperations() : []),

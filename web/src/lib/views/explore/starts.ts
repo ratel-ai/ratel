@@ -3,10 +3,9 @@ import {
   geographyQuery,
   type MetricQuery,
   metricQuery,
-  type Query,
   stepFlowQuery,
 } from "@/lib/contracts/query";
-import type { WidgetChart, WidgetInput } from "@/lib/views/dashboards/types";
+import type { WidgetChart, WidgetInput, WidgetQuery } from "@/lib/views/dashboards/types";
 import { widgetOfKind } from "@/lib/views/dashboards/widget";
 
 /** What the page opens with, so it is never empty. */
@@ -37,9 +36,9 @@ export const STARTING_POINTS: readonly { label: string; panel: WidgetInput }[] =
 
 /** The start panel for the traces of a filter. */
 export function startPanel(filters: MetricQuery["filters"]): WidgetInput {
-  return { ...START_PANEL, query: { ...START_PANEL.query, filters } as Query };
+  return { ...START_PANEL, query: { ...START_PANEL.query, filters } as WidgetQuery };
 }
 
-function panel(query: Query, chart: WidgetChart): WidgetInput {
+function panel(query: WidgetQuery, chart: WidgetChart): WidgetInput {
   return { title: "", query, chart };
 }

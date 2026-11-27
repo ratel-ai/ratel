@@ -196,7 +196,7 @@ function stats(projectId: string, task: TaskDetailModel): StatProps[] {
       hint: task.callsPerRun === null ? undefined : `${task.callsPerRun.toFixed(1)} calls`,
     },
     {
-      label: "Self-corrections per 100 runs",
+      label: "Self-corrections per 100 turns",
       value: marked(
         formatPer100(task.correctionsPer100),
         task,

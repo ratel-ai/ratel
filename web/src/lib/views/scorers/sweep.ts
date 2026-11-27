@@ -5,8 +5,10 @@ import { getLogger } from "@/lib/platform/logger";
 import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { CLOSED_SINCE_SLACK_MS } from "@/lib/readings/trace-signals/sweep";
 import { settledBefore } from "@/lib/synthesis/traces/summary-refresh";
+import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import { runCheck } from "./check";
 import { JUDGE_BATCH_SIZE, type JudgeDeps, judgeTraces, resolveJudgeEngine } from "./judge";
+import { scorePresetTraces } from "./preset";
 import { inSample } from "./sample";
 import { traceScorers } from "./schema";
 import {
@@ -132,7 +134,7 @@ export async function sweepScorers(
   if (judge.engine === undefined) judge.engine = resolveJudgeEngine();
   let pending = (
     await activeScorers(db, options.flagOn ?? scorersFlagOn, new Date(startedAt))
-  ).filter((scorer) => scorer.kind === "check" || judge.engine !== null);
+  ).filter((scorer) => scorer.kind !== "judge" || judge.engine !== null);
   result.scorers = pending.length;
   while (pending.length > 0) {
     const behind: Scorer[] = [];
@@ -162,7 +164,7 @@ export async function sweepScorers(
 
 /** One transaction: claim the lock, read a slice of summaries, score, advance the cursor. */
 async function sweepOneBatch(
-  tx: ScorerDb,
+  tx: ScorerDb & EvalDb,
   scorer: Scorer,
   batchSize: number,
   settleMs: number,
@@ -232,12 +234,11 @@ async function sweepOneBatch(
     const toJudge = traces.filter((trace) => !done.has(trace.traceId));
     return { ...batch, written: 0, skipped: 0, toJudge };
   }
-  const { config } = scorer;
-  const scores = scoresOf(
-    scorer,
-    traces,
-    traces.map((trace) => runCheck(config, trace)),
-  );
+  const outcomes =
+    scorer.kind === "preset"
+      ? await scorePresetTraces(scorer.projectId, scorer.config, traces, scorer.tasks ?? [], tx)
+      : traces.map((trace) => runCheck(scorer.config, trace));
+  const scores = scoresOf(scorer, traces, outcomes);
   const written = await insertTraceScores(scores, tx);
   return { ...batch, written, skipped: traces.length - scores.length, toJudge: [] };
 }

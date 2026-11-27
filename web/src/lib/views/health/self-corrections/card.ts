@@ -24,6 +24,7 @@ import { NO_FILTERS, selfCorrectionsHref } from "@/lib/views/health/self-correct
  * the share of failed calls the agent got past, the tool it corrects itself
  * after most, the phrase it says most, and the way to the page (which
  * explains). A lean read: the counts the row shows and nothing else.
+ * `readSelfCorrectionRate` is leaner still: the headline's two counts.
  */
 
 export interface SelfCorrectionsCardModel {
@@ -80,6 +81,33 @@ function emptyCard(
   };
 }
 
+/** The page's window: `windowDays` back from the end of what the reading read (or now, if sooner). */
+function currentRange(run: { windowEnd: Date }, windowDays: WindowDays, now: Date): PageRange {
+  const end = run.windowEnd.getTime() < now.getTime() ? run.windowEnd : now;
+  return { from: new Date(end.getTime() - windowDays * DAY_MS), to: end };
+}
+
+/**
+ * The page's headline counts and nothing else: its turns and self-corrections
+ * over `windowDays`, unfiltered, under the reading's trust, so a number shown
+ * elsewhere (the Tasks tile) is the page's to the decimal. Null before the
+ * first reading.
+ */
+export async function readSelfCorrectionRate(
+  db: BoundReadDb,
+  projectId: string,
+  windowDays: WindowDays,
+  now: Date = new Date(),
+): Promise<{ windowDays: WindowDays; turns: number; events: number } | null> {
+  const run = await loadCorrectionRun(db, projectId);
+  if (!run) return null;
+  const current = currentRange(run, windowDays, now);
+  const trust = run.stored.trust;
+  const turns = await countTurns(db, projectId, current, NO_FILTERS, trust);
+  const events = await countCorrections(db, projectId, current, NO_FILTERS, trust);
+  return { windowDays, turns, events };
+}
+
 export async function readSelfCorrectionsCard(
   db: BoundReadDb,
   projectId: string,
@@ -88,8 +116,7 @@ export async function readSelfCorrectionsCard(
 ): Promise<SelfCorrectionsCardModel> {
   const run = await loadCorrectionRun(db, projectId);
   if (!run) return emptyCard("not_read", projectId, windowDays);
-  const end = run.windowEnd.getTime() < now.getTime() ? run.windowEnd : now;
-  const current: PageRange = { from: new Date(end.getTime() - windowDays * DAY_MS), to: end };
+  const current = currentRange(run, windowDays, now);
   const before: PageRange = {
     from: new Date(current.from.getTime() - windowDays * DAY_MS),
     to: current.from,

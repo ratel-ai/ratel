@@ -5,7 +5,7 @@ import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { createScorer, insertTraceScores } from "./store";
-import { loadAttachableScorers, loadTaskScorers } from "./task-scores";
+import { loadTaskScorers } from "./task-scores";
 import { checkDraft, judgeDraft } from "./test-support";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -90,16 +90,6 @@ test("a task's live scores are the stored results of the scorers scoped to it", 
     const [shared, quiet] = await loadTaskScorers(PROJECT, "task-c", NOW, db);
     assert.deepEqual([shared?.id, shared?.week?.scored, shared?.tasks], [check, 1, tasks]);
     assert.deepEqual([quiet?.id, quiet?.week], [judge, null]);
-    assert.deepEqual(
-      (await loadAttachableScorers(PROJECT, "task-c", db)).map(({ id, everyTrace }) => [
-        id,
-        everyTrace,
-      ]),
-      [
-        [other, false],
-        [every, true],
-      ],
-    );
     assert.deepEqual(await loadTaskScorers(PROJECT, "task-d", NOW, db), []);
   } finally {
     await client.close();

@@ -5,12 +5,13 @@ import { IconButton } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { Section } from "@ratel/design-system/section";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, type Ref, useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import type { StepText } from "@/lib/views/session-replay/settings";
 import type { SessionView, ViewRow } from "@/lib/views/session-replay/view";
 import type { WhatIfOptions, WhatIfRunView } from "@/lib/views/session-replay/what-if";
 import { ContextBar, ContextLens, Markers } from "./ContextLens";
 import { DecisionChip } from "./DecisionChip";
+import { PanelBoundary } from "./PanelBoundary";
 import { type ForkTarget, WhatIfPanel } from "./WhatIfPanel";
 
 /**
@@ -52,15 +53,29 @@ export function SessionTimeline({
   const [current, setCurrent] = useState(
     () => view.rows.find((row) => row.chips.some((chip) => chip.tone === "bad"))?.index ?? 1,
   );
+  // RTL-368: the slider and its label read `current`; the strip, the list and the lens read a
+  // deferred copy, so dragging stays instant while they catch up.
+  const shown = useDeferredValue(current);
   const listRef = useRef<HTMLOListElement>(null);
+  // The list scrolls to the step when someone lands on it, never on each tick of a drag.
+  // A new object each time, so landing again on the same step scrolls to it again.
+  const [reveal, setReveal] = useState<{ step: number } | null>(null);
   useEffect(() => {
+    if (reveal === null) return;
     listRef.current
-      ?.querySelector(`[data-step="${current}"]`)
+      ?.querySelector(`[data-step="${reveal.step}"]`)
       ?.scrollIntoView({ block: "nearest" });
-  }, [current]);
-  const row = view.rows[current - 1] ?? null;
+  }, [reveal]);
+  const row = view.rows[shown - 1] ?? null;
   const lensRow = row?.lensStep ? (view.rows[row.lensStep - 1] ?? null) : null;
-  const go = (index: number) => setCurrent(Math.min(total, Math.max(1, index)));
+  const clamp = useCallback((index: number) => Math.min(total, Math.max(1, index)), [total]);
+  const go = useCallback(
+    (index: number) => {
+      setCurrent(clamp(index));
+      setReveal({ step: clamp(index) });
+    },
+    [clamp],
+  );
 
   return (
     <Section title="Timeline" description="Move through the session one step at a time.">
@@ -77,7 +92,9 @@ export function SessionTimeline({
             min={1}
             max={total}
             value={current}
-            onChange={(event) => go(Number(event.target.value))}
+            onChange={(event) => setCurrent(clamp(Number(event.target.value)))}
+            onPointerUp={() => setReveal({ step: current })}
+            onKeyUp={() => setReveal({ step: current })}
             aria-label="Step"
             aria-valuetext={`Step ${current} of ${total}`}
             className="h-1 flex-1 cursor-pointer accent-accent-mark"
@@ -92,45 +109,66 @@ export function SessionTimeline({
             Step {current} of {total}
           </span>
         </div>
-        <StepStrip rows={view.rows} current={current} onPick={go} />
+        <StepStrip rows={view.rows} current={shown} onPick={go} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <ol
-          ref={listRef}
-          aria-label="Steps"
-          className="flex max-h-[70vh] flex-col gap-1 overflow-y-auto pr-1"
-        >
-          {view.rows.map((step) => (
-            <StepRow
-              key={step.index}
-              row={step}
-              selected={step.index === current}
-              onPick={() => go(step.index)}
-            />
-          ))}
-        </ol>
+        <StepList ref={listRef} rows={view.rows} current={shown} onPick={go} />
         <aside
           className="self-start rounded-lg border border-line bg-raised p-4 lg:sticky lg:top-4"
           aria-label="Context lens"
         >
-          <ContextLens row={lensRow} gaps={view.gaps} />
-          {lensRow && texts[lensRow.index] ? <StepMessages text={texts[lensRow.index]!} /> : null}
+          <PanelBoundary name="context lens" resetKey={lensRow?.index ?? null}>
+            <ContextLens row={lensRow} gaps={view.gaps} />
+            {lensRow && texts[lensRow.index] ? <StepMessages text={texts[lensRow.index]!} /> : null}
+          </PanelBoundary>
           {lensRow && whatIf?.targets[lensRow.index] ? (
-            <WhatIfPanel
-              key={lensRow.index}
-              projectId={whatIf.projectId}
-              target={whatIf.targets[lensRow.index]!}
-              options={whatIf.options}
-              runs={whatIf.runs}
-              readContent={whatIf.readContent}
-            />
+            <PanelBoundary name="What if… panel" resetKey={lensRow.index}>
+              <WhatIfPanel
+                key={lensRow.index}
+                projectId={whatIf.projectId}
+                target={whatIf.targets[lensRow.index]!}
+                options={whatIf.options}
+                runs={whatIf.runs}
+                readContent={whatIf.readContent}
+              />
+            </PanelBoundary>
           ) : null}
         </aside>
       </div>
     </Section>
   );
 }
+
+/** Every step in order; memo'd, so a slider tick that the deferred step has not reached skips it. */
+const StepList = memo(function StepList({
+  ref,
+  rows,
+  current,
+  onPick,
+}: {
+  ref: Ref<HTMLOListElement>;
+  rows: readonly ViewRow[];
+  current: number;
+  onPick: (index: number) => void;
+}) {
+  return (
+    <ol
+      ref={ref}
+      aria-label="Steps"
+      className="flex max-h-[70vh] flex-col gap-1 overflow-y-auto pr-1"
+    >
+      {rows.map((step) => (
+        <StepRow
+          key={step.index}
+          row={step}
+          selected={step.index === current}
+          onPick={() => onPick(step.index)}
+        />
+      ))}
+    </ol>
+  );
+});
 
 /** One cell per step; a dot under a step flags a questionable choice or a marker. */
 function StepStrip({

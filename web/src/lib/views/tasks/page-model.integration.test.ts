@@ -169,3 +169,32 @@ test("Fixes' open fixes, or null when Fixes could not be read: the task pages th
     null,
   );
 });
+
+test("the project's self-corrections are read only for the list's tile, when asked for", async () => {
+  const { client, db } = await setupDb();
+  await seedRun(client);
+  const run = async (tile: boolean) => {
+    const operations: string[] = [];
+    let planLooked = false;
+    const inputs = await loadTasksInputs(PROJECT_ID, {
+      read: (operation, read) => (operations.push(operation), read(db as unknown as BoundReadDb)),
+      planWindowDays: async () => {
+        planLooked = true;
+        return 30;
+      },
+      ...(tile ? { selfCorrectionsTile: true } : {}),
+    });
+    return { operations, planLooked, inputs };
+  };
+  const without = await run(false);
+  assert.ok(
+    !without.operations.includes("tasks_project_self_corrections"),
+    "a task's page needs none",
+  );
+  assert.equal(without.planLooked, false, "nor the plan's window");
+  assert.equal(without.inputs.projectCorrections, null);
+  const withTile = await run(true);
+  assert.ok(withTile.operations.includes("tasks_project_self_corrections"));
+  assert.equal(withTile.planLooked, true);
+  await client.close();
+});

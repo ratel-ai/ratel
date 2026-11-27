@@ -74,7 +74,7 @@ stay outside it (listed at the top of `config.ts`).
 Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`,
 `toolRunInsights`, `focusedConsole`, `customMonitoring`): in the file `flags.<key>`, in the environment
 `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`,
-`FF_FOCUSED_CONSOLE` and `FF_CUSTOM_MONITORING`. A flag
+`FF_FOCUSED_CONSOLE` and `FF_CUSTOM_MONITORING` (it also turns on RQL). A flag
 takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
@@ -84,7 +84,9 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 exist: `ingest` only queues ingest batches and never migrates, `persist` only persists them.
 
 `BASE_URL` is where the console's SDK snippets point: this deployment's origin. The console adds
-`/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
+`/api/v1` when it builds API and ingest URLs. Every snippet passes that address to the Cloud SDK
+explicitly rather than leaning on the SDK's hosted default
+([`snippet-endpoints.test.ts`](src/lib/console/onboarding/snippet-endpoints.test.ts) checks). It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
 
 `RATEL_EXPERIMENTAL_FEATURES=1` (`experimentalFeatures`) turns on the experimental features left in the open-source

@@ -2,9 +2,10 @@ import type { Query } from "@/lib/contracts/query";
 import { placeName } from "@/lib/ingest/geo/codes";
 import { capRows, round, type TruncationTracker } from "@/lib/mcp/serialize";
 import { getMetric, type MetricUnit } from "@/lib/synthesis/metrics/catalog";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
+import type { QueryResult, SqlResult } from "@/lib/synthesis/metrics/query";
 import { formatMetric } from "@/lib/views/dashboards/chart-model";
 import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
+import type { WidgetResult } from "@/lib/views/dashboards/types";
 import { measuresOne } from "@/lib/views/dashboards/widget";
 
 /** A query's numbers as a tool returns them: capped, and in one line. */
@@ -91,12 +92,18 @@ export function cappedResult(
         ...(view === "tools" ? { steps: tracker.take(capRows(steps, limit)) } : {}),
       };
     }
+    case "sql":
+      tracker.mark(result.truncated);
+      return { ...result, rows: tracker.take(capRows(result.rows, limit)) };
   }
 }
 
 /** The numbers in one line, for a host that draws nothing. */
-export function headline(query: Query, result: QueryResult | null): string {
-  if (!result) return "no numbers (the read failed, or the widget waits for a scorer)";
+export function headline(query: Query, result: WidgetResult | null): string {
+  if (!result)
+    return "no numbers (the read failed, the widget waits for a scorer, or its switch is off)";
+  if (result.kind === "refused")
+    return `RQL refused the query: ${result.message} Fix: ${result.fix}`;
   switch (result.kind) {
     case "metric":
     case "geography": {
@@ -141,7 +148,18 @@ export function headline(query: Query, result: QueryResult | null): string {
       if (!analyzedAt) return "no stored analysis yet";
       return `${model.asks.length} clusters and ${model.capabilities.length} tools, analyzed ${analyzedAt.slice(0, 10)}`;
     }
+    case "sql":
+      return tableSummary(result);
   }
+}
+
+/** "2 rows of 2 columns: model, cost." The words of a table, for a host that draws nothing. */
+export function tableSummary({ columns, rows, truncated }: SqlResult): string {
+  const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+  if (rows.length === 0) return `No row. The query has ${plural(columns.length, "column")}.`;
+  const names = columns.map(({ name }) => name).join(", ");
+  const cut = truncated ? " The query had more rows than its limit: these are the first ones." : "";
+  return `${plural(rows.length, "row")} of ${plural(columns.length, "column")}: ${names}.${cut}`;
 }
 
 /** "2 scorers: Fast; Polite." */

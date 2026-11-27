@@ -181,7 +181,7 @@ test("MCP: the route exists and every tool needs a declared MCP scope", () => {
   const [method, path] = MCP_ROUTE.split(" ");
   const route = routeFiles.find((candidate) => candidate.path === path);
   assert.ok(route && exportedMethods(route.source).includes(method));
-  const operations = assembleOperations({ focusedConsole: true });
+  const operations = assembleOperations({ focusedConsole: true, customMonitoring: true });
   assert.ok(operations.length > 0);
   for (const operation of operations) {
     const scope = mcpOperationScope(operation);

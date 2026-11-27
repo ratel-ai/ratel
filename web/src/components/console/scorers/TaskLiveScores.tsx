@@ -2,15 +2,6 @@
 
 import { Button } from "@ratel/design-system/button";
 import { ConfirmDialog } from "@ratel/design-system/dialog";
-import {
-  Menu,
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuLinkItem,
-  MenuSeparator,
-  MenuTrigger,
-} from "@ratel/design-system/menu";
 import { Section } from "@ratel/design-system/section";
 import { EmptyState } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
@@ -19,26 +10,31 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { changeScorerAction } from "@/app/(console)/project/[projectId]/scorers/actions";
 import { formatInteger } from "@/lib/synthesis/traces/v2/format";
-import { newTaskScorerHref, scorersHref } from "@/lib/views/scorers/paths";
-import type { AttachableScorer, TaskScorerScores } from "@/lib/views/scorers/task-scores";
+import { scorerHref } from "@/lib/views/scorers/paths";
+import type { PickerScorer } from "@/lib/views/scorers/picker";
+import type { TaskScorerScores } from "@/lib/views/scorers/task-scores";
 import { KindBadge, summaryValue } from "./parts";
+import { EditScorerButton } from "./ScorerPanel";
+import { ScorerPicker } from "./ScorerPicker";
 import { ScoreTrend } from "./ScoreTrend";
+import { StillCalculating } from "./StillCalculating";
 
-/** A task's scorers: the global ones attached to it, each with its trend, Add scorer and Detach. */
+/**
+ * A task's scorers: the global ones attached to it, each with its trend, Edit and Detach. Add scorer
+ * picks one of the project (inside a `ScorerPickerProvider`), or creates one for this task.
+ */
 export function TaskLiveScores({
   projectId,
   taskId,
   scorers,
-  attachable,
 }: {
   projectId: string;
   taskId: string;
   scorers: readonly TaskScorerScores[];
-  attachable: readonly AttachableScorer[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [narrowing, setNarrowing] = useState<AttachableScorer | null>(null);
+  const [narrowing, setNarrowing] = useState<PickerScorer | null>(null);
 
   /** True when the change was saved. A failure is a toast. */
   async function change(
@@ -57,7 +53,7 @@ export function TaskLiveScores({
     return result.ok;
   }
 
-  async function attach(scorer: AttachableScorer, narrow: boolean) {
+  async function attach(scorer: PickerScorer, narrow: boolean) {
     if (await change(scorer, { action: "attach", narrow }))
       toast({ title: `Attached ${scorer.name}`, tone: "success" });
   }
@@ -82,39 +78,22 @@ export function TaskLiveScores({
     });
   }
 
+  function picked(scorer: PickerScorer | null) {
+    if (!scorer) return;
+    // A scorer created here already has the task.
+    if (scorer.tasks?.includes(taskId)) router.refresh();
+    else if (scorer.tasks === null) setNarrowing(scorer);
+    else startTransition(() => attach(scorer, false));
+  }
+
   const add = (
-    <Menu>
-      <MenuTrigger render={<Button variant="secondary" loading={pending} />}>
-        Add scorer
-      </MenuTrigger>
-      <MenuContent align="end" className="max-h-80 max-w-80 overflow-y-auto">
-        {attachable.length > 0 ? (
-          <>
-            <MenuGroup label="Attach a scorer">
-              {attachable.map((scorer) => (
-                <MenuItem
-                  key={scorer.id}
-                  onClick={() =>
-                    scorer.everyTrace
-                      ? setNarrowing(scorer)
-                      : startTransition(() => attach(scorer, false))
-                  }
-                >
-                  {scorer.name}
-                  {scorer.everyTrace ? (
-                    <span className="ml-2 text-xs text-fg-subtle">All traces</span>
-                  ) : null}
-                </MenuItem>
-              ))}
-            </MenuGroup>
-            <MenuSeparator />
-          </>
-        ) : null}
-        <MenuLinkItem render={<Link href={newTaskScorerHref(projectId, taskId)} />}>
-          Create scorer for this task
-        </MenuLinkItem>
-      </MenuContent>
-    </Menu>
+    <ScorerPicker
+      value={null}
+      onChange={(_, scorer) => picked(scorer)}
+      filter={(scorer) => !scorer.tasks?.includes(taskId)}
+      taskId={taskId}
+      trigger={{ render: <Button variant="secondary" loading={pending} />, children: "Add scorer" }}
+    />
   );
   return (
     <Section
@@ -135,10 +114,7 @@ export function TaskLiveScores({
             <li key={scorer.id} className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h3 className="text-sm font-medium">
-                  <Link
-                    href={`${scorersHref(projectId)}/${scorer.id}`}
-                    className="text-fg hover:underline"
-                  >
+                  <Link href={scorerHref(projectId, scorer.id)} className="text-fg hover:underline">
                     {scorer.name}
                   </Link>
                 </h3>
@@ -151,6 +127,7 @@ export function TaskLiveScores({
                 <span className="text-xs text-fg-subtle tabular-nums">
                   {`${formatInteger(scorer.week?.scored ?? 0)} scored, 7 days`}
                 </span>
+                <EditScorerButton scorer={scorer} />
                 <Button
                   variant="ghost"
                   disabled={pending}
@@ -160,7 +137,11 @@ export function TaskLiveScores({
                   Detach
                 </Button>
               </div>
-              <ScoreTrend days={scorer.trend} verdict={scorer.verdict} />
+              {scorer.trend.every(({ scored }) => scored === 0) ? (
+                <StillCalculating padded={false} />
+              ) : (
+                <ScoreTrend days={scorer.trend} verdict={scorer.verdict} />
+              )}
             </li>
           ))}
         </ul>

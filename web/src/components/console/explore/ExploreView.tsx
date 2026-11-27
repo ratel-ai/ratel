@@ -12,12 +12,11 @@ import { useMemo, useState } from "react";
 import { previewKey } from "@/components/console/dashboards/use-widget-preview";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import { type TimeWindow, TimeWindowMenu } from "@/components/console/traces/TracesHeader";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import { type TraceFilterBarFacets, withRangePreset } from "@/lib/synthesis/traces/v2/filters";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
 import { barChange, barSearch, DASHBOARD_FILTER_FIELDS } from "@/lib/views/dashboards/filters";
 import { type DashboardRange, EXACT_RANGE } from "@/lib/views/dashboards/links";
-import type { DashboardFilters, ScorerOption, WidgetInput } from "@/lib/views/dashboards/types";
+import type { DashboardFilters, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import { STARTING_POINTS } from "@/lib/views/explore/starts";
 import { withoutPanels } from "@/lib/views/explore/state";
 import { MAX_PANELS } from "@/lib/views/explore/types";
@@ -32,19 +31,17 @@ export function ExploreView({
   problem,
   filters,
   facets,
-  scorers,
   dashboards,
   range,
   timeWindow,
 }: {
   projectId: string;
   /** The panels of the address with their numbers: null for one that failed, absent for one not read. */
-  served: readonly { widget: WidgetInput; result: QueryResult | null | undefined }[];
+  served: readonly { widget: WidgetInput; result: WidgetResult | null | undefined }[];
   /** Why the address cannot be shown, or null. */
   problem: string | null;
   filters: DashboardFilters;
   facets: TraceFilterBarFacets;
-  scorers: readonly ScorerOption[] | null;
   dashboards: readonly DashboardOption[];
   /** What the panels read. */
   range: DashboardRange;
@@ -183,7 +180,6 @@ export function ExploreView({
                 widget={widget}
                 refused={explore.refused?.panelId === id ? explore.refused : null}
                 served={servedResults}
-                scorers={scorers}
                 facets={facets}
                 range={range}
                 filters={filters}

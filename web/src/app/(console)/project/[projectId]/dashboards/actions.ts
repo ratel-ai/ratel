@@ -9,7 +9,6 @@ import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import {
   changeDashboard,
   type DashboardActionInput,
@@ -25,9 +24,10 @@ import {
 import { dashboardsHref } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { resolveWidgetRange } from "@/lib/views/dashboards/range";
-import { scorerOptions } from "@/lib/views/dashboards/scorer-options";
 import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
+import type { WidgetResult } from "@/lib/views/dashboards/types";
+import { scorerNames } from "@/lib/views/scorers/picker";
 import { metricFeatures } from "./context";
 
 const logger = getLogger("dashboards/actions");
@@ -42,7 +42,7 @@ export async function changeDashboardAction(
       findProjectScope,
       enabled: (subject) => featureEnabled("customMonitoring", subject),
       features: metricFeatures,
-      scorers: (projectId) => scorerOptions(projectId),
+      scorers: (projectId) => scorerNames(projectId),
       isRestricted: isRestrictedBySupportSession,
       store,
       observe: async (fields) => {
@@ -87,7 +87,7 @@ export async function exportDashboardAction(
     if (!dashboard) return { ok: false, error: "This dashboard no longer exists." };
     return {
       ok: true,
-      document: exportDashboard(dashboard, await scorerOptions(scope.project.id)),
+      document: exportDashboard(dashboard, await scorerNames(scope.project.id)),
       leftOut: dashboard.widgets.filter(isBroken).length,
     };
   } catch (err) {
@@ -97,7 +97,7 @@ export async function exportDashboardAction(
   }
 }
 
-export type WidgetPreview = { ok: true; result: QueryResult } | { ok: false; error: string };
+export type WidgetPreview = { ok: true; result: WidgetResult } | { ok: false; error: string };
 
 /** The editor's live preview: the numbers a widget would show, before it is saved. */
 export async function previewWidgetAction(

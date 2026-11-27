@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { round4 } from "@/lib/readings/trace-signals/signals/build";
 import { detectDemand } from "@/lib/readings/trace-signals/signals/detect-demand";
-import { wilsonLow } from "@/lib/readings/trace-signals/signals/severity";
 
 const MIX = { declared: 0, inferred: 10, otlp: 0 };
 const clusters = (singletons: number, groups: number) => [
@@ -10,13 +8,12 @@ const clusters = (singletons: number, groups: number) => [
   ...Array.from({ length: groups }, () => ({ memberCount: 4 })),
 ];
 
-test("fragmented_intents reads the singleton share of the intent graph", () => {
+test("fragmented_intents is measured but never shown: it is the intent engine's state, not the agent's", () => {
+  // "Ratel cannot learn from an ask it has only seen once" describes our
+  // ranking, not a customer problem; on one WhatsApp agent the "asks" were
+  // "sì" and site names. Measuring it resolves any card still open.
   const result = detectDemand(clusters(209, 23), MIX);
-  const [signal] = result.signals;
-  assert.equal(signal?.kind, "fragmented_intents");
-  assert.equal(signal?.metrics.singletons, 209);
-  assert.equal(signal?.n, 232);
-  assert.equal(signal?.severity, round4(wilsonLow(209, 232)));
+  assert.equal(result.signals.length, 0);
   assert.ok(result.measured.has("fragmented_intents"));
 });
 

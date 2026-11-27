@@ -12,6 +12,8 @@ sentence); without it the copy keeps its neutral words.
 
 `query.ts` is the query object: the one JSON contract of dashboards, alerts and MCP (a version, a kind
 and what that kind asks; never the time window), with `parseQuery` and the `MEASURES` vocabulary.
+Kind `sql` is RQL text (`text`, at most `MAX_SQL_TEXT` characters) with the RQL version it was
+written in (`rqlVersion`, a whole number from 1); `synthesis/rql` checks the version and runs it.
 `check.ts` is what a check reads and how it compares, for check scorers and funnel steps. `views/dashboards/json-schemas.ts` derives the JSON Schemas under
 `docs/schemas`.
 

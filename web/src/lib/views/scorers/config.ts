@@ -6,6 +6,8 @@ import {
   type CheckValue,
   JUDGE_OUTPUTS,
   type JudgeConfig,
+  PRESET_KINDS,
+  type PresetConfig,
   type ScorerDefinition,
   type ScorerDraft,
   type ScorerFilter,
@@ -14,9 +16,17 @@ import {
 export { MAX_PATH_CHARS, MAX_VALUE_CHARS };
 export const MAX_NAME_CHARS = 100;
 export const MAX_PROMPT_CHARS = 5_000;
-/** Every scorer of every project takes its turn in one sweep. */
+/**
+ * The scorers a project's people may have. Every scorer of every project takes its turn in one
+ * sweep. The scorers the system makes for tasks (`TASK_SCORERS_ACTOR`) do not count.
+ */
 export const MAX_SCORERS = 100;
+/** Who creates the scorers that stand for a task's scorers (the migration names them the same). */
+export const TASK_SCORERS_ACTOR = "system:task-scorers";
 export const MAX_TASKS = 50;
+/** The task kind a preset draft may name besides `PRESET_KINDS`: it becomes a pass-or-fail judge. */
+export const CRITERIA_PRESET = "judge_criteria";
+const MAX_TOOL_CHARS = 500;
 const MAX_FILTER_VALUES = 50;
 const FILTER_LISTS = [
   "models",
@@ -35,6 +45,9 @@ export type DraftField =
   | "value"
   | "prompt"
   | "output"
+  | "preset"
+  | "max"
+  | "tool"
   | "tasks"
   | "sampleRate";
 export type DraftProblem = { ok: false; error: string; field?: DraftField };
@@ -61,6 +74,8 @@ export function parseScorerDraft(raw: unknown): { ok: true; draft: ScorerDraft }
     return fail(`Choose from 1 to ${MAX_TASKS} tasks, or every trace.`, "tasks");
   const definition = parseDefinition(raw.kind, raw.config);
   if ("ok" in definition) return definition;
+  if (raw.kind === "preset" && tasks === null)
+    return fail("A task preset scores the runs of its tasks. Choose them.", "tasks");
   return { ok: true, draft: { name, sampleRate, enabled, filter, tasks, ...definition } };
 }
 
@@ -73,6 +88,16 @@ export function parseDefinition(kind: unknown, config: unknown): ScorerDefinitio
   }
   if (kind === "judge") {
     const parsed = parseJudge(config);
+    return "ok" in parsed ? parsed : { kind, config: parsed };
+  }
+  if (kind === "preset") {
+    if (config.preset === CRITERIA_PRESET) {
+      const prompt = text(config.criteria, MAX_PROMPT_CHARS);
+      return prompt
+        ? { kind: "judge", config: { prompt, output: "boolean" } }
+        : fail(`Write the task criteria in up to ${MAX_PROMPT_CHARS} characters.`, "prompt");
+    }
+    const parsed = parsePreset(config);
     return "ok" in parsed ? parsed : { kind, config: parsed };
   }
   return fail("Choose a kind.");
@@ -127,6 +152,37 @@ function parseCheck(raw: Record<string, unknown>): CheckConfig | DraftProblem {
   if (value === null) return fail("Give the check a value to compare with.", "value");
   if (!isComparable(op, value)) return fail("This operator compares with a number.", "value");
   return { path, op, value };
+}
+
+/** A task kind and its setting, with the rules of `task-scorers/actions.ts`. */
+function parsePreset(raw: Record<string, unknown>): PresetConfig | DraftProblem {
+  const preset = PRESET_KINDS.find((candidate) => candidate === raw.preset);
+  if (!preset) return fail("Choose a task preset.", "preset");
+  switch (preset) {
+    case "ends_well":
+      return { preset };
+    case "expected_tool": {
+      const tool = text(raw.tool, MAX_TOOL_CHARS);
+      return tool ? { preset, tool } : fail("Give the tool the run must call.", "tool");
+    }
+    default: {
+      const { max } = raw;
+      const whole = preset === "max_tool_calls" || preset === "max_self_corrections";
+      if (
+        typeof max !== "number" ||
+        !Number.isFinite(max) ||
+        max < 0 ||
+        (whole && !Number.isSafeInteger(max))
+      )
+        return fail(
+          whole
+            ? "The limit is a whole number of 0 or more."
+            : "The limit is a number of 0 or more.",
+          "max",
+        );
+      return { preset, max };
+    }
+  }
 }
 
 function parseJudge(raw: Record<string, unknown>): JudgeConfig | DraftProblem {

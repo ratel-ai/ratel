@@ -81,6 +81,13 @@ test("file only", () => {
   assert.equal(config.flags.evalGate, true);
 });
 
+test("RQL_DATABASE_URL is the RQL database, unset by default", () => {
+  assert.equal(resolveConfig().database.rqlUrl, undefined);
+  const config = resolveConfig({ env: { RQL_DATABASE_URL: " postgres://rql@replica/ratel " } });
+  assert.equal(config.database.rqlUrl, "postgres://rql@replica/ratel");
+  assert.equal(resolveConfig({ env: { RQL_DATABASE_URL: "" } }).database.rqlUrl, undefined);
+});
+
 test("CONFIG_PATH in the environment names the file", () => {
   const configPath = configFile("config-path.json", { jobs: { runningPerProject: 3 } });
   assert.equal(resolveConfig({ env: { CONFIG_PATH: configPath } }).jobs.runningPerProject, 3);

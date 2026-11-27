@@ -1,6 +1,7 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
+import { seedTaskPresets } from "@/lib/views/scorers/task-presets";
 import {
   type EnqueueScoreTasksDeps,
   enqueueDueTaskScores,
@@ -28,10 +29,15 @@ export function fillComputeSeams(seams: typeof computeSeams = computeSeams): voi
 fillComputeSeams();
 
 const scorersOn = (projectId: string) => featureEnabled("customMonitoring", { projectId });
+/** With the flag on, a new task gets its default presets when it is next due for scoring. */
+const oneModel: Pick<EnqueueScoreTasksDeps, "scorersOn" | "seedPresets"> = {
+  scorersOn,
+  seedPresets: (projectId, now, db) => seedTaskPresets(projectId, now, db),
+};
 
 /** The signal run's trigger. */
 export function enqueueTaskScores(projectId: string, deps: EnqueueScoreTasksDeps = {}) {
-  return enqueueScoreTasksJob(projectId, { scorersOn, ...deps });
+  return enqueueScoreTasksJob(projectId, { ...oneModel, ...deps });
 }
 
 /**
@@ -43,7 +49,7 @@ export function taskScoresEnqueueStep(
   enqueue?: () => Promise<{ enqueued: number }>,
   deps: EnqueueScoreTasksDeps = {},
 ): DrainStep {
-  const run = enqueue ?? (() => enqueueDueTaskScores({ scorersOn, ...deps }));
+  const run = enqueue ?? (() => enqueueDueTaskScores({ ...oneModel, ...deps }));
   return {
     name: "task_scores_enqueue",
     phase: "before",
@@ -53,7 +59,7 @@ export function taskScoresEnqueueStep(
 
 export const taskScorersRegistration: Registration = {
   jobs: {
-    score_tasks: (job) => scoreTasksJob(job.projectId),
+    score_tasks: (job) => scoreTasksJob(job.projectId, { scorersOn }),
   },
   drainSteps: [taskScoresEnqueueStep()],
 };

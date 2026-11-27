@@ -20,7 +20,8 @@ export type FeatureName =
   | "hosted_apis"
   | "scorers"
   | "alerts"
-  | "explore";
+  | "explore"
+  | "rql";
 
 export type FeatureSpanOptions = {
   attributes?: Attributes;

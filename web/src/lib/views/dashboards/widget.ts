@@ -11,22 +11,26 @@ import {
   type MeasureId,
   type MetricQuery,
   metricQuery,
+  QUERY_VERSION,
   type Query,
-  type QueryKind,
+  type SqlQuery,
   type StepFlowNode,
   type StepFlowQuery,
   stepFlowQuery,
 } from "@/lib/contracts/query";
 import { placeName } from "@/lib/ingest/geo/codes";
 import { getMetric, type MetricDefinition } from "@/lib/synthesis/metrics/catalog";
+import { RQL_VERSION } from "@/lib/synthesis/rql/domain/version";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   METRIC_CHARTS,
   type MetricWidget,
-  type ScorerOption,
   type WidgetChart,
   type WidgetInput,
+  type WidgetKind,
+  type WidgetQuery,
 } from "@/lib/views/dashboards/types";
+import type { PickerScorer } from "@/lib/views/scorers/picker";
 
 /** What fits a widget, and how it is named. Safe for the browser. */
 
@@ -40,16 +44,25 @@ export const CHART_LABELS: Readonly<Record<WidgetChart, string>> = {
   funnel: "Funnel",
   clusters: "Clusters",
   geography: "Map",
+  sql: "Table or chart",
 };
 
-export const KIND_LABELS: Readonly<Record<QueryKind, string>> = {
+export const KIND_LABELS: Readonly<Record<WidgetKind, string>> = {
   metric: "Metric",
   flow: "Flow",
   step_flow: "Step flow",
   funnel: "Funnel",
   clusters: "Clusters",
   geography: "Map",
+  sql: "SQL",
 };
+
+export const SQL_CHART_PROBLEM =
+  'A query of kind sql is drawn as chart "sql": a table, or a chart when its rows have one time column.';
+
+/** What a new widget of kind sql starts from. */
+export const NEW_SQL_TEXT =
+  "select time_bucket('1 hour', started_at) as hour, count(*) as traces\nfrom traces\ngroup by hour\norder by hour";
 
 const NODE_LABELS: Readonly<Record<StepFlowNode, string>> = {
   tool: "Tools",
@@ -79,6 +92,7 @@ const DIMENSION_LABELS: Readonly<Record<Dimension, string>> = {
 
 /** Why a chart does not fit the grouping, or null. */
 export function chartProblem({ chart, query }: Pick<WidgetInput, "chart" | "query">) {
+  if (query.kind === "sql") return chart === "sql" ? null : SQL_CHART_PROBLEM;
   if (query.kind !== "metric")
     return chart === query.kind ? null : `A ${query.kind} is drawn as a ${query.kind}.`;
   if (!isMetricChart(chart)) return `A metric cannot be drawn as a ${chart}.`;
@@ -102,7 +116,7 @@ export interface QueryChange {
 export function changeQuery(
   query: MetricQuery,
   change: QueryChange,
-  scorers: readonly ScorerOption[],
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
 ): MetricQuery {
   const [current] = query.measures;
   const metric = getMetric(change.measure ?? current.measure);
@@ -136,7 +150,7 @@ export function changeQuery(
 export function changeGeography(
   query: GeographyQuery,
   change: QueryChange,
-  scorers: readonly ScorerOption[],
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
 ): GeographyQuery {
   const { measures, filters } = changeQuery(
     metricQuery(query.measures[0].measure, query.measures[0].aggregation, {
@@ -164,7 +178,7 @@ export function fitWidget(widget: WidgetInput): WidgetInput {
 }
 
 /** The widget a person starts from when they pick a kind: its filter stays where the kind has one. */
-export function widgetOfKind(kind: QueryKind, from: WidgetInput): WidgetInput {
+export function widgetOfKind(kind: WidgetKind, from: WidgetInput): WidgetInput {
   if (from.query.kind === kind) return from;
   const filters = queryFilter(from.query) ?? {};
   switch (kind) {
@@ -202,7 +216,14 @@ export function widgetOfKind(kind: QueryKind, from: WidgetInput): WidgetInput {
         }),
         chart: "geography",
       };
+    case "sql":
+      return { ...from, query: sqlWidgetQuery(NEW_SQL_TEXT), chart: "sql" };
   }
+}
+
+/** A query of kind sql in the RQL version of this build. */
+export function sqlWidgetQuery(text: string): SqlQuery {
+  return { version: QUERY_VERSION, kind: "sql", text, rqlVersion: RQL_VERSION };
 }
 
 /** What a new funnel starts from: the fewest steps it may have. */
@@ -217,8 +238,8 @@ export function queryMetric(query: Query): MetricDefinition | null {
 }
 
 /** A query's own trace filter, without its scorer. */
-export function queryFilter(query: Query): TraceFilter {
-  if (query.kind === "clusters") return {};
+export function queryFilter(query: WidgetQuery): TraceFilter {
+  if (query.kind === "clusters" || query.kind === "sql") return {};
   if (!measuresOne(query)) return query.filters;
   const { scorer: _, ...filter } = query.filters;
   return filter;
@@ -234,15 +255,16 @@ export function measuresOne(query: Query): query is MetricQuery | GeographyQuery
 }
 
 /** The query with another trace filter; its scorer stays. */
-export function withFilter<Q extends Query>(query: Q, filter: TraceFilter): Q {
-  if (query.kind === "clusters") return query;
+export function withFilter<Q extends WidgetQuery>(query: Q, filter: TraceFilter): Q {
+  if (query.kind === "clusters" || query.kind === "sql") return query;
   const scorer = queryScorerId(query);
   return { ...query, filters: { ...filter, ...(scorer ? { scorer: { id: scorer } } : {}) } };
 }
 
 /** Whether the dashboard's filters narrow it. */
-export function isFilterable(query: Query): boolean {
-  if (query.kind === "clusters") return false;
+export function isFilterable(query: WidgetQuery): boolean {
+  // RQL text has no filter of its own to take the page's: the page's filter applies when it runs.
+  if (query.kind === "clusters" || query.kind === "sql") return false;
   return !measuresOne(query) || queryMetric(query)?.filterable === true;
 }
 
@@ -269,16 +291,16 @@ export function dimensionLabel(dimension: Dimension): string {
 }
 
 /** The scorers a metric can read: pass or fail for the pass rate, 1 to 5 for the average. */
-export function scorersOfMetric(
+export function scorersOfMetric<T extends Pick<PickerScorer, "verdict">>(
   metric: MeasureId,
-  scorers: readonly ScorerOption[],
-): readonly ScorerOption[] {
+  scorers: readonly T[],
+): readonly T[] {
   if (metric === "scorer_count") return scorers;
   return scorers.filter(({ verdict }) => verdict === (metric === "scorer_pass_rate"));
 }
 
 /** The widget "Add to dashboard" starts from on a scorer's page. */
-export function scorerWidget({ id, verdict }: Pick<ScorerOption, "id" | "verdict">): MetricWidget {
+export function scorerWidget({ id, verdict }: Pick<PickerScorer, "id" | "verdict">): MetricWidget {
   return {
     title: "",
     query: metricQuery(verdict ? "scorer_pass_rate" : "scorer_average", verdict ? "rate" : "avg", {
@@ -329,6 +351,8 @@ export function queryName(query: NamedQuery): string {
       return query.country
         ? `${metricName({ ...query, dimensions: [] })} by region of ${placeName(query.country)}`
         : `${metricName({ ...query, dimensions: [] })} by country`;
+    case "sql":
+      return "RQL query";
   }
 }
 
@@ -339,7 +363,8 @@ type NamedQuery =
   | Pick<StepFlowQuery, "kind" | "node" | "start" | "mode" | "target">
   | { kind: "funnel"; steps: readonly { name: string }[] }
   | Pick<ClustersQuery, "kind" | "view">
-  | Pick<GeographyQuery, "kind" | "measures" | "country">;
+  | Pick<GeographyQuery, "kind" | "measures" | "country">
+  | { kind: "sql" };
 
 function metricName({
   measures: [{ measure, aggregation }],

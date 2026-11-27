@@ -1,7 +1,19 @@
-import { and, asc, count, desc, eq, gte, inArray, notInArray, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  ne,
+  notInArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 
 import { getDb } from "@/lib/platform/db/client";
-import { parseDefinition, parseFilter } from "./config";
+import { parseDefinition, parseFilter, TASK_SCORERS_ACTOR } from "./config";
 import { type ScorerRow, traceScorers, traceScorerTasks, traceScores } from "./schema";
 import { taskTraces } from "./traces";
 import type { Scorer, ScorerDraft, ScorerScope, TraceScore } from "./types";
@@ -72,11 +84,14 @@ export async function getScorer(
   return row ? ((await scorersOf([row], db))[0] ?? null) : null;
 }
 
+/** The scorers that count against `MAX_SCORERS`: all but the ones the system made for tasks. */
 export async function countScorers(projectId: string, db: ScorerDb = getDb()): Promise<number> {
   const [row] = await db
     .select({ count: count() })
     .from(traceScorers)
-    .where(eq(traceScorers.projectId, projectId));
+    .where(
+      and(eq(traceScorers.projectId, projectId), ne(traceScorers.createdBy, TASK_SCORERS_ACTOR)),
+    );
   return row?.count ?? 0;
 }
 

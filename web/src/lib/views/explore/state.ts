@@ -114,6 +114,7 @@ const stateSchema = z
 
 /** A panel, also one with a text a person has not written yet: it is kept as it is. */
 function parsePanel(raw: { title?: string; chart: string; query: Record<string, unknown> }) {
+  // Every switch on: the address keeps a panel whose switch is off, and the page does not read it.
   const features = { customMonitoring: true };
   const parsed = parseWidget(raw, features);
   if (parsed.ok) return parsed;

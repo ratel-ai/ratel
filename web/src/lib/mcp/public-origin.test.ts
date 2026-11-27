@@ -40,16 +40,16 @@ test("with no configured origin, discovery stays on the port the client used", (
 });
 
 test("a configured origin wins, because production is the authority on its own URL", () => {
-  withEnv("https://cloud.ratel.sh", () => {
-    assert.equal(mcpOrigin(request("http://10.0.1.7:3000/api/mcp")), "https://cloud.ratel.sh");
+  withEnv("https://app.ratel.sh", () => {
+    assert.equal(mcpOrigin(request("http://10.0.1.7:3000/api/mcp")), "https://app.ratel.sh");
   });
 });
 
 test("a trailing slash in the configured origin does not double up", () => {
-  withEnv("https://cloud.ratel.sh/", () => {
+  withEnv("https://app.ratel.sh/", () => {
     assert.equal(
       mcpResourceUrl(request("http://localhost:3000/api/mcp")),
-      "https://cloud.ratel.sh/api/mcp",
+      "https://app.ratel.sh/api/mcp",
     );
   });
 });
@@ -71,14 +71,14 @@ test("a forwarding proxy's host is preferred over the socket URL", () => {
 test("the forwarded host is only trusted where no origin is configured", () => {
   // Production always sets APP_PUBLIC_URL, so a spoofed header cannot redirect
   // discovery there. This asserts that ordering rather than assuming it.
-  withEnv("https://cloud.ratel.sh", () => {
+  withEnv("https://app.ratel.sh", () => {
     assert.equal(
       mcpOrigin(
         request("http://localhost:3000/api/mcp", {
           "x-forwarded-host": "attacker.example",
         }),
       ),
-      "https://cloud.ratel.sh",
+      "https://app.ratel.sh",
     );
   });
 });
@@ -95,12 +95,12 @@ test("the resource identifier is the endpoint, not the bare origin", () => {
 });
 
 test("the metadata path carries the resource path after the well-known segment", () => {
-  withEnv("https://cloud.ratel.sh", () => {
-    const metadata = mcpResourceMetadataUrl(request("https://cloud.ratel.sh/api/mcp"));
+  withEnv("https://app.ratel.sh", () => {
+    const metadata = mcpResourceMetadataUrl(request("https://app.ratel.sh/api/mcp"));
 
-    assert.equal(metadata, "https://cloud.ratel.sh/.well-known/oauth-protected-resource/api/mcp");
+    assert.equal(metadata, "https://app.ratel.sh/.well-known/oauth-protected-resource/api/mcp");
     // The document has to live on the same origin as the endpoint, or the
     // client leaves this server mid-handshake.
-    assert.ok(metadata.startsWith(mcpOrigin(request("https://cloud.ratel.sh/api/mcp"))));
+    assert.ok(metadata.startsWith(mcpOrigin(request("https://app.ratel.sh/api/mcp"))));
   });
 });

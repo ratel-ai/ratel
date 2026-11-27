@@ -12,10 +12,14 @@ import {
   createDashboard,
   deleteDashboard,
   getDashboard,
+  getDashboards,
 } from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
-import type { Widget } from "@/lib/views/dashboards/types";
+import type { Widget, WidgetResult } from "@/lib/views/dashboards/types";
+import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
+import { readDashboardItems } from "@/lib/views/home/dashboard-items";
 import { FOCUSED_READS, loadFocusedOverview } from "@/lib/views/home/focused-load";
+import type { OverviewReadScope } from "@/lib/views/home/overview-reads";
 import {
   findDashboardWidget,
   offeredDashboardWidgets,
@@ -217,6 +221,55 @@ test("nothing is read without an entry, and a failed read is not an empty one", 
     },
   });
   assert.equal(failed.dashboards, "failed");
+});
+
+test("an RQL widget shows its rows", async () => {
+  const made = await createDashboard(
+    {
+      projectId: PROJECT,
+      name: "RQL",
+      widgets: [
+        {
+          id: "rql",
+          title: "Traces",
+          query: sqlWidgetQuery("select count(*) as traces from traces"),
+          chart: "sql",
+          layout: { x: 0, y: 0, w: 6, h: 5 },
+        },
+      ],
+      filters: {},
+      ...EDITOR,
+    },
+    db,
+  );
+  assert.ok(made);
+  const rows: WidgetResult = {
+    kind: "sql",
+    columns: [{ name: "traces", type: "integer" }],
+    rows: [[4]],
+    truncated: false,
+  };
+  const at = {
+    projectId: PROJECT,
+    organization: { id: ORG } as OverviewReadScope["organization"],
+    current: { since: new Date(NOW.getTime() - 7 * 86_400_000), until: NOW },
+    before: { since: new Date(NOW.getTime() - 14 * 86_400_000), until: NOW },
+    now: NOW,
+    db,
+  };
+  const id = dashboardItemId(made.id, "rql");
+  const read = () =>
+    readDashboardItems(
+      at,
+      [id],
+      { preset: "7d", from: "", to: "" },
+      {
+        dashboards: getDashboards,
+        widget: async () => rows,
+      },
+    );
+  const item = (await read())[id];
+  assert.equal(item?.kind === "widget" && item.result, rows);
 });
 
 test("the picker offers the project's own widgets, by dashboard", async () => {

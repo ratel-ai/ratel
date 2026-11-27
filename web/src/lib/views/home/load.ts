@@ -3,6 +3,7 @@ import type { DailyAggregateRow, PromptCacheTotals } from "@/lib/ingest/otlp/que
 import type { getDb } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
+import { toolRunInsightsEnabled } from "@/lib/readings/trace-signals/tool-run-insights";
 import {
   type AgentHealthPlanLimits,
   agentHealthHref,
@@ -10,6 +11,7 @@ import {
   type HealthPageModel,
   type HealthTile,
   healthReadiness,
+  LOW_CONFIDENCE_FLOOR,
   parseWindowDays,
   type WindowDays,
 } from "@/lib/readings/trace-signals/view";
@@ -35,6 +37,7 @@ import {
   type SelfCorrectionsCardModel,
   unavailableSelfCorrectionsCard,
 } from "@/lib/views/health/self-corrections/card";
+import { healthUnlock } from "@/lib/views/health/unlock";
 import { type Attention, buildAttention } from "@/lib/views/home/attention";
 import { CONTEXT_PEEK } from "@/lib/views/home/context-peek";
 import {
@@ -277,8 +280,14 @@ export async function loadOverview({
     recentRuns,
     runTasks,
     or("overview_telemetry", null, readTelemetry),
-    or("overview_agent_health", pendingHealthModel(healthWindow), (at) =>
-      readHealth(at, healthWindow, healthLimits),
+    // The reading Agent health shows, low-confidence floor included: Needs attention opens with it.
+    or("overview_agent_health", pendingHealthModel(healthWindow), async (at) =>
+      readHealth(
+        at,
+        healthWindow,
+        healthLimits,
+        (await toolRunInsightsEnabled(project.id, organization)) ? LOW_CONFIDENCE_FLOOR : undefined,
+      ),
     ),
     // Each of its sources degrades on its own; this fallback covers the rest.
     or("overview_fixes", null, readFixes),
@@ -450,8 +459,11 @@ export function overviewAttention({
   projectId: string;
   window: OverviewWindow;
   traces: Pick<TraceAggregateSummary, "count" | "errorCount"> | null;
-  /** Cut to the plan; null when Agent health is off. */
-  health: Pick<HealthPageModel, "signals" | "lockedCount"> | null;
+  /** Cut to the plan; null when Agent health is off. Its issues are listed only once it unlocks. */
+  health: Pick<
+    HealthPageModel,
+    "signals" | "lockedCount" | "turns" | "floor" | "computedAt"
+  > | null;
   healthWindow: WindowDays;
   fixes: FixesSlice | null;
   pendingRewrites: number | null;
@@ -462,6 +474,8 @@ export function overviewAttention({
 }): Attention {
   const root = projectRoot(projectId);
   const healthHref = health ? agentHealthHref(projectId, healthWindow) : null;
+  // Agent health's own rule: what it cannot open yet is not listed here.
+  const unlock = health ? healthUnlock(health) : null;
   // An issue opens the fix that resolves it, when Fixes has one.
   const fixLinks = new Map<string, string>();
   for (const fix of [...(fixes?.open ?? []), ...(fixes?.applied ?? [])]) {
@@ -482,6 +496,7 @@ export function overviewAttention({
     },
     issues: health?.signals ?? [],
     lockedIssues: health?.lockedCount ?? 0,
+    healthLock: unlock && !unlock.unlocked ? unlock : null,
     issueHref: (issueId) => (healthHref ? issuePanelHref(healthHref, issueId) : root),
     fixHref: (issueId) => fixLinks.get(issueId) ?? null,
     healthHref,
@@ -532,9 +547,10 @@ export function overviewDaily(
   };
 }
 
-/** The first try tile once there is a reading, for the stat row. */
+/** The first try tile once there is a reading by the usual floor, for the stat row. */
 export function firstTryTile(health: HealthPageModel): HealthTile | null {
-  if (healthReadiness(health) !== "ready") return null;
+  const floor = health.lowConfidence?.firmsUpAt ?? health.floor;
+  if (healthReadiness({ turns: health.turns, floor }) !== "ready") return null;
   return (
     health.tiles.find(
       (tile) => (tile.key === "top_5" || tile.key === "first_try") && tile.value !== null,
