@@ -225,6 +225,7 @@ test("the Tasks tile reads the page's headline: the same turns, the same self-co
   const inputs = await loadTasksInputs(PROJECT_ID, {
     read: (_operation, read) => read(db as unknown as BoundReadDb),
     planWindowDays: async () => 7,
+    selfCorrectionsTile: true,
   });
   const { stats } = buildTaskList(inputs);
   assert.equal(stats.correctionsWindowDays, 7, "the plan's page shows no more than 7 days");

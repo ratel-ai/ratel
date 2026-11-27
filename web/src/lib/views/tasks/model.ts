@@ -137,7 +137,8 @@ export interface TasksInputs {
   /**
    * The project's self-corrections as the Self-corrections page counts them
    * (every closed turn ending in `windowDays`, placed in a task or not), for
-   * the list's tile; null when the page has no reading or it was not read.
+   * the list's tile; null when the page has no reading, it was not read, or
+   * the caller shows no tile (`selfCorrectionsTile`).
    */
   projectCorrections: ProjectCorrections | null;
   /** Null until topics have been assigned for the project. */

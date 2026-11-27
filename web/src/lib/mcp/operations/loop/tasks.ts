@@ -108,7 +108,10 @@ async function taskFixesFor(projectId: string) {
 
 /** The Tasks page's model: `buildTaskList` with Fixes' open fixes, so fix counts match the page. */
 export async function loadTaskListModel(projectId: string): Promise<TaskListModel> {
-  const [inputs, fixes] = await Promise.all([loadTasksInputs(projectId), taskFixesFor(projectId)]);
+  const [inputs, fixes] = await Promise.all([
+    loadTasksInputs(projectId, { selfCorrectionsTile: true }),
+    taskFixesFor(projectId),
+  ]);
   return buildTaskList(inputs, { fixes });
 }
 

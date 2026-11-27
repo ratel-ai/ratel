@@ -77,9 +77,18 @@ function fallback<T>(
   return loadOrFallback({ operation, distinctId: `project:${projectId}`, fallback: value, load });
 }
 
+/** What a caller reads besides every task page's inputs. */
+export interface TasksLoadOptions extends Partial<TasksLoadDeps> {
+  /**
+   * The project's self-corrections for the list's tile (the Tasks list and
+   * `list_tasks`): two counts over up to 90 days, so only where it is shown.
+   */
+  selfCorrectionsTile?: boolean;
+}
+
 export async function loadTasksInputs(
   projectId: string,
-  overrides: Partial<TasksLoadDeps> = {},
+  { selfCorrectionsTile = false, ...overrides }: TasksLoadOptions = {},
 ): Promise<TasksInputs> {
   const deps = { ...defaultDeps, ...overrides };
   const run = await fallback(projectId, "tasks_latest_run", null as LatestTasksRun | null, () =>
@@ -123,19 +132,24 @@ export async function loadTasksInputs(
         (db) => loadTaskCorrections(projectId, since, db),
       ),
       // The tile's rate is the Self-corrections page's own, over the window it opens on.
-      fallback(
-        projectId,
-        "tasks_project_self_corrections",
-        null as Awaited<ReturnType<typeof readSelfCorrectionRate>>,
-        async () => {
-          const days = correctionsWindowFor(run.windowDays, await deps.planWindowDays(projectId));
-          return deps.read(
+      selfCorrectionsTile
+        ? fallback(
+            projectId,
             "tasks_project_self_corrections",
-            (db) => readSelfCorrectionRate(db, projectId, days),
-            true,
-          );
-        },
-      ),
+            null as Awaited<ReturnType<typeof readSelfCorrectionRate>>,
+            async () => {
+              const days = correctionsWindowFor(
+                run.windowDays,
+                await deps.planWindowDays(projectId),
+              );
+              return deps.read(
+                "tasks_project_self_corrections",
+                (db) => readSelfCorrectionRate(db, projectId, days),
+                true,
+              );
+            },
+          )
+        : null,
       read("tasks_topics", null as Awaited<ReturnType<typeof loadTaskTopics>>, (db) =>
         loadTaskTopics(projectId, since, db),
       ),
