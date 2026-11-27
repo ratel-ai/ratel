@@ -79,6 +79,7 @@ const FLAG_ENV = {
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
   customMonitoring: "FF_CUSTOM_MONITORING",
+  githubRepositories: "FF_GITHUB_REPOSITORIES",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -189,6 +190,13 @@ const CONFIG_SCHEMA = schema({
   slack: {
     /** Where Slack's consent page and API are: another address for GovSlack. */
     url: setting("SLACK_URL", trimmed.pipe(z.url({ protocol: /^https?$/ })), D.slack.url),
+  },
+  github: {
+    /**
+     * The secret GitHub signs each webhook delivery with (`githubRepositories`). Unset, the
+     * webhook route answers 404: nothing from GitHub is read.
+     */
+    webhookSecret: optional("GITHUB_WEBHOOK_SECRET", configured, { sensitive: true }),
   },
   logging: {
     /** Unset: `debug` in development, else `info`. */

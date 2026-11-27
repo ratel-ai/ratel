@@ -19,6 +19,10 @@ export const CORE_FLAGS = [
   // Owner: rstagi. Scorers, dashboards, alerts, Slack delivery and RQL. Remove with the stacked
   // flag-removal PR, once on for all users.
   "customMonitoring",
+  // Owner: marcelloghiozzi (RTL-408). A project links its GitHub repository: each new commit is a
+  // version, and only the evals a change touches run. Foundations only; see
+  // docs/github-repositories.md.
+  "githubRepositories",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

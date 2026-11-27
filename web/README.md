@@ -72,9 +72,10 @@ Next reads, `next.config.ts`'s build-time variables and the variables a third-pa
 stay outside it (listed at the top of `config.ts`).
 
 Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`,
-`toolRunInsights`, `focusedConsole`, `customMonitoring`): in the file `flags.<key>`, in the environment
-`FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`,
-`FF_FOCUSED_CONSOLE` and `FF_CUSTOM_MONITORING` (it also turns on RQL). A flag
+`toolRunInsights`, `focusedConsole`, `customMonitoring`, `githubRepositories`): in the file
+`flags.<key>`, in the environment `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`,
+`FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`, `FF_FOCUSED_CONSOLE`, `FF_CUSTOM_MONITORING` (it also turns on
+RQL) and `FF_GITHUB_REPOSITORIES` (a linked GitHub repository, with `GITHUB_WEBHOOK_SECRET`). A flag
 takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
