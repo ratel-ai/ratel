@@ -12,8 +12,9 @@ import { filterProblem, MAX_FILTER_BYTES } from "./filter-budget";
 /**
  * The query object: the one JSON contract of dashboards, alerts and MCP. It says what to measure,
  * never over which time: the window is a separate argument of whoever runs it. The measures table
- * is the whole vocabulary; `synthesis/metrics` runs it. `docs/schemas/query.schema.json` is
- * generated from this file (`pnpm schemas:generate`).
+ * is the whole vocabulary; `synthesis/metrics` runs it. Kind `sql` is the exception: RQL text with
+ * the RQL version it was written in, which `synthesis/rql` compiles and runs.
+ * `docs/schemas/query.schema.json` is generated from this file (`pnpm schemas:generate`).
  */
 
 export const QUERY_VERSION = 1;
@@ -24,6 +25,7 @@ export const QUERY_KINDS = [
   "funnel",
   "clusters",
   "geography",
+  "sql",
 ] as const;
 export type QueryKind = (typeof QUERY_KINDS)[number];
 
@@ -62,6 +64,9 @@ export type ClustersView = (typeof CLUSTERS_VIEWS)[number];
 /** The world by country, or one country by region. */
 export const GEOGRAPHY_LEVELS = ["world", "country"] as const;
 export type GeographyLevel = (typeof GEOGRAPHY_LEVELS)[number];
+
+/** The longest RQL text of a `sql` query, in characters. */
+export const MAX_SQL_TEXT = 20_000;
 
 export const MAX_STEP_NAME = 80;
 export const AGGREGATIONS = ["count", "rate", "sum", "avg", "p50", "p95"] as const;
@@ -126,6 +131,7 @@ export type FunnelStep = FunnelQuery["steps"][number];
 export type FunnelCondition = FunnelStep["condition"];
 export type ClustersQuery = Extract<Query, { kind: "clusters" }>;
 export type GeographyQuery = Extract<Query, { kind: "geography" }>;
+export type SqlQuery = Extract<Query, { kind: "sql" }>;
 export type QueryFilters = MetricQuery["filters"];
 /** The query as a document carries it between projects. */
 export type PortableQuery = z.infer<typeof portableQuerySchema>;
@@ -365,6 +371,32 @@ const clustersSchema = z
     if (message) context.addIssue({ code: "custom", message });
   });
 
+const RQL_VERSION_PROBLEM = "Give the RQL version the query was written in: a whole number from 1.";
+const SQL_TEXT_PROBLEM = "Write the RQL text of the query.";
+
+/**
+ * RQL text: one SELECT over the `rql` tables. No trace filter: the text says what it keeps. The
+ * window of whoever runs it is its window; a time condition in the text narrows it.
+ */
+const sqlSchema = z.strictObject({
+  version,
+  kind: z.literal("sql"),
+  text: z
+    .string(SQL_TEXT_PROBLEM)
+    .trim()
+    .min(1, SQL_TEXT_PROBLEM)
+    .max(
+      MAX_SQL_TEXT,
+      `The RQL text has at most ${MAX_SQL_TEXT.toLocaleString("en-US")} characters.`,
+    )
+    .refine(hasNoNul, NUL_PROBLEM)
+    .describe("One RQL SELECT statement."),
+  rqlVersion: z
+    .int(RQL_VERSION_PROBLEM)
+    .min(1, RQL_VERSION_PROBLEM)
+    .describe("The RQL version the text was written in. A saved query is compiled again at load."),
+});
+
 /** One check, as a check scorer stores it. */
 const checkSchema = z
   .strictObject({
@@ -434,6 +466,7 @@ function queryWith<S extends z.ZodType>(scorer: S) {
       funnelWith(scorer),
       clustersSchema,
       geographyWith(scorer),
+      sqlSchema,
     ],
     {
       error: ({ input }) =>

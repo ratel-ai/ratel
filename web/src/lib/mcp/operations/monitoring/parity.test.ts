@@ -13,6 +13,7 @@ import {
   EXPLORE_FILES,
   exportedFunctions,
   importedActions,
+  MCP_ONLY,
   PARITY,
   parityProblems,
   takenChanges,
@@ -20,11 +21,24 @@ import {
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const operations = new Map(
-  assembleOperations({ focusedConsole: true }).map((operation) => [operation.id, operation]),
+  assembleOperations({ focusedConsole: true, customMonitoring: true }).map((operation) => [
+    operation.id,
+    operation,
+  ]),
 );
 
 test("each console action of these modules has an MCP operation", () => {
   assert.deepEqual(parityProblems(actions(), new Set(operations.keys())), []);
+});
+
+test("each operation without a console action exists, says why, and is no action's operation", () => {
+  assert.deepEqual(Object.keys(MCP_ONLY).sort(), ["describe_rql_schema", "run_rql"]);
+  const covering = new Set(Object.values(PARITY).filter((covered) => typeof covered === "string"));
+  for (const [id, why] of Object.entries(MCP_ONLY)) {
+    assert.ok(operations.has(id), `${id} is no operation`);
+    assert.ok(why.length > 0, id);
+    assert.ok(!covering.has(id), `${id} covers a console action: remove it from MCP_ONLY`);
+  }
 });
 
 test("F452-1: the location settings are covered, and fail without their operation", () => {
@@ -106,9 +120,10 @@ test("each Explore action is an operation that takes the panel's query object", 
     z.toJSONSchema(operations.get(id)?.params as z.ZodType, { io: "input" }) as unknown as {
       properties: Record<string, { enum?: string[]; maxItems?: number }>;
     };
-  for (const [what, { operation, change }] of Object.entries(EXPLORE)) {
+  for (const [what, { operation, change, as }] of Object.entries(EXPLORE)) {
     assert.ok(operations.has(operation), `${what}: ${operation}`);
     if (change) assert.ok(schemaOf(operation).properties.action.enum?.includes(change), what);
+    if (as) assert.ok(schemaOf(operation).properties.as?.enum?.includes(as), what);
   }
   assert.equal(schemaOf("query_monitoring").properties.queries.maxItems, MAX_PANELS);
   // The page changes and reads nothing that is not in the list.

@@ -8,9 +8,22 @@ import { Callout } from "@ratel/design-system/states";
 import { Check, Ellipsis, ListChecks, TriangleAlert, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { WhatIfSetup } from "@/components/console/session-replay/SessionTimeline";
-import { createUrlWriter, withQueryUpdates } from "@/lib/synthesis/traces/v2/url-writer";
+import {
+  createUrlWriter,
+  URL_WRITE_DELAY_MS,
+  withQueryUpdates,
+} from "@/lib/synthesis/traces/v2/url-writer";
 import type { PanelChat, PanelChatTurn } from "@/lib/views/session-chat/actions";
 import {
   type ChatTurn,
@@ -50,6 +63,14 @@ import { SessionTrack, type Speed, type TrackMarker } from "./SessionTrack";
  * to the call under it, and opening a call (Previous / Next call, a click)
  * moves the playhead to that call's start, where the playhead already points
  * at it, so neither direction triggers the other again.
+ *
+ * Scrubbing (RTL-368): only the track reads the live playhead, so it moves
+ * at once. The chat and the side panel read a deferred copy (they are memo'd,
+ * so a tick that changes nothing else skips them), and React drops their
+ * stale renders while the playhead keeps moving. Dragging fast across dozens
+ * of turns used to re-render every message and the inspector on each pointer
+ * move, scroll the chat each time and fire a content read per model call
+ * passed, until the tab ran out of memory.
  */
 
 /** What the inspector needs to fork a model call: the targets come with the chat. */
@@ -110,20 +131,27 @@ export function SessionChatView({
   // Closed once, the default inspector stays closed until a click opens a panel.
   const [dismissed, setDismissed] = useState(false);
   const firstCall = chat.calls[0]?.stepIndex;
-  const peek =
-    parseChatPeek(id) ??
-    (synced && !dismissed && firstCall !== undefined
-      ? ({ kind: "step", stepIndex: firstCall } as const)
-      : null);
-  const open = (next: ChatPeek) => {
-    // Synced, a model call puts the playhead at its start: the follow below then already points at it.
-    const start =
-      synced && next.kind === "step" && chat.calls.some((c) => c.stepIndex === next.stepIndex)
-        ? callStart(chat, next.stepIndex)
-        : null;
-    if (start !== null) setT(start);
-    openPeek(chatPeekId(next));
-  };
+  // One object per panel id, so the memo'd chat and panel skip a tick that did not change it.
+  const urlPeek = useMemo<ChatPeek | null>(
+    () =>
+      parseChatPeek(id) ??
+      (synced && !dismissed && firstCall !== undefined
+        ? { kind: "step", stepIndex: firstCall }
+        : null),
+    [id, synced, dismissed, firstCall],
+  );
+  const open = useCallback(
+    (next: ChatPeek) => {
+      // Synced, a model call puts the playhead at its start: the follow below then already points at it.
+      const start =
+        synced && next.kind === "step" && chat.calls.some((c) => c.stepIndex === next.stepIndex)
+          ? callStart(chat, next.stepIndex)
+          : null;
+      if (start !== null) setT(start);
+      openPeek(chatPeekId(next));
+    },
+    [synced, chat, openPeek],
+  );
   const close = useCallback(() => {
     setDismissed(true);
     closePeek();
@@ -142,11 +170,13 @@ export function SessionChatView({
   // Following starts when the playhead leaves where the page opened, or when someone ticks it.
   const [startT] = useState(t);
   const [followTicked, setFollowTicked] = useState(false);
-  const onFollowChange = (next: boolean) => {
+  const onFollowChange = useCallback((next: boolean) => {
     setFollow(next);
     setFollowTicked(next);
-  };
+  }, []);
   const seek = (next: number) => setT(Math.min(Math.max(0, next), total));
+  // What the chat and the panel show: the playhead once React has time for them (RTL-368).
+  const shownT = useDeferredValue(t);
 
   // The playhead and zoom follow into the URL once they rest (Safari caps replaceState).
   const writer = useMemo(
@@ -193,6 +223,34 @@ export function SessionChatView({
     return () => cancelAnimationFrame(frame);
   }, [playing, speed, total]);
 
+  // "Follow the playhead": an open model call moves to the call at the (deferred) playhead.
+  // The panel shows it at once; the URL gets it once the playhead rests, like `?t=`. Writing
+  // `?peek=` for every call passed flooded history.replaceState, which Safari refuses past
+  // 100 calls in 10 seconds (the SecurityError behind RTL-368).
+  const followedCall =
+    follow &&
+    (followTicked || shownT !== startT) &&
+    urlPeek?.kind === "step" &&
+    chat.calls.some((c) => c.stepIndex === urlPeek.stepIndex)
+      ? callAt(chat, shownT)
+      : null;
+  const urlStep = urlPeek?.kind === "step" ? urlPeek.stepIndex : null;
+  const peek = useMemo<ChatPeek | null>(
+    () =>
+      followedCall !== null && followedCall !== urlStep
+        ? { kind: "step", stepIndex: followedCall }
+        : urlPeek,
+    [followedCall, urlStep, urlPeek],
+  );
+  useEffect(() => {
+    if (followedCall === null || followedCall === urlStep) return;
+    const timer = setTimeout(
+      () => openPeek(chatPeekId({ kind: "step", stepIndex: followedCall })),
+      URL_WRITE_DELAY_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [followedCall, urlStep, openPeek]);
+
   const isOpen = peek !== null;
   const keys = useRef({ t, playing, isOpen });
   useEffect(() => {
@@ -224,33 +282,6 @@ export function SessionChatView({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [chat, close, total]);
 
-  // "Follow the playhead": an open model call moves to the call at the playhead.
-  const followedCall =
-    follow &&
-    (followTicked || t !== startT) &&
-    peek?.kind === "step" &&
-    chat.calls.some((c) => c.stepIndex === peek.stepIndex)
-      ? callAt(chat, t)
-      : null;
-  const openStep = peek?.kind === "step" ? peek.stepIndex : null;
-  useEffect(() => {
-    if (followedCall !== null && followedCall !== openStep)
-      openPeek(chatPeekId({ kind: "step", stepIndex: followedCall }));
-  }, [followedCall, openStep, openPeek]);
-
-  const phases = chatStateAt(chat, t);
-  // While it plays or steps, the chat keeps its newest line in view.
-  const scroller = useRef<HTMLDivElement>(null);
-  const shownTurns = phases.filter((phase) => phase.phase !== "future").length;
-  const liveSteps = phases.reduce(
-    (n, phase) => n + (phase.phase === "live" ? phase.done.length + 1 : 0),
-    0,
-  );
-  useEffect(() => {
-    if (t >= total) return;
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [shownTurns, liveSteps, t, total]);
-
   return (
     <div
       className={cn(
@@ -260,45 +291,15 @@ export function SessionChatView({
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col">
-        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-          <div className="mx-auto flex max-w-3xl flex-col gap-3">
-            <div className="-mt-2 flex justify-end">
-              <Button
-                size="sm"
-                variant="ghost"
-                aria-pressed={showActions}
-                onClick={() => setShowActions(!showActions)}
-              >
-                <ListChecks aria-hidden />
-                {showActions ? "Hide actions" : "Show actions"}
-              </Button>
-            </div>
-            {chat.textOff ? (
-              <Callout tone="info">
-                Message text is off for this project, so the steps show without the words. An admin
-                can{" "}
-                <a href={settingsHref} className="underline underline-offset-2 hover:text-fg">
-                  turn it on in Settings
-                </a>
-                .
-              </Callout>
-            ) : null}
-            {chat.turns.length > 0 ? <DaySeparator at={chat.turns[0]!.startedAt} /> : null}
-            {phases.map((phase) =>
-              phase.phase === "future" ? null : (
-                <TurnBlock
-                  key={phase.turn.turnId}
-                  chat={chat}
-                  phase={phase}
-                  textOff={chat.textOff}
-                  showActions={showActions}
-                  peek={peek}
-                  onOpen={open}
-                />
-              ),
-            )}
-          </div>
-        </div>
+        <ChatLog
+          chat={chat}
+          t={shownT}
+          settingsHref={settingsHref}
+          showActions={showActions}
+          onShowActionsChange={setShowActions}
+          peek={peek}
+          onOpen={open}
+        />
         <SessionTrack
           chat={chat}
           t={t}
@@ -419,21 +420,124 @@ export function SessionChatTranscript({
   );
 }
 
-function TurnBlock({
+/**
+ * The chat at the playhead it is given (the deferred one): memo'd, so it
+ * renders only when the shown playhead, the open panel or Show actions change.
+ */
+const ChatLog = memo(function ChatLog({
   chat,
-  phase,
-  textOff,
+  t,
+  settingsHref,
   showActions,
+  onShowActionsChange,
   peek,
   onOpen,
 }: {
+  chat: SessionChat;
+  t: number;
+  settingsHref: string;
+  showActions: boolean;
+  onShowActionsChange: (show: boolean) => void;
+  peek: ChatPeek | null;
+  onOpen: (peek: ChatPeek) => void;
+}) {
+  const phases = chatStateAt(chat, t);
+  // While it plays or steps, the chat keeps its newest line in view: once a new turn or step
+  // has been on screen for a moment, never on each move of a drag (RTL-368: each scroll
+  // forced a layout of the whole chat).
+  const scroller = useRef<HTMLDivElement>(null);
+  const shownTurns = phases.filter((phase) => phase.phase !== "future").length;
+  const liveSteps = phases.reduce(
+    (n, phase) => n + (phase.phase === "live" ? phase.done.length + 1 : 0),
+    0,
+  );
+  const atEnd = t >= chat.trackTotalMs;
+  useEffect(() => {
+    if (atEnd) return;
+    const timer = setTimeout(
+      () => scroller.current?.scrollTo({ top: scroller.current.scrollHeight }),
+      SCROLL_SETTLE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [shownTurns, liveSteps, atEnd]);
+
+  return (
+    <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="mx-auto flex max-w-3xl flex-col gap-3">
+        <div className="-mt-2 flex justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-pressed={showActions}
+            onClick={() => onShowActionsChange(!showActions)}
+          >
+            <ListChecks aria-hidden />
+            {showActions ? "Hide actions" : "Show actions"}
+          </Button>
+        </div>
+        {chat.textOff ? (
+          <Callout tone="info">
+            Message text is off for this project, so the steps show without the words. An admin can{" "}
+            <a href={settingsHref} className="underline underline-offset-2 hover:text-fg">
+              turn it on in Settings
+            </a>
+            .
+          </Callout>
+        ) : null}
+        {chat.turns.length > 0 ? <DaySeparator at={chat.turns[0]!.startedAt} /> : null}
+        {phases.map((phase) =>
+          phase.phase === "future" ? null : (
+            <TurnBlock
+              key={phase.turn.turnId}
+              chat={chat}
+              phase={phase}
+              textOff={chat.textOff}
+              showActions={showActions}
+              peek={peek}
+              onOpen={onOpen}
+            />
+          ),
+        )}
+      </div>
+    </div>
+  );
+});
+
+/** How long the chat waits for the playhead to settle before scrolling to its newest line. */
+const SCROLL_SETTLE_MS = 100;
+
+interface TurnBlockProps {
   chat: SessionChat;
   phase: Exclude<TurnPhase, { phase: "future" }>;
   textOff: boolean;
   showActions: boolean;
   peek: ChatPeek | null;
   onOpen: (peek: ChatPeek) => void;
-}) {
+}
+
+/** What of a turn the open panel selects (its message, work line or reply), or null. */
+function turnSelection(peek: ChatPeek | null, turnIndex: number): ChatPeek["kind"] | null {
+  return peek && peek.kind !== "step" && peek.turnIndex === turnIndex ? peek.kind : null;
+}
+
+/**
+ * A finished turn looks the same wherever the playhead is past it, so it renders again only
+ * when its own selection or the view's options change; a turn in progress renders every time.
+ */
+const TurnBlock = memo(
+  TurnBlockView,
+  (a, b) =>
+    a.chat === b.chat &&
+    a.textOff === b.textOff &&
+    a.showActions === b.showActions &&
+    a.onOpen === b.onOpen &&
+    turnSelection(a.peek, a.phase.turn.turnIndex) ===
+      turnSelection(b.peek, b.phase.turn.turnIndex) &&
+    (a.phase === b.phase ||
+      (a.phase.phase === "done" && b.phase.phase === "done" && a.phase.turn === b.phase.turn)),
+);
+
+function TurnBlockView({ chat, phase, textOff, showActions, peek, onOpen }: TurnBlockProps) {
   const { turn } = phase;
   const selected = (kind: "ask" | "reply" | "work") =>
     peek?.kind === kind && peek.turnIndex === turn.turnIndex;

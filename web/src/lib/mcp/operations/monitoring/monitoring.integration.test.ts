@@ -144,12 +144,33 @@ test("F445-9: the scorer over the limit is refused as the console refuses it", a
   const over = await create();
   assert.deepEqual(!over.ok && [over.error, over.message], [
     "conflict",
-    "A project can have 100 scorers.",
+    "This project has 100 scorers, and the limit is 100. Delete 1 to create another.",
   ]);
   assert.equal(await countScorers(PROJECT, m.db), 100);
   // The other actions stay.
   const [first] = await listScorers(PROJECT, m.db);
   assert.ok((await m.call("change_scorer", { action: "disable", scorerId: first?.id })).ok);
+});
+
+test("over the limit (legacy excess), change_scorer refuses create with the real count; the rest works", async () => {
+  await m.client.exec(`insert into trace_scorers (project_id, name, kind, config, created_by, updated_by)
+    select '${PROJECT}', 'S' || n, 'check', '{"path":"duration_ms","op":"exists"}', 'u', 'u' from generate_series(1, 120) n`);
+  const over = await m.call("change_scorer", { action: "create", scorer: CHECK });
+  assert.deepEqual(!over.ok && [over.error, over.message], [
+    "conflict",
+    "This project has 120 scorers, and the limit is 100. Delete 21 to create another.",
+  ]);
+  const [first] = await listScorers(PROJECT, m.db);
+  const scorerId = first?.id;
+  for (const params of [
+    { action: "update", scorerId, scorer: { name: "Renamed" } },
+    { action: "disable", scorerId },
+    { action: "enable", scorerId },
+    { action: "attach", scorerId, taskId: "t1", narrow: true },
+    { action: "delete", scorerId },
+  ])
+    assert.ok((await m.call("change_scorer", params)).ok, params.action);
+  assert.equal(await countScorers(PROJECT, m.db), 119);
 });
 
 test("a scorer made through MCP equals the one the web app makes", async () => {
@@ -204,6 +225,63 @@ test("a scorer made through MCP equals the one the web app makes", async () => {
       },
     },
   ]);
+});
+
+test("change_scorer creates, updates and attaches each task preset; judge_criteria is a judge", async () => {
+  const presets: { preset: string; max?: number; tool?: string }[] = [
+    { preset: "ends_well" },
+    { preset: "max_self_corrections", max: 1 },
+    { preset: "max_latency_ms", max: 2000 },
+    { preset: "max_cost_usd", max: 0.1 },
+    { preset: "expected_tool", tool: "book" },
+    { preset: "max_tool_calls", max: 3 },
+  ];
+  for (const config of presets) {
+    const { scorerId } = await m.data<{ scorerId: string }>("change_scorer", {
+      action: "create",
+      scorer: { name: config.preset, kind: "preset", config, tasks: ["t1"] },
+    });
+    const changed = config.max === undefined ? config : { ...config, max: config.max + 1 };
+    await m.data("change_scorer", {
+      action: "update",
+      scorerId,
+      scorer: { kind: "preset", config: changed },
+    });
+    await m.data("change_scorer", { action: "attach", scorerId, taskId: "t2" });
+    const stored = await getScorer(PROJECT, scorerId, m.db);
+    assert.deepEqual(
+      [stored?.kind, stored?.config, stored?.tasks],
+      ["preset", changed, ["t1", "t2"]],
+      config.preset,
+    );
+  }
+  const { scorerId } = await m.data<{ scorerId: string }>("change_scorer", {
+    action: "create",
+    scorer: {
+      name: "Criteria",
+      kind: "preset",
+      config: { preset: "judge_criteria", criteria: "Did it book?" },
+      tasks: ["t1"],
+    },
+  });
+  const judge = await getScorer(PROJECT, scorerId, m.db);
+  assert.deepEqual(
+    [judge?.kind, judge?.config],
+    ["judge", { prompt: "Did it book?", output: "boolean" }],
+  );
+  const listed = await m.data<{
+    scorers: { usage: { tasks: number; total: number; said: string } }[];
+  }>("list_scorers", {});
+  assert.deepEqual(
+    [listed.scorers[0]?.usage.tasks, listed.scorers[0]?.usage.said],
+    [2, "used in 2 places"],
+  );
+  const everyTrace = await m.call("change_scorer", {
+    action: "create",
+    scorer: { name: "No task", kind: "preset", config: { preset: "ends_well" } },
+  });
+  assert.equal(everyTrace.ok, false);
+  assert.match(everyTrace.ok ? "" : everyTrace.message, /tasks/);
 });
 
 test("a scorer is listed, read, updated, switched, attached, detached and deleted", async () => {
@@ -310,6 +388,33 @@ test("an alert made through MCP equals the one the web app makes", async () => {
     getAlertRule(PROJECT, web.ruleId, m.db),
   ]);
   assert.deepEqual({ ...byMcp, id: "" }, { ...byWeb, id: "" });
+});
+
+test("change_alert takes RQL text that gives one number", async () => {
+  const sqlAlert = (text: string) => ({
+    ...ALERT,
+    name: "Failed traces",
+    threshold: 3,
+    query: { version: 1, kind: "sql", rqlVersion: 1, text },
+  });
+  const many = await m.call("change_alert", {
+    action: "create",
+    alert: sqlAlert("select service_name, count(*) from traces group by service_name"),
+  });
+  assert.ok(!many.ok);
+  assert.match(many.message, /gives 2 columns/);
+  const { alertId, alert } = await m.data<{
+    alertId: string;
+    alert: { condition: string; query: object; lastError: null };
+  }>("change_alert", {
+    action: "create",
+    alert: sqlAlert("select count(*) from traces where has_error"),
+  });
+  assert.equal(alert.condition, "RQL query is above 3 over 15 minutes");
+  assert.deepEqual(alert.query, sqlAlert("select count(*) from traces where has_error").query);
+  assert.equal(alert.lastError, null);
+  const saved = await getAlertRule(PROJECT, alertId, m.db);
+  assert.equal(saved?.query?.kind, "sql");
 });
 
 test("an alert is updated, paused, resumed, read with its history and deleted", async () => {

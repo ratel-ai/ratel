@@ -2,6 +2,7 @@ import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
 import { type BatchPrices, costFor, PRICES_UNKNOWN } from "@/lib/ingest/pricing";
 import { deterministicEventId, MAX_QUERY } from "@/lib/ingest/trace-events/parse";
 import { attrNumber, attrString } from "./anyvalue";
+import { indexSpans, MCP_SESSION_KEYS, resolveUp, SESSION_KEYS, USER_KEYS } from "./attr-resolve";
 import { AGENT_DIMENSION, GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
 import {
   type DetectSource,
@@ -66,6 +67,9 @@ export interface OtelSpanRow {
   mcpServerSource: DetectSource | null;
   mcpRole: McpRole | null;
   mcpSessionId: string | null;
+  /** The conversation and the end user (RTL-321), with the `trace_events` values; null when the export has none. */
+  sessionId: string | null;
+  endUserId: string | null;
   /** The span's events and links (AOBS-7); null when it has none or they are not stored. */
   events: StoredSpanEvent[] | null;
   links: StoredSpanLink[] | null;
@@ -78,6 +82,8 @@ const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const ZERO_SPAN_ID = "0000000000000000";
 const MCP_SESSION_ID_KEY = "mcp.session.id";
+/** The bound of a session or end-user id, the one the `trace_events` rows use. */
+const MAX_ID = 256;
 /** The keys a tool span keeps, in the order the size bound keeps them. */
 const TOOL_CONTENT_KEYS = [
   MCP_SESSION_ID_KEY,
@@ -133,6 +139,7 @@ export function toOtelSpanRows(
 ): OtelSpanRow[] {
   const normalizedSpans = spans.map(normalizeParentSpanId);
   const dimensions = options.dimensions ?? NO_SPAN_DIMENSIONS;
+  const byId = indexSpans(normalizedSpans);
   return normalizedSpans.filter(isPersistableSpan).map((span) => {
     let scalarTruncated = false;
     // A deduped agent span stores no usage or cost, so every SUM over
@@ -245,10 +252,27 @@ export function toOtelSpanRows(
       mcpServerSource: entity.mcpServerSource,
       mcpRole: entity.mcpRole,
       mcpSessionId: entity.mcpSessionId,
+      ...sessionAndUser(span, byId),
       events: events.value,
       links: links.value,
     } satisfies NewOtelSpan;
   });
+}
+
+/**
+ * The span's session and end user, read as the `trace_events` rows read them
+ * (`derive-tools.ts`): a conversation id, else the MCP transport session, up
+ * the span's ancestors and resource. No trace id stand-in: null when none.
+ */
+function sessionAndUser(
+  span: DecodedSpan,
+  byId: ReadonlyMap<string, DecodedSpan>,
+): Pick<OtelSpanRow, "sessionId" | "endUserId"> {
+  const session = resolveUp(span, byId, SESSION_KEYS) ?? resolveUp(span, byId, MCP_SESSION_KEYS);
+  return {
+    sessionId: session?.slice(0, MAX_ID) ?? null,
+    endUserId: resolveUp(span, byId, USER_KEYS)?.slice(0, MAX_ID) ?? null,
+  };
 }
 
 /**

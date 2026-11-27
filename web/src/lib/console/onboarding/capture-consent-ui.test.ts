@@ -96,7 +96,7 @@ test("the copy stays in plain language: no engine names", () => {
 
 test("the snippet carries the capture switch only when the customer opts in", () => {
   const props = {
-    endpoint: "https://cloud.ratel.sh/api/v1/traces",
+    endpoint: "https://app.ratel.sh/api/v1/traces",
     serviceName: "support-copilot",
   };
   const off = renderToStaticMarkup(createElement(SdkQuickstart, props));
@@ -119,7 +119,7 @@ test("the capture switch says the emitter decides, not the switch alone", () => 
 test("the Human tab offers NodeSDK, an existing OTel provider and curl", () => {
   const html = renderToStaticMarkup(
     createElement(SdkQuickstart, {
-      endpoint: "https://cloud.ratel.sh/api/v1/traces",
+      endpoint: "https://app.ratel.sh/api/v1/traces",
       serviceName: "support-copilot",
     }),
   );
@@ -133,11 +133,11 @@ test("the agent prompt panel previews the prompt and copies it as the main actio
     createElement(AgentPromptPanel, {
       projectName: "Support copilot",
       serviceName: "support-copilot",
-      endpoint: "https://cloud.ratel.sh/api/v1/traces",
-      tracesUrl: "https://cloud.ratel.sh/project/p_1/traces",
+      endpoint: "https://app.ratel.sh/api/v1/traces",
+      tracesUrl: "https://app.ratel.sh/project/p_1/traces",
     }),
   );
   assert.match(html, /Copy this prompt for your agent/);
-  assert.ok(html.includes("https://cloud.ratel.sh/api/v1/traces"), "the preview shows the prompt");
+  assert.ok(html.includes("https://app.ratel.sh/api/v1/traces"), "the preview shows the prompt");
   assert.ok(!html.includes("rtl_"), "no key in the preview");
 });

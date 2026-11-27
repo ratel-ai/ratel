@@ -5,7 +5,12 @@ import { drizzle } from "drizzle-orm/pglite";
 import { resolveConfig } from "@/config";
 import { type DrainCronDeps, runDrainTick } from "@/lib/jobs/drain";
 import type { BackgroundObservabilityDeps } from "@/lib/jobs/observability";
-import { claimNextQueuedJob, markJobDone, readJobQueueClock } from "@/lib/jobs/queries";
+import {
+  claimNextQueuedJob,
+  markJobDone,
+  markJobError,
+  readJobQueueClock,
+} from "@/lib/jobs/queries";
 import { drainJobs, type JobStore } from "@/lib/jobs/runner";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -120,12 +125,7 @@ function drainDeps(db: Db, flagDeps: OrganizationFlagDeps): DrainCronDeps {
       );
     },
     markDone: (id, result) => markJobDone(id, result, db),
-    markError: async (id, error) => {
-      await db
-        .update(schema.jobs)
-        .set({ status: "error", error, finishedAt: new Date() })
-        .where(eq(schema.jobs.id, id));
-    },
+    markError: (id, error) => markJobError(id, error, db),
     queueClock: () => readJobQueueClock(db),
   };
   return {

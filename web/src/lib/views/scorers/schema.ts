@@ -15,7 +15,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
-import type { CheckConfig, JudgeConfig, ScorerFilter, ScorerKind, ScorerScope } from "./types";
+import type {
+  CheckConfig,
+  JudgeConfig,
+  PresetConfig,
+  ScorerFilter,
+  ScorerKind,
+  ScorerScope,
+} from "./types";
 
 /** A project's scorers. Each row carries its own sweep cursor, so a new scorer starts at "now". */
 export const traceScorers = pgTable(
@@ -27,7 +34,7 @@ export const traceScorers = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     kind: text("kind").$type<ScorerKind>().notNull(),
-    config: jsonb("config").$type<CheckConfig | JudgeConfig>().notNull(),
+    config: jsonb("config").$type<CheckConfig | JudgeConfig | PresetConfig>().notNull(),
     filter: jsonb("filter").$type<ScorerFilter>().notNull().default({}),
     // `tasks`: only the traces of its `trace_scorer_tasks`. Without one left, it scores nothing.
     scope: text("scope").$type<ScorerScope>().notNull().default("all"),
@@ -49,7 +56,7 @@ export const traceScorers = pgTable(
   (t) => [
     index("trace_scorers_project_idx").on(t.projectId, t.createdAt),
     index("trace_scorers_enabled_idx").on(t.cursorAt).where(sql`${t.enabled}`),
-    check("trace_scorers_kind_check", sql`${t.kind} in ('check', 'judge')`),
+    check("trace_scorers_kind_check", sql`${t.kind} in ('check', 'judge', 'preset')`),
     check("trace_scorers_scope_check", sql`${t.scope} in ('all', 'tasks')`),
     check("trace_scorers_sample_rate_check", sql`${t.sampleRate} between 1 and 100`),
   ],
@@ -73,6 +80,26 @@ export const traceScorerTasks = pgTable(
     primaryKey({ columns: [t.scorerId, t.taskId] }),
     index("trace_scorer_tasks_project_task_idx").on(t.projectId, t.taskId),
   ],
+);
+
+/**
+ * What of a task's scorers was already given to the one model, so it is given once: each kind that
+ * migration 0055 converted or `task-presets.ts` created, and `*` when the task got its defaults. A
+ * preset a person detaches or deletes then does not come back.
+ */
+export const taskPresetSeeds = pgTable(
+  "task_preset_seeds",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    // `trace_turns.workflow_id`.
+    taskId: text("task_id").notNull(),
+    // A task kind (`task-scorers/types.ts`), or `*`: the task got its defaults.
+    kind: text("kind").notNull(),
+    seededAt: timestamp("seeded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.taskId, t.kind] })],
 );
 
 /** One result per scorer and trace. No trace content: numbers and a verdict only. */

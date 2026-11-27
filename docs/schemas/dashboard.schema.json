@@ -1778,6 +1778,38 @@
                   "measures"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "kind": {
+                    "type": "string",
+                    "const": "sql"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "description": "One RQL SELECT statement."
+                  },
+                  "rqlVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "The RQL version the text was written in. A saved query is compiled again at load."
+                  }
+                },
+                "required": [
+                  "version",
+                  "kind",
+                  "text",
+                  "rqlVersion"
+                ],
+                "additionalProperties": false
               }
             ]
           },
@@ -1792,7 +1824,8 @@
               "step_flow",
               "funnel",
               "clusters",
-              "geography"
+              "geography",
+              "sql"
             ]
           },
           "layout": {

@@ -8,9 +8,13 @@ import {
   EMPTY_TRACE_FILTER_FACETS,
   getTraceFilterFacets,
 } from "@/lib/synthesis/traces/trace-filters";
-import { scorerOptions } from "@/lib/views/dashboards/scorer-options";
+import {
+  loadScorerPicker,
+  type ScorerPickerData,
+  UNREAD_SCORERS,
+} from "@/lib/views/scorers/picker";
 
-/** What the widget fields offer: the filter values of the range, and the scorers (null while they are off). */
+/** What the widget fields offer: the filter values of the range, and the scorer picker (null while scorers are off). */
 export async function loadWidgetForm(
   projectId: string,
   range: { since: Date; until?: Date },
@@ -29,11 +33,12 @@ export async function loadWidgetForm(
         ),
     }),
     features.customMonitoring
-      ? loadOrFallback({
+      ? loadOrFallback<ScorerPickerData>({
           operation: "dashboard_scorers",
           distinctId,
-          fallback: [],
-          load: () => scorerOptions(projectId),
+          // A failed read says so, not scorers off and not an empty project.
+          fallback: UNREAD_SCORERS,
+          load: () => loadScorerPicker(projectId),
         })
       : null,
   ]);

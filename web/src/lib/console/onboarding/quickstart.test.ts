@@ -15,7 +15,7 @@ import {
 } from "@/lib/console/onboarding/quickstart";
 
 const TARGET: QuickstartTarget = {
-  endpoint: "https://cloud.ratel.sh/api/v1/traces",
+  endpoint: "https://app.ratel.sh/api/v1/traces",
   serviceName: "support-copilot",
 };
 
@@ -53,7 +53,7 @@ test("TypeScript wires the cloud SDK's span processor onto a host provider", () 
   assert.match(code, /import \{ RatelSpanProcessor \} from "@ratel-ai\/cloud-sdk\/otel";/);
   assert.match(
     code,
-    /new RatelSpanProcessor\(\{\n {6}endpoint: "https:\/\/cloud\.ratel\.sh\/api\/v1\/traces",\n {4}\}\),/,
+    /new RatelSpanProcessor\(\{\n {6}endpoint: "https:\/\/app\.ratel\.sh\/api\/v1\/traces",\n {4}\}\),/,
   );
   assert.match(code, /serviceName: "support-copilot",/);
   // Every line stays inside the snippet box's width, so nothing soft-wraps into
@@ -85,7 +85,7 @@ test("only the languages the cloud SDK actually ships get an SDK tab", () => {
 test("curl needs no install and posts a decodable OTLP body", () => {
   const { code, install } = buildQuickstart("curl", TARGET);
   assert.equal(install, null);
-  assert.match(code, /^curl -X POST https:\/\/cloud\.ratel\.sh\/api\/v1\/traces/);
+  assert.match(code, /^curl -X POST https:\/\/app\.ratel\.sh\/api\/v1\/traces/);
   assert.match(code, /Authorization: Bearer \$RATEL_API_KEY/);
 
   // The -d payload has to survive JSON.parse and carry the gen_ai attributes
@@ -132,7 +132,7 @@ const TYPESCRIPT_WITHOUT_CAPTURE = [
   "    // Reads RATEL_API_KEY. Forwards gen_ai.* / ratel.* spans to",
   "    // Ratel; any exporter you already run is left untouched.",
   "    new RatelSpanProcessor({",
-  '      endpoint: "https://cloud.ratel.sh/api/v1/traces",',
+  '      endpoint: "https://app.ratel.sh/api/v1/traces",',
   "    }),",
   "  ],",
   "});",
@@ -212,7 +212,7 @@ test("the existing-provider snippet adds the processor instead of starting a Nod
   assert.ok(install?.includes("@ratel-ai/cloud-sdk"));
   assert.match(
     code,
-    /export const ratel = new RatelSpanProcessor\(\{\n {2}endpoint: "https:\/\/cloud\.ratel\.sh\/api\/v1\/traces",\n\}\);/,
+    /export const ratel = new RatelSpanProcessor\(\{\n {2}endpoint: "https:\/\/app\.ratel\.sh\/api\/v1\/traces",\n\}\);/,
   );
   assert.match(code, /@vercel\/otel/);
   assert.match(code, /spanProcessors: \["auto", ratel\]/);

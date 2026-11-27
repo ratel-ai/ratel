@@ -5,6 +5,7 @@ import { MAX_FILTER_BYTES } from "./filter-budget";
 import {
   AGGREGATIONS,
   DIMENSIONS,
+  MAX_SQL_TEXT,
   MEASURE_IDS,
   MEASURES,
   parseQuery,
@@ -108,7 +109,7 @@ test("what the contract does not allow is refused in words", () => {
     [null, /Unknown query kind/],
     [
       { ...BASE, kind: "pie" },
-      /Unknown query kind "pie"\. The kinds are: metric, flow, step_flow, funnel, clusters, geography\./,
+      /Unknown query kind "pie"\. The kinds are: metric, flow, step_flow, funnel, clusters, geography, sql\./,
     ],
     [{ ...BASE, version: 2 }, /Unknown query version "2"\. The version is 1\./],
     [{ ...BASE, version: undefined }, /Unknown query version/],
@@ -243,5 +244,26 @@ test("a map shows one measure of traces, of the world or of one country", () => 
     const parsed = parseQuery({ ...map, ...change });
     assert.ok(!parsed.ok, JSON.stringify(change));
     assert.match(parsed.error, error);
+  }
+});
+
+test("a SQL query carries its RQL text and the language version it was written in", () => {
+  const given = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
+  assert.deepEqual(parseQuery(given), { ok: true, query: given });
+  assert.ok(portableQuerySchema.safeParse(given).success);
+  const refused: [object, RegExp][] = [
+    [{ text: undefined }, /Write the RQL text of the query/],
+    [{ text: "  " }, /Write the RQL text of the query/],
+    [{ text: "x".repeat(MAX_SQL_TEXT + 1) }, /at most 20,000 characters/],
+    [{ text: "select\0" }, /invalid at "text"|NUL/],
+    [{ rqlVersion: undefined }, /Give the RQL version the query was written in/],
+    [{ rqlVersion: 0 }, /Give the RQL version the query was written in/],
+    [{ rqlVersion: 1.5 }, /Give the RQL version the query was written in/],
+    [{ filters: {} }, /invalid/],
+  ];
+  for (const [change, says] of refused) {
+    const parsed = parseQuery({ ...given, ...change });
+    assert.ok(!parsed.ok, JSON.stringify(change));
+    assert.match(parsed.error, says, JSON.stringify(change));
   }
 });

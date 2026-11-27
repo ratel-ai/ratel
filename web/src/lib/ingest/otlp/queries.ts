@@ -43,7 +43,7 @@ export type EventWithMetric = {
   metric: Omit<NewEventMetric, "id" | "eventId" | "projectId">;
 };
 
-export type EventsDb = Pick<ReturnType<typeof getDb>, "insert">;
+export type EventsDb = Pick<ReturnType<typeof getDb>, "insert" | "transaction">;
 
 /** A per-source token map for one aggregate bucket. */
 export type SourceSums = Record<ContextSource, number>;
@@ -64,9 +64,9 @@ export type DailyAggregateRow = {
 /**
  * Store a batch of agent events and their derived metrics. Raw events go into
  * `events` with `ON CONFLICT (project_id, dedupe_hash) DO NOTHING` so SDK retries are
- * idempotent; one `event_metrics` row per freshly inserted event. Not one transaction, so a
- * crash between the two inserts leaves an event with no metrics row. Returns the number of
- * newly stored events.
+ * idempotent; one `event_metrics` row per freshly inserted event. Both inserts run in one
+ * transaction so a failed metrics write rolls back the events and a retry can store both.
+ * Returns the number of newly stored events.
  */
 export async function insertEventsWithMetrics(
   projectId: string,
@@ -85,21 +85,23 @@ export async function insertEventsWithMetrics(
   }
   const unique = [...byHash.values()];
 
-  const inserted = await db
-    .insert(events)
-    .values(unique.map((r) => r.event))
-    .onConflictDoNothing({ target: [events.projectId, events.dedupeHash] })
-    .returning({ id: events.id, dedupeHash: events.dedupeHash });
-  if (inserted.length === 0) return 0;
+  return db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(events)
+      .values(unique.map((r) => r.event))
+      .onConflictDoNothing({ target: [events.projectId, events.dedupeHash] })
+      .returning({ id: events.id, dedupeHash: events.dedupeHash });
+    if (inserted.length === 0) return 0;
 
-  const metricRows: NewEventMetric[] = [];
-  for (const e of inserted) {
-    const r = e.dedupeHash != null ? byHash.get(e.dedupeHash) : undefined;
-    if (r) metricRows.push({ ...r.metric, eventId: e.id, projectId });
-  }
-  if (metricRows.length > 0) await db.insert(eventMetrics).values(metricRows);
+    const metricRows: NewEventMetric[] = [];
+    for (const e of inserted) {
+      const r = e.dedupeHash != null ? byHash.get(e.dedupeHash) : undefined;
+      if (r) metricRows.push({ ...r.metric, eventId: e.id, projectId });
+    }
+    if (metricRows.length > 0) await tx.insert(eventMetrics).values(metricRows);
 
-  return inserted.length;
+    return inserted.length;
+  });
 }
 
 export type EventPresenceDb = Pick<ReturnType<typeof getDb>, "select">;

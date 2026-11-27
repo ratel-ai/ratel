@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { type MetricQuery, metricQuery, QUERY_KINDS } from "@/lib/contracts/query";
+import { type MetricQuery, metricQuery } from "@/lib/contracts/query";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { type MetricsDb, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
@@ -30,7 +30,7 @@ import { widgetTracesHref } from "@/lib/views/dashboards/links";
 import { exactly } from "@/lib/views/dashboards/range";
 import * as store from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
-import type { DashboardFilters } from "@/lib/views/dashboards/types";
+import { type DashboardFilters, WIDGET_KINDS } from "@/lib/views/dashboards/types";
 import { queryFilter, widgetOfKind, withFilter } from "@/lib/views/dashboards/widget";
 import { START_PANEL } from "@/lib/views/explore/starts";
 import { decodePanels, encodePanels } from "@/lib/views/explore/state";
@@ -89,7 +89,8 @@ after(() => client.close());
 test("a panel of each kind runs, and saves as an equal widget", async () => {
   const id = await change({ action: "create", name: "Board" });
   const range = resolveTraceRange({}, new Date());
-  for (const kind of QUERY_KINDS) {
+  // Kind sql runs on the RQL path: `dashboards.integration.test.ts` saves and reads it.
+  for (const kind of WIDGET_KINDS.filter((kind) => kind !== "sql")) {
     const decoded = decodePanels(encodePanels([widgetOfKind(kind, START_PANEL)]));
     assert.ok(decoded.ok);
     const [panel] = decoded.panels;
@@ -251,7 +252,7 @@ function alertOf(href: string): MetricQuery {
     alertQueryOf(value === IN_FRAGMENT ? hash.slice(1) : value),
     FEATURES,
   );
-  assert.ok(parsed.ok);
+  assert.ok(parsed.ok && parsed.query.kind === "metric");
   return parsed.query;
 }
 

@@ -14,6 +14,7 @@ import {
 } from "@/lib/views/alerts/domain";
 import { storedQuery } from "@/lib/views/alerts/parse-rule";
 import { alertEvents, alertRules } from "@/lib/views/alerts/schema";
+import { measureSqlValue } from "@/lib/views/alerts/sql-value";
 import { ALERT_WINDOWS, type AlertNoticeKind, type AlertState } from "@/lib/views/alerts/types";
 // The scorer metrics read through the source this module registers.
 import "@/lib/views/scorers/metrics";
@@ -39,6 +40,7 @@ export interface StateChange {
 
 export interface EvaluationResult {
   evaluated: number;
+  /** Rules whose evaluation threw, and RQL rules whose query RQL refused (marked with the error). */
   failed: number;
   /** Rules whose stored query is malformed. */
   skipped: { projectId: string; ruleId: string }[];
@@ -78,11 +80,16 @@ export async function evaluateAlerts(
   for (const rule of due) {
     if (Date.now() - startedAt >= timeBudgetMs) return result;
     try {
-      const outcome = await db.transaction((tx) => evaluateOne(tx, rule.id, now()));
+      const read = await readSqlFirst(db, rule.id, now());
+      const outcome = await db.transaction((tx) => evaluateOne(tx, rule.id, now(), read));
       if (outcome === "locked") return { ...result, lockContended: true };
       if (outcome === "gone") continue;
       if (outcome === "skipped") {
         result.skipped.push({ projectId: rule.projectId, ruleId: rule.id });
+        continue;
+      }
+      if (outcome === "failing") {
+        result.failed += 1;
         continue;
       }
       result.evaluated += 1;
@@ -112,11 +119,43 @@ async function dueRules(
   return rows.filter(({ projectId }) => flags.get(projectId));
 }
 
+/** The value of an RQL rule, read before its transaction, with the query it was read for. */
+interface SqlRead {
+  query: string;
+  measured: Measurement | { error: string };
+}
+
+/**
+ * An RQL rule reads on the RQL pool before its transaction: a query of up to its own timeout must
+ * hold no row lock and no connection of the primary pool. Null for a metric rule.
+ */
+async function readSqlFirst(db: Db, ruleId: string, now: Date): Promise<SqlRead | null> {
+  const [rule] = await db
+    .select({
+      projectId: alertRules.projectId,
+      query: alertRules.query,
+      windowMinutes: alertRules.windowMinutes,
+    })
+    .from(alertRules)
+    .where(and(eq(alertRules.id, ruleId), dueAt(now)));
+  const query = rule && storedQuery(rule.query).query;
+  if (query?.kind !== "sql") return null;
+  return {
+    query: JSON.stringify(query),
+    measured: await measureSqlValue(
+      rule.projectId,
+      query,
+      evaluationWindow(rule.windowMinutes, now),
+    ),
+  };
+}
+
 async function evaluateOne(
   tx: Tx,
   ruleId: string,
   now: Date,
-): Promise<"locked" | "gone" | "skipped" | { change: StateChange | null }> {
+  read: SqlRead | null,
+): Promise<"locked" | "gone" | "skipped" | "failing" | { change: StateChange | null }> {
   const locked = await tx.execute(
     sql`select pg_try_advisory_xact_lock(${ALERTS_ADVISORY_LOCK_KEY}::bigint) as locked`,
   );
@@ -135,7 +174,20 @@ async function evaluateOne(
     return "skipped";
   }
   const window = evaluationWindow(rule.windowMinutes, now);
-  const measured = await measure(tx, rule.projectId, query, window);
+  let measured: Measurement | { error: string };
+  if (query.kind === "sql") {
+    // Changed since it was read: the next tick reads it again.
+    if (read?.query !== JSON.stringify(query)) return "gone";
+    measured = read.measured;
+  } else measured = await measureMetric(tx, rule.projectId, query, window);
+  if ("error" in measured) {
+    // Failing, not firing: the state and the last value stay, and the rule says why.
+    await tx
+      .update(alertRules)
+      .set({ lastError: measured.error, lastEvaluatedAt: now })
+      .where(eq(alertRules.id, rule.id));
+    return "failing";
+  }
   const next = nextState(rule, rule, measured);
   await tx
     .update(alertRules)
@@ -143,6 +195,7 @@ async function evaluateOne(
       state: next.state,
       firing: next.firing,
       lastValue: next.value,
+      lastError: null,
       lastEvaluatedAt: now,
       ...(next.changed ? { stateChangedAt: now } : {}),
     })
@@ -164,7 +217,7 @@ async function evaluateOne(
     change: {
       projectId: rule.projectId,
       ruleId: rule.id,
-      metric: query.measures[0].measure,
+      metric: query.kind === "sql" ? "sql" : query.measures[0].measure,
       from: rule.state,
       to: next.state,
       notice: next.notice,
@@ -172,7 +225,7 @@ async function evaluateOne(
   };
 }
 
-async function measure(
+async function measureMetric(
   tx: Tx,
   projectId: string,
   query: MetricQuery,

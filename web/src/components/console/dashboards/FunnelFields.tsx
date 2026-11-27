@@ -6,6 +6,8 @@ import { Select } from "@ratel/design-system/select";
 import { SegmentedControl } from "@ratel/design-system/tabs";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { useId } from "react";
+import { ScorerPicker } from "@/components/console/scorers/ScorerPicker";
+import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import {
   ATTRIBUTE_PREFIX,
   CHECK_OPERATORS,
@@ -22,8 +24,8 @@ import {
   MAX_STEP_NAME,
 } from "@/lib/contracts/query";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
-import type { ScorerOption } from "@/lib/views/dashboards/types";
 import { FIELD_LABELS, OPERATOR_LABELS } from "@/lib/views/scorers/format";
+import type { PickerScorer } from "@/lib/views/scorers/picker";
 import { Choice } from "./MetricFields";
 
 type ConditionType = FunnelCondition["type"];
@@ -42,12 +44,10 @@ const SCORE_FLOORS = [2, 3, 4, 5] as const;
 export function FunnelFields({
   query,
   facets,
-  scorers,
   onChange,
 }: {
   query: FunnelQuery;
   facets: TraceFilterBarFacets;
-  scorers: readonly ScorerOption[];
   onChange: (query: FunnelQuery) => void;
 }) {
   const toolsId = useId();
@@ -81,7 +81,6 @@ export function FunnelFields({
               <ConditionFields
                 place={index + 1}
                 condition={step.condition}
-                scorers={scorers}
                 toolsId={toolsId}
                 onChange={(condition) => setSteps(steps.with(index, { ...step, condition }))}
               />
@@ -154,16 +153,15 @@ export function FunnelFields({
 function ConditionFields({
   place,
   condition,
-  scorers,
   toolsId,
   onChange,
 }: {
   place: number;
   condition: FunnelCondition;
-  scorers: readonly ScorerOption[];
   toolsId: string;
   onChange: (condition: FunnelCondition) => void;
 }) {
+  const scorers = useScorers() ?? [];
   const types = (Object.keys(TYPE_LABELS) as ConditionType[]).filter(
     (type) => type !== "scorer" || scorers.length > 0 || condition.type === "scorer",
   );
@@ -192,7 +190,7 @@ function ConditionFields({
         <AttributeFields place={place} condition={condition} onChange={onChange} />
       ) : null}
       {condition.type === "scorer" ? (
-        <ScorerFields place={place} condition={condition} scorers={scorers} onChange={onChange} />
+        <ScorerFields place={place} condition={condition} onChange={onChange} />
       ) : null}
     </>
   );
@@ -272,28 +270,20 @@ function AttributeFields({
 function ScorerFields({
   place,
   condition,
-  scorers,
   onChange,
 }: {
   place: number;
   condition: Extract<FunnelCondition, { type: "scorer" }>;
-  scorers: readonly ScorerOption[];
   onChange: (condition: FunnelCondition) => void;
 }) {
   const { scorer, result, atLeast } = condition;
-  const known = scorers.find(({ id }) => id === scorer.id);
   return (
     <>
-      <Select
-        aria-label={`Scorer of step ${place}`}
+      <ScorerPicker
+        label={`Scorer of step ${place}`}
         className="w-44"
-        options={[
-          ...(known ? [] : [{ value: scorer.id, label: "Choose a scorer" }]),
-          ...scorers.map(({ id, name }) => ({ value: id, label: name })),
-        ]}
         value={scorer.id}
-        onValueChange={(id) => {
-          const next = scorers.find((option) => option.id === id);
+        onChange={(_, next) => {
           if (next) onChange(scorerCondition(next));
         }}
       />
@@ -324,7 +314,7 @@ function ScorerFields({
   );
 }
 
-function newCondition(type: ConditionType, scorers: readonly ScorerOption[]): FunnelCondition {
+function newCondition(type: ConditionType, scorers: readonly PickerScorer[]): FunnelCondition {
   switch (type) {
     case "tool":
     case "skill":
@@ -338,7 +328,7 @@ function newCondition(type: ConditionType, scorers: readonly ScorerOption[]): Fu
   }
 }
 
-function scorerCondition({ id, verdict }: ScorerOption): FunnelCondition {
+function scorerCondition({ id, verdict }: Pick<PickerScorer, "id" | "verdict">): FunnelCondition {
   return {
     type: "scorer",
     scorer: { id },

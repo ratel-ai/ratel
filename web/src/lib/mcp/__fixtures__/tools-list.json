@@ -3688,7 +3688,7 @@
   {
     "name": "get_task",
     "title": "Get task",
-    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. With custom monitoring on, scorers are the ones attached to the task, each with its 7-day result and 14-day trend, and scoreSeries is empty. Use list_fixes for the task's fixes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4029,7 +4029,7 @@
   {
     "name": "list_scorers",
     "title": "List scorers",
-    "description": "The project's own scorers: each gives every matching trace one stored result. Per scorer: what it checks, which traces it takes, whether it is on, and its pass rate or average of the last 7 days. A task's fix scorers are in get_task. Change one with change_scorer.",
+    "description": "The project's own scorers: each gives every matching trace one stored result. Per scorer: what it checks, which traces it takes, whether it is on, its pass rate or average of the last 7 days, and where it is used (dashboard widgets, alert rules, tasks). A task's fix scorers are in get_task. Change one with change_scorer.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4296,7 +4296,7 @@
           "maxLength": 36
         },
         "query": {
-          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}.",
+          "description": "A query object. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"latency\",\"aggregation\":\"p95\"}],\"dimensions\":[\"model\"]}. A step flow: {\"version\":1,\"kind\":\"step_flow\",\"node\":\"tool\",\"start\":\"intent\"}. A query of kind sql (RQL text) gives a table. It cannot be a panel, but it can be a widget of chart sql.",
           "type": "object",
           "propertyNames": {
             "type": "string"
@@ -4334,7 +4334,8 @@
                   "step_flow",
                   "funnel",
                   "clusters",
-                  "geography"
+                  "geography",
+                  "sql"
                 ],
                 "description": "line, bar, number or table for a metric; else the query's kind."
               }
@@ -4381,6 +4382,13 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 50
+        },
+        "as": {
+          "description": "sql: for a lone metric query, give the RQL text of its numbers (the web app's Edit as SQL) instead of running it. A rate, a context metric and a group-by model, tool or agent have none yet: the refusal says why.",
+          "type": "string",
+          "enum": [
+            "sql"
+          ]
         }
       }
     },
@@ -5211,7 +5219,7 @@
   {
     "name": "change_task_scorer",
     "title": "Change a task scorer",
-    "description": "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task.",
+    "description": "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task. The task's scorer of the same kind (list_scorers) changes with it.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -5909,7 +5917,7 @@
           "description": "A scorer id from list_scorers."
         },
         "scorer": {
-          "description": "A draft, instead of scorerId. Example: {\"name\":\"Fast\",\"kind\":\"check\",\"config\":{\"path\":\"duration_ms\",\"op\":\"lte\",\"value\":2000}}.",
+          "description": "A draft, instead of scorerId. Example: {\"name\":\"Fast\",\"kind\":\"check\",\"config\":{\"path\":\"duration_ms\",\"op\":\"lte\",\"value\":2000}}, or {\"name\":\"Run time\",\"kind\":\"preset\",\"config\":{\"preset\":\"max_latency_ms\",\"max\":2000},\"tasks\":[\"<task id>\"]}.",
           "type": "object",
           "properties": {
             "name": {
@@ -5920,7 +5928,8 @@
               "type": "string",
               "enum": [
                 "check",
-                "judge"
+                "judge",
+                "preset"
               ]
             },
             "config": {
@@ -5983,9 +5992,45 @@
                     "output"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "ends_well",
+                        "max_self_corrections",
+                        "max_latency_ms",
+                        "max_cost_usd",
+                        "expected_tool",
+                        "max_tool_calls",
+                        "judge_criteria"
+                      ],
+                      "description": "A task kind, graded on the task run of each trace. judge_criteria is saved as a pass-or-fail judge."
+                    },
+                    "max": {
+                      "description": "For max_*: the limit (ms, USD, or a whole number of tool calls or self-corrections).",
+                      "type": "number"
+                    },
+                    "tool": {
+                      "description": "For expected_tool: the tool id.",
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "criteria": {
+                      "description": "For judge_criteria: what to check.",
+                      "type": "string",
+                      "maxLength": 5000
+                    }
+                  },
+                  "required": [
+                    "preset"
+                  ],
+                  "additionalProperties": false
                 }
               ],
-              "description": "A check's path, op and value, or a judge's prompt and output."
+              "description": "A check's path, op and value; a judge's prompt and output; or a preset with its setting (kind preset, with tasks)."
             },
             "filter": {
               "description": "Which traces: models, tools, services, environments, agents, mcpServers (lists), status (failed or ok), minCostUsd, minTokens.",
@@ -6045,7 +6090,7 @@
   {
     "name": "change_scorer",
     "title": "Change a scorer",
-    "description": "Create, update, enable, disable or delete a scorer, or attach it to a task or detach it. An update changes only the fields it gives. Delete removes every stored result. Try a draft with test_scorer first; read scorers with list_scorers.",
+    "description": "Create, update, enable, disable or delete a scorer, or attach it to a task or detach it. A task preset (kind preset) grades the task run of each trace of its tasks. An update changes only the fields it gives. Delete removes every stored result. Try a draft with test_scorer first; read scorers with list_scorers.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -6075,7 +6120,7 @@
           "maxLength": 36
         },
         "scorer": {
-          "description": "For create (name, kind and config at least) and update. Example: {\"name\":\"Fast\",\"kind\":\"check\",\"config\":{\"path\":\"duration_ms\",\"op\":\"lte\",\"value\":2000}}.",
+          "description": "For create (name, kind and config at least) and update. Example: {\"name\":\"Fast\",\"kind\":\"check\",\"config\":{\"path\":\"duration_ms\",\"op\":\"lte\",\"value\":2000}}, or {\"name\":\"Run time\",\"kind\":\"preset\",\"config\":{\"preset\":\"max_latency_ms\",\"max\":2000},\"tasks\":[\"<task id>\"]}.",
           "type": "object",
           "properties": {
             "name": {
@@ -6086,7 +6131,8 @@
               "type": "string",
               "enum": [
                 "check",
-                "judge"
+                "judge",
+                "preset"
               ]
             },
             "config": {
@@ -6149,9 +6195,45 @@
                     "output"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "ends_well",
+                        "max_self_corrections",
+                        "max_latency_ms",
+                        "max_cost_usd",
+                        "expected_tool",
+                        "max_tool_calls",
+                        "judge_criteria"
+                      ],
+                      "description": "A task kind, graded on the task run of each trace. judge_criteria is saved as a pass-or-fail judge."
+                    },
+                    "max": {
+                      "description": "For max_*: the limit (ms, USD, or a whole number of tool calls or self-corrections).",
+                      "type": "number"
+                    },
+                    "tool": {
+                      "description": "For expected_tool: the tool id.",
+                      "type": "string",
+                      "maxLength": 500
+                    },
+                    "criteria": {
+                      "description": "For judge_criteria: what to check.",
+                      "type": "string",
+                      "maxLength": 5000
+                    }
+                  },
+                  "required": [
+                    "preset"
+                  ],
+                  "additionalProperties": false
                 }
               ],
-              "description": "A check's path, op and value, or a judge's prompt and output."
+              "description": "A check's path, op and value; a judge's prompt and output; or a preset with its setting (kind preset, with tasks)."
             },
             "filter": {
               "description": "Which traces: models, tools, services, environments, agents, mcpServers (lists), status (failed or ok), minCostUsd, minTokens.",
@@ -6259,7 +6341,7 @@
                 "type": "string"
               },
               "additionalProperties": {},
-              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}."
+              "description": "A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"error_rate\",\"aggregation\":\"rate\"}]}. Or a query of kind sql: RQL text that gives one row with one number, such as {\"version\":1,\"kind\":\"sql\",\"rqlVersion\":1,\"text\":\"select count(*) from traces where has_error\"}. Its window is the rule's window."
             },
             "operator": {
               "type": "string",
@@ -6508,7 +6590,8 @@
                 "step_flow",
                 "funnel",
                 "clusters",
-                "geography"
+                "geography",
+                "sql"
               ],
               "description": "line, bar, number or table for a metric; else the query's kind."
             }

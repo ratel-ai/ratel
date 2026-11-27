@@ -121,7 +121,7 @@ export function nothingIsZero(aggregation: Aggregation): boolean {
 
 /** Whether a project with these switches may use the entry. */
 export function metricOffered(metric: MetricDefinition, features: MetricFeatures): boolean {
-  return !metric.feature || features[metric.feature];
+  return !metric.feature || features[metric.feature] === true;
 }
 
 /** The entries a form offers, in menu order. */

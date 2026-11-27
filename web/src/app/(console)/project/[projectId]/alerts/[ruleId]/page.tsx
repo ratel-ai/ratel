@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AlertDetail } from "@/components/console/alerts/AlertDetail";
 import { AlertForm } from "@/components/console/alerts/AlertForm";
+import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { getAlertRule, listAlertEvents } from "@/lib/views/alerts/store";
@@ -27,7 +28,7 @@ export default async function AlertPage({
   const id = parseProjectUuid(ruleId);
   const rule = id ? await getAlertRule(page.projectId, id) : null;
   if (!rule) notFound();
-  const [{ form }, events] = await Promise.all([
+  const [{ scorers, form }, events] = await Promise.all([
     loadAlertForm(page),
     listAlertEvents(page.projectId, rule.id),
   ]);
@@ -39,7 +40,9 @@ export default async function AlertPage({
       alert={{ ...shown, stateChangedAt: stateChangedAt?.toISOString() ?? null }}
       events={events.map((event) => ({ ...event, at: event.at.toISOString() }))}
     >
-      <AlertForm projectId={page.projectId} rule={rule} start={null} {...form} />
+      <ScorerPickerProvider projectId={page.projectId} data={scorers}>
+        <AlertForm projectId={page.projectId} rule={rule} start={null} {...form} />
+      </ScorerPickerProvider>
     </AlertDetail>
   );
 }

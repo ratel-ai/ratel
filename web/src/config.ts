@@ -160,6 +160,11 @@ const CONFIG_SCHEMA = schema({
     /** Unset: on for the open-source edition, off for the others. */
     migrateOnBoot: optional("DATABASE_MIGRATE_ON_BOOT", flagValue),
     migrationsDir: optional("MIGRATIONS_DIR", trimmed),
+    /**
+     * The database RQL queries run on (a read replica, or a user of its own); unset, `url`. RQL
+     * always has a small pool of its own, so it never takes a connection of the primary pool.
+     */
+    rqlUrl: optional("RQL_DATABASE_URL", trimmed, { sensitive: true }),
   },
   jobs: {
     /** Unset: in process for the open-source edition, external for the others. */

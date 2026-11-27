@@ -2,9 +2,10 @@
 
 import { DataTable } from "@ratel/design-system/data-table";
 import { StatRow } from "@ratel/design-system/stat-row";
-import { EmptyState } from "@ratel/design-system/states";
+import { Callout, EmptyState } from "@ratel/design-system/states";
 import { ChartColumn, CircleAlert, Funnel, Waypoints } from "lucide-react";
 import Link from "next/link";
+import { StillCalculating } from "@/components/console/scorers/StillCalculating";
 import type { MetricQuery } from "@/lib/contracts/query";
 import { getMetric, type MetricSource } from "@/lib/synthesis/metrics/catalog";
 import type { MetricResult, QueryResult } from "@/lib/synthesis/metrics/query";
@@ -25,7 +26,7 @@ import {
   stepFlowFilter,
   widgetTracesHref,
 } from "@/lib/views/dashboards/links";
-import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
+import type { DashboardFilters, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import {
   aggregationLabel,
   dimensionLabel,
@@ -33,12 +34,13 @@ import {
   queryFilter,
   widgetName,
 } from "@/lib/views/dashboards/widget";
-import { scorersHref } from "@/lib/views/scorers/paths";
+import { scorerHref } from "@/lib/views/scorers/paths";
 import { ClustersBody } from "./ClustersBody";
 import { FlowChart } from "./FlowChart";
 import { FunnelChart } from "./FunnelChart";
 import { GeographyChart } from "./GeographyChart";
 import { MetricChart } from "./MetricChart";
+import { SqlBody } from "./SqlBody";
 import { StepFlowChart } from "./StepFlowChart";
 
 const SAMPLE_NOUN: Readonly<Record<MetricSource, string>> = {
@@ -60,11 +62,11 @@ export function WidgetBody({
 }: {
   projectId: string;
   widget: WidgetInput;
-  result: QueryResult | null;
+  result: WidgetResult | null;
   range: DashboardRange;
   /** The dashboard's, for the links to what a widget shows. */
   filters: DashboardFilters;
-  /** False while the metric's switch is off. */
+  /** False while the switch of the metric is off. */
   available?: boolean;
   /** The scorer of an imported widget, when the project does not have it. */
   missingScorer?: string;
@@ -96,6 +98,14 @@ export function WidgetBody({
         description="Reload the page to try again."
       />
     );
+  if (result.kind === "refused")
+    return (
+      <Callout tone="danger" title="RQL refused the query">
+        {result.message} Fix: {result.fix}
+      </Callout>
+    );
+  if (query.kind === "sql" && result.kind === "sql")
+    return <SqlBody result={result} label={widgetName(widget)} fill={fill} />;
   if (query.kind === "metric" && result.kind === "metric")
     return (
       <MetricBody
@@ -236,6 +246,9 @@ function MetricBody({
   const [{ measure, aggregation }] = query.measures;
   const metric = getMetric(measure);
   if (!metric) return null;
+  // A scorer scores only new traces, so a chosen one without results may be new.
+  if (isEmptyResult(result) && metric.source === "scores" && query.filters.scorer)
+    return <StillCalculating />;
   if (isEmptyResult(result))
     return (
       <EmptyState
@@ -281,7 +294,7 @@ function MetricBody({
                 <Link
                   href={
                     by === "scorer"
-                      ? `${scorersHref(projectId)}/${value}`
+                      ? scorerHref(projectId, value)
                       : widgetTracesHref(
                           projectId,
                           withClause<TraceFilter>(filters, dashboardFilters),

@@ -1,5 +1,6 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import { DashboardView } from "@/components/console/dashboards/DashboardView";
+import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { projectRoot } from "@/lib/console/navigation";
@@ -73,32 +74,33 @@ export default async function ScopedDashboardPage({
     }),
   ]);
   const overview = await focusedConsoleEnabled(scope.organization);
-  const added = scorers?.find(({ id }) => id === search[ADD_SCORER_PARAM]);
+  const added = scorers?.scorers.find(({ id }) => id === search[ADD_SCORER_PARAM]);
   return (
-    <DashboardView
-      scorers={scorers}
-      alerts={alerts}
-      overview={overview}
-      draft={added ? scorerWidget(added) : null}
-      projectId={scope.project.id}
-      dashboard={{
-        id: dashboard.id,
-        name: dashboard.name,
-        defaults: { filters: dashboard.filters, range: dashboard.range },
-      }}
-      filters={filters}
-      problem={problem}
-      widgets={dashboard.widgets.map((widget, index) => ({
-        widget,
-        result: results[index] ?? null,
-      }))}
-      facets={facets}
-      timeWindow={{
-        preset: range.preset,
-        from: range.from,
-        to: range.to,
-        today: now.toISOString().slice(0, 10),
-      }}
-    />
+    <ScorerPickerProvider projectId={scope.project.id} data={scorers}>
+      <DashboardView
+        alerts={alerts}
+        overview={overview}
+        draft={added ? scorerWidget(added) : null}
+        projectId={scope.project.id}
+        dashboard={{
+          id: dashboard.id,
+          name: dashboard.name,
+          defaults: { filters: dashboard.filters, range: dashboard.range },
+        }}
+        filters={filters}
+        problem={problem}
+        widgets={dashboard.widgets.map((widget, index) => ({
+          widget,
+          result: results[index] ?? null,
+        }))}
+        facets={facets}
+        timeWindow={{
+          preset: range.preset,
+          from: range.from,
+          to: range.to,
+          today: now.toISOString().slice(0, 10),
+        }}
+      />
+    </ScorerPickerProvider>
   );
 }

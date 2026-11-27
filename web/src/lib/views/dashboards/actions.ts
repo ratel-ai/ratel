@@ -25,10 +25,10 @@ import {
   MAX_DASHBOARD_NAME,
   MAX_DASHBOARDS,
   MAX_WIDGETS,
-  type ScorerOption,
   type Widget,
   type WidgetInput,
 } from "@/lib/views/dashboards/types";
+import type { PickerScorer } from "@/lib/views/scorers/picker";
 
 export type DashboardActionInput = { projectId: string } & (
   | { action: "create"; name: string }
@@ -78,7 +78,7 @@ export interface DashboardActionDeps {
     actor: string;
   }): Promise<MetricFeatures>;
   /** The project's scorers, for an import to find by name. */
-  scorers(projectId: string): Promise<readonly ScorerOption[]>;
+  scorers(projectId: string): Promise<readonly Pick<PickerScorer, "id" | "name" | "verdict">[]>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
   store: Pick<

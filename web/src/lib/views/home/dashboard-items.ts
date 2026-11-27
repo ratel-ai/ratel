@@ -1,11 +1,15 @@
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
-import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
 import { dashboardHref } from "@/lib/views/dashboards/links";
 import { getDashboards } from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
-import type { Dashboard, DashboardFilters, Widget } from "@/lib/views/dashboards/types";
+import type {
+  Dashboard,
+  DashboardFilters,
+  Widget,
+  WidgetResult,
+} from "@/lib/views/dashboards/types";
 import { widgetName } from "@/lib/views/dashboards/widget";
 import type { OverviewReadScope } from "@/lib/views/home/overview-reads";
 import {
@@ -21,7 +25,7 @@ export type DashboardItem =
       dashboard: { name: string; href: string };
       widget: Widget;
       /** Null when the read failed. */
-      result: QueryResult | null;
+      result: WidgetResult | null;
       /** The dashboard's saved ones. */
       filters: DashboardFilters;
       range: DashboardItemsRange;
@@ -39,12 +43,23 @@ export interface DashboardItemsRange {
 
 type Found = { id: DashboardItemId; dashboard: Dashboard; widget: Widget };
 
+/** What the items read, in a test another database or flag. */
+export interface DashboardItemReads {
+  dashboards: typeof getDashboards;
+  widget: typeof loadWidget;
+}
+
+const DASHBOARD_ITEM_READS: DashboardItemReads = {
+  dashboards: getDashboards,
+  widget: loadWidget,
+};
+
 /** The numbers are the dashboard's own for the Overview's window, under its saved filters. */
 export async function readDashboardItems(
   at: OverviewReadScope,
   ids: readonly DashboardItemId[],
   range: DashboardItemsRange,
-  reads = { dashboards: getDashboards, widget: loadWidget },
+  reads: DashboardItemReads = DASHBOARD_ITEM_READS,
 ): Promise<DashboardItems> {
   const refs = ids.map((id) => ({ id, ref: parseDashboardItem(id) }));
   const wanted = [...new Set(refs.flatMap(({ ref }) => ref?.dashboardId ?? []))];

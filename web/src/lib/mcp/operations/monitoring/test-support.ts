@@ -7,10 +7,16 @@ import { buildRegistry } from "@/lib/mcp/registry";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { runQuery } from "@/lib/synthesis/metrics/query";
+import { metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
+import type { RqlPool } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
 import type { SealedDestination } from "@/lib/views/alerts/destinations";
+import { loadWidget } from "@/lib/views/dashboards/data";
 // What these modules own is read through what they register.
 import "@/lib/views/dashboards/data";
+import { scorePresetTraces } from "@/lib/views/scorers/preset";
 import { countLastWeek, previewScorer } from "@/lib/views/scorers/preview";
 import { countMatchingTraces, latestMatchingTraces } from "@/lib/views/scorers/traces";
 import type { MonitoringDeps } from "./deps";
@@ -89,6 +95,8 @@ export async function monitoring(
     count: (...[p, t, s]: Parameters<typeof countMatchingTraces>) =>
       countMatchingTraces(p, t, s, db),
     judge: async () => [],
+    preset: (...[p, c, t, k]: Parameters<typeof scorePresetTraces>) =>
+      scorePresetTraces(p, c, t, k, db),
   };
   const deps: MonitoringDeps = {
     enabled: async () => set.on,
@@ -96,7 +104,11 @@ export async function monitoring(
     previewScorer: (projectId, draft) => previewScorer(projectId, draft, preview),
     countLastWeek: (projectId, target) => countLastWeek(projectId, target, NOW, preview),
     runQuery: (projectId, query, scope) => runQuery(projectId, query, scope, db),
-    loadWidget: (projectId, widget, scope) => runQuery(projectId, widget.query, scope, db),
+    loadWidget: (projectId, widget, scope) =>
+      // Kind sql through the console's own read: it drops the page's filter and keeps a refusal.
+      widget.query.kind === "sql"
+        ? loadWidget(projectId, widget, scope, db as never)
+        : runQuery(projectId, widget.query, scope, db),
     canSeal: () => true,
     secretKey: SECRET_KEY,
     slack: {
@@ -114,6 +126,7 @@ export async function monitoring(
     },
     now: () => NOW,
   };
+  runRqlOn(client);
   const registry = buildRegistry(operationsOf(deps));
   const call: Monitoring["call"] = (id, params = {}, auth = KEY_AUTH) =>
     dispatchOperation(id, params, {
@@ -147,4 +160,25 @@ export function insertTrace(client: PGlite, traceId: string, durationMs = 100, f
      values ($1, $2, $3, $4, $5, 1, 1, 0, $3, $3)`,
     [PROJECT, traceId, at, durationMs, failed],
   );
+}
+
+/**
+ * Kind `sql` on this database: the RQL runner over the one PGlite connection. The seam has no flag
+ * check: the tools check `customMonitoring` of the caller (`set.on`) before it.
+ */
+function runRqlOn(client: PGlite) {
+  const pool: RqlPool = {
+    async connect() {
+      return {
+        async query({ text, values, rowMode }) {
+          const result = await client.query(text, values ?? [], rowMode ? { rowMode } : {});
+          return { rows: result.rows as unknown[] };
+        },
+        release: () => {},
+      };
+    },
+  };
+  metricSeams.sql = sqlQueryRunner({
+    run: { executor: createPgRqlExecutor(pool), gate: createRqlGate(), observe: async () => {} },
+  });
 }

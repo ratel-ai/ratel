@@ -378,6 +378,10 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
     latestFixDraft: async () => null,
     scorersFor: async () => [{ kind: "ends_well", enabled: true, source: "default", version: 1 }],
     dailyScoresFor: async () => [],
+    scorersOn: async () => false,
+    liveTaskScorers: async () => {
+      throw new Error("The live read must not run with custom monitoring off.");
+    },
     taskEvalViewFor: async () => ({
       rows: [],
       targetRuns: 20,
@@ -1158,6 +1162,72 @@ test("get_task returns its scorers, score series and eval set within the project
     ((await run("get_task", { taskId: "foreign-task" })) as { error: string }).error,
     "not_found",
   );
+});
+
+test("with custom monitoring on, get_task reads the task's scorers from trace_scores, not the daily scores", async () => {
+  const unavailable = async (): Promise<never> => {
+    throw new Error("The old read must not run.");
+  };
+  const out = data<{ task: { scorers: { id: string; week: unknown }[]; scoreSeries: unknown[] } }>(
+    await run("get_task", { taskId: task.id }, [], {
+      scorersOn: async () => true,
+      scorersFor: unavailable,
+      dailyScoresFor: unavailable,
+      liveTaskScorers: async () => [
+        {
+          id: "s1",
+          name: "Run time · t",
+          kind: "preset",
+          summary: "Run time at most 2.0 s",
+          verdict: true,
+          sampleRate: 100,
+          tasks: [task.id],
+          enabled: true,
+          week: { scored: 4, passRate: 0.75, average: 0.75 },
+          trend: [],
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    out.task.scorers.map((scorer) => [scorer.id, scorer.week]),
+    [["s1", { scored: 4, passRate: 0.75, average: 0.75 }]],
+  );
+  assert.deepEqual(out.task.scoreSeries, []);
+});
+
+test("with custom monitoring on and the eval gate off, get_task still returns the task's scorers, as its page does", async () => {
+  const unavailable = async (): Promise<never> => {
+    throw new Error("The read must not run.");
+  };
+  const out = data<{ task: { scorers: { id: string }[]; evalSet: null } }>(
+    await run("get_task", { taskId: task.id }, [], {
+      evalGateEnabled: async () => false,
+      scorersOn: async () => true,
+      scorersFor: unavailable,
+      dailyScoresFor: unavailable,
+      taskEvalViewFor: unavailable,
+      liveTaskScorers: async () => [
+        {
+          id: "s1",
+          name: "Run time",
+          kind: "preset",
+          summary: "Run time at most 2.0 s",
+          verdict: true,
+          sampleRate: 100,
+          tasks: [task.id],
+          enabled: true,
+          week: null,
+          trend: [],
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    out.task.scorers.map((scorer) => scorer.id),
+    ["s1"],
+  );
+  assert.equal(out.task.evalSet, null);
 });
 
 test("get_task does not read scorers or evals when the eval gate is off", async () => {

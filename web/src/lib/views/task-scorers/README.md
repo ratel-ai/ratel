@@ -18,12 +18,16 @@ is on (`evalGate`, `eval-gate/gate.ts`).
 With no `ANTHROPIC_API_KEY` the judge is skipped (no row, no call) and the deterministic scorers
 still write their counts; `EVAL_GATE_MOCK_MODEL=1` judges with a rule stand-in outside
 production. As upstream, `score_tasks` is not coalesced: each completed signal run queues one.
-With the `customMonitoring` flag on, a project's live scoring is the top-level scorers scoped to its tasks
-(`views/scorers`, `trace_scores`): the task page reads those, and neither trigger queues
-`score_tasks` for the project. The skip is recorded as a gate refusal is (a finished job, one
+With the `customMonitoring` flag on, a project's live scoring is the one scorer model of
+`views/scorers`: its kinds are scorers attached to the task (the 6 measured ones as `preset`
+scorers, `judge_criteria` as a judge), scored per trace into `trace_scores` with this `engine.ts`.
+Migration `0055` converted the `task_scorers` rows, and the skipped trigger gives a new task its
+defaults once (`scorers/task-presets.ts`). The task page and MCP `get_task` read `trace_scores`;
+`change_task_scorer` also moves the task's scorer of that kind. Neither trigger queues
+`score_tasks` for the project, and a job queued before writes nothing (reason `trace_scorers`). The skip is recorded as a gate refusal is (a finished job, one
 `task_scores_skipped` event, reason `trace_scorers`), and the trigger queues the due eval sets,
-which the job does otherwise. A job already queued when the flag turns on still runs. The pure
-core, `task_scorers` and the eval gate's simulations are unchanged, and old `task_scores_daily` rows
+which the job does otherwise. The pure
+core, `task_scorers` (what the eval gate grades with) and the eval gate's simulations are unchanged, and old `task_scores_daily` rows
 stay readable with the flag off.
 
 With `evalGate` off, the sweep still records one refusal per project with task runs a day,

@@ -116,7 +116,7 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
-  /** `customMonitoring` on for the shown organization: Dashboards, Explore, Scorers and Alerts in Monitor. */
+  /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
   customMonitoring?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
@@ -428,7 +428,7 @@ export function consoleNav({
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore, Scorers and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
+ * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
  * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the list, unlabelled; MCP sits in the footer.
  */
 function stageRailNav(
@@ -551,7 +551,9 @@ function withMonitoringPages(
     label: "Dashboards",
     href: `${root}/dashboards`,
     icon: "dashboards",
-    keywords: ["dashboards", "widgets", "charts", "metrics"],
+    // A scorer has no list page: it is picked where it is used. One scorer's page lights Dashboards.
+    also: [`${root}/scorers`],
+    keywords: ["dashboards", "widgets", "charts", "metrics", "scorers", "scores", "judge"],
   };
   return [
     { ...overview, also: overview.also?.filter((path) => path !== dashboards.href) },
@@ -565,13 +567,6 @@ function withMonitoringPages(
     },
     health,
     traces,
-    {
-      id: "scorers",
-      label: "Scorers",
-      href: `${root}/scorers`,
-      icon: "scorers",
-      keywords: ["scores", "judge", "checks", "evaluation"],
-    },
     {
       id: "alerts",
       label: "Alerts",

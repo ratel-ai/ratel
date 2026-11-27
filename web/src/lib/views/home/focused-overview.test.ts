@@ -731,3 +731,21 @@ test("the picker lists the widgets by dashboard; one that is there is added, and
   assert.doesNotMatch(list(true), /Remove one first/);
   assert.match(list(false), /An Overview can have 12 dashboard widgets\. Remove one first\./);
 });
+
+test("Needs attention waits for Agent health: its progress instead of issues it cannot open", async () => {
+  const attention = async (over: Partial<HealthPageModel>) =>
+    page(
+      await load(
+        { health: async () => ({ ...MODEL, ...over }) },
+        { layout: removed("metrics", "topology", "health", "alerts") },
+      ),
+    );
+  const locked = await attention({ turns: 36, floor: 50 });
+  assert.deepEqual(emptyOf(locked), ["attention-collecting"]);
+  assert.match(visibleText(locked), /Agent health unlocks at 50 turns · 36\/50/);
+  assert.doesNotMatch(visibleText(locked), /Nothing needs you|more in Agent health/);
+  assert.match(locked, /href="[^"]*\/health"/, "Agent health stays a click away");
+
+  const building = await attention({ computedAt: null });
+  assert.match(visibleText(building), /Agent health is building its first reading/);
+});
