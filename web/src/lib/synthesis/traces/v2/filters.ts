@@ -1,3 +1,4 @@
+import { z } from "zod";
 /**
  * One filter model for every Traces tab (DESIGN.md, Lists): the active filters
  * are chips derived from the URL, the "Add filter" popover offers the values
@@ -18,6 +19,7 @@ import type {
   TraceFacetValue,
 } from "@/lib/synthesis/traces/queries";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+import { pack, unpack } from "../compact-json";
 import { formatDuration, formatInteger, formatMoney } from "./format";
 
 /**
@@ -81,6 +83,34 @@ export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service
   Partial<Pick<TraceFacets, "experiment" | "arm" | "name">> &
   Partial<Record<"agent" | "server", readonly TraceFacetValue[]>>;
 
+/** How a packed clause of the `and` parameter starts. */
+const PACKED_CLAUSE = "z.";
+/** More than any filter that fits an address inflates to. */
+const MAX_PACKED_BYTES = 100_000;
+
+const packedValues = z.array(z.string()).optional();
+const packedClause = z.object({
+  models: packedValues,
+  tools: packedValues,
+  services: packedValues,
+  environments: packedValues,
+  agents: packedValues,
+  mcpServers: packedValues,
+  status: z.enum(["failed", "ok"]).optional(),
+  minCostUsd: z.number().optional(),
+  minTokens: z.number().optional(),
+});
+const packedSchema = packedClause.extend({ and: z.array(packedClause).optional() });
+
+const LIST_PARAMS = {
+  models: "facetModel",
+  tools: "facetTool",
+  services: "facetService",
+  environments: "facetEnvironment",
+  agents: "facetAgent",
+  mcpServers: "facetServer",
+} as const satisfies Partial<Record<keyof TraceFilter, string>>;
+
 /** Never survive a filter change: the page and the open row belong to the old list. */
 const VOLATILE = ["cursor", "peek"] as const;
 
@@ -94,6 +124,7 @@ const ROLLUP_FILTER_PARAMS_LIST = [
   "facetEnvironment",
   "minCostUsd",
   "minTokens",
+  "and",
 ] as const;
 export const ROLLUP_FILTER_PARAMS: readonly string[] = ROLLUP_FILTER_PARAMS_LIST;
 /** The rollup bar's parameters behind `cloud-project-entities` (RC-790). */
@@ -197,6 +228,7 @@ export function filterChips(
       options.entities ? multi(params, "facetServer", "MCP server is") : null,
       measure(params, "Cost", "minCostUsd", "maxCostUsd", (value) => formatMoney(value)),
       measure(params, "Tokens", "minTokens", "maxTokens", (value) => formatInteger(value)),
+      clausesChip(params, options),
     ]);
   }
   const exact = params.get("exactTags") === "1";
@@ -234,6 +266,32 @@ export function filterChips(
         )
       : []),
   ]);
+}
+
+/** The further clauses as one chip: they come from a link, and go together. */
+function clausesChip(params: URLSearchParams, options: TraceFilterOptions): FilterChipModel | null {
+  const said = furtherClauses(params).flatMap((clause) =>
+    filterChips("rollup", clause, options).map(({ field, value }) => `${field} ${value}`),
+  );
+  return said.length > 0
+    ? { key: "and", field: "And", value: said.join(", "), params: ["and"] }
+    : null;
+}
+
+/** The further clauses of a list, each a query string of its own. A packed one has its own further ones. */
+function furtherClauses(params: URLSearchParams): string[] {
+  return params.getAll("and").flatMap((value) => {
+    const filter = unpackFilter(value);
+    if (!filter) return [withoutClauses(value)];
+    const { and = [], ...own } = filter;
+    return [own, ...and].map((clause) => searchFromTraceFilter(clause));
+  });
+}
+
+function withoutClauses(clause: string): string {
+  const params = new URLSearchParams(clause);
+  params.delete("and");
+  return `?${params}`;
 }
 
 /** The query string without one chip. Removing the last experiment or variant drops `exactTags` too. */
@@ -474,6 +532,9 @@ export function traceFilterFromSearch(
   const status = rollupStatus(params) ?? undefined;
   const minCostUsd = numberParam(params.get("minCostUsd"));
   const minTokens = numberParam(params.get("minTokens"));
+  const and = furtherClauses(params)
+    .map((clause) => traceFilterFromSearch(clause, options))
+    .filter((clause) => Object.keys(clause).length > 0);
   const filter: TraceFilter = {
     models: values("facetModel"),
     tools: values("facetTool"),
@@ -484,6 +545,7 @@ export function traceFilterFromSearch(
     status,
     minCostUsd: minCostUsd ?? undefined,
     minTokens: minTokens ?? undefined,
+    and,
   };
   return Object.fromEntries(
     Object.entries(filter).filter(
@@ -780,4 +842,34 @@ function toggleMulti(params: URLSearchParams, name: string, value: string): void
     ? values.filter((item) => item !== value)
     : [...values, value];
   for (const item of next) params.append(name, item);
+}
+
+/** The filter bar's query string for a filter: the inverse of `traceFilterFromSearch`. */
+export function searchFromTraceFilter(filter: TraceFilter): string {
+  const params = new URLSearchParams();
+  for (const [key, param] of Object.entries(LIST_PARAMS) as [keyof typeof LIST_PARAMS, string][])
+    for (const value of filter[key] ?? []) params.append(param, value);
+  if (filter.status) params.set("status", filter.status);
+  if (filter.minCostUsd !== undefined) params.set("minCostUsd", String(filter.minCostUsd));
+  if (filter.minTokens !== undefined) params.set("minTokens", String(filter.minTokens));
+  for (const clause of filter.and ?? []) {
+    const said = searchFromTraceFilter({ ...clause, and: undefined }).slice(1);
+    if (said) params.append("and", said);
+  }
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+/** A filter as one value of an address, not longer than its JSON in base64. */
+export function packFilter(filter: TraceFilter): string {
+  return `${PACKED_CLAUSE}${pack(filter)}`;
+}
+
+/** The filter of a packed value; empty for a damaged one, null for a value that is not packed. */
+export function unpackFilter(value: string): TraceFilter | null {
+  if (!value.startsWith(PACKED_CLAUSE)) return null;
+  const parsed = packedSchema.safeParse(
+    unpack(value.slice(PACKED_CLAUSE.length), MAX_PACKED_BYTES),
+  );
+  return parsed.success ? parsed.data : {};
 }

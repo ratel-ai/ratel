@@ -2,15 +2,21 @@ import type { McpAppBinding } from "@/lib/mcp/apps/types";
 import type { DetailConfig } from "../../shell/config";
 import type { ViewBindings } from "../../shell/types";
 import {
+  ALERT_TONES,
   EVIDENCE_LABELS,
   EVIDENCE_TONES,
   SKILL_LABELS,
   SKILL_TONES,
+  SWITCH_LABELS,
+  SWITCH_TONES,
   TASK_LABELS,
   TASK_TONES,
 } from "../list/bindings";
 
 export type DetailBinding = McpAppBinding & { config: DetailConfig };
+
+const EVENT_TONES = { ok: "success", alerting: "danger", no_data: "neutral" } as const;
+const EVENT_LABELS = { ok: "OK", alerting: "Alerting", no_data: "No data" };
 
 /**
  * One entity: its key facts, then sections. The list view's Panel renders a
@@ -339,6 +345,90 @@ export const detailBindings: DetailBinding[] = [
         },
         { key: "counts.skills", label: "Skills", format: "number" },
         { key: "counts.activeExperiments", label: "Active experiments", format: "number" },
+      ],
+    },
+  },
+  {
+    tool: "get_scorer",
+    config: {
+      root: "scorer",
+      title: "name",
+      href: "scorer.href",
+      fields: [
+        {
+          key: "status",
+          label: "Status",
+          format: "badge",
+          tones: SWITCH_TONES,
+          labels: SWITCH_LABELS,
+        },
+        { key: "summary", label: "Checks" },
+        { key: "traces", label: "Takes" },
+        { key: "sampleRate", label: "Sample (%)", format: "number" },
+        { key: "result", label: "Last 7 days" },
+      ],
+      sections: [
+        {
+          title: "By day",
+          kind: "table",
+          key: "trend",
+          columns: [
+            { key: "day", label: "Day", format: "date" },
+            { key: "scored", label: "Results", format: "number", width: "6rem" },
+            { key: "passRate", label: "Pass rate", format: "percent", width: "6rem" },
+            { key: "average", label: "Average", format: "number", width: "6rem" },
+          ],
+        },
+        {
+          title: "Latest results",
+          kind: "table",
+          key: "latest",
+          columns: [
+            { key: "traceId", label: "Trace", format: "id" },
+            { key: "result", label: "Result", width: "6rem" },
+            { key: "traceStartedAt", label: "Started", format: "relative", width: "8rem" },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    tool: "get_alert",
+    config: {
+      root: "alert",
+      title: "name",
+      href: "alert.href",
+      fields: [
+        { key: "status", label: "State", format: "badge", tones: ALERT_TONES },
+        { key: "condition", label: "Condition" },
+        { key: "lastValueText", label: "Last value" },
+        { key: "stateChangedAt", label: "Changed", format: "relative" },
+      ],
+      sections: [
+        {
+          title: "Sends to",
+          kind: "table",
+          key: "destinations",
+          columns: [{ key: "name", label: "Destination" }],
+        },
+        {
+          title: "History",
+          kind: "table",
+          key: "history",
+          columns: [
+            { key: "at", label: "When", format: "relative", width: "8rem" },
+            {
+              key: "to",
+              label: "State",
+              format: "badge",
+              tones: EVENT_TONES,
+              labels: EVENT_LABELS,
+            },
+            { key: "valueText", label: "Value", width: "6rem" },
+            { key: "condition", label: "Condition", hiddenBelow: "md" },
+            { key: "delivery", label: "Message", width: "6rem" },
+          ],
+        },
       ],
     },
   },

@@ -33,6 +33,17 @@ and `TRACE_WORKFLOW_MAX_JUDGE_TOKENS` is read as an alias). With no key the
 run completes, workflows keep their tool-order names, and the label job reports `no_model` and
 `no_judge`; nothing leaves the process (`readings/no-outbound-without-key.test.ts`).
 
+**Evidence guards.** Every detector stays on for every project and checks its own evidence
+before it shows a problem (upstream `ff774dda`): an `asked_again` ask needs a user message to
+open its trace and at least `traceSignals.askedAgainMinWords` content words; repeats count
+rounds, so calls of one tool within `traceSignals.fanOutGapMs` of each other are a fan-out;
+`latency_outlier` compares a tool with its own typical call and skips tools built to wait;
+`sequence_chain` needs the pair in `alwaysShare` of one tool's turns; `workflow_slow` stays quiet
+when timed tools explain under 20% of a run and no model calls are linked; `Bash:<cmd>` is on
+the menu when `Bash` is; `fragmented_intents` is measured, never shown. Stored signals carry
+`metrics.guardsVersion` (`GUARDS_VERSION`, `signals/queries.ts`), and one stored by an older
+release resolves at its first miss instead of its second.
+
 **Seams.** `register.ts` fills the ledger's `ledgerSeams` (`enqueueReading`,
 `onBacklogDrained`) when the registry loads. `signals/compute-job.ts` exports `computeSeams`:
 `enqueueTopics` (the topics registration fills it), `enqueueExplore` (the tool-explorer

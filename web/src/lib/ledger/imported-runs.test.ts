@@ -10,7 +10,7 @@ function fakes(runsJobs: boolean) {
   const deps: ImportedRunsDeps = {
     persistDecodedSpans: async (spans, context, persistDeps) => {
       calls.push(["persist", spans, context, persistDeps]);
-      return { ok: true, accepted: 1, calls: 1, rows: [] };
+      return { ok: true, accepted: 1, calls: 1, rows: [], addressed: false };
     },
     enqueueBuildTraceTurnsJob: async (projectId, _db, request) => {
       calls.push(["build", projectId, request]);
@@ -39,6 +39,7 @@ describe("createImportedRuns", () => {
       accepted: 1,
       calls: 1,
       rows: [],
+      addressed: false,
     });
     const [, , context, persistDeps] = calls[0] as [
       string,

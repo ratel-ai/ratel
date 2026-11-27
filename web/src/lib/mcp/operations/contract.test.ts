@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true });
+const operations = assembleOperations({ focusedConsole: true, customMonitoring: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -199,6 +199,30 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
+  // Custom monitoring: scorers, alerts and where alerts go (RTL-211). A scorer test may call a
+  // model and spend from the budget, so it mutates.
+  ["list_scorers", false],
+  ["get_scorer", false],
+  ["test_scorer", true],
+  ["change_scorer", true],
+  ["list_alerts", false],
+  ["get_alert", false],
+  ["change_alert", true],
+  ["list_alert_destinations", false],
+  ["change_alert_destination", true],
+  ["list_slack_channels", false],
+  ["get_location_attributes", false],
+  ["change_location_attributes", true],
+  // Custom monitoring: dashboards and the query tool (RTL-212).
+  ["describe_monitoring_schema", false],
+  ["query_monitoring", false],
+  ["list_dashboards", false],
+  ["get_dashboard", false],
+  ["change_dashboard", true],
+  ["import_dashboard", true],
+  // RQL over trace data (RTL-325), behind customMonitoring.
+  ["describe_rql_schema", false],
+  ["run_rql", false],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

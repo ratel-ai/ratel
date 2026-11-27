@@ -229,6 +229,8 @@ function span(overrides: Partial<OtelSpan> & { spanId: string; at?: number }): O
     mcpServerSource: null,
     mcpRole: null,
     mcpSessionId: null,
+    sessionId: null,
+    endUserId: null,
     events: null,
     links: null,
     ...rest,

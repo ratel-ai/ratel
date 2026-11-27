@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
   "files": {
     "includes": [
       "ee/**/*.ts",
@@ -25,7 +25,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "preset": "recommended"
     }
   },
   "overrides": [
@@ -836,7 +836,6 @@
         "!web/src/components/console/home/overview-stats.tsx",
         "!web/src/components/console/home/OverviewPage.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/loading.tsx",
-        "web/src/app/(console)/project/\\[projectId\\]/dashboards/page.tsx",
         "web/src/lib/views/freshness/**",
         "!web/src/lib/views/freshness/load.ts",
         "!web/src/lib/views/freshness/load.integration.test.ts",
@@ -954,7 +953,6 @@
         "web/src/components/console/org/ProjectsList.tsx",
         "web/src/components/console/org/NewProjectButton.tsx",
         "web/src/components/console/org/OrgSkeleton.tsx",
-        "web/src/app/(console)/project/\\[projectId\\]/settings/layout.tsx",
         "web/src/lib/platform/chart.ts",
         "web/src/lib/synthesis/dashboard.ts",
         "web/src/lib/synthesis/dashboard.test.ts",
@@ -970,6 +968,7 @@
         "!web/src/lib/synthesis/traces/register.ts",
         "!web/src/lib/synthesis/traces/register.test.ts",
         "web/src/components/console/traces/**",
+        "!web/src/components/console/traces/TraceView.tsx",
         "web/src/components/console/stale-build-callout.tsx",
         "web/src/lib/console/stale-build.ts",
         "web/src/lib/console/stale-build.test.ts",
@@ -1038,6 +1037,8 @@
         "web/src/app/api/v1/jobs/\\[id\\]/route.ts",
         "web/src/app/api/v1/suggestions/\\[\\[...path\\]\\]/route.ts",
         "web/src/lib/mcp/**",
+        "!web/src/lib/mcp/dispatch.ts",
+        "!web/src/lib/mcp/operations/monitoring",
         "!web/src/lib/mcp/telemetry/session.ts",
         "!web/src/lib/mcp/registry.ts",
         "!web/src/lib/mcp/public-origin.ts",
@@ -1097,6 +1098,15 @@
         "!web/src/lib/mcp/operations/mcp-servers.ts",
         "!web/src/lib/mcp/operations/entities-gate.test.ts",
         "mcp-apps/**",
+        "!mcp-apps/views/list/bindings.ts",
+        "!mcp-apps/views/list/fixtures.ts",
+        "!mcp-apps/views/detail/bindings.ts",
+        "!mcp-apps/views/detail/fixtures.ts",
+        "!mcp-apps/harness/data.ts",
+        "!mcp-apps/views/dashboard",
+        "!mcp-apps/shell/shims/zod.ts",
+        "!mcp-apps/shell/shims/node-crypto.ts",
+        "!mcp-apps/shell/shims/clusters-body.tsx",
         "!mcp-apps/views/replay/bindings.ts",
         "!mcp-apps/tsconfig.json",
         "!mcp-apps/shell/view.css",
@@ -1118,7 +1128,7 @@
         "!web/src/lib/mcp/connect/connect-ui.test.ts",
         "!web/src/lib/mcp/connect/snippets.ts",
         "!web/src/lib/mcp/connect/snippets.test.ts",
-        "web/src/components/console/org/McpExample.tsx",
+        "web/src/components/console/mcp-setup/McpExample.tsx",
         "web/src/app/(console)/org/\\[orgSlug\\]/mcp/loading.tsx",
         "web/src/lib/synthesis/experiments/comparison-cache.ts",
         "web/src/lib/synthesis/experiments/comparison-cache.test.ts",
@@ -1433,7 +1443,7 @@
     },
     {
       "includes": [
-        "web/src/components/console/org/McpExample.tsx",
+        "web/src/components/console/mcp-setup/McpExample.tsx",
         "web/src/components/console/home/**"
       ],
       "linter": {

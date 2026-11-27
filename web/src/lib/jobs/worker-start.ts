@@ -1,3 +1,5 @@
+import { workerLanes } from "@/lib/composition/registry";
+import type { WorkerLane } from "@/lib/contracts/registry";
 import { runDrainTick } from "@/lib/jobs/drain";
 import { type DrainObserverDeps, drainTimeoutMs, timedDrain } from "@/lib/jobs/drain-observer";
 import { LONG_JOB_KINDS, RUN_IMPORT_JOB, SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
@@ -18,6 +20,8 @@ export interface BackgroundWorkerDeps {
   drainImports?: WorkerDeps["drainImports"];
   /** The build lane: `sandbox_image_build` only, so the builds of one project hold back no import. */
   drainBuilds?: WorkerDeps["drainBuilds"];
+  /** The registrations' lanes (the ingest queue's persist lane, RTL-314). Read once, at start. */
+  lanes?: () => readonly WorkerLane[];
   /** The day's most expensive statements, logged once a day (`reportTopQueries`). */
   reportTopQueries?: () => Promise<void>;
   /** One cron tick (`runDrainTick`): the sweeps and safety nets, plus a drain. */
@@ -39,6 +43,7 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
   drain: () => drainProjectJobs(undefined, undefined, { kinds: LANE_KINDS.analysis }),
   drainImports: () => drainProjectJobs(undefined, undefined, { kinds: LANE_KINDS.imports }),
   drainBuilds: () => drainProjectJobs(undefined, undefined, { kinds: LANE_KINDS.builds }),
+  lanes: () => workerLanes(),
   reportTopQueries: () => reportTopQueries(),
   tick: workerTick(),
   startWorker,
@@ -68,13 +73,20 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
  */
 export function startBackgroundWorker(
   deps: BackgroundWorkerDeps = defaultDeps(),
-  options: { beforeExit?: () => Promise<void> } = {},
+  options: {
+    beforeExit?: () => Promise<void>;
+    /** A persist-only process (APP_ROLE=persist): the registrations' lanes and nothing else. */
+    lanesOnly?: boolean;
+  } = {},
 ): WorkerHandle {
   const globals = globalThis as Record<symbol, WorkerHandle | undefined>;
   const existing = globals[GLOBAL_KEY];
   if (existing) return existing;
   const { drainImports, drainBuilds } = deps;
+  const lanesOnly = options.lanesOnly === true;
   const handle = deps.startWorker({
+    ...(lanesOnly ? { analysis: false } : {}),
+    extraLanes: deps.lanes?.() ?? [],
     drain: () => deps.drain(),
     ...(drainImports ? { drainImports: () => drainImports() } : {}),
     ...(drainBuilds ? { drainBuilds: () => drainBuilds() } : {}),
@@ -87,7 +99,8 @@ export function startBackgroundWorker(
   });
   globals[GLOBAL_KEY] = handle;
   const topQueries = deps.reportTopQueries;
-  const report = topQueries ? setInterval(() => void topQueries(), TOP_QUERIES_EVERY_MS) : null;
+  const report =
+    topQueries && !lanesOnly ? setInterval(() => void topQueries(), TOP_QUERIES_EVERY_MS) : null;
   report?.unref();
   let stopping = false;
   const stop = () => {

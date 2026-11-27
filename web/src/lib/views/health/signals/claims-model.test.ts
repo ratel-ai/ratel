@@ -141,9 +141,28 @@ test("the fixture's tone: magnet, latency and dead tools", () => {
   const latency = claimModel(record("latency_outlier"), NAMES, 30);
   assert.equal(
     latency.claim,
-    "Create task's slowest calls take 12.4 s, against 1.4 s for a typical call.",
+    "Create task's slowest calls take 12.4 s, against 1.4 s for a typical call in this project.",
+    "a reading from before toolMedianMs",
   );
   assert.equal(latency.cost, "About 26 minutes of waiting.");
+  const own = claimModel(
+    record("latency_outlier", {
+      impact: 5_400,
+      metrics: { p95Ms: 12_400, medianMs: 1_400, toolMedianMs: 6_900, calls: 900 },
+    }),
+    NAMES,
+    30,
+  );
+  assert.equal(
+    own.claim,
+    "Create task's slowest calls take 12.4 s; a typical call of it takes 6.9 s.",
+    "the tool's own typical call",
+  );
+  assert.equal(
+    own.cost,
+    "About 90 minutes of waiting in Create task.",
+    "the time really spent in it",
+  );
   const dead = claimModel(record("dead_tool"), NAMES, 30);
   assert.equal(dead.claim, "23 tools were never listed and never run.");
   assert.equal(dead.fixRoute, "retire_tool");

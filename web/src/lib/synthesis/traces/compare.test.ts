@@ -406,6 +406,8 @@ function span(overrides: Partial<OtelSpan> = {}): OtelSpan {
     mcpServerSource: null,
     mcpRole: null,
     mcpSessionId: null,
+    sessionId: null,
+    endUserId: null,
     events: null,
     links: null,
     ...overrides,

@@ -262,6 +262,7 @@ export function resolveTraceListView(
     queryOptions: {
       since: range.since,
       until: range.until,
+      ...(exactInstants(params) ? { summaryWindow: true } : {}),
       rootName: rootName || undefined,
       ...(name ? { spanName: name } : {}),
       ...(model ? { model } : {}),
@@ -779,7 +780,38 @@ function validTraceId(value: string): boolean {
   return TRACE_ID_PATTERN.test(value) && !/^0+$/.test(value);
 }
 
+/** The preset of a range between two instants; `from` and `to` are then ISO times. */
+export const EXACT_RANGE = "exact";
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+
+/** The two instants of an exact range, or null for another range or a damaged one. */
+export function exactInstants({
+  range,
+  from,
+  to,
+}: TraceListSearchParams): { since: Date; until: Date } | null {
+  if (range !== EXACT_RANGE || !isInstant(from) || !isInstant(to)) return null;
+  const since = new Date(from);
+  const until = new Date(to);
+  const span = until.getTime() - since.getTime();
+  return span >= 0 && span <= MAX_TRACE_RANGE_DAYS * DAY_MS ? { since, until } : null;
+}
+
+function isInstant(value: unknown): value is string {
+  return typeof value === "string" && INSTANT.test(value) && !Number.isNaN(Date.parse(value));
+}
+
 export function resolveTraceRange(params: TraceListSearchParams, now: Date): ResolvedRange {
+  const exact = exactInstants(params);
+  if (exact) {
+    // Its days are what the charts and the labels know; the window is the instants.
+    const last = new Date(Math.max(exact.since.getTime(), exact.until.getTime() - 1));
+    const days = resolveTraceRange(
+      { range: "custom", from: utcDay(exact.since), to: utcDay(last) },
+      now,
+    );
+    return { ...days, ...exact };
+  }
   const requestedRange = textParam(params.range);
   const requestedFrom = isoDay(textParam(params.from));
   const requestedTo = isoDay(textParam(params.to));
@@ -817,6 +849,10 @@ export function resolveTraceRange(params: TraceListSearchParams, now: Date): Res
     days,
     label: preset === "custom" ? `${shortDay(from)} – ${shortDay(to)}` : TRACE_RANGE_LABELS[preset],
   };
+}
+
+function utcDay(at: Date): string {
+  return at.toISOString().slice(0, 10);
 }
 
 function isRangePreset(value: string): value is RangePreset {

@@ -19,7 +19,9 @@ import type { DetectedSignal, DetectionResult } from "@/lib/readings/trace-signa
  *   P(b|a)); severity is the Wilson lower bound of P(b|a). `dependency` when
  *   the pair nearly always runs in this order, else `co_occurrence`.
  *   `viaSearch` is the share of those turns that needed a fresh search to reach
- *   `b`: a high one is what a workflow skill saves.
+ *   `b`: a high one is what a workflow skill saves. The pair must also hold in
+ *   `alwaysShare` of the turns of `a` or of `b`, since the card says the two
+ *   always run together.
  * - `no_follow_through`: an ok call followed at once by a search for the same
  *   thing as the search that led to it (`same-ask.ts`): the agent kept
  *   looking, so the call likely did not deliver. A search for a new need
@@ -70,6 +72,8 @@ function sequenceChains(stats: ProjectStats, pairs: PairStats, floors: Floors): 
     const conditional = pair.n / turnsA;
     const lift = conditional / (turnsB / stats.turnsWithInvoke);
     if (lift < f.minLift || conditional < f.minConditional) continue;
+    // "Always run together" has to be true from one side at least.
+    if (Math.max(conditional, pair.n / turnsB) < f.alwaysShare) continue;
     const reverse = pairs.ordered.get(`${b}>${a}`)?.n ?? 0;
     const dependency = pair.n / (pair.n + reverse) >= f.dependencyShare;
     const viaShare = pair.viaSearch / pair.n;

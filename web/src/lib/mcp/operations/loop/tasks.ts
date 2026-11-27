@@ -5,12 +5,18 @@ import { loadProjectFixes } from "@/lib/mcp/operations/loop/read";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { type FixContext, loadFixContext } from "@/lib/views/eval-gate/service";
 import { findFix } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
+import {
+  resetTaskScorer,
+  ScorerLimitError,
+  saveTaskScorer,
+} from "@/lib/views/scorers/task-presets";
 import { changeTaskEval } from "@/lib/views/task-evals/actions";
 import { draftTaskTest } from "@/lib/views/task-evals/draft-action";
 import { enqueueTaskEvalRefreshJob } from "@/lib/views/task-evals/job";
@@ -25,7 +31,6 @@ import {
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { type TestProposal, testProposalSchema } from "@/lib/views/task-evals/test-proposal";
 import { changeTaskScorer } from "@/lib/views/task-scorers/actions";
-import { resetScorer, upsertScorer } from "@/lib/views/task-scorers/store";
 import { SCORER_KINDS } from "@/lib/views/task-scorers/types";
 import {
   buildTaskDetail,
@@ -237,8 +242,11 @@ export interface TaskOperationDeps {
   /** A task's cases, excluded ones included, for `restore` by case id. */
   taskEvalCases: (projectId: string, taskId: string) => Promise<TaskEvalCaseRow[]>;
   changeTaskScorer: typeof changeTaskScorer;
-  saveScorer: typeof upsertScorer;
-  resetScorer: typeof resetScorer;
+  /** Whether the project's live scoring is the one scorer model (`customMonitoring`). */
+  scorersOn: (projectId: string) => Promise<boolean>;
+  /** Save a task scorer and move its scorer of the one model (`saveTaskScorer`). */
+  saveScorer: (...args: Parameters<typeof saveTaskScorer>) => Promise<void>;
+  resetScorer: (...args: Parameters<typeof resetTaskScorer>) => Promise<void>;
   changeTaskEval: typeof changeTaskEval;
   enqueueTaskEvalRefresh: (projectId: string, taskId: string) => Promise<{ id: string } | null>;
   draftTaskTest: typeof draftTaskTest;
@@ -262,8 +270,10 @@ export const defaultTaskDeps: TaskOperationDeps = {
     taskSimulationDetailFor(projectId, taskId, fix),
   taskEvalCases: async (projectId, taskId) => (await taskEvalSetFor(projectId, taskId)).cases,
   changeTaskScorer,
-  saveScorer: (input) => upsertScorer(input),
-  resetScorer: (projectId, taskId, kind) => resetScorer(projectId, taskId, kind),
+  scorersOn: (projectId) => featureEnabled("customMonitoring", { projectId }),
+  saveScorer: (input, live) => saveTaskScorer(input, live),
+  resetScorer: (projectId, taskId, kind, actor, live) =>
+    resetTaskScorer(projectId, taskId, kind, actor, live),
   changeTaskEval,
   enqueueTaskEvalRefresh: (projectId, taskId) => enqueueTaskEvalRefreshJob(projectId, taskId),
   draftTaskTest,
@@ -457,7 +467,7 @@ export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDep
       domain: "writes",
       title: "Change a task scorer",
       description:
-        "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task.",
+        "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task. The task's scorer of the same kind (list_scorers) changes with it.",
       keywords: ["task scorer", "judge criteria", "expected tool scorer"],
       scope: "project",
       mutates: true,
@@ -512,13 +522,23 @@ export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDep
                   criteria: params.criteria,
                 },
               };
-        const result = await deps.changeTaskScorer(input, {
-          ...mcpSessionDeps(ctx, actor),
-          enabled: decided,
-          save: deps.saveScorer,
-          reset: deps.resetScorer,
-          observe: (fields) => track(deps, ctx, "task_scorer_updated", fields),
-        });
+        // The scorer of the one model moves with the task scorer. Flag off, the save is the result, as
+        // before; flag on, a change past the scorer limit is refused before any write.
+        const live = await deps.scorersOn(ctx.projectId);
+        let result: Awaited<ReturnType<typeof deps.changeTaskScorer>>;
+        try {
+          result = await deps.changeTaskScorer(input, {
+            ...mcpSessionDeps(ctx, actor),
+            enabled: decided,
+            save: (scorer) => deps.saveScorer(scorer, live),
+            reset: (projectId, taskId, kind) =>
+              deps.resetScorer(projectId, taskId, kind, actor, live),
+            observe: (fields) => track(deps, ctx, "task_scorer_updated", fields),
+          });
+        } catch (err) {
+          if (err instanceof ScorerLimitError) throw new McpOperationError("conflict", err.message);
+          throw err;
+        }
         if (!result.ok) {
           throw result.error === "The scorer settings are invalid."
             ? invalidParams(

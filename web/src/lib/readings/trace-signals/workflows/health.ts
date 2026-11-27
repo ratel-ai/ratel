@@ -83,6 +83,26 @@ function slowestStep(runs: readonly RunReading[]): WorkflowSlowStep | null {
   return { ...top, medianMs: median(took.filter((t) => t.toolId === top.toolId).map((t) => t.ms)) };
 }
 
+/**
+ * How much of the runs' time their timed tool calls account for, and how many
+ * calls carry a duration at all. A low share with no model calls linked means
+ * the run's time is spent somewhere this project does not report (a coding
+ * session around an MCP server), so its length says nothing about the tools.
+ */
+function toolTime(runs: readonly RunReading[]): {
+  toolTimeShare: number | null;
+  timedCallShare: number;
+} {
+  const calls = runs.reduce((sum, run) => sum + run.calls, 0);
+  const timed = runs.reduce((sum, run) => sum + run.took.length, 0);
+  const runMs = runs.reduce((sum, run) => sum + run.durationMs, 0);
+  const toolMs = runs.reduce((sum, run) => sum + run.took.reduce((s, t) => s + t.ms, 0), 0);
+  return {
+    toolTimeShare: runMs > 0 && timed > 0 ? Math.min(1, toolMs / runMs) : null,
+    timedCallShare: calls > 0 ? timed / calls : 0,
+  };
+}
+
 function mixOf(runs: readonly RunReading[]): TurnSourceMix {
   const counts = tally(runs.map((run) => run.turn.turnSource));
   return {
@@ -156,6 +176,7 @@ export function workflowHealth(
     retryRuns: runs.filter((run) => run.retried).length,
     errorRuns: runs.filter((run) => run.errored).length,
     meanToolCalls: n > 0 ? runs.reduce((sum, run) => sum + run.calls, 0) / n : 0,
+    ...toolTime(runs),
     turnSourceMix: mixOf(runs),
     ...examples(runs, evidenceTurns),
     ...(model ? { model } : {}),

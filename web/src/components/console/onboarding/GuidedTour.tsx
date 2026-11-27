@@ -221,6 +221,8 @@ export function GuidedTour({
     if (!step) return;
     const element = document.querySelector(`[data-tour="${step.target}"]`);
     if (!element) return;
+    // The rail scrolls in a short window: its lower rows can be below the fold.
+    element.scrollIntoView({ block: "nearest" });
     const remeasure = () => {
       const box = element.getBoundingClientRect();
       setTarget({

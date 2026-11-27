@@ -7,9 +7,14 @@ import { type Config, getConfig } from "@/config";
  * - `api`: serves requests and only queues jobs. Customers' requests never wait
  *   behind analysis.
  * - `worker`: runs the job loop and the scheduled sweeps; serves no customer
- *   traffic (no load balancer in front of it).
+ *   traffic (no load balancer in front of it). With the ingest queue on it also
+ *   persists queued ingest batches (its ingest lane).
+ * - `ingest`: serves the ingest routes and only queues, like `api`, but never
+ *   migrates: a deployment routes `/api/v1/traces`, `/logs` and `/events` to it.
+ * - `persist`: runs only the ingest lane (RTL-314): it persists queued batches
+ *   and nothing else, so Cloud can scale it on the queue's depth.
  */
-export type AppRole = "all" | "api" | "worker";
+export type AppRole = "all" | "api" | "worker" | "ingest" | "persist";
 
 /** `app.role` (APP_ROLE). */
 export function appRole(config: Pick<Config, "app"> = getConfig()): AppRole {
@@ -30,4 +35,15 @@ export function importsRunInWorker(config: Pick<Config, "jobs"> = getConfig()): 
 /** Whether this process runs jobs right after a request's response. */
 export function runsJobsAfterResponse(config: Pick<Config, "app"> = getConfig()): boolean {
   return appRole(config) === "all";
+}
+
+/** Whether this process persists queued ingest batches right after a request's response. */
+export function persistsIngestAfterResponse(config: Pick<Config, "app"> = getConfig()): boolean {
+  return appRole(config) === "all";
+}
+
+/** Whether this process runs the ingest lane: a loop persisting queued ingest batches. */
+export function runsIngestLane(config: Pick<Config, "app"> = getConfig()): boolean {
+  const role = appRole(config);
+  return role === "worker" || role === "persist";
 }
