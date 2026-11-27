@@ -4,8 +4,10 @@ import type { AddressInfo } from "node:net";
 import { after, before, beforeEach, test } from "node:test";
 import { metricQuery } from "@/lib/contracts/query";
 import { sealSecret } from "@/lib/platform/secret-box";
+import { formOf } from "@/lib/views/dashboards/widget";
 import { changeDestination, type DestinationActionDeps } from "./destination-actions";
 import type { AlertNotice } from "./notifier";
+import { alertFormQuery } from "./parse-rule";
 import { type SlackDeps, slackNotifier } from "./slack";
 import { parseSlackWebhook } from "./slack-url";
 import { type PostWebhook, postWebhook } from "./webhook-post";
@@ -30,7 +32,7 @@ const NOTICE: AlertNotice = {
   ruleName: "Errors <!channel> & more",
   projectId: PROJECT,
   projectName: "Agent",
-  query: metricQuery("error_rate", "rate"),
+  query: alertFormQuery(formOf(metricQuery("error_rate", "rate"))),
   operator: "above",
   threshold: 0.5,
   windowMinutes: 5,

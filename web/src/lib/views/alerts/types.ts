@@ -1,9 +1,11 @@
-import type { MetricQuery, SqlQuery } from "@/lib/contracts/query";
+import type { SqlQuery } from "@/lib/contracts/query";
 
 /**
- * What a rule compares: an ungrouped metric, or RQL text that gives one row with one number.
+ * What a rule compares: RQL text that gives one row with one number, with the metric form's
+ * selection (ungrouped) when the form wrote it. A rule stored as an ungrouped metric is read as
+ * one (`parseAlertQuery`).
  */
-export type AlertQuery = MetricQuery | SqlQuery;
+export type AlertQuery = SqlQuery;
 
 export const ALERT_OPERATORS = ["above", "below"] as const;
 export type AlertOperator = (typeof ALERT_OPERATORS)[number];

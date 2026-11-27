@@ -34,7 +34,7 @@ import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
 import { createRqlGate } from "@/lib/synthesis/rql/run";
 import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
-import { evaluationWindow } from "@/lib/views/alerts/domain";
+import { evaluationWindow, nextState } from "@/lib/views/alerts/domain";
 import { metricAsRql } from "@/lib/views/dashboards/metric-rql";
 import { sqlAsMetric } from "@/lib/views/dashboards/sql-chart";
 import type { MetricChartKind } from "@/lib/views/dashboards/types";
@@ -185,8 +185,21 @@ describe("an alert rule reads the same value as RQL, by known time", () => {
           const value = rql.rows[0]?.[0];
           const expected = form.series[0].total;
           if (empty) assert.equal(expected, nothingIsZero(aggregation) ? 0 : null, metric.id);
-          if (round(expected) !== round(typeof value === "number" ? value : null))
+          const actual = typeof value === "number" ? value : null;
+          if (round(expected) !== round(actual))
             failures.push(`${metric.id} ${aggregation}: form ${expected}, RQL ${value}\n${text}`);
+          // The same fire and resolve decision, with a threshold on each side of the value.
+          for (const threshold of [Math.max(0, (expected ?? 0) - 0.001), (expected ?? 0) + 0.001])
+            for (const operator of ["above", "below"] as const)
+              for (const current of [
+                { state: "ok", firing: false },
+                { state: "alerting", firing: true },
+              ] as const) {
+                const decide = (measured: number | null) =>
+                  nextState(current, { operator, threshold }, { value: measured });
+                if (JSON.stringify(decide(expected)) !== JSON.stringify(decide(actual)))
+                  failures.push(`${metric.id} ${aggregation}: ${operator} ${threshold} differs`);
+              }
           cells += 1;
         }
       assert.deepEqual(failures, []);

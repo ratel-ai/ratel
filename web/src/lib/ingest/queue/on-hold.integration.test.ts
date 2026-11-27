@@ -7,7 +7,12 @@ import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
 import { clearHold, setHold } from "@/lib/platform/org-hold/store";
 import { listProjectsWithUnfoldedEvents } from "@/lib/readings/intent-graph/queries";
 import { enqueueDueQueryCategorizations } from "@/lib/readings/query-intents/queries";
+import { metricSeams } from "@/lib/synthesis/metrics/query";
 import { refreshQualitySnapshots } from "@/lib/synthesis/quality/snapshot";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import { pruneExpiredOtelSpans } from "@/lib/synthesis/traces/queries";
 import { evaluateAlerts } from "@/lib/views/alerts/evaluate";
 import { createAlertRule } from "@/lib/views/alerts/store";
@@ -145,8 +150,21 @@ test("the scheduled sweeps skip a held project and take the other", async () => 
   }
 });
 
-test("alerts and scorers of a held project wait, and go on after the hold", async () => {
+test("alerts and scorers of a held project wait, and go on after the hold", async (t) => {
   const { client, db } = await setupDeployment();
+  // Each alert rule reads through RQL: run it on this database.
+  const sql = metricSeams.sql;
+  t.after(() => {
+    metricSeams.sql = sql;
+  });
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(client)),
+      gate: createRqlGate(),
+      observe: async () => {},
+    },
+    alertGate: createRqlGate(1),
+  });
   const query = JSON.stringify(metricQuery("error_rate", "rate"));
   const draft: AlertDraft = {
     name: "Errors",

@@ -15,7 +15,7 @@ import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import { WINDOW_LABELS } from "@/lib/views/alerts/format";
 import type { AlertQuery, AlertWindow } from "@/lib/views/alerts/types";
 import { chartModel, isEmptyResult } from "@/lib/views/dashboards/chart-model";
-import { queryName } from "@/lib/views/dashboards/widget";
+import { metricOfForm, queryName } from "@/lib/views/dashboards/widget";
 import { MetricChart } from "../dashboards/MetricChart";
 
 const PREVIEW_DELAY_MS = 200;
@@ -34,7 +34,7 @@ export function AlertPreviewChart({
   threshold: number | null;
 }) {
   const { preview, pending } = usePreview(projectId, query, windowMinutes);
-  if (query.kind === "sql")
+  if (!query.form)
     return (
       <section
         aria-label="Value now"
@@ -78,20 +78,21 @@ export function AlertPreviewChart({
         <p role="status" className="text-sm text-danger">
           {preview.value.error}
         </p>
-      ) : preview.value.result.kind !== "metric" ||
-        preview.query.kind !== "metric" ? null : isEmptyResult(preview.value.result) ? (
+      ) : preview.value.result.kind !== "metric" || !preview.query.form ? null : isEmptyResult(
+          preview.value.result,
+        ) ? (
         <EmptyState
           icon={ChartColumn}
           title="No data in the last 7 days"
           description={
-            nothingIsZero(preview.query.measures[0].aggregation)
+            nothingIsZero(preview.query.form.measures[0].aggregation)
               ? "The alert compares 0 until there is some."
               : "The alert stays on No data until there is some."
           }
         />
       ) : (
         <Chart
-          query={preview.query}
+          query={metricOfForm(preview.query.form)}
           windowMinutes={preview.windowMinutes}
           result={preview.value.result}
           threshold={threshold}

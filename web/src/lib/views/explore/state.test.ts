@@ -368,7 +368,8 @@ test("the fullest panels with their page filters fit an address, a widget and an
     customMonitoring: true,
   });
   assert.ok(parsed.ok);
-  assert.deepEqual(parsed.query, saved);
+  // An alert keeps the metric as the form of its RQL.
+  assert.deepEqual(parsed.query.form, formOf(saved));
   // One byte more is refused in the bar, in a panel and in the alert.
   const over = metricOfPanel(fullest(1, 1));
   assert.equal(filtersProblem([over], PAGE), TOO_LONG);

@@ -1,15 +1,12 @@
-import {
-  supplementaryReadTimeoutMs,
-  withStatementTimeout,
-} from "@/lib/platform/db/statement-timeout";
-import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { getMetric } from "@/lib/synthesis/metrics/catalog";
-import { type MetricResult, runQuery } from "@/lib/synthesis/metrics/query";
+import { type MetricResult, QueryError, runQuery } from "@/lib/synthesis/metrics/query";
 import { evaluationWindow } from "@/lib/views/alerts/domain";
 import { measureSqlValue } from "@/lib/views/alerts/sql-value";
 import type { AlertQuery, AlertWindow } from "@/lib/views/alerts/types";
-// The scorer metrics read through the source this module registers.
-import "@/lib/views/scorers/metrics";
+import { formQuery } from "@/lib/views/dashboards/metric-rql";
+import { formAsMetric } from "@/lib/views/dashboards/sql-chart";
+// Kind sql runs through the seam this module registers.
+import "@/lib/synthesis/rql/query";
 
 const PREVIEW_MS = 7 * 86_400_000;
 
@@ -22,9 +19,15 @@ export interface SqlAlertValue {
 
 export type AlertPreviewResult = MetricResult | SqlAlertValue;
 
+/** Kind sql reads through the RQL pool: the primary database is never asked. */
+const RQL_ONLY = {
+  execute: () => Promise.reject(new Error("a query of kind sql reads through the RQL pool")),
+} as unknown as Parameters<typeof runQuery>[3];
+
 /**
- * A metric: its last 7 days, by the hour when the alert's window is an hour or less. RQL text: its
- * value now, over the window, as the evaluator reads it. Null when the read failed.
+ * A rule of the metric form: its last 7 days, by the hour when the alert's window is an hour or
+ * less, read through RQL as the text of its selection by bucket. A Custom text: its value now,
+ * over the window, as the evaluator reads it. Null when the read failed.
  */
 export async function loadAlertPreview(
   projectId: string,
@@ -32,28 +35,27 @@ export async function loadAlertPreview(
   windowMinutes: AlertWindow,
   now: Date = new Date(),
 ): Promise<AlertPreviewResult | null> {
-  if (query.kind === "sql") {
+  const { form } = query;
+  if (!form) {
     const measured = await measureSqlValue(projectId, query, evaluationWindow(windowMinutes, now));
     return "error" in measured
       ? { kind: "sql_value", value: null, error: measured.error }
       : { kind: "sql_value", value: measured.value, error: null };
   }
   const hourly =
-    windowMinutes <= 60 && getMetric(query.measures[0].measure)?.buckets.includes("hour");
-  return loadOrFallback<MetricResult | null>({
-    operation: "alert_preview",
-    distinctId: `project:${projectId}`,
-    fallback: null,
-    load: () =>
-      withStatementTimeout(
-        (db) =>
-          runQuery(
-            projectId,
-            { ...query, bucket: hourly ? "hour" : "day" },
-            { since: new Date(now.getTime() - PREVIEW_MS), until: now },
-            db,
-          ),
-        { operation: "alert_preview", timeoutMs: supplementaryReadTimeoutMs() },
-      ),
-  });
+    windowMinutes <= 60 && getMetric(form.measures[0].measure)?.buckets.includes("hour");
+  const window = { since: new Date(now.getTime() - PREVIEW_MS), until: now };
+  const series = { ...form, bucket: hourly ? ("hour" as const) : ("day" as const) };
+  try {
+    const result = await runQuery(
+      projectId,
+      formQuery(series, "line", series.bucket),
+      window,
+      RQL_ONLY,
+    );
+    return formAsMetric(result, series, "line", window);
+  } catch (error) {
+    if (error instanceof QueryError) return null;
+    throw error;
+  }
 }

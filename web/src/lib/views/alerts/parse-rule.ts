@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MetricForm } from "@/lib/contracts/query";
 import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 import { compileRql } from "@/lib/synthesis/rql/compile";
 import {
@@ -8,7 +9,9 @@ import {
   type AlertQuery,
   MAX_ALERT_NAME,
 } from "@/lib/views/alerts/types";
+import { formQuery, isFormText } from "@/lib/views/dashboards/metric-rql";
 import { parseOfferedQuery } from "@/lib/views/dashboards/parse-widget";
+import { formOf } from "@/lib/views/dashboards/widget";
 
 const draftShape = z
   .object({
@@ -47,14 +50,16 @@ export function parseRule(
     return { ok: false, error: `An alert name can have ${MAX_ALERT_NAME} characters.` };
   const parsedQuery = parseAlertQuery(rawQuery, features);
   if (!parsedQuery.ok) return parsedQuery;
-  if (parsedQuery.query.kind === "sql") {
-    const problem = sqlAlertProblem(parsedQuery.query.text, now);
-    if (problem) return { ok: false, error: problem };
-  }
+  const problem = sqlAlertProblem(parsedQuery.query.text, now);
+  if (problem) return { ok: false, error: problem };
   return { ok: true, draft: { ...condition, name, query: parsedQuery.query } };
 }
 
-/** The query alone: a rule's, or the one a new alert starts from. */
+/**
+ * The query alone: a rule's, or the one a new alert starts from. An ungrouped metric (what an older
+ * rule stored, or what a caller gives) is RQL with the form's selection. A selection whose text is
+ * not its own any more is dropped: the text is Custom.
+ */
 export function parseAlertQuery(
   raw: unknown,
   features: MetricFeatures,
@@ -62,12 +67,23 @@ export function parseAlertQuery(
   const parsed = parseOfferedQuery(raw, features);
   if (!parsed.ok) return parsed;
   const { query } = parsed;
-  if (query.kind === "sql") return { ok: true, query };
-  if (query.kind !== "metric")
+  if (query.kind !== "sql" && query.kind !== "metric")
     return { ok: false, error: `An alert compares one number: a ${query.kind} has none.` };
-  if (query.dimensions.length > 0)
+  const form = query.kind === "metric" ? formOf(query) : query.form;
+  if (form && form.dimensions.length > 0)
     return { ok: false, error: "An alert cannot be grouped: it compares one number." };
-  return { ok: true, query };
+  if (query.kind === "metric") return { ok: true, query: alertFormQuery(formOf(query)) };
+  if (!query.form || isFormText(query, ALERT_CHART)) return { ok: true, query };
+  const { form: _, ...text } = query;
+  return { ok: true, query: text };
+}
+
+/** An alert's text is written for one number. */
+export const ALERT_CHART = "number" as const;
+
+/** The query of kind sql of an alert's selection: its text gives one row with one number. */
+export function alertFormQuery(form: MetricForm): AlertQuery {
+  return formQuery(form, ALERT_CHART, form.bucket ?? "hour");
 }
 
 /** A rule's query as it is stored, under the same contract; null with the reason when it fails. */

@@ -16,8 +16,10 @@ import {
   createDestination,
   MAX_DESTINATIONS,
 } from "@/lib/views/alerts/destinations";
+import { alertFormQuery } from "@/lib/views/alerts/parse-rule";
 import * as store from "@/lib/views/alerts/store";
 import { type AlertDraft, MAX_ALERT_RULES } from "@/lib/views/alerts/types";
+import { formOf } from "@/lib/views/dashboards/widget";
 
 /**
  * Transactions that overlap need connections of their own, which PGlite does not have. With
@@ -29,7 +31,7 @@ const PROJECT = "11111111-1111-4111-8111-111111111111";
 const CHANNELS = "55555555-5555-4555-8555-555555555555";
 const DRAFT: AlertDraft = {
   name: "Too many errors",
-  query: metricQuery("error_rate", "rate"),
+  query: alertFormQuery(formOf(metricQuery("error_rate", "rate"))),
   operator: "above",
   threshold: 0.5,
   windowMinutes: 5,
