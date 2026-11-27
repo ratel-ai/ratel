@@ -31,7 +31,10 @@ import {
  * a gate of this process (`GROUP_QUERIES_PER_PROJECT`), whatever widget, page or tool asks.
  */
 
-/** The small queries of one project that run at the same time, in this process: as many as RQL's. */
+/**
+ * The small queries of one project that run at the same time, in this process. They read the
+ * primary pool under the read timeout, not the RQL pool: this gate is apart from RQL's gates.
+ */
 export const GROUP_QUERIES_PER_PROJECT = 2;
 /** How long a small query waits for a place before its value shows no numbers. */
 const GROUP_WAIT_MS = 60_000;

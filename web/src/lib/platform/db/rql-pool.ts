@@ -11,9 +11,10 @@ import { getLogger } from "@/lib/platform/logger";
  */
 
 /**
- * The connections of the RQL pool, for all projects together: more than the queries one project
- * may run at the same time (`RQL_LIMITS.parallelQueriesPerProject`, 2), so one project never holds
- * every connection. A run that waits past the connect timeout gets `rql_busy`.
+ * The connections of the RQL pool, for all projects together: more than the places one project
+ * holds on all its paths (`RQL_PLACES_PER_PROJECT` of `synthesis/rql/run.ts`: 4 console, 2
+ * `run_rql`, 1 alert), so one project never holds every connection. A run that waits past the
+ * connect timeout gets `rql_busy`.
  */
 export const RQL_POOL_MAX = 8;
 

@@ -168,8 +168,8 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
       return widget.title === "3" ? null : grouped([[widget.title, [1]]]);
     },
   );
-  // A metric widget is RQL: it waits for a place of the RQL gate.
-  assert.equal(most, RQL_LIMITS.parallelQueriesPerProject);
+  // A metric widget is RQL: it reads as many at once as the console's RQL gate gives.
+  assert.equal(most, RQL_LIMITS.parallelConsoleQueriesPerProject);
   assert.deepEqual(
     results.map((result) => (result as MetricResult | null)?.series[0].groups[0].value ?? null),
     ["0", "1", "2", null, "4", "5", "6", "7", "8", "9"],

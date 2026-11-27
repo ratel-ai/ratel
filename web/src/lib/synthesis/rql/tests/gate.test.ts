@@ -85,3 +85,68 @@ test("an alert read runs with the alert timeout, and a busy alert path names its
       /1 query at the same time/.test(error.message),
   );
 });
+
+/** An executor that holds each run until `release`, and counts the runs that reached it. */
+function heldExecutor() {
+  const runs: RqlExecution[] = [];
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    runs,
+    release: () => release(),
+    executor: { execute: async (run: RqlExecution) => (runs.push(run), await held, [[1]]) },
+  };
+}
+
+/** Lets every pending wait of the gates and the runner settle. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+test("a console widget path runs 4 queries of a project at the same time, and a fifth waits for a place", async () => {
+  assert.equal(RQL_LIMITS.parallelConsoleQueriesPerProject, 4);
+  const { runs, release, executor } = heldExecutor();
+  // The gates of this process: what a dashboard, Explore and get_dashboard take.
+  const runner = sqlQueryRunner({ run: { executor, observe: async () => {} } });
+  const reads = Array.from({ length: RQL_LIMITS.parallelConsoleQueriesPerProject + 1 }, () =>
+    runner(P, query, SCOPE, NO_DB),
+  );
+  await settle();
+  assert.equal(runs.length, RQL_LIMITS.parallelConsoleQueriesPerProject, "the fifth waits");
+  release();
+  await Promise.all(reads);
+  assert.equal(runs.length, RQL_LIMITS.parallelConsoleQueriesPerProject + 1, "then it runs");
+});
+
+test("run_rql of an agent stops at 2 queries of a project, apart from the console's places", async () => {
+  assert.equal(RQL_LIMITS.parallelQueriesPerProject, 2);
+  const { runs, release, executor } = heldExecutor();
+  const runner = sqlQueryRunner({ run: { executor, observe: async () => {} } });
+  const agent = { ...SCOPE, purpose: "agent" as const };
+  const reads = Array.from({ length: RQL_LIMITS.parallelQueriesPerProject + 1 }, () =>
+    runner(P, query, agent, NO_DB),
+  );
+  await settle();
+  assert.equal(runs.length, RQL_LIMITS.parallelQueriesPerProject, "the third waits");
+  // A console read of the same project takes a place of its own path.
+  const widget = runner(P, query, SCOPE, NO_DB);
+  await settle();
+  assert.equal(runs.length, RQL_LIMITS.parallelQueriesPerProject + 1);
+  release();
+  await Promise.all([...reads, widget]);
+});
+
+test("a busy run_rql names the 2 queries of its own path", async () => {
+  const full = { enter: () => undefined, wait: async () => undefined };
+  const runner = sqlQueryRunner({
+    run: { observe: async () => {} },
+    agentGate: full,
+  });
+  await assert.rejects(
+    runner(P, query, { ...SCOPE, purpose: "agent" }, NO_DB),
+    (error: unknown) =>
+      error instanceof QueryError &&
+      error.detail?.code === "rql_busy" &&
+      /2 queries at the same time/.test(error.message),
+  );
+});
