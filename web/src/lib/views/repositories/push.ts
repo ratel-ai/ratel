@@ -4,10 +4,10 @@ import type { PushedCommitInput } from "./store";
 
 /**
  * Build path B, the first one (decided 2026-11-27): the customer's CI (a GitHub Actions workflow)
- * runs `ratel push` on each commit. Next to today's `git: { commit, dirty }`, the push says which
- * repository, branch and pull request the commit is on, what it compares against, and sends the
- * diff (`git diff base...head`), so no GitHub App is needed to know what changed. GitHub gives no
- * secrets to a fork's workflow, so a fork cannot push: forks stay out on their own.
+ * runs `ratel push --ci` on each commit. Next to today's `git: { commit, dirty }`, the push says
+ * which repository, branch and pull request the commit is on, what it compares against, and sends
+ * the diff (`git.diff`, `git diff base...head`), so no GitHub App is needed to know what changed.
+ * GitHub gives no secrets to a fork's workflow, so a fork cannot push: forks stay out on their own.
  *
  * The push API (the eval core's `POST /api/v1/sandboxes/versions`) calls `recordPush` once the
  * version exists; it never fails the push.
@@ -25,6 +25,10 @@ export const pushedGitSchema = z.object({
   baseCommit: sha.nullish(),
   title: z.string().max(10_000).optional(),
   author: z.string().max(100).nullish(),
+  /** `git diff <base>...<commit>`; the server keeps it up to `MAX_DIFF_BYTES`. */
+  diff: z.string().optional(),
+  /** The CLI left the diff out: it was over its cap. */
+  diffTruncated: z.boolean().optional(),
 });
 
 /** A diff over this is not kept: the commit runs every eval. */
@@ -39,9 +43,8 @@ export type PushInput = {
   organizationId: string;
   projectId: string;
   versionId: string;
-  /** The push body's `git`, as sent. */
+  /** The push body's `git`, as sent, with its diff. */
   git: unknown;
-  diff: string | null;
 };
 
 export type PushResult = { recorded: true; commitId: string } | { recorded: false; reason: string };
@@ -59,7 +62,8 @@ export async function recordPush(input: PushInput, deps: PushDeps): Promise<Push
   const git = parsed.data;
   if (git.dirty) return { recorded: false, reason: "uncommitted changes" };
 
-  const tooLarge = input.diff !== null && Buffer.byteLength(input.diff) > MAX_DIFF_BYTES;
+  const diff = git.diff ?? null;
+  const tooLarge = diff !== null && Buffer.byteLength(diff) > MAX_DIFF_BYTES;
   const { id } = await deps.recordPushedCommit({
     projectId: input.projectId,
     repositoryId: git.repository.id,
@@ -70,8 +74,8 @@ export async function recordPush(input: PushInput, deps: PushDeps): Promise<Push
     title: (git.title ?? "").split("\n", 1)[0].slice(0, 200),
     author: git.author ?? null,
     sandboxVersionId: input.versionId,
-    diff: tooLarge ? null : input.diff,
-    diffTruncated: tooLarge,
+    diff: tooLarge ? null : diff,
+    diffTruncated: tooLarge || git.diffTruncated === true,
   });
   return { recorded: true, commitId: id };
 }

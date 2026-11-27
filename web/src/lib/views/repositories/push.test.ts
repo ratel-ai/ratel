@@ -40,12 +40,12 @@ function fakes(on = true) {
   return { deps, saved, asked };
 }
 
+// The diff travels inside `git`, as `ratel push --ci` sends it (protocol sandbox/v1).
 const push = (git: unknown, diff: string | null = DIFF) => ({
   organizationId: ORG,
   projectId: PROJECT,
   versionId: VERSION,
-  git,
-  diff,
+  git: git && typeof git === "object" && diff !== null ? { ...git, diff } : git,
 });
 
 test("a commit pushed from CI is recorded with its version, its base and its diff", async () => {
@@ -119,6 +119,11 @@ test("a diff over the cap is not kept, and is marked so every eval runs", async 
   assert.equal(saved[1].diff, null);
   assert.equal(saved[1].diffTruncated, false);
   assert.equal(saved[1].baseSha, null);
+
+  // The CLI caps the diff too, and says so instead of sending it.
+  await recordPush(push({ ...GIT, diffTruncated: true }, null), deps);
+  assert.equal(saved[2].diff, null);
+  assert.equal(saved[2].diffTruncated, true);
 });
 
 test("a long title is cut to its first line and 200 characters", async () => {
