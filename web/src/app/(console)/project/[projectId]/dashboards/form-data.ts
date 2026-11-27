@@ -13,15 +13,21 @@ import {
   type ScorerPickerData,
   UNREAD_SCORERS,
 } from "@/lib/views/scorers/picker";
+import { loadTaskOptions } from "../scorers/tasks";
+import { loadFormProperties } from "./property-data";
 
-/** What the widget fields offer: the filter values of the range, and the scorer picker (null while scorers are off). */
+/**
+ * What the widget fields offer: the filter values of the range, the scorer picker (null while
+ * scorers are off), the trace properties with their values, and the project's task names by id
+ * (RTL-397, while custom monitoring is on) for a widget grouped by task.
+ */
 export async function loadWidgetForm(
   projectId: string,
   range: { since: Date; until?: Date },
   features: MetricFeatures,
 ) {
   const distinctId = `project:${projectId}`;
-  const [facets, scorers] = await Promise.all([
+  const [facets, scorers, properties, tasks] = await Promise.all([
     loadOrFallback({
       operation: "dashboard_facets",
       distinctId,
@@ -41,6 +47,20 @@ export async function loadWidgetForm(
           load: () => loadScorerPicker(projectId),
         })
       : null,
+    loadFormProperties(projectId, range, features.customMonitoring),
+    features.customMonitoring
+      ? loadOrFallback({
+          operation: "dashboard_tasks",
+          distinctId,
+          fallback: [],
+          load: () => loadTaskOptions(projectId),
+        })
+      : [],
   ]);
-  return { facets, scorers };
+  return {
+    facets,
+    scorers,
+    properties,
+    taskNames: Object.fromEntries(tasks.map(({ id, name }) => [id, name])),
+  };
 }

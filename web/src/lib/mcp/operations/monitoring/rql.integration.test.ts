@@ -51,7 +51,8 @@ after(() => m.client.close());
 
 test("describe_rql_schema gives the language: tables, columns, functions, limits and examples", async () => {
   const data = await m.data("describe_rql_schema");
-  assert.deepEqual(data, describeRqlSchema());
+  // The project has no trace property yet.
+  assert.deepEqual(data, describeRqlSchema({ indexed: [], detected: [] }));
   assert.deepEqual(
     (data.tables as { name: string }[]).map(({ name }) => name),
     ["events", "traces", "scores", "sessions", "users", "prompts"],

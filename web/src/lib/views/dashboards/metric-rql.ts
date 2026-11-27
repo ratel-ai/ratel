@@ -3,7 +3,9 @@ import {
   type Bucket,
   type Dimension,
   type MeasureId,
+  type MetricDimension,
   type MetricForm,
+  propertyOf,
   QUERY_VERSION,
   type SqlQuery,
 } from "@/lib/contracts/query";
@@ -78,6 +80,9 @@ const GROUP_COLUMNS: Record<Dimension, readonly string[]> = {
   agent: ["each(agents) as agent"],
   service: ["service_name"],
   environment: ["environment"],
+  user: ["user_id"],
+  session: ["session_id"],
+  task: ["each(tasks) as task"],
   scorer: ["scorer_id", "scorer"],
 };
 
@@ -91,6 +96,8 @@ const LIST_DIMENSIONS: Partial<
   model: { list: "models", values: (filter) => filter.models },
   tool: { list: "tools", values: (filter) => filter.tools },
   agent: { list: "agents", values: (filter) => filter.agents },
+  // A metric's filter names no task: the groups of a task are every task the trace ran in.
+  task: { list: "tasks", values: () => undefined },
 };
 
 const TIME_COLUMNS: Record<Table, string> = {
@@ -100,6 +107,18 @@ const TIME_COLUMNS: Record<Table, string> = {
 };
 
 const BUCKET_INTERVALS: Record<Bucket, string> = { hour: "1 hour", day: "1 day" };
+
+/** The reserved words of the parser that cannot be a bare output name. */
+const RESERVED = new Set(
+  (
+    "all analyse analyze and any array as asc asymmetric between both case cast check collate column " +
+    "constraint create current_date current_role current_time current_timestamp current_user default " +
+    "deferrable desc distinct do else end except false fetch for foreign from grant group having ilike " +
+    "in initially intersect into is lateral leading like limit localtime localtimestamp not null nulls " +
+    "offset on only or order placing primary references returning select session_user some symmetric " +
+    "table then to trailing true union unique user using variadic when where window with"
+  ).split(" "),
+);
 
 /** The RQL text of a selection drawn as `chart`, read by `bucket` for a line or a bar. */
 export function metricAsRql(
@@ -114,8 +133,9 @@ export function metricAsRql(
     filters: { scorer, ...filter },
   } = form;
   const read = MEASURES[measure];
-  const groups = dimensions.flatMap((dimension) => GROUP_COLUMNS[dimension]);
-  const keys = groups.map((column) => column.replace(/^.* as /, ""));
+  const columns = groupColumns(dimensions);
+  const groups = columns.map(({ select }) => select);
+  const keys = columns.map(({ key }) => key);
   const timed = chart === "line" || chart === "bar";
   const selected = [
     ...(timed
@@ -133,10 +153,7 @@ export function metricAsRql(
             : `scorer = ${literal(options.scorerName)}`,
         ]
       : []),
-    ...dimensions
-      .filter((dimension) => !LIST_DIMENSIONS[dimension])
-      .flatMap((dimension) => GROUP_COLUMNS[dimension])
-      .map((column) => `${column} is not null`),
+    ...columns.filter(({ list }) => !list).map(({ value }) => `${value} is not null`),
     // The context measures have no trace: the form applies no trace filter to them.
     ...(read.table === "prompts" ? [] : filterConditions(filter, read.table)),
     ...(read.table === "prompts" ? [] : listGroupConditions(dimensions, filter)),
@@ -217,6 +234,69 @@ function normalized(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+interface GroupColumn {
+  /** What the select reads: the value with its alias, when it has one. */
+  select: string;
+  /** What GROUP BY and ORDER BY name. */
+  key: string;
+  /** The value, without its alias. */
+  value: string;
+  /** A list read with `each`: a row without values is in no group already. */
+  list: boolean;
+}
+
+/**
+ * The columns of the group-by, in the form's order. A property is `properties['name']` with an
+ * alias of its name that no reserved word and no other output has: the select names the alias,
+ * GROUP BY and ORDER BY the value, so an alias that is also a column name never reads as one.
+ */
+function groupColumns(dimensions: readonly MetricDimension[]): GroupColumn[] {
+  const taken = new Set([
+    "bucket",
+    "value",
+    ...dimensions.flatMap((dimension) =>
+      propertyOf(dimension) === undefined
+        ? GROUP_COLUMNS[dimension as Dimension].map((column) => column.replace(/^.* as /, ""))
+        : [],
+    ),
+  ]);
+  return dimensions.flatMap((dimension): GroupColumn[] => {
+    const property = propertyOf(dimension);
+    if (property === undefined)
+      return GROUP_COLUMNS[dimension as Dimension].map((column) => {
+        const [value, alias] = column.split(" as ");
+        return {
+          select: column,
+          key: alias ?? value,
+          value,
+          list: Boolean(LIST_DIMENSIONS[dimension as Dimension]),
+        };
+      });
+    const value = `properties[${literal(property)}]`;
+    const alias = propertyAlias(property, taken);
+    taken.add(alias);
+    return [{ select: `${value} as ${alias}`, key: value, value, list: false }];
+  });
+}
+
+/**
+ * An output name for a property: its name in RQL's letters, kept apart from the other outputs and
+ * the reserved words. The name of a catalog column is fine: GROUP BY and ORDER BY name the value.
+ */
+function propertyAlias(property: string, taken: ReadonlySet<string>): string {
+  const plain = property
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const base = /^[a-z]/.test(plain) ? plain.slice(0, 50) : `property_${plain}`.slice(0, 50);
+  const reserved = (name: string) => taken.has(name) || RESERVED.has(name);
+  if (!reserved(base)) return base;
+  if (!reserved(`${base}_property`)) return `${base}_property`;
+  let n = 2;
+  while (reserved(`${base}_${n}`)) n += 1;
+  return `${base}_${n}`;
+}
+
 /** The filter as RQL conditions on the trace columns of the table. */
 function filterConditions(filter: TraceFilter, table: Exclude<Table, "prompts">): string[] {
   // The scores table copies the trace's columns: its own names for the ones a score also has.
@@ -250,6 +330,11 @@ function filterConditions(filter: TraceFilter, table: Exclude<Table, "prompts">)
   const minTokens = positive(filter.minTokens);
   if (minCostUsd !== null) parts.push(`${column.cost} >= ${decimal(minCostUsd)}`);
   if (minTokens !== null) parts.push(`${column.tokens} >= ${decimal(minTokens)}`);
+  for (const [name, values] of Object.entries(filter.properties ?? {})) {
+    const kept = cleaned(values);
+    if (kept.length > 0)
+      parts.push(`properties[${literal(name)}] in (${kept.map(literal).join(", ")})`);
+  }
   for (const clause of filter.and ?? []) parts.push(...filterConditions(clause, table));
   return parts;
 }
@@ -258,10 +343,14 @@ function filterConditions(filter: TraceFilter, table: Exclude<Table, "prompts">)
  * A group-by of a list that the filter names keeps only the named values, as the form groups: a
  * trace of two models under a filter of one is in that model's group only.
  */
-function listGroupConditions(dimensions: readonly Dimension[], filter: TraceFilter): string[] {
+function listGroupConditions(
+  dimensions: readonly MetricDimension[],
+  filter: TraceFilter,
+): string[] {
   const clauses = clausesOf(filter);
   return dimensions.flatMap((dimension) => {
-    const list = LIST_DIMENSIONS[dimension];
+    const list =
+      propertyOf(dimension) === undefined ? LIST_DIMENSIONS[dimension as Dimension] : undefined;
     if (!list) return [];
     return clauses
       .map((clause) => cleaned(list.values(clause)))

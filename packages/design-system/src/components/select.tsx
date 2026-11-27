@@ -5,7 +5,16 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "../cn";
 import { FLOATING_SURFACE } from "./popover";
 
-export type SelectOption = { value: string; label: string };
+export type SelectOption = {
+  value: string;
+  label: string;
+  /** A heading the option is listed under. Options without one come first, then each group in order. */
+  group?: string;
+  /** Shown faint with its `detail`: the option can be picked, and the caller says why it is off. */
+  muted?: boolean;
+  /** A short word after the label, such as "not indexed". */
+  detail?: string;
+};
 
 export type SelectProps = {
   options: readonly SelectOption[];
@@ -64,22 +73,57 @@ export function Select({
         <BaseSelect.Positioner sideOffset={4} className="z-popover">
           <BaseSelect.Popup className={cn(FLOATING_SURFACE, "min-w-(--anchor-width) p-1")}>
             <BaseSelect.List className="max-h-(--available-height) overflow-y-auto">
-              {options.map((option) => (
-                <BaseSelect.Item
-                  key={option.value}
-                  value={option.value}
-                  className="flex h-8 cursor-default items-center gap-2 rounded-md pr-2 pl-7 text-ui text-fg outline-none select-none focus-visible:outline-none data-highlighted:bg-hover"
-                >
-                  <BaseSelect.ItemIndicator className="absolute left-3 text-fg">
-                    <Check className="size-3.5" aria-hidden />
-                  </BaseSelect.ItemIndicator>
-                  <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
-                </BaseSelect.Item>
-              ))}
+              {groupsOf(options).map(({ group, items }) =>
+                group === undefined ? (
+                  items.map(item)
+                ) : (
+                  <BaseSelect.Group
+                    key={`group:${group}`}
+                    className="mt-1 border-line border-t pt-1"
+                  >
+                    <BaseSelect.GroupLabel className="px-2.5 py-1 text-xs font-medium text-fg-subtle">
+                      {group}
+                    </BaseSelect.GroupLabel>
+                    {items.map(item)}
+                  </BaseSelect.Group>
+                ),
+              )}
             </BaseSelect.List>
           </BaseSelect.Popup>
         </BaseSelect.Positioner>
       </BaseSelect.Portal>
     </BaseSelect.Root>
   );
+}
+
+function item(option: SelectOption) {
+  return (
+    <BaseSelect.Item
+      key={option.value}
+      value={option.value}
+      className={cn(
+        "flex h-8 cursor-default items-center gap-2 rounded-md pr-2 pl-7 text-ui text-fg outline-none select-none focus-visible:outline-none data-highlighted:bg-hover",
+        option.muted && "text-fg-faint",
+      )}
+    >
+      <BaseSelect.ItemIndicator className="absolute left-3 text-fg">
+        <Check className="size-3.5" aria-hidden />
+      </BaseSelect.ItemIndicator>
+      <BaseSelect.ItemText>{option.label}</BaseSelect.ItemText>
+      {option.detail ? (
+        <span className="ml-auto pl-3 text-xs text-fg-subtle">{option.detail}</span>
+      ) : null}
+    </BaseSelect.Item>
+  );
+}
+
+/** The options without a group, then each group in the order of its first option. */
+function groupsOf(options: readonly SelectOption[]): { group?: string; items: SelectOption[] }[] {
+  const groups = new Map<string | undefined, SelectOption[]>([[undefined, []]]);
+  for (const option of options) {
+    const items = groups.get(option.group) ?? [];
+    items.push(option);
+    groups.set(option.group, items);
+  }
+  return [...groups].map(([group, items]) => (group === undefined ? { items } : { group, items }));
 }

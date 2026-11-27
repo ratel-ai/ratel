@@ -449,6 +449,20 @@
       "when": 1795752645635,
       "tag": "0063_trace_properties",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1795757588037,
+      "tag": "0064_rql_properties",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1795761746569,
+      "tag": "0065_rql_tasks",
+      "breakpoints": true
     }
   ]
 }

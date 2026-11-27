@@ -23,6 +23,8 @@ export interface WidgetRefusal {
   fix: string;
   /** Where in the text the refusal is, when the compiler knows. */
   at?: { start: number; end: number };
+  /** The trace property of a `property_not_indexed` refusal: the widget links to its settings. */
+  property?: string;
 }
 
 /** What a widget shows: its numbers, or the refusal of its RQL text. */

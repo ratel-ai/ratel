@@ -267,3 +267,106 @@ test("a SQL query carries its RQL text and the language version it was written i
     assert.match(parsed.error, says, JSON.stringify(change));
   }
 });
+
+test("a metric groups by a property: an object of its name, once, on a measure of traces", () => {
+  const grouped = (measure: string, aggregation: string, dimensions: unknown[]) =>
+    parseQuery({ ...BASE, measures: [{ measure, aggregation }], dimensions });
+  const ok = grouped("latency", "p95", [{ property: "organization" }, "model"]);
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.query.kind === "metric" && ok.query.dimensions, [
+    { property: "organization" },
+    "model",
+  ]);
+  assert.ok(grouped("scorer_count", "count", [{ property: "plan" }]).ok);
+  // The context measures have no trace.
+  assert.match(
+    (grouped("context_tokens", "sum", [{ property: "plan" }]) as { error: string }).error,
+    /cannot be grouped by the property "plan"/,
+  );
+  assert.match(
+    (grouped("latency", "p95", [{ property: "plan" }, { property: "plan" }]) as { error: string })
+      .error,
+    /twice/,
+  );
+  // A column property is its dimension, never a property.
+  assert.match(
+    (grouped("latency", "p95", [{ property: "user" }]) as { error: string }).error,
+    /"user" is a column of every trace/,
+  );
+  for (const property of ["", " ", "k".repeat(101), "a\u0000b"])
+    assert.ok(!grouped("latency", "p95", [{ property }]).ok, JSON.stringify(property));
+  // The form's selection of a SQL query takes the same dimension.
+  assert.ok(
+    parseQuery({
+      version: 1,
+      kind: "sql",
+      text: "select 1 from traces",
+      rqlVersion: 1,
+      form: {
+        measures: [{ measure: "trace_count", aggregation: "count" }],
+        dimensions: [{ property: "organization" }],
+      },
+    }).ok,
+  );
+});
+
+test("user and session are dimensions of the measures of traces and of scores", () => {
+  for (const dimension of ["user", "session"]) {
+    assert.ok(DIMENSIONS.includes(dimension as never));
+    assert.ok(parseQuery({ ...BASE, dimensions: [dimension] }).ok, dimension);
+    assert.ok(
+      parseQuery({
+        ...BASE,
+        measures: [{ measure: "scorer_count", aggregation: "count" }],
+        dimensions: [dimension],
+      }).ok,
+    );
+  }
+});
+
+test("a filter holds properties: of one name any value, names combine, in every clause", () => {
+  const filtered = (filters: unknown) => parseQuery({ ...BASE, filters });
+  const ok = filtered({
+    properties: { organization: ["acme", "globex"], plan: ["pro"] },
+    and: [{ properties: { release: ["1.2.0"] } }],
+  });
+  assert.ok(ok.ok);
+  assert.deepEqual(ok.query.kind === "metric" && ok.query.filters.properties, {
+    organization: ["acme", "globex"],
+    plan: ["pro"],
+  });
+  // Every kind with a trace filter takes it.
+  assert.ok(
+    parseQuery({ ...stepFlowQuery("tool"), filters: { properties: { plan: ["pro"] } } }).ok,
+  );
+  assert.match(
+    (filtered({ properties: { environment: ["prod"] } }) as { error: string }).error,
+    /"environment" is a column of every trace/,
+  );
+  for (const properties of [
+    { plan: [] },
+    { plan: [""] },
+    { plan: "pro" },
+    { ["k".repeat(101)]: ["v"] },
+    Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`p${i}`, ["v"]])),
+  ])
+    assert.ok(!filtered({ properties }).ok, JSON.stringify(properties).slice(0, 60));
+});
+
+test("a metric of traces or of scores groups by task (RTL-397)", () => {
+  assert.ok(parseQuery({ ...BASE, dimensions: ["task"] }).ok);
+  assert.ok(
+    parseQuery({
+      ...BASE,
+      measures: [{ measure: "scorer_count", aggregation: "count" }],
+      dimensions: ["task"],
+    }).ok,
+  );
+  assert.ok(
+    !parseQuery({
+      ...BASE,
+      measures: [{ measure: "context_tokens", aggregation: "sum" }],
+      dimensions: ["task"],
+    }).ok,
+  );
+});

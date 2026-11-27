@@ -5,8 +5,15 @@ import { describeRqlSchema } from "./describe";
  * What the RQL field of the console offers as a person writes: the tables, the columns of the
  * table in FROM, the functions with their signatures, the keywords and the operators. It reads the
  * same catalog as the compiler and `describe_rql_schema`, so it offers nothing the compiler
- * refuses. Pure and safe for the browser.
+ * refuses. The project's trace properties are an input, not part of the catalog: inside
+ * `properties['` it offers them, a detected one off. Pure and safe for the browser.
  */
+
+/** The trace properties of the project, as the page read them. */
+export interface RqlEditorProperties {
+  indexed: readonly string[];
+  detected: readonly string[];
+}
 
 export interface RqlEditorData {
   tables: {
@@ -17,6 +24,7 @@ export interface RqlEditorData {
   functions: { name: string; signature: string; returns: string; description: string }[];
   keywords: readonly string[];
   operators: string[];
+  properties: { indexed: string[]; detected: string[] };
 }
 
 /** One completion of the field. `type` names its icon: a table, a column, a function, a word. */
@@ -25,6 +33,8 @@ export interface RqlCompletion {
   type: "class" | "property" | "function" | "keyword" | "operator";
   detail?: string;
   info?: string;
+  /** Shown, and not written when picked: a property that is not indexed. */
+  disabled?: true;
 }
 
 /** The keywords of a SELECT that RQL accepts, in the order a query reads them. */
@@ -55,8 +65,10 @@ export const RQL_KEYWORDS = [
   "limit",
 ] as const;
 
-/** The editor data of the catalog. Pure: the same value on each call. */
-export function rqlEditorData(): RqlEditorData {
+/** The editor data of the catalog and of the project's properties. Pure. */
+export function rqlEditorData(
+  properties: RqlEditorProperties = { indexed: [], detected: [] },
+): RqlEditorData {
   return {
     tables: RQL_TABLES.map(({ name, description, columns }) => ({
       name,
@@ -72,6 +84,7 @@ export function rqlEditorData(): RqlEditorData {
     keywords: RQL_KEYWORDS,
     // The operators of the schema description: one list for the agent and the person.
     operators: describeRqlSchema().operators,
+    properties: { indexed: [...properties.indexed], detected: [...properties.detected] },
   };
 }
 
@@ -85,8 +98,11 @@ export function rqlCompletions(
   text: string,
   pos: number,
   explicit: boolean,
+  data: Pick<RqlEditorData, "properties"> = DATA,
 ): { from: number; options: RqlCompletion[] } | null {
   const before = text.slice(0, pos);
+  const property = PROPERTY_KEY.exec(before);
+  if (property) return propertyCompletions(pos - property[1].length, data.properties);
   if (insideStringOrComment(before)) return null;
   const word = /[A-Za-z_][\w]*$/.exec(before);
   if (!word && !explicit) return null;
@@ -99,6 +115,10 @@ export function rqlCompletions(
 }
 
 const DATA = rqlEditorData();
+/** The start of a property name being typed: `properties['` and what follows, to the cursor. */
+const PROPERTY_KEY = /\bproperties\s*\[\s*'([^'\n]*)$/;
+const NOT_INDEXED_INFO =
+  "Not indexed: Ratel stores no values of it. Index it in project settings first.";
 const TABLES: RqlCompletion[] = DATA.tables.map(({ name, description }) => ({
   label: name,
   type: "class",
@@ -133,6 +153,28 @@ const OPERATORS: RqlCompletion[] = [
 ]
   .filter((operator) => !RQL_KEYWORDS.includes(operator as (typeof RQL_KEYWORDS)[number]))
   .map((label) => ({ label, type: "operator" }));
+
+/** The project's property names at `from`: the indexed ones, then the detected ones, off. */
+function propertyCompletions(
+  from: number,
+  properties: RqlEditorData["properties"],
+): { from: number; options: RqlCompletion[] } | null {
+  const options: RqlCompletion[] = [
+    ...properties.indexed.map((label) => ({
+      label,
+      type: "property" as const,
+      detail: "indexed property",
+    })),
+    ...properties.detected.map((label) => ({
+      label,
+      type: "property" as const,
+      detail: "not indexed",
+      info: NOT_INDEXED_INFO,
+      disabled: true as const,
+    })),
+  ];
+  return options.length > 0 ? { from, options } : null;
+}
 
 /** Whether the end of `before` is inside a 'string' or after `--` on its line. */
 function insideStringOrComment(before: string): boolean {

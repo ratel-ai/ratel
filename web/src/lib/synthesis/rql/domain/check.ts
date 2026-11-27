@@ -9,8 +9,9 @@ import type {
   UnaryOp,
 } from "./ast";
 import { RQL_FUNCTIONS, RQL_TABLES, type RqlTable, type RqlType, rqlTable } from "./catalog";
-import { fail, nearestName } from "./errors";
+import { fail, nearestName, RqlCompileError } from "./errors";
 import { RQL_LIMITS } from "./limits";
+import { propertyRefusal, type RqlPropertyCheck } from "./properties";
 
 /**
  * The check: the parsed tree of one query to a typed tree that holds only catalog names and
@@ -42,6 +43,8 @@ export type CheckedNode =
   /** One value of a list column per row: `rewrite.ts` reads the list once per value. */
   | { kind: "each"; column: string }
   | { kind: "attribute"; target: CheckedExpr; key: CheckedExpr }
+  /** One indexed trace property: `key` is a text parameter. */
+  | { kind: "property"; key: CheckedExpr }
   | { kind: "binary"; op: BinaryOp; left: CheckedExpr; right: CheckedExpr }
   | { kind: "unary"; op: UnaryOp; operand: CheckedExpr }
   | {
@@ -87,6 +90,7 @@ interface Scope {
   items: readonly CheckedItem[];
   aliases: ReadonlyMap<string, number>;
   insideAggregate: boolean;
+  properties: RqlPropertyCheck;
 }
 
 const GRAMMAR =
@@ -118,8 +122,14 @@ const POSTGRES_FUNCTIONS: Readonly<Record<string, string>> = {
   cardinality: "Use contains(models, 'value').",
 };
 
-/** Checks the one statement of the parse, or stops with the error that refuses it. */
-export function checkQuery(parsed: ParseResult): CheckedSelect {
+/**
+ * Checks the one statement of the parse, or stops with the error that refuses it. `properties`
+ * are the project's: a query reads an indexed one only.
+ */
+export function checkQuery(
+  parsed: ParseResult,
+  properties: RqlPropertyCheck = { indexed: [] },
+): CheckedSelect {
   if (!parsed.ok) {
     fail(
       "syntax_error",
@@ -142,7 +152,7 @@ export function checkQuery(parsed: ParseResult): CheckedSelect {
   const [statement] = parsed.statements;
   switch (statement.kind) {
     case "select":
-      return checkSelect(statement);
+      return checkSelect(statement, properties);
     case "set_operation":
       return fail(
         "set_operation",
@@ -174,7 +184,7 @@ export function checkQuery(parsed: ParseResult): CheckedSelect {
   }
 }
 
-function checkSelect(select: ParsedSelect): CheckedSelect {
+function checkSelect(select: ParsedSelect, properties: RqlPropertyCheck): CheckedSelect {
   if (select.foreign.length > 0) refuseForeign(select.foreign[0]);
   const { table, alias } = checkFrom(select.from, select.at);
   if (select.offset) {
@@ -193,6 +203,7 @@ function checkSelect(select: ParsedSelect): CheckedSelect {
     items,
     aliases: clause === "select" ? new Map() : aliases,
     insideAggregate: false,
+    properties,
   });
 
   const items = checkItems(select, scope("select", []));
@@ -287,7 +298,8 @@ function checkItems(select: ParsedSelect, scope: Scope): CheckedItem[] {
   for (const [position, column] of select.columns.entries()) {
     if (column.expr.kind === "star") {
       checkQualifier(column.expr.table, scope, column.expr.at);
-      for (const catalogColumn of scope.table.columns) {
+      // The map of properties is read one key at a time, never whole.
+      for (const catalogColumn of scope.table.columns.filter(({ type }) => type !== "properties")) {
         items.push({
           expr: {
             kind: "column",
@@ -506,8 +518,24 @@ function checkExpr(parsed: ParsedExpr, scope: Scope): CheckedExpr {
 }
 
 function checkColumn(parsed: Extract<ParsedExpr, { kind: "column" }>, scope: Scope): CheckedExpr {
+  if (parsed.table === "properties" && findColumn(scope.table, "properties")) {
+    fail(
+      "wrong_arguments",
+      `properties.${parsed.name} names a property as a column.`,
+      `Write the name in single quotes: properties['${parsed.name}'].`,
+      parsed.at,
+    );
+  }
   checkQualifier(parsed.table, scope, parsed.at);
   const column = findColumn(scope.table, parsed.name);
+  if (column?.type === "properties") {
+    fail(
+      "wrong_arguments",
+      "properties is read one property at a time.",
+      "Read one property with properties['name'], for example properties['organization'] = 'acme'.",
+      parsed.at,
+    );
+  }
   if (column) return { kind: "column", name: column.name, type: column.type, aggregate: false };
   const index = parsed.table ? undefined : scope.aliases.get(parsed.name);
   if (index !== undefined && scope.clause === "having") return scope.items[index].expr;
@@ -523,7 +551,9 @@ function checkColumn(parsed: Extract<ParsedExpr, { kind: "column" }>, scope: Sco
   fail(
     "unknown_column",
     `The table ${scope.table.name} has no column ${parsed.name}.`,
-    `${near ? `Did you mean ${near}? ` : ""}The columns of ${scope.table.name} are ${scope.table.columns.map((c) => c.name).join(", ")}.`,
+    parsed.name === "properties"
+      ? `The table ${scope.table.name} has no trace properties. Read them on the traces table, and group by session_id or user_id there.`
+      : `${near ? `Did you mean ${near}? ` : ""}The columns of ${scope.table.name} are ${scope.table.columns.map((c) => c.name).join(", ")}.`,
     parsed.at,
   );
 }
@@ -619,6 +649,7 @@ function checkUnary(parsed: Extract<ParsedExpr, { kind: "unary" }>, scope: Scope
 }
 
 function checkAttribute(parsed: Extract<ParsedExpr, { kind: "index" }>, scope: Scope): CheckedExpr {
+  if (isPropertiesColumn(parsed.target, scope)) return checkProperty(parsed, scope);
   const target = checkExpr(parsed.target, scope);
   if (target.type !== "attributes") {
     fail(
@@ -642,9 +673,45 @@ function checkAttribute(parsed: Extract<ParsedExpr, { kind: "index" }>, scope: S
   return { kind: "attribute", target, key, type: "text", aggregate: target.aggregate };
 }
 
+/** Whether an expression is the `properties` column of the table, as `properties[...]` reads it. */
+function isPropertiesColumn(parsed: ParsedExpr, scope: Scope): boolean {
+  return (
+    parsed.kind === "column" &&
+    parsed.name === "properties" &&
+    (!parsed.table || parsed.table === scope.table.name || parsed.table === scope.alias) &&
+    findColumn(scope.table, "properties")?.type === "properties"
+  );
+}
+
+/**
+ * `properties['name']`: one trace property, by a text literal that is a bound value, never a name
+ * of the SQL. Only a name the project indexes; a column property names its column.
+ */
+function checkProperty(parsed: Extract<ParsedExpr, { kind: "index" }>, scope: Scope): CheckedExpr {
+  if (parsed.key.kind !== "string" || parsed.key.value === "") {
+    fail(
+      "wrong_arguments",
+      "A property name must be a text literal.",
+      "Write the name in single quotes, for example properties['organization'].",
+      at(parsed.key),
+    );
+  }
+  const refusal = propertyRefusal(parsed.key.value, scope.table, scope.properties);
+  if (refusal) {
+    const place = at(parsed.key);
+    throw new RqlCompileError({ ...refusal, ...(place ? { at: place } : {}) });
+  }
+  return { kind: "property", key: checkExpr(parsed.key, scope), type: "text", aggregate: false };
+}
+
+/** The functions that are a subscript, not a call. */
+const SUBSCRIPTS: readonly string[] = ["attributes", "properties"];
+
 function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope): CheckedExpr {
   const name = parsed.name.toLowerCase();
-  const fn = RQL_FUNCTIONS.find((candidate) => candidate.name === name && name !== "attributes");
+  const fn = RQL_FUNCTIONS.find(
+    (candidate) => candidate.name === name && !SUBSCRIPTS.includes(name),
+  );
   if (!fn) {
     const hint =
       (Object.hasOwn(POSTGRES_FUNCTIONS, name) ? POSTGRES_FUNCTIONS[name] : undefined) ??
@@ -834,7 +901,7 @@ function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope):
         fail(
           "wrong_arguments",
           `each reads a list column, and ${describe(list)} is not a column.`,
-          "Write each(models), each(tools), each(agents) or each(mcp_servers).",
+          "Write each(models), each(tools), each(agents), each(mcp_servers) or each(tasks).",
           at(list),
         );
       }
@@ -969,6 +1036,8 @@ function ungroupedColumn(expr: CheckedExpr, keys: ReadonlySet<string>): string |
       return `each(${expr.column})`;
     case "attribute":
       return ungroupedColumn(expr.target, keys) && "attributes[...]";
+    case "property":
+      return `properties['${String((expr.key as { value?: unknown }).value)}']`;
     case "binary":
       return ungroupedColumn(expr.left, keys) ?? ungroupedColumn(expr.right, keys);
     case "unary":

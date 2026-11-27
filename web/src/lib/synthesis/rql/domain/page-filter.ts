@@ -14,6 +14,8 @@ export interface RqlPageFilter {
   status?: "failed" | "ok";
   minCostUsd?: number;
   minTokens?: number;
+  /** Trace properties (ADR-0012): of one name, any of its values; names combine. */
+  properties?: Readonly<Record<string, readonly string[]>>;
   and?: readonly RqlPageFilter[];
 }
 
@@ -44,6 +46,12 @@ export function pageFilterConditions(
   if (minCostUsd !== null) parts.push(`"cost_usd" >= ${param(minCostUsd)}`);
   const minTokens = positive(filter.minTokens);
   if (minTokens !== null) parts.push(`"input_tokens" + "output_tokens" >= ${param(minTokens)}`);
+  for (const [name, values] of Object.entries(filter.properties ?? {})) {
+    const kept = cleaned(values);
+    // The name is a bound value, as in properties['name'].
+    if (kept.length > 0)
+      parts.push(`("properties" ->> ${param(name)}) in (${kept.map(param).join(", ")})`);
+  }
   for (const clause of filter.and ?? []) parts.push(...pageFilterConditions(clause, param));
   return parts;
 }

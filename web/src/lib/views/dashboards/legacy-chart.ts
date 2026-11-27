@@ -8,6 +8,6 @@ import type { MetricChartKind } from "@/lib/views/dashboards/types";
  * the compiler. A text that no longer compiles is a table, and shows its refusal.
  */
 export function sqlChartOfText(text: string): MetricChartKind {
-  const compiled = compileRql(text, { now: new Date(), console: true });
+  const compiled = compileRql(text, { now: new Date(), console: true, properties: "any" });
   return compiled.ok ? defaultChart(chartChoices({ columns: compiled.columns })) : "table";
 }

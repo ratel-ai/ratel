@@ -152,3 +152,18 @@ test("a function that is not RQL, or wrong arguments, are refused with a fix", (
     assert.match(result.error.fix, fix, text);
   }
 });
+
+test("tasks is a list of the trace and of the score: contains filters it, each groups it (RTL-397)", () => {
+  for (const table of ["traces", "scores"]) {
+    const filtered = compileRql(
+      `select each(tasks) as task, count(*) from ${table} where contains(tasks, 'checkout') group by task`,
+      { now: NOW },
+    );
+    assert.ok(filtered.ok, table);
+    assert.ok(filtered.sql.includes(`("tasks" @> array[`), table);
+    assert.ok(filtered.params.includes("checkout"), table);
+  }
+  const typed = compileRql("select tasks from traces", { now: NOW });
+  assert.ok(typed.ok);
+  assert.deepEqual(typed.columns, [{ name: "tasks", type: "text_list" }]);
+});

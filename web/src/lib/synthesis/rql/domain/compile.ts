@@ -5,6 +5,7 @@ import { RqlCompileError, type RqlError } from "./errors";
 import { guardText } from "./guard";
 import { RQL_LIMITS } from "./limits";
 import type { RqlPageFilter } from "./page-filter";
+import type { RqlPropertyCheck } from "./properties";
 import { rewriteSelect } from "./rewrite";
 import { type RqlWindow, resolveWindow } from "./window";
 
@@ -20,6 +21,12 @@ export interface RqlCompileOptions {
    * `consoleMaxWindowDays`. Without it, up to `maxWindowDays`, as `run_rql` gives an agent.
    */
   console?: boolean;
+  /**
+   * The trace properties of the project (`properties.ts`): a query reads `properties['name']` only
+   * for an indexed name. The caller reads them; the compiler has no database. Absent: none.
+   * `"any"`: a check of the shape alone, with no project, where every name reads.
+   */
+  properties?: RqlPropertyCheck;
 }
 
 export type RqlCompileResult =
@@ -70,7 +77,7 @@ export function compileQuery(
     );
     const parsed = parse(text);
     guardDepth(parsed);
-    const select = checkQuery(parsed);
+    const select = checkQuery(parsed, options.properties);
     const limit = Math.min(select.limit ?? RQL_LIMITS.defaultLimit, RQL_LIMITS.maxLimit);
     const { sql, params, limitParam } = rewriteSelect(select, window, limit, options.filter);
     return {

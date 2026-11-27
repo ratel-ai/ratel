@@ -28,6 +28,7 @@ import {
   stepFlowFilter,
   widgetTracesHref,
 } from "@/lib/views/dashboards/links";
+import { propertySettingsHref } from "@/lib/views/dashboards/properties";
 import { formAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import type { DashboardFilters, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
 import {
@@ -47,6 +48,7 @@ import { GeographyChart } from "./GeographyChart";
 import { MetricChart } from "./MetricChart";
 import { SqlBody } from "./SqlBody";
 import { StepFlowChart } from "./StepFlowChart";
+import { useTaskNames } from "./TaskNamesProvider";
 
 const SAMPLE_NOUN: Readonly<Record<MetricSource, string>> = {
   traces: "trace",
@@ -79,6 +81,7 @@ export function WidgetBody({
   fill?: boolean;
 }) {
   const { query } = widget;
+  const taskNames = useTaskNames();
   if (!available)
     return (
       <EmptyState
@@ -103,6 +106,23 @@ export function WidgetBody({
         description="Reload the page to try again."
       />
     );
+  // A widget on a property that is no longer indexed says so, with the way back.
+  if (result.kind === "refused" && result.code === "property_not_indexed" && result.property)
+    return (
+      <EmptyState
+        icon={CircleAlert}
+        title="Property is not indexed"
+        description={`${result.property} is not indexed, so this widget has no numbers. Index it again to see them.`}
+        action={
+          <Link
+            href={propertySettingsHref(projectId, result.property)}
+            className="text-ui font-medium text-fg underline hover:text-fg-muted"
+          >
+            Index it in project settings
+          </Link>
+        }
+      />
+    );
   if (result.kind === "refused")
     return (
       <Callout tone="danger" title="RQL refused the query">
@@ -123,7 +143,7 @@ export function WidgetBody({
           result={
             result.kind === "metric"
               ? result
-              : formAsMetric(result, query.form, chart, rangeWindow(range))
+              : formAsMetric(result, query.form, chart, rangeWindow(range), { taskNames })
           }
           samples={result.kind === "metric"}
           range={range}
@@ -318,7 +338,7 @@ function MetricBody({
         rowKey={seriesKey}
         columns={[
           ...dimensions.map((by, index) => ({
-            id: by,
+            id: typeof by === "string" ? by : `property:${by.property}`,
             header: dimensionLabel(by),
             className: "max-w-0 truncate",
             cell: ({ groups }: MetricResult["series"][number]) => {

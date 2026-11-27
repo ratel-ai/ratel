@@ -13,6 +13,8 @@ import {
 
 export const ORG = "22222222-2222-4222-8222-222222222222";
 export const PROJECT = "11111111-1111-4111-8111-111111111111";
+/** Another project of the same organization: what it stores never shows in `PROJECT`. */
+export const OTHER_PROJECT = "77777777-7777-4777-8777-777777777777";
 
 type SpanSeed = Partial<NewOtelSpan> & {
   /** Seconds after the root's start. */
@@ -36,7 +38,8 @@ export async function traceDatabase() {
   await client.exec(`
     insert into organizations (id, name, slug) values ('${ORG}', 'Acme', 'acme');
     insert into projects (id, organization_id, name, slug) values
-      ('${PROJECT}', '${ORG}', 'Agent', 'agent');
+      ('${PROJECT}', '${ORG}', 'Agent', 'agent'),
+      ('${OTHER_PROJECT}', '${ORG}', 'Other', 'fixture-other');
   `);
   return {
     client,

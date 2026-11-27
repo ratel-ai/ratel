@@ -1,4 +1,4 @@
-import type { Dimension, FunnelQuery, StepFlowQuery } from "@/lib/contracts/query";
+import type { Dimension, FunnelQuery, MetricDimension, StepFlowQuery } from "@/lib/contracts/query";
 import { NO_GROUP, type StepFlowNodeCount } from "@/lib/synthesis/metrics/step-flow-columns";
 import { simplified, withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
@@ -31,13 +31,14 @@ export const MAX_PLAIN_CHARS = 2_800;
 
 export const ADD_SCORER_PARAM = "addScorer";
 
-const GROUP_FILTERS = {
+/** The dimensions the Traces filter can say. It has no scorer, user, session or property. */
+const GROUP_FILTERS: Partial<Record<Dimension, keyof TraceFilter>> = {
   model: "models",
   tool: "tools",
   service: "services",
   environment: "environments",
   agent: "agents",
-} as const satisfies Record<Exclude<Dimension, "scorer">, keyof TraceFilter>;
+};
 
 export function dashboardsHref(projectId: string): string {
   return `/project/${encodeURIComponent(projectId)}/dashboards`;
@@ -62,14 +63,13 @@ export function widgetTracesHref(
   projectId: string,
   filter: TraceFilter,
   range: DashboardRange,
-  groups: readonly { by: Dimension; value: string }[] = [],
+  groups: readonly { by: MetricDimension; value: string }[] = [],
 ): string {
   // A group is a clause: its value says nothing of the filter's own values.
-  const all = groups.reduce<TraceFilter>(
-    (kept, { by, value }) =>
-      by === "scorer" ? kept : withClause(kept, { [GROUP_FILTERS[by]]: [value] }),
-    filter,
-  );
+  const all = groups.reduce<TraceFilter>((kept, { by, value }) => {
+    const key = typeof by === "string" ? GROUP_FILTERS[by] : undefined;
+    return key ? withClause(kept, { [key]: [value] }) : kept;
+  }, filter);
   const params = new URLSearchParams(filterSearch(simplified(all)));
   if (range.preset === "custom" || range.preset === EXACT_RANGE) {
     params.set("range", range.preset);

@@ -1,5 +1,6 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchResult, type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation } from "@/lib/mcp/registry";
@@ -126,7 +127,7 @@ export async function monitoring(
     },
     now: () => NOW,
   };
-  runRqlOn(client);
+  runRqlOn(client, db);
   const registry = buildRegistry(operationsOf(deps));
   const call: Monitoring["call"] = (id, params = {}, auth = KEY_AUTH) =>
     dispatchOperation(id, params, {
@@ -166,10 +167,11 @@ export function insertTrace(client: PGlite, traceId: string, durationMs = 100, f
  * Kind `sql` on this database: the RQL runner over the one PGlite connection. The seam has no flag
  * check: the tools check `customMonitoring` of the caller (`set.on`) before it.
  */
-function runRqlOn(client: PGlite) {
+function runRqlOn(client: PGlite, db: ReturnType<typeof getDb>) {
   // PGlite has one connection: an RQL transaction waits for the one before it.
   const pool = pglitePoolOf(client);
   metricSeams.sql = sqlQueryRunner({
     run: { executor: createPgRqlExecutor(pool), gate: createRqlGate(), observe: async () => {} },
+    properties: (projectId) => loadStoredPropertyNames(projectId, db),
   });
 }

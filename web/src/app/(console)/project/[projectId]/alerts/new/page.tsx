@@ -1,5 +1,6 @@
 import { NewAlertForm } from "@/components/console/alerts/NewAlertForm";
 import { NewAlertFrame } from "@/components/console/alerts/NewAlertFrame";
+import { PropertyChoicesProvider } from "@/components/console/properties/PropertyChoicesProvider";
 import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import {
@@ -30,7 +31,7 @@ export default async function NewAlertPage({
         Alerts need a database. Set DATABASE_URL to connect one.
       </DatabaseUnavailable>
     );
-  const { features, scorers, form } = await loadAlertForm(page);
+  const { features, scorers, properties, form } = await loadAlertForm(page);
   const search = await searchParams;
   const value = search[NEW_ALERT_PARAM];
   const inFragment = value === IN_FRAGMENT;
@@ -41,13 +42,15 @@ export default async function NewAlertPage({
   return (
     <NewAlertFrame projectId={page.projectId}>
       <ScorerPickerProvider projectId={page.projectId} data={scorers}>
-        <NewAlertForm
-          projectId={page.projectId}
-          start={start.ok ? start.query : null}
-          inFragment={inFragment}
-          pageFilters={Boolean(search[PAGE_FILTERS_PARAM])}
-          {...form}
-        />
+        <PropertyChoicesProvider projectId={page.projectId} choices={properties}>
+          <NewAlertForm
+            projectId={page.projectId}
+            start={start.ok ? start.query : null}
+            inFragment={inFragment}
+            pageFilters={Boolean(search[PAGE_FILTERS_PARAM])}
+            {...form}
+          />
+        </PropertyChoicesProvider>
       </ScorerPickerProvider>
     </NewAlertFrame>
   );

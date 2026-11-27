@@ -8,6 +8,11 @@ import {
 } from "@/lib/contracts/check";
 import { hasNoNul, NUL_PROBLEM, shownValue } from "@/lib/contracts/json-text";
 import { filterProblem, MAX_FILTER_BYTES } from "./filter-budget";
+import {
+  MAX_FILTER_PROPERTIES,
+  MAX_PROPERTY_NAME_CHARS,
+  propertyNameProblem,
+} from "./trace-properties";
 
 /**
  * The query object: the one JSON contract of dashboards, alerts and MCP. It says what to measure,
@@ -72,8 +77,24 @@ export const MAX_STEP_NAME = 80;
 export const AGGREGATIONS = ["count", "rate", "sum", "avg", "p50", "p95"] as const;
 export type Aggregation = (typeof AGGREGATIONS)[number];
 
-export const DIMENSIONS = ["model", "service", "environment", "agent", "tool", "scorer"] as const;
+export const DIMENSIONS = [
+  "model",
+  "service",
+  "environment",
+  "agent",
+  "tool",
+  "user",
+  "session",
+  "task",
+  "scorer",
+] as const;
 export type Dimension = (typeof DIMENSIONS)[number];
+/** A group-by of one indexed trace property (ADR-0012), on a measure a trace filter applies to. */
+export interface PropertyDimension {
+  property: string;
+}
+/** What a metric groups by: a dimension of the vocabulary, or a trace property. */
+export type MetricDimension = Dimension | PropertyDimension;
 /** The dimensions one query may group by. */
 export const MAX_DIMENSIONS = 2;
 
@@ -93,14 +114,14 @@ interface MeasureRules {
 }
 
 const TRACES = {
-  dimensions: ["model", "service", "environment", "agent", "tool"],
+  dimensions: ["model", "service", "environment", "agent", "tool", "user", "session", "task"],
   buckets: ["hour", "day"],
   filterable: true,
   byScorer: false,
 } as const;
 const CONTEXT = { dimensions: [], buckets: ["day"], filterable: false, byScorer: false } as const;
 const SCORES = {
-  dimensions: ["scorer", "model", "service", "environment"],
+  dimensions: ["scorer", "model", "service", "environment", "user", "session", "task"],
   buckets: ["hour", "day"],
   filterable: true,
   byScorer: true,
@@ -232,8 +253,32 @@ export function geographyQuery(
 /** A filter that keeps every trace. */
 export function isEmptyFilter(filters: object): boolean {
   return Object.values(filters).every(
-    (value) => value === undefined || (Array.isArray(value) && value.length === 0),
+    (value) =>
+      value === undefined ||
+      (Array.isArray(value) && value.length === 0) ||
+      (typeof value === "object" && value !== null && Object.keys(value).length === 0),
   );
+}
+
+/** The trace property a dimension names, or undefined for a dimension of the vocabulary. */
+export function propertyOf(dimension: MetricDimension): string | undefined {
+  return typeof dimension === "string" ? undefined : dimension.property;
+}
+
+/** The trace properties a query names: in its filters, every clause, and in its group-by. */
+export function queryProperties(query: object): string[] {
+  const { filters, dimensions } = query as { filters?: unknown; dimensions?: unknown };
+  const named = new Set<string>();
+  const visit = (filter: unknown) => {
+    const clause = filter as { properties?: object; and?: unknown[] } | undefined;
+    for (const name of Object.keys(clause?.properties ?? {})) named.add(name);
+    for (const more of clause?.and ?? []) visit(more);
+  };
+  visit(filters);
+  for (const dimension of Array.isArray(dimensions) ? dimensions : [])
+    if (dimension && typeof dimension === "object" && "property" in dimension)
+      named.add(String(dimension.property));
+  return [...named];
 }
 
 function invalidAt(path: readonly PropertyKey[] | undefined): string {
@@ -245,6 +290,21 @@ const values = z
   .array(z.string().trim().min(1).max(2_000).refine(hasNoNul, NUL_PROBLEM))
   .max(1_000);
 const threshold = z.number().nonnegative();
+/** A trace property's name: one a stored property can have, never a column of every trace. */
+const propertyName = z
+  .string()
+  .trim()
+  .min(1, "Name the property.")
+  .max(
+    MAX_PROPERTY_NAME_CHARS,
+    `A property name has at most ${MAX_PROPERTY_NAME_CHARS} characters.`,
+  )
+  .refine(hasNoNul, NUL_PROBLEM)
+  .superRefine((name, context) => {
+    const problem = propertyNameProblem(name);
+    if (problem) context.addIssue({ code: "custom", message: problem });
+  });
+const PROPERTIES_PROBLEM = `A filter names ${MAX_FILTER_PROPERTIES} properties at most.`;
 
 /** One clause. Values of one property are alternatives; properties combine. */
 const clauseShape = {
@@ -257,6 +317,24 @@ const clauseShape = {
   status: z.enum(["failed", "ok"]).optional(),
   minCostUsd: threshold.optional(),
   minTokens: threshold.optional(),
+  properties: z
+    .record(z.string(), values.min(1, "Give each property at least one value."))
+    .superRefine((named, context) => {
+      const names = Object.keys(named);
+      if (names.length > MAX_FILTER_PROPERTIES)
+        context.addIssue({ code: "custom", message: PROPERTIES_PROBLEM });
+      for (const name of names) {
+        const problem =
+          name !== name.trim()
+            ? "A property name has no space at its start or end."
+            : propertyName.safeParse(name).error?.issues[0]?.message;
+        if (problem) context.addIssue({ code: "custom", message: problem, path: [name] });
+      }
+    })
+    .optional()
+    .describe(
+      "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+    ),
 };
 
 /**
@@ -587,7 +665,15 @@ function metricFields<S extends z.ZodType>(scorer: S) {
     measures: z.array(measureSchema).length(1).describe("One measure and its aggregation."),
     dimensions: z
       .array(
-        z.enum(DIMENSIONS, { error: ({ input }) => `Unknown dimension "${shownValue(input)}".` }),
+        z.union(
+          [
+            z.enum(DIMENSIONS),
+            z
+              .strictObject({ property: propertyName })
+              .describe("An indexed trace property, by name: list_trace_properties gives them."),
+          ],
+          { error: ({ input }) => `Unknown dimension "${shownValue(input)}".` },
+        ),
       )
       .max(MAX_DIMENSIONS, `A query has ${MAX_DIMENSIONS} dimensions at most.`)
       .default([]),
@@ -604,7 +690,7 @@ function metricRules(
     bucket,
   }: {
     measures: { measure: MeasureId }[];
-    dimensions: Dimension[];
+    dimensions: MetricDimension[];
     filters: object;
     bucket?: Bucket;
   },
@@ -614,11 +700,15 @@ function metricRules(
   const rules: MeasureRules = MEASURES[first.measure];
   const refuse = (message: string, ...path: (string | number)[]) =>
     context.addIssue({ code: "custom", message, path });
+  const keys = dimensions.map((dimension) => JSON.stringify(dimension));
   for (const [index, dimension] of dimensions.entries()) {
-    if (!rules.dimensions.includes(dimension))
-      refuse(`${rules.label} cannot be grouped by "${dimension}".`, "dimensions", index);
-    else if (dimensions.indexOf(dimension) !== index)
-      refuse(`"${dimension}" is grouped by twice.`, "dimensions", index);
+    const property = propertyOf(dimension);
+    const named = property === undefined ? `"${dimension}"` : `the property "${property}"`;
+    const allowed =
+      property === undefined ? rules.dimensions.includes(dimension as Dimension) : rules.filterable;
+    if (!allowed) refuse(`${rules.label} cannot be grouped by ${named}.`, "dimensions", index);
+    else if (keys.indexOf(keys[index]) !== index)
+      refuse(`${named} is grouped by twice.`, "dimensions", index);
   }
   const { scorer: scorerRef, ...traceFilters } = filters as Record<string, unknown>;
   if (!rules.filterable && !isEmptyFilter(traceFilters))

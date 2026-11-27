@@ -262,10 +262,15 @@ export function sqlAsCategories(result: SqlResult): CategoryBar[] {
   return [...bars.values()];
 }
 
+/** What the page knows of the ids a group-by gives: the task names by id. */
+export interface GroupNames {
+  taskNames?: Readonly<Record<string, string>>;
+}
+
 /**
  * The rows of a text of the form as the form's own result, so the widget draws as it did: the
- * buckets of the window filled, the groups by their value with a scorer's name as its label, and
- * the 10 highest. The text gives no count of rows behind a value: `samples` is 1 where there is
+ * buckets of the window filled, the groups by their value with a scorer's name as its label (and a
+ * task's, from `names`: RQL gives its id), and the 10 highest. The text gives no count of rows behind a value: `samples` is 1 where there is
  * a value, 0 where there is nothing.
  */
 export function formAsMetric(
@@ -273,6 +278,7 @@ export function formAsMetric(
   form: MetricForm,
   chart: MetricChartKind,
   window: QueryWindow,
+  names: GroupNames = {},
 ): MetricResult {
   const [{ aggregation }] = form.measures;
   const nothing = nothingIsZero(aggregation) ? 0 : null;
@@ -282,7 +288,9 @@ export function formAsMetric(
     return form.dimensions.map((dimension) => {
       const value = values[at++] ?? "null";
       // A group-by scorer gives the id, then the name.
-      return dimension === "scorer" ? { value, label: values[at++] ?? value } : { value };
+      if (dimension === "scorer") return { value, label: values[at++] ?? value };
+      const task = dimension === "task" ? names.taskNames?.[value] : undefined;
+      return task ? { value, label: task } : { value };
     });
   };
   const some = (value: number | null) => (value === null || value === nothing ? 0 : 1);

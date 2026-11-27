@@ -78,3 +78,26 @@ test("the journal lists every migration file, in order, with strictly increasing
     );
   }
 });
+
+// The migrator runs every pending migration in one transaction, so a plain CREATE INDEX on a table
+// that already holds rows blocks its writes for the whole build. From 0054 on, such an index is
+// IF NOT EXISTS and its migration's comment gives the CONCURRENTLY statement to run first on a
+// large database (see the RQL README on 0056). A table the same migration creates is empty.
+test("an index on an existing table can be built CONCURRENTLY before the deploy", () => {
+  const index =
+    /^CREATE (?:UNIQUE )?INDEX (IF NOT EXISTS )?"(\w+)" ON (?:ONLY )?(?:"\w+"\.)?"(\w+)"/gim;
+  const created = /^CREATE TABLE (?:IF NOT EXISTS )?(?:"\w+"\.)?"(\w+)"/gim;
+  const problems: string[] = [];
+  for (const file of readdirSync(DEFAULT_MIGRATIONS_DIR).filter((f) => f.endsWith(".sql"))) {
+    if (file < "0054") continue;
+    const text = readFileSync(join(DEFAULT_MIGRATIONS_DIR, file), "utf8");
+    const newTables = new Set([...text.matchAll(created)].map((match) => match[1]));
+    for (const [, ifNotExists, name, table] of text.matchAll(index)) {
+      if (newTables.has(table)) continue;
+      if (!ifNotExists) problems.push(`${file}: ${name} is not IF NOT EXISTS`);
+      if (!text.includes(`CREATE INDEX CONCURRENTLY IF NOT EXISTS "${name}"`))
+        problems.push(`${file}: no CONCURRENTLY statement for ${name} in the comment`);
+    }
+  }
+  assert.deepEqual(problems, []);
+});

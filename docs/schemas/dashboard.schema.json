@@ -319,14 +319,36 @@
                     "maxItems": 2,
                     "type": "array",
                     "items": {
-                      "type": "string",
-                      "enum": [
-                        "model",
-                        "service",
-                        "environment",
-                        "agent",
-                        "tool",
-                        "scorer"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "model",
+                            "service",
+                            "environment",
+                            "agent",
+                            "tool",
+                            "user",
+                            "session",
+                            "task",
+                            "scorer"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "property": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
+                            }
+                          },
+                          "required": [
+                            "property"
+                          ],
+                          "additionalProperties": false,
+                          "description": "An indexed trace property, by name: list_trace_properties gives them."
+                        }
                       ]
                     }
                   },
@@ -404,6 +426,23 @@
                         "type": "number",
                         "minimum": 0
                       },
+                      "properties": {
+                        "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -478,6 +517,23 @@
                             "minTokens": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "properties": {
+                              "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "minItems": 1,
+                                "maxItems": 1000,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                }
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -635,6 +691,23 @@
                         "type": "number",
                         "minimum": 0
                       },
+                      "properties": {
+                        "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -709,6 +782,23 @@
                             "minTokens": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "properties": {
+                              "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "minItems": 1,
+                                "maxItems": 1000,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                }
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -859,6 +949,23 @@
                         "type": "number",
                         "minimum": 0
                       },
+                      "properties": {
+                        "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -933,6 +1040,23 @@
                             "minTokens": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "properties": {
+                              "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "minItems": 1,
+                                "maxItems": 1000,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                }
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -1205,6 +1329,23 @@
                         "type": "number",
                         "minimum": 0
                       },
+                      "properties": {
+                        "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -1279,6 +1420,23 @@
                             "minTokens": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "properties": {
+                              "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "minItems": 1,
+                                "maxItems": 1000,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                }
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -1675,6 +1833,23 @@
                         "type": "number",
                         "minimum": 0
                       },
+                      "properties": {
+                        "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          }
+                        }
+                      },
                       "and": {
                         "description": "More clauses: a trace must match every one, also on the same property.",
                         "type": "array",
@@ -1749,6 +1924,23 @@
                             "minTokens": {
                               "type": "number",
                               "minimum": 0
+                            },
+                            "properties": {
+                              "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "minItems": 1,
+                                "maxItems": 1000,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 2000
+                                }
+                              }
                             }
                           },
                           "additionalProperties": false
@@ -2023,14 +2215,36 @@
                         "maxItems": 2,
                         "type": "array",
                         "items": {
-                          "type": "string",
-                          "enum": [
-                            "model",
-                            "service",
-                            "environment",
-                            "agent",
-                            "tool",
-                            "scorer"
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "model",
+                                "service",
+                                "environment",
+                                "agent",
+                                "tool",
+                                "user",
+                                "session",
+                                "task",
+                                "scorer"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "property": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 100
+                                }
+                              },
+                              "required": [
+                                "property"
+                              ],
+                              "additionalProperties": false,
+                              "description": "An indexed trace property, by name: list_trace_properties gives them."
+                            }
                           ]
                         }
                       },
@@ -2108,6 +2322,23 @@
                             "type": "number",
                             "minimum": 0
                           },
+                          "properties": {
+                            "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "minItems": 1,
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            }
+                          },
                           "and": {
                             "description": "More clauses: a trace must match every one, also on the same property.",
                             "type": "array",
@@ -2182,6 +2413,23 @@
                                 "minTokens": {
                                   "type": "number",
                                   "minimum": 0
+                                },
+                                "properties": {
+                                  "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "minItems": 1,
+                                    "maxItems": 1000,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 2000
+                                    }
+                                  }
                                 }
                               },
                               "additionalProperties": false

@@ -55,9 +55,31 @@ and a fix; an unknown name gets the nearest one by edit distance or a hint.
 **Neutral functions, no Postgres syntax.** `count` (with `*` and `distinct`), `count_distinct`,
 `sum`, `avg`, `min`, `max`, `p50`/`p90`/`p95`/`p99`, `percentile(x, f)`, `rate(condition)`,
 `coalesce(x, y, ...)`, `time_bucket('<n> minute|hour|day|week', ts)`, `contains(list, value)` and
-`each(list)` for `models`, `tools`, `agents` and `mcp_servers`, and `attributes['key']`. The rewrite
-maps them to Postgres (`percentile_cont ... within group`, `avg(case when ...)`, `date_bin`,
-`@> array[...]`, a lateral join of `unnest`, `->>`).
+`each(list)` for `models`, `tools`, `agents` and `mcp_servers`, `attributes['key']`, and
+`properties['name']` for the trace properties a project indexes (ADR-0012). The rewrite maps them to
+Postgres (`percentile_cont ... within group`, `avg(case when ...)`, `date_bin`, `@> array[...]`, a
+lateral join of `unnest`, `->>`).
+
+**Trace properties: `properties['name']` (decision `rql-properties`).** `traces`, `events` and
+`scores` have a `properties` column, read one name at a time: the name is a bound value, never a
+name of the SQL, and the bare map is refused (`select *` leaves it out). The compiler stays pure:
+the caller gives the project's indexed and detected names (`compileRql(text, { properties })`), and
+a name that is not indexed is refused with code `property_not_indexed`, the name and the fix "index
+it in project settings". A standard property that is a column of every trace (user, session,
+environment, model, service) is refused as `property_is_column`, with its column as the fix: one
+name for one value. `sessions` and `users` have none, as a session's traces can hold different
+values. A check of the shape alone, with no project (an alert's columns at save), gives
+`properties: "any"`; each run checks the project's names again. The metric form writes
+`properties['name']` for a property filter and group-by, and `runQuery` refuses a property of a
+query object or of a page filter that is not indexed, with the same code.
+
+**Tasks: a `tasks` list (decision `rql-tasks`, RTL-397).** `traces` and `scores` have `tasks`, the
+sorted ids of the tasks the trace ran in, read by the rule of the task scorers: the trace's own
+OTLP turn, or a turn with a step on an event of the trace, with its `workflow_id`. It is a list, not
+one `task_id`, because a trace can be a step of runs of more than one task. RQL filters it with
+`contains(tasks, 'id')`. The metric form writes `each(tasks) as task` for the group-by `task`, as it
+writes a model; the form compiler reads the same runs (`traceTasks`), so the two agree. A score whose
+trace summary is gone has no task, as it has no other trace column.
 
 **Every metric of the form is RQL (decision `metric-is-rql`).** `rate(condition)` is the share of
 rows where the condition is true, a null counting as not true, as the form's rates count it (no

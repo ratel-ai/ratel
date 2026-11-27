@@ -9,9 +9,11 @@ import {
   type GeographyQuery,
   geographyQuery,
   type MeasureId,
+  type MetricDimension,
   type MetricForm,
   type MetricQuery,
   metricQuery,
+  propertyOf,
   QUERY_VERSION,
   type Query,
   type SqlQuery,
@@ -85,6 +87,9 @@ const DIMENSION_LABELS: Readonly<Record<Dimension, string>> = {
   environment: "Environment",
   agent: "Agent",
   tool: "Tool",
+  user: "User",
+  session: "Session",
+  task: "Task",
   scorer: "Scorer",
 };
 
@@ -106,7 +111,7 @@ export function chartProblem({ chart, query }: Pick<WidgetInput, "chart" | "quer
 export interface QueryChange {
   measure?: MeasureId;
   aggregation?: Aggregation;
-  dimensions?: Dimension[];
+  dimensions?: MetricDimension[];
   filter?: TraceFilter;
   /** Null: every scorer. */
   scorerId?: string | null;
@@ -134,8 +139,11 @@ export function changeQuery(
     metric.id,
     metric.aggregations.includes(aggregation) ? aggregation : metric.aggregations[0],
     {
+      // A trace property groups a measure a trace filter applies to.
       dimensions: (change.dimensions ?? query.dimensions).filter((dimension) =>
-        metric.dimensions.includes(dimension),
+        propertyOf(dimension) === undefined
+          ? metric.dimensions.includes(dimension as Dimension)
+          : metric.filterable,
       ),
       filters: {
         ...(metric.filterable ? (filter as MetricQuery["filters"]) : {}),
@@ -312,8 +320,8 @@ export function aggregationLabel(aggregation: Aggregation): string {
   return AGGREGATION_LABELS[aggregation];
 }
 
-export function dimensionLabel(dimension: Dimension): string {
-  return DIMENSION_LABELS[dimension];
+export function dimensionLabel(dimension: MetricDimension): string {
+  return propertyOf(dimension) ?? DIMENSION_LABELS[dimension as Dimension];
 }
 
 /** The scorers a metric can read: pass or fail for the pass rate, 1 to 5 for the average. */
@@ -402,5 +410,5 @@ function metricName({
     metric && metric.aggregations.length > 1 && aggregation !== "sum"
       ? ` ${aggregation === "avg" ? "per trace" : aggregation}`
       : "";
-  return `${label}${how}${dimensions.length > 0 ? ` by ${dimensions.join(" and ")}` : ""}`;
+  return `${label}${how}${dimensions.length > 0 ? ` by ${dimensions.map((dimension) => propertyOf(dimension) ?? dimension).join(" and ")}` : ""}`;
 }

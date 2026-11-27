@@ -1,4 +1,6 @@
+import { TaskNamesProvider } from "@/components/console/dashboards/TaskNamesProvider";
 import { ExploreView } from "@/components/console/explore/ExploreView";
+import { PropertyChoicesProvider } from "@/components/console/properties/PropertyChoicesProvider";
 import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import type { TimeWindow } from "@/components/console/traces/TracesHeader";
@@ -51,7 +53,7 @@ export default async function ScopedExplorePage({
       : filtersProblem(decoded?.panels.map(({ query }) => query) ?? [], filters));
   const panels = decoded?.ok && !problem ? decoded.panels : [];
   const features = await metricFeatures(page);
-  const [results, { facets, scorers }, dashboards] = await Promise.all([
+  const [results, { facets, scorers, properties, taskNames }, dashboards] = await Promise.all([
     loadWidgets(projectId, panels, { ...range, filter: filters }, features),
     loadWidgetForm(projectId, range, features),
     loadOrFallback({
@@ -63,24 +65,29 @@ export default async function ScopedExplorePage({
   ]);
   return (
     <ScorerPickerProvider projectId={projectId} data={scorers}>
-      <ExploreView
-        projectId={projectId}
-        served={panels.map((widget, index) => ({
-          widget,
-          // One that is not complete has not been read.
-          result: parseWidget(widget, features).ok ? results[index] : undefined,
-        }))}
-        problem={problem}
-        filters={filters}
-        facets={facets}
-        dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
-        range={{ preset: range.preset, from: range.from, to: range.to }}
-        timeWindow={{
-          preset: range.preset === EXACT_RANGE ? "custom" : (range.preset as TimeWindow["preset"]),
-          ...days,
-          today: now.toISOString().slice(0, 10),
-        }}
-      />
+      <PropertyChoicesProvider projectId={projectId} choices={properties}>
+        <TaskNamesProvider names={taskNames}>
+          <ExploreView
+            projectId={projectId}
+            served={panels.map((widget, index) => ({
+              widget,
+              // One that is not complete has not been read.
+              result: parseWidget(widget, features).ok ? results[index] : undefined,
+            }))}
+            problem={problem}
+            filters={filters}
+            facets={facets}
+            dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
+            range={{ preset: range.preset, from: range.from, to: range.to }}
+            timeWindow={{
+              preset:
+                range.preset === EXACT_RANGE ? "custom" : (range.preset as TimeWindow["preset"]),
+              ...days,
+              today: now.toISOString().slice(0, 10),
+            }}
+          />
+        </TaskNamesProvider>
+      </PropertyChoicesProvider>
     </ScorerPickerProvider>
   );
 }

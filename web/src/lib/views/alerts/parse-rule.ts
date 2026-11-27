@@ -102,7 +102,8 @@ export function storedQuery(
  * one row with one number. The same check runs on the result at each evaluation.
  */
 export function sqlAlertProblem(text: string, now: Date): string | null {
-  const compiled = compileRql(text, { now });
+  // The shape alone: each run checks the project's indexed properties again.
+  const compiled = compileRql(text, { now, properties: "any" });
   if (!compiled.ok) return `${compiled.error.message} Fix: ${compiled.error.fix}`;
   const { columns, oneRow } = compiled;
   if (columns.length !== 1)

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AlertDetail } from "@/components/console/alerts/AlertDetail";
 import { AlertForm } from "@/components/console/alerts/AlertForm";
+import { PropertyChoicesProvider } from "@/components/console/properties/PropertyChoicesProvider";
 import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
@@ -28,7 +29,7 @@ export default async function AlertPage({
   const id = parseProjectUuid(ruleId);
   const rule = id ? await getAlertRule(page.projectId, id) : null;
   if (!rule) notFound();
-  const [{ scorers, form }, events] = await Promise.all([
+  const [{ scorers, properties, form }, events] = await Promise.all([
     loadAlertForm(page),
     listAlertEvents(page.projectId, rule.id),
   ]);
@@ -41,7 +42,9 @@ export default async function AlertPage({
       events={events.map((event) => ({ ...event, at: event.at.toISOString() }))}
     >
       <ScorerPickerProvider projectId={page.projectId} data={scorers}>
-        <AlertForm projectId={page.projectId} rule={rule} start={null} {...form} />
+        <PropertyChoicesProvider projectId={page.projectId} choices={properties}>
+          <AlertForm projectId={page.projectId} rule={rule} start={null} {...form} />
+        </PropertyChoicesProvider>
       </ScorerPickerProvider>
     </AlertDetail>
   );

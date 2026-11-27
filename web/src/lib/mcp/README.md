@@ -52,9 +52,10 @@ fails for an action of the page that is not in it.
 RQL (Ratel Query Language, `synthesis/rql`) answers a trace question that no query kind has. Two tools in
 `operations/monitoring/rql.ts` give it to an agent, behind the `customMonitoring` flag:
 
-- `describe_rql_schema` gives `describeRqlSchema()`: the tables (`events`, `traces`, `scores`,
-  `sessions`, `users`, `prompts`), their columns, the functions, the operators, the limits, the rules and
-  examples.
+- `describe_rql_schema` gives `describeRqlSchema(properties)`: the tables (`events`, `traces`, `scores`,
+  `sessions`, `users`, `prompts`), their columns, the functions, the operators, the limits, the rules,
+  examples, and the trace properties of the caller's project only (`properties.indexed`, which
+  `properties['name']` reads, and apart `properties.detected`).
 - `run_rql` takes `text`, an optional `rqlVersion` (default: the current one) and `since`/`until`
   (default: the last 24 hours; a window over 30 days is refused). It runs kind `sql` of the query
   object through `runQuery` with `purpose: "agent"`, the same path as `query_monitoring` (whose
@@ -62,7 +63,10 @@ RQL (Ratel Query Language, `synthesis/rql`) answers a trace question that no que
   `truncated`. The `table` view of `mcp-apps/` draws it.
 
 `query_monitoring` runs a lone query of kind `sql` too and gives its table; a panel of `queries`
-cannot be one. `describe_monitoring_schema` lists kind `sql` in its catalog.
+cannot be one. `query_monitoring`, `change_dashboard` and `change_alert` take a trace property in a
+filter (`filters.properties`) and in a metric's group-by (`{ "property": "<name>" }`). A property
+that is not indexed is refused with the reason `property_not_indexed`, its name and the fix, by
+`run_rql` and by `query_monitoring`. `describe_monitoring_schema` lists kind `sql` in its catalog.
 
 With `customMonitoring` off for the connection (`customMonitoringForCaller`: an API key's project,
 or any organization of a person) the two tools are not listed and the `table` view is not

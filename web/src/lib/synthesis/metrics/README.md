@@ -7,7 +7,7 @@ Dashboards and alerts both call it. Kind `sql` (RQL text) runs here too, through
 | File | Holds |
 |---|---|
 | `catalog.ts` | the entries: what the contract allows of each measure, how it reads and where it comes from; pure, safe for the browser, so the forms are built from it |
-| `query.ts` | `runQuery(projectId, query, scope, db)`: a query object of any kind over a window, narrowed by the filter of what it is part of (a dashboard); and the metric kind |
+| `query.ts` | `runQuery(projectId, query, scope, db)`: a query object of any kind over a window, narrowed by the filter of what it is part of (a dashboard), after it refuses a trace property of the query or of the page that the project does not index (`property_not_indexed`, with the name and the fix); and the metric kind (a group-by of a trace property reads `s.properties ->> name`; user and session read `end_user_id` and `session_id`; task reads `traceTasks`, the trace's task runs, one group per task) |
 | `steps.ts` | `loadTraceSteps`: the newest matching traces with the tools, skills, agents, MCP servers and models they went through, in order, from `otel_spans` (a skill also from its `skill_invoke` event). At most 2,000 traces per run and 200 steps per trace; the result says how many matched |
 | `flow.ts` | the flow kind: the moves between tools, skills or agents, counted in traces by step |
 | `step-flow.ts` | the step flow kind: per step, forward from the start or back from the first visit of one node. The start is each trace's first agent, or the intent its first placed turn is in (`trace_turn_topics`); a trace without one is "No agent" or "No intent". Marks a node that fails (3 visits and 20%) or is slow (the p95 over 10 s and 5 times the median step) |
