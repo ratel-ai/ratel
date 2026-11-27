@@ -139,3 +139,37 @@ test("the newest commits come first, per project", async () => {
   );
   assert.equal((await store.listCommits(PROJECT, 1, db)).length, 1);
 });
+
+test("a pushed commit carries its version and diff, and takes over a row the webhook made", async () => {
+  const version = "44444444-4444-4444-8444-444444444444";
+  const webhook = await store.recordCommit(COMMIT, db);
+  const pushed = await store.recordPushedCommit(
+    {
+      ...COMMIT,
+      pullRequest: 12,
+      sandboxVersionId: version,
+      diff: "diff --git a/x b/x\n",
+      diffTruncated: false,
+    },
+    db,
+  );
+  assert.equal(pushed.id, webhook.id);
+  const [row] = await store.listCommits(PROJECT, 10, db);
+  assert.deepEqual(
+    [row.source, row.status, row.sandboxVersionId, row.diff, row.pullRequest],
+    ["push", "building", version, "diff --git a/x b/x\n", 12],
+  );
+
+  const fresh = await store.recordPushedCommit(
+    {
+      ...COMMIT,
+      sha: "e".repeat(40),
+      sandboxVersionId: version,
+      diff: null,
+      diffTruncated: true,
+    },
+    db,
+  );
+  const second = (await store.listCommits(PROJECT, 10, db)).find((r) => r.id === fresh.id);
+  assert.deepEqual([second?.source, second?.diff, second?.diffTruncated], ["push", null, true]);
+});

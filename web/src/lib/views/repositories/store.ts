@@ -170,3 +170,41 @@ export async function listCommits(
     .orderBy(desc(repositoryCommits.receivedAt), desc(repositoryCommits.id))
     .limit(limit);
 }
+
+export type PushedCommitInput = Omit<CommitInput, "status" | "reason"> & {
+  sandboxVersionId: string;
+  diff: string | null;
+  diffTruncated: boolean;
+};
+
+/**
+ * Records a commit `ratel push` built in the customer's CI, with its version and diff. A row the
+ * webhook already made for the same commit becomes this one: the push is what built it.
+ */
+export async function recordPushedCommit(
+  input: PushedCommitInput,
+  db: RepositoryDb = getDb(),
+): Promise<{ id: string }> {
+  const pushed = {
+    sandboxVersionId: input.sandboxVersionId,
+    diff: input.diff,
+    diffTruncated: input.diffTruncated,
+    source: "push",
+    status: "building",
+    reason: null,
+  };
+  const [row] = await db
+    .insert(repositoryCommits)
+    .values({ ...input, ...pushed })
+    .onConflictDoUpdate({
+      target: [repositoryCommits.projectId, repositoryCommits.repositoryId, repositoryCommits.sha],
+      set: {
+        ...pushed,
+        pullRequest: sql`coalesce(excluded.pull_request, ${repositoryCommits.pullRequest})`,
+        baseSha: sql`coalesce(excluded.base_sha, ${repositoryCommits.baseSha})`,
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ id: repositoryCommits.id });
+  return { id: row.id };
+}

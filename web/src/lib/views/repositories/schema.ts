@@ -49,8 +49,11 @@ export const projectRepositories = pgTable(
 );
 
 /**
- * A commit that makes a version: `queued` until the builder takes it, then `building`, `ready` or
- * `failed`. A pull request from a fork is never recorded. One row per
+ * A commit that makes a version. It comes from GitHub's webhook (`source` `webhook`: `queued` until
+ * the builder takes it, then `building`, `ready` or `failed`) or from `ratel push` in the customer's
+ * CI (`push`: built there, `building` while Ratel prepares its version). A push brings the diff
+ * the selection reads; over the cap it is not kept (`diff_truncated`). A pull request from a fork
+ * is never recorded. One row per
  * commit: the same code is one version, whether a push or a pull request named it.
  * `sandbox_version_id` is the version it built. No foreign key yet: `sandbox_versions` lands with
  * the eval core (RP-308), and the key comes with it.
@@ -73,6 +76,9 @@ export const repositoryCommits = pgTable(
     status: text("status").notNull(),
     reason: text("reason"),
     sandboxVersionId: uuid("sandbox_version_id"),
+    source: text("source").notNull().default("webhook"),
+    diff: text("diff"),
+    diffTruncated: boolean("diff_truncated").notNull().default(false),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -4,7 +4,13 @@ import {
 } from "@/lib/readings/decisions/engine";
 import { decisionClient } from "@/lib/readings/decisions/openai";
 import { type DiffFile, parseUnifiedDiff } from "./diff";
-import { type Resolution, type Selection, type SelectionInput, selectEvals } from "./select";
+import {
+  everyEval,
+  type Resolution,
+  type Selection,
+  type SelectionInput,
+  selectEvals,
+} from "./select";
 
 /**
  * The second pass of the change → evals rule: the files the rule leaves unmapped (code that names
@@ -41,6 +47,23 @@ export async function selectEvalsWithModel(
     if (resolution) resolved[path] = resolution;
   }
   return selectEvals({ ...input, diff: files, resolved });
+}
+
+/**
+ * The selection for a recorded commit: its stored diff, read by the rule and the model. A commit
+ * whose diff is not known (none was sent) or was too large to keep runs every eval.
+ */
+export function selectForCommit(
+  commit: { diff: string | null; diffTruncated: boolean },
+  rest: Omit<SelectionInput, "diff">,
+  classify: ChangeClassifier | null,
+): Promise<Selection> {
+  if (commit.diff === null) {
+    return Promise.resolve(
+      everyEval(rest, [commit.diffTruncated ? "the diff is too large" : "the change is not known"]),
+    );
+  }
+  return selectEvalsWithModel({ ...rest, diff: commit.diff }, classify);
 }
 
 /** One question as the decision engine takes it (`readings/decisions/openai.ts`). */

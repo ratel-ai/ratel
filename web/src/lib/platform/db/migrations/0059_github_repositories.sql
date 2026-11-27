@@ -26,6 +26,9 @@ CREATE TABLE "repository_commits" (
 	"status" text NOT NULL,
 	"reason" text,
 	"sandbox_version_id" uuid,
+	"source" text DEFAULT 'webhook' NOT NULL,
+	"diff" text,
+	"diff_truncated" boolean DEFAULT false NOT NULL,
 	"received_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );

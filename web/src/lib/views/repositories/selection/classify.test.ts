@@ -5,6 +5,7 @@ import {
   decisionClassifier,
   engineClassifier,
   selectEvalsWithModel,
+  selectForCommit,
 } from "./classify";
 import type { EvalTarget } from "./select";
 import { fixture } from "./test-support";
@@ -163,4 +164,19 @@ test("with one, a file goes to its Decisions API as one choice question", async 
     confidence: 0.93,
   });
   assert.deepEqual(urls, ["https://decisions.test/v1/decisions"]);
+});
+
+test("a commit with no diff, or one too large to keep, runs every eval", async () => {
+  const rest = { tools: TOOLS, evals: EVALS, traces: [] };
+  const unknown = await selectForCommit({ diff: null, diffTruncated: false }, rest, null);
+  assert.equal(unknown.mode, "all");
+  assert.match(unknown.reason, /the change is not known/);
+  const large = await selectForCommit({ diff: null, diffTruncated: true }, rest, null);
+  assert.match(large.reason, /the diff is too large/);
+  const known = await selectForCommit(
+    { diff: fixture("docs-only.diff"), diffTruncated: false },
+    rest,
+    null,
+  );
+  assert.equal(known.mode, "none");
 });

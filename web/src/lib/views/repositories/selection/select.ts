@@ -297,15 +297,7 @@ export function selectEvals(input: SelectionInput): Selection {
       ...unmapped.map((path) => `${path} changed and no eval maps to it`),
       ...orphanPrompts.map((prompt) => `the prompt ${prompt} changed and no eval names it`),
     ];
-    return {
-      mode: input.evals.length > 0 ? "all" : "none",
-      reason: `Every eval runs: ${why.join("; ")}.`,
-      change,
-      evals: input.evals.map((e) => ({ id: e.id, name: e.name, reasons: why, rows: "all" })),
-      skipped: [],
-      untestedTools: [],
-      traces: input.traces.slice(0, limit).map((t) => t.id),
-    };
+    return everyEval(input, why, change);
   }
 
   const evals: SelectedEval[] = [];
@@ -371,4 +363,31 @@ function reasonOf(evals: SelectedEval[], change: ChangeSummary, untested: string
   }
   if (gaps.length > 0) return `No eval runs: ${gaps.join("; ")}.`;
   return "No eval runs: the change touches nothing the agent runs.";
+}
+
+const NO_CHANGE: ChangeSummary = {
+  tools: [],
+  prompts: [],
+  global: [],
+  unmapped: [],
+  ignored: [],
+  outside: [],
+  classified: [],
+};
+
+/** Every eval and row, and the most recent traces, with why. */
+export function everyEval(
+  input: Pick<SelectionInput, "evals" | "traces" | "traceLimit">,
+  why: string[],
+  change: ChangeSummary = NO_CHANGE,
+): Selection {
+  return {
+    mode: input.evals.length > 0 ? "all" : "none",
+    reason: `Every eval runs: ${why.join("; ")}.`,
+    change,
+    evals: input.evals.map((e) => ({ id: e.id, name: e.name, reasons: why, rows: "all" })),
+    skipped: [],
+    untestedTools: [],
+    traces: input.traces.slice(0, input.traceLimit ?? 20).map((t) => t.id),
+  };
 }

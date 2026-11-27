@@ -1,6 +1,6 @@
 # Connect a GitHub repository (design note, RTL-408)
 
-**Status:** proposed. Marcello agreed the plan and answered questions 2–6 (2026-11-27). The build path (question 1) is still open. It becomes an ADR once that is settled.
+**Status:** agreed with Marcello (2026-11-27). It becomes an ADR when the first phase ships.
 **Flag:** `githubRepositories` (`FF_GITHUB_REPOSITORIES`). It is off by default and gates every surface below.
 **Comes after:** the eval core (RP-308: sandboxes, `ratel push`, datasets, evals, runs, baseline), which is still in open PRs (#487 → #509 → #518–#522).
 
@@ -53,7 +53,7 @@ Permissions:
 - One commit is one version, whether a push or a pull request named it.
 - Same-repository PRs make versions by default. Later, a link will say which branches run and how automatically (on every push, or on request).
 
-**Repositories per project:** several (decided 2026-11-27). An agent, its tools and its prompts may each live in their own repository. Each link has its own `configPath`, and a monorepo can link the same repository from several projects. How a commit to a repository that holds no `ratel.yaml` (a tools library) rebuilds the agent is an open question.
+**Repositories per project:** several (decided 2026-11-27). In phase 1 the first push from CI links its repository, because the project key authenticates it. An agent, its tools and its prompts may each live in their own repository. Each link has its own `configPath`, and a monorepo can link the same repository from several projects. How a commit to a repository that holds no `ratel.yaml` (a tools library) rebuilds the agent is an open question.
 
 ## 2. How the agent is built from source
 
@@ -63,7 +63,61 @@ Permissions:
 | B. GitHub Actions runs `ratel push` | It works today, with no new infrastructure. Build secrets stay in the customer's CI. GitHub already keeps secrets from fork PRs. | It needs a workflow file and a Ratel key in their repository secrets. It is not "connect and go". |
 | C. Pull from a registry (GHCR, ECR) | No build at all. | Registry credentials for each project, and the customer must already publish images. |
 
-**Recommended:** A as the default, with B kept and documented as the escape hatch for builds that need secrets. C comes later, if someone asks for it.
+**Decided (2026-11-27):** B first, as the bridge, then A as the product. C comes later, if someone asks for it. B stays afterwards as the escape hatch for builds that need secrets.
+
+### Phase 1: B, `ratel push` from GitHub Actions
+
+B needs no GitHub App, no webhook and no builder. The CI already has the checkout, so it sends what changed itself:
+
+```yaml
+# .github/workflows/ratel.yml in the customer's repository (proposed; `--ci` is new in the CLI)
+name: Ratel
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the base commit, for the diff
+      # install the ratel CLI (ratel-sdk)
+      - run: ratel push --ci
+        env:
+          RATEL_API_KEY: ${{ secrets.RATEL_API_KEY }}
+```
+
+`ratel push --ci` reads the GitHub Actions environment. It adds these to today's `git: { commit, dirty }`:
+
+- **Repository:** `GITHUB_REPOSITORY_ID` and `GITHUB_REPOSITORY`.
+- **Branch:** `GITHUB_HEAD_REF` for a pull request, `GITHUB_REF_NAME` for a push.
+- **Pull request:** from the event payload, the PR number, its head commit (not `GITHUB_SHA`, which is the merge commit) and its base commit.
+- **Push:** the `before` commit from the event payload.
+- **The diff:** `git diff <base>...<head>`, up to 1 MiB.
+
+On the platform, the push API calls `recordPush` (`web/src/lib/views/repositories/push.ts`) once the version exists, behind the flag, and never fails the push. The commit row (`source` `push`) holds the version and the diff, and the selection reads that diff. A diff over the cap, or none, runs every eval.
+
+Forks stay out on their own: GitHub gives no secrets to a fork's workflow, so it cannot push. Branches and how automatic it is are the customer's workflow for now (its `on:`).
+
+**Estimate:** about 2–3 days. That covers the CLI flag (ratel-sdk), the push API calling `recordPush` (once the eval core is on main), the workflow template in the docs, and the selection run on a pushed version (RTL-413).
+
+### Phase 2: A, our builder
+
+**Estimate:** about two weeks for one person, on top of #487's VM port. The work is:
+
+- the GitHub App (install, the JWT and installation tokens);
+- fetching the tarball and getting it into the build VM;
+- the build VM's lifecycle, limits and metering;
+- build logs.
+
+The hard part is the long tail:
+
+- **Speed:** a cold `docker build` without a layer cache. The live run already measured about 3 minutes for a push, prepare and smoke check, before any build.
+- **Private dependencies:** private registries and git submodules.
+- **Monorepos:** a build context bigger than the agent's folder.
+- **Architecture:** the VM's architecture against the customer's images.
 
 The builder for A:
 
@@ -144,6 +198,7 @@ The heuristic stays first because it is free, deterministic and explains itself.
 - **Route `POST /api/v1/github/webhook`:** verifies the delivery, reads push and pull_request, decides per project, and records the commit only for projects with the flag on.
 - **`selectEvals`:** the first selection rule, with fixture diffs, scoped to the agent's folder.
 - **`selectEvalsWithModel`:** the decision engine reads the files the rule leaves unmapped.
+- **`recordPush`** (phase 1): records a commit `ratel push --ci` built, with its version and its diff (`source`, `diff` and `diff_truncated` on `repository_commits`). `selectForCommit` runs every eval when the diff is unknown or too large.
 
 **Not in it yet:**
 
@@ -161,10 +216,10 @@ The heuristic stays first because it is free, deterministic and explains itself.
 - **Unmapped changes:** running everything is acceptable. A change outside the agent (the product website) runs nothing: the agent's folder and the decision model handle that.
 - **Forks:** pull requests from forks are ignored for now.
 - **Selection:** the heuristic first, then the decision engine for what it cannot map.
+- **Build path:** B first (GitHub Actions running `ratel push --ci`, no App needed), then A (our builder) as the product.
 
 ## Open questions
 
-1. **Build path:** is A (our builder) the default, or do we ship B (Actions + `ratel push`) first because it needs no new infrastructure?
-2. **Repositories without a `ratel.yaml`:** when a tools or prompts repository changes, which agent version does it rebuild, and against which commit of the agent's repository?
-3. **Migration numbering:** the stack's 0059–0066 collide with this PR's 0059. Whichever merges second regenerates. The `sandbox_version_id` foreign key comes with that.
-4. **Deploys:** none to staging or prod before Berca's migration ends (2026-11-27 or later).
+1. **Repositories without a `ratel.yaml`:** when a tools or prompts repository changes, which agent version does it rebuild, and against which commit of the agent's repository?
+2. **Migration numbering:** the stack's 0059–0066 collide with this PR's 0059. Whichever merges second regenerates. The `sandbox_version_id` foreign key comes with that.
+3. **Deploys:** none to staging or prod before Berca's migration ends (2026-11-27 or later).

@@ -1,5 +1,5 @@
 {
-  "id": "47b31b48-fbc6-49cb-bcdb-906c615e22e9",
+  "id": "eceb6e97-1e4a-4e5a-9d7d-b6a06a8f6e34",
   "prevId": "2fb0b4d5-d86c-4076-af6c-77daa891f48f",
   "version": "7",
   "dialect": "postgresql",
@@ -12400,6 +12400,26 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'webhook'"
+        },
+        "diff": {
+          "name": "diff",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diff_truncated": {
+          "name": "diff_truncated",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "received_at": {
           "name": "received_at",
