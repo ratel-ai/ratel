@@ -75,7 +75,7 @@ export async function startEvalRun(
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
-    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+    return refused("sandboxes_off", "Sandboxes are not on for this project.");
   }
   const definition = (await deps.evals.list(projectId)).find(
     (one) => one.name === wanted || one.id === wanted,
@@ -172,7 +172,7 @@ export async function startEachEvalRun(
 ): Promise<{ ok: true; runs: EachRunPart[] } | Refusal> {
   const { projectId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
-    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+    return refused("sandboxes_off", "Sandboxes are not on for this project.");
   }
   const all = await deps.evals.list(projectId);
   const chosen = chooseEach(all, names, changes.sandbox);

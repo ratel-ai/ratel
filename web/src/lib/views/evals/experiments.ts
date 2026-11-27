@@ -129,7 +129,7 @@ export async function startExperiment(
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
-    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+    return refused("sandboxes_off", "Sandboxes are not on for this project.");
   }
   const [allEvals, allCases] = await Promise.all([
     deps.evals.list(projectId),
