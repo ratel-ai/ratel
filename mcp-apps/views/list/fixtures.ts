@@ -1,4 +1,8 @@
 import {
+  alertDestinations,
+  alertDetail,
+  alerts,
+  dashboards,
   declaredTools,
   declaredToolsResult,
   fixDetail,
@@ -9,15 +13,19 @@ import {
   intentDetail,
   intents,
   invokedTools,
+  locationAttributes,
   logs,
   projectOverview,
   projects,
+  scorerDetail,
+  scorers,
   sdkEventDetail,
   sdkEvents,
   sdkEventsResult,
   shipments,
   skillDetail,
   skills,
+  slackChannels,
   spanGroups,
   taskDetail,
   tasks,
@@ -363,6 +371,92 @@ const fixtures: ViewFixtures = {
       result: okResult(declaredToolsResult(declaredTools(40, 5)), cut),
     },
     { tool: "list_declared_tools", input, result: okResult(declaredToolsResult([])) },
+  ),
+  ...scenarios(
+    "list_scorers",
+    {
+      tool: "list_scorers",
+      input,
+      result: okResult({ count: 6, scorers: scorers(6), href: "/project/p1/scorers" }),
+      calls: { get_scorer: okResult(scorerDetail(scorers(6)[0])) },
+    },
+    {
+      tool: "list_scorers",
+      input,
+      result: okResult({ count: 40, scorers: scorers(25), href: "/project/p1/scorers" }, cut),
+    },
+    {
+      tool: "list_scorers",
+      input,
+      result: okResult({ count: 0, scorers: [], href: "/project/p1/scorers" }),
+    },
+  ),
+  ...scenarios(
+    "list_alerts",
+    {
+      tool: "list_alerts",
+      input,
+      result: okResult({ count: 5, alerting: 1, alerts: alerts(5), href: "/project/p1/alerts" }),
+      calls: { get_alert: okResult(alertDetail(alerts(1)[0])) },
+    },
+    {
+      tool: "list_alerts",
+      input,
+      result: okResult({ count: 40, alerting: 5, alerts: alerts(25) }, cut),
+    },
+    { tool: "list_alerts", input, result: okResult({ count: 0, alerting: 0, alerts: [] }) },
+  ),
+  ...scenarios(
+    "list_alert_destinations",
+    {
+      tool: "list_alert_destinations",
+      input,
+      result: okResult({ count: 3, destinations: alertDestinations(3) }),
+    },
+    {
+      tool: "list_alert_destinations",
+      input,
+      result: okResult({ count: 20, destinations: alertDestinations(20) }),
+    },
+    { tool: "list_alert_destinations", input, result: okResult({ count: 0, destinations: [] }) },
+  ),
+  ...scenarios(
+    "list_slack_channels",
+    {
+      tool: "list_slack_channels",
+      input,
+      result: okResult({ count: 4, channels: slackChannels(4) }),
+    },
+    {
+      tool: "list_slack_channels",
+      input,
+      result: okResult({ count: 40, channels: slackChannels(25) }, cut),
+    },
+    { tool: "list_slack_channels", input, result: okResult({ count: 0, channels: [] }) },
+  ),
+  ...scenarios(
+    "get_location_attributes",
+    { tool: "get_location_attributes", input, result: okResult(locationAttributes()) },
+    {
+      tool: "get_location_attributes",
+      input,
+      result: okResult(locationAttributes("app.request.", 4)),
+    },
+    { tool: "get_location_attributes", input, result: okResult({ attributes: {}, rows: [] }) },
+  ),
+  ...scenarios(
+    "list_dashboards",
+    {
+      tool: "list_dashboards",
+      input,
+      result: okResult({ count: 4, dashboards: dashboards(4), href: "/project/p1/dashboards" }),
+    },
+    {
+      tool: "list_dashboards",
+      input,
+      result: okResult({ count: 40, dashboards: dashboards(25) }, cut),
+    },
+    { tool: "list_dashboards", input, result: okResult({ count: 0, dashboards: [] }) },
   ),
 };
 

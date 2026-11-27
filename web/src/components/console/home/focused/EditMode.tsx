@@ -3,13 +3,15 @@
 import { Button, IconButton } from "@ratel/design-system/button";
 import { Dialog, DialogContent } from "@ratel/design-system/dialog";
 import { Check, History, Pencil, Plus, Undo2 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef } from "react";
-import { HISTORY_ID, keyLeavesEditMode } from "@/components/console/home/focused/edit-mode";
+import { type ReactNode, useCallback, useRef } from "react";
+import { EditModeBar, focusSoon, InertHeader } from "@/components/console/grid/EditBar";
+import { DashboardWidgetPicker } from "@/components/console/home/focused/DashboardWidgetPicker";
+import { HISTORY_ID } from "@/components/console/home/focused/edit-mode";
 import { useOverviewLayout } from "@/components/console/home/focused/OverviewLayout";
 import { offeredTo, WIDGETS } from "@/components/console/home/focused/widgets";
 import {
   defaultLayout,
-  type OverviewWidgetId,
+  type OverviewItemId,
   sameLayout,
 } from "@/lib/views/overview-layout/domain/layout";
 
@@ -40,11 +42,7 @@ export function EditButton({ id = EDIT_ID }: { id?: string }) {
 /** The page's header, out of reach while the edit bar is over it. */
 export function HeaderInEditMode({ children }: { children: ReactNode }) {
   const { editing } = useOverviewLayout();
-  return (
-    <div inert={editing} className="inert:opacity-40">
-      {children}
-    </div>
-  );
+  return <InertHeader editing={editing}>{children}</InertHeader>;
 }
 
 /** Undo, History, Reset, Add widget and Done, over the header. It takes no room, so nothing moves when it comes, and it stays in reach when the page scrolls. */
@@ -55,65 +53,57 @@ export function EditBar() {
     setEditing(false);
     focusSoon(EDIT_ID);
   }, [setEditing]);
-  useEscape(editing, leave);
   return (
-    <div className="sticky top-[calc(var(--support-bar,0px)+3rem)] z-sticky h-0 md:top-[var(--support-bar,0px)]">
-      {editing ? (
-        <section
-          aria-label="Edit Overview"
-          data-overview-edit-bar=""
-          className="flex h-13 items-center justify-end gap-2 border-b border-line-strong bg-app px-6 max-sm:gap-1 max-sm:px-4 lg:px-8"
-        >
-          <p className="min-w-0 flex-1 truncate text-ui text-fg-muted max-sm:hidden">
-            Edit Overview. <span className="max-lg:hidden">Only you see this layout.</span>
-          </p>
-          <IconButton
-            label={undoable ? `Undo: ${undoable}` : "Undo"}
-            icon={<Undo2 aria-hidden />}
-            // A change that is on its way can be taken back too.
-            disabled={undoable === null && !saving}
-            focusableWhenDisabled
-            onClick={() => undo()}
-          />
-          <IconButton
-            id={HISTORY_ID}
-            label="History"
-            icon={<History aria-hidden />}
-            aria-haspopup="dialog"
-            onClick={() => setBrowsing(true)}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={sameLayout(layout, defaultLayout(offeredTo(layout)))}
-            focusableWhenDisabled
-            onClick={() => change({ kind: "reset" }, "The default layout is back")}
-          >
-            Reset
-          </Button>
-          <Button
-            id={ADD_ID}
-            aria-label="Add widget"
-            aria-haspopup="dialog"
-            size="sm"
-            onClick={() => setAdding(true)}
-          >
-            <Plus aria-hidden />
-            <span className="max-sm:hidden">Add widget</span>
-          </Button>
-          <Button id={DONE_ID} variant="primary" size="sm" onClick={leave}>
-            Done
-          </Button>
-        </section>
-      ) : null}
-    </div>
+    <EditModeBar
+      editing={editing}
+      label="Edit Overview"
+      note="Only you see this layout."
+      doneId={DONE_ID}
+      onLeave={leave}
+    >
+      <IconButton
+        label={undoable ? `Undo: ${undoable}` : "Undo"}
+        icon={<Undo2 aria-hidden />}
+        // A change that is on its way can be taken back too.
+        disabled={undoable === null && !saving}
+        focusableWhenDisabled
+        onClick={() => undo()}
+      />
+      <IconButton
+        id={HISTORY_ID}
+        label="History"
+        icon={<History aria-hidden />}
+        aria-haspopup="dialog"
+        onClick={() => setBrowsing(true)}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={sameLayout(layout, defaultLayout(offeredTo(layout)))}
+        focusableWhenDisabled
+        onClick={() => change({ kind: "reset" }, "The default layout is back")}
+      >
+        Reset
+      </Button>
+      <Button
+        id={ADD_ID}
+        aria-label="Add widget"
+        aria-haspopup="dialog"
+        size="sm"
+        onClick={() => setAdding(true)}
+      >
+        <Plus aria-hidden />
+        <span className="max-sm:hidden">Add widget</span>
+      </Button>
+    </EditModeBar>
   );
 }
 
-/** Every widget the Overview offers: the ones on the page, and the ones to add. */
+/** Every widget the Overview offers, and those of the dashboards: the ones on the page, and the ones to add. */
 export function AddWidgetDialog() {
-  const { adding, setAdding, setAdded, layout, change, said } = useOverviewLayout();
-  const added = useRef<OverviewWidgetId[]>([]);
+  const { adding, setAdding, setAdded, layout, change, said, readDashboardWidgets } =
+    useOverviewLayout();
+  const added = useRef<OverviewItemId[]>([]);
   const removed = new Set(layout.filter((widget) => widget.removed).map(({ id }) => id));
   return (
     <Dialog
@@ -126,7 +116,10 @@ export function AddWidgetDialog() {
         added.current = [];
       }}
     >
-      <DialogContent title="Add widget" description="Added widgets go back to their last place.">
+      <DialogContent
+        title="Add widget"
+        description="Added widgets go back to their last place. A dashboard widget goes to the bottom."
+      >
         <ul className="divide-y divide-line">
           {offeredTo(layout).map(({ id }) => {
             const { title, description, icon: Icon } = WIDGETS[id];
@@ -156,49 +149,19 @@ export function AddWidgetDialog() {
             );
           })}
         </ul>
+        {readDashboardWidgets ? (
+          <DashboardWidgetPicker
+            read={readDashboardWidgets}
+            onAdd={(id, source) => {
+              added.current.push(id);
+              change({ kind: "add", widget: id, source }, `${source.title} added`);
+            }}
+          />
+        ) : null}
         <span className="sr-only" aria-live="polite">
           {said}
         </span>
       </DialogContent>
     </Dialog>
   );
-}
-
-/** After React has drawn the change that brings the element. */
-export function focusSoon(id: string) {
-  requestAnimationFrame(() => document.getElementById(id)?.focus());
-}
-
-/**
- * Escape in edit mode. It looks before anything else reacts (the capture phase of the window), so
- * a layer that the same key closes still counts as open: to leave then takes a second Escape.
- */
-function useEscape(editing: boolean, leave: () => void) {
-  useEffect(() => {
-    if (!editing) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      const moment = {
-        key: event.key,
-        continued: event.repeat || event.isComposing,
-        layerOpen: openLayer(),
-        arranging: document.querySelector(ARRANGING) !== null,
-        fieldFocused: document.activeElement?.closest(`${FIELD}, ${TOASTS}`) != null,
-      };
-      if (keyLeavesEditMode(moment)) leave();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [editing, leave]);
-}
-
-const LAYERS = ["dialog", "alertdialog", "menu", "listbox"]
-  .map((role) => `[role="${role}"]:not([data-closed])`)
-  .join(", ");
-/** A toast has the role of a dialog, and it blocks nothing. */
-const TOASTS = "[role='region'][aria-label='Notifications']";
-const ARRANGING = ".react-draggable-dragging, .react-grid-item.resizing";
-const FIELD = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
-
-function openLayer(): boolean {
-  return [...document.querySelectorAll(LAYERS)].some((layer) => !layer.closest(TOASTS));
 }

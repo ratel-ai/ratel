@@ -466,6 +466,40 @@ test("refresh skips spans newer than the visibility lag until they settle", asyn
   await client.close();
 });
 
+test("refresh keeps the first session and end user of a trace's spans in canonical order", async () => {
+  const { client, db } = await setup();
+  await insertOtelSpans(
+    PROJECT_ID,
+    [
+      // The root has the session only. A later child has another session and the user.
+      span({ id: uuid(100), traceId: traceId(100), spanId: spanId(100), sessionId: "conv-1" }),
+      span({
+        id: uuid(101),
+        traceId: traceId(100),
+        spanId: spanId(101),
+        parentSpanId: spanId(100),
+        startedAt: at("10:00:00.500"),
+        sessionId: "conv-2",
+        endUserId: "user-1",
+      }),
+      // No span has either.
+      span({ id: uuid(110), traceId: traceId(110), spanId: spanId(110) }),
+    ],
+    db,
+  );
+
+  await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
+
+  const { rows } = await client.query(
+    "select trace_id, session_id, end_user_id from otel_trace_summaries order by trace_id",
+  );
+  assert.deepEqual(rows, [
+    { trace_id: traceId(100), session_id: "conv-1", end_user_id: "user-1" },
+    { trace_id: traceId(110), session_id: null, end_user_id: null },
+  ]);
+  await client.close();
+});
+
 test("refresh releases its advisory lock and yields to a contending tick", async () => {
   const { client, db } = await setup();
   await insertOtelSpans(

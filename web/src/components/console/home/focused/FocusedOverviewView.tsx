@@ -8,6 +8,7 @@ import {
   HeaderInEditMode,
 } from "@/components/console/home/focused/EditMode";
 import { HistoryDialog } from "@/components/console/home/focused/HistoryDialog";
+import { itemBodies, itemFrames } from "@/components/console/home/focused/item-bodies";
 import { OverviewGrid } from "@/components/console/home/focused/OverviewGrid";
 import {
   type LayoutActions,
@@ -78,7 +79,14 @@ export function FocusedOverviewView({
         </HeaderInEditMode>
         <PageBody>
           {project.isDemo ? <DemoNotice projectId={project.id} projectName={project.name} /> : null}
-          {hasTelemetry ? <OverviewGrid bodies={widgetBodies(data, linked)} /> : setup}
+          {hasTelemetry ? (
+            <OverviewGrid
+              bodies={{ ...widgetBodies(data, linked), ...itemBodies(data) }}
+              items={itemFrames(data)}
+            />
+          ) : (
+            setup
+          )}
         </PageBody>
         {contextPanel}
         <AddWidgetDialog />

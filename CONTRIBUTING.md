@@ -30,6 +30,14 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every PR through the si
 
 For features that aren't frontend-only, implement on the backend first (with tests), then surface in the console.
 
+## Web and MCP parity
+
+What a person can do in the console, an agent can do through MCP, and it sees the same views.
+
+- **Build:** each console feature has MCP operations (`web/src/lib/mcp/operations/`) that call the same actions as the console's server actions, behind the same flag and access check. Its main views have MCP App views (`mcp-apps/views/`). The parity test (`web/src/lib/mcp/operations/monitoring/parity.test.ts`, with its map in `parity.ts` beside it) covers the feature's module: it fails for a console action without an operation.
+- **Proof:** a PR shows the MCP path next to the web path: a recording or transcript of an agent using the operations, and a screenshot of each MCP App view.
+- **Review:** a missing operation, a missing view, a module the parity test does not cover, or a proof without the MCP path is a finding.
+
 ## SDKs
 
 The SDKs (Rust core, TypeScript and Python SDKs, adapters, rankers, telemetry, protocol and examples) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk). Contribute to them there.

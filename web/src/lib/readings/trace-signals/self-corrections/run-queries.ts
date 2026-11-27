@@ -236,7 +236,15 @@ export async function loadPlacements(
   return { workflows, topics };
 }
 
-/** The user's words that opened each trace: its first model call's captured prompt, by trace id. */
+/**
+ * The user's words that opened each trace: its first model call's captured
+ * prompt, by trace id. A prompt is the last user message of the call's input,
+ * so a run the agent started on its own (a photo arriving, a background
+ * step) inherits the words of an older message. When the call's captured
+ * input shows it did not end with a user message, the trace has no ask of
+ * its own and is left out: on one WhatsApp agent 65% of `asked_again` turns
+ * were such runs. Traces without captured input keep their prompt.
+ */
 export async function loadAsks(
   projectId: string,
   traceIds: readonly string[],
@@ -244,17 +252,35 @@ export async function loadAsks(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   for (const ids of chunks([...new Set(traceIds)].sort())) {
-    const rows = await db.execute<{ trace_id: string; prompt: string }>(sql`
-      select distinct on (e.trace_id) e.trace_id, e.payload ->> 'prompt' as prompt
+    // The stored messages are the call's input followed by the model's reply,
+    // so the opener is the message at `input_message_count - 1`.
+    const rows = await db.execute<{
+      trace_id: string;
+      prompt: string;
+      opener_role: string | null;
+    }>(sql`
+      select distinct on (e.trace_id) e.trace_id, e.payload ->> 'prompt' as prompt,
+        (select m.payload -> 'messages' -> (nullif(coalesce((m.payload ->> 'input_message_count')::int, jsonb_array_length(m.payload -> 'messages')), 0) - 1) ->> 'role'
+           from events m
+          where m.project_id = ${projectId} and m.trace_id = e.trace_id and jsonb_typeof(m.payload -> 'messages') = 'array'
+          order by m.occurred_at, m.id
+          limit 1) as opener_role
       from trace_events e
       where e.project_id = ${projectId}
         and e.type = ${OTLP_MODEL_CALL_TYPE}
         and e.trace_id in (${idList(ids)})
         and jsonb_typeof(e.payload -> 'prompt') = 'string'
       order by e.trace_id, coalesce(e.occurred_at, e.received_at), e.id`);
-    for (const row of rows.rows) if (row.prompt) out.set(row.trace_id, row.prompt);
+    for (const row of rows.rows) {
+      if (row.prompt && opensTurn(row.opener_role)) out.set(row.trace_id, row.prompt);
+    }
   }
   return out;
+}
+
+/** Whether a call's last input message, by role, is a person opening the turn; unknown counts as yes. */
+export function opensTurn(openerRole: string | null | undefined): boolean {
+  return openerRole === null || openerRole === undefined || openerRole === "user";
 }
 
 /** Everything one page of read turns needs beyond its steps. */

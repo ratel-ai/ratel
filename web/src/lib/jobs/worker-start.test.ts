@@ -375,3 +375,19 @@ test("the lanes of the worker share no job kind", () => {
   assert.deepEqual(LANE_KINDS.builds, { only: [SANDBOX_IMAGE_BUILD_JOB] });
   assert.deepEqual(LANE_KINDS.analysis, { except: LONG_JOB_KINDS });
 });
+
+test("the worker runs the registered lanes; a persist-only process runs only them", async () => {
+  const lane = { name: "ingest", concurrency: 2, step: async () => ({ done: 0, failed: 0 }) };
+  const worker = harness({ lanes: () => [lane] });
+  startBackgroundWorker(worker.deps);
+  assert.deepEqual(worker.wired.loop?.extraLanes, [lane]);
+  assert.notEqual(worker.wired.loop?.analysis, false);
+  worker.finishStep();
+  await stopBackgroundWorker();
+
+  const persist = harness({ lanes: () => [lane] });
+  startBackgroundWorker(persist.deps, { lanesOnly: true });
+  assert.deepEqual(persist.wired.loop?.extraLanes, [lane]);
+  assert.equal(persist.wired.loop?.analysis, false);
+  persist.finishStep();
+});

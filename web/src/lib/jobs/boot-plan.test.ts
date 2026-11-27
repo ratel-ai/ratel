@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveConfig } from "@/config";
-import { bootPlan } from "./boot-plan";
+import { bootPlan, skippedMigrationMessage } from "./boot-plan";
 
 /** The settings `env` resolves to (`web/src/config.ts`). */
 const config = (env: Record<string, string> = {}) => resolveConfig({ env });
@@ -57,4 +57,13 @@ test("the migration flag still decides for the processes that may migrate", () =
   );
   assert.equal(bootPlan(config({ ...DB, RATEL_COMPOSITION: "cloud" })).migrate, false);
   assert.equal(bootPlan(config({})).migrate, false, "never without a database");
+});
+
+test("a process that never migrates says so; the worker's words are the ones CI greps for", () => {
+  // .github/workflows/ci.yml (platform-compose) greps the worker's log for this exact phrase.
+  assert.match(skippedMigrationMessage("worker") ?? "", /the worker never migrates/);
+  assert.match(skippedMigrationMessage("ingest") ?? "", /the ingest process never migrates/);
+  assert.match(skippedMigrationMessage("persist") ?? "", /the persist process never migrates/);
+  assert.equal(skippedMigrationMessage("all"), null);
+  assert.equal(skippedMigrationMessage("api"), null);
 });

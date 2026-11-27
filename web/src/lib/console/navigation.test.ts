@@ -7,11 +7,13 @@ import {
   consoleNav,
   entryHref,
   findProject,
+  flattenNav,
   ONBOARDING_ROUTE,
   organizationRoot,
   organizationSlugFromPath,
   projectIdFromPath,
   projectRoot,
+  railParts,
   shellOrganization,
   shortcutHref,
   switchProjectHref,
@@ -55,6 +57,7 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "evals", href: `/project/${P1}/evals` },
       { id: "sandbox", href: `/project/${P1}/sandbox` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
+      { id: "mcp-setup", href: `/project/${P1}/mcp-setup` },
       { id: "settings", href: `/project/${P1}/settings` },
     ],
   );
@@ -166,6 +169,7 @@ test("outside a project, the organization rail lists its projects page", () => {
       "evals",
       "sandbox",
       "catalog",
+      "mcp-setup",
       "settings",
     ],
   );
@@ -182,7 +186,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 12);
+  assert.equal(withProject.length, 13);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -209,6 +213,7 @@ test("the OSS composition adds no destination", () => {
       "evals",
       "sandbox",
       "catalog",
+      "mcp-setup",
       "settings",
     ],
   );
@@ -250,6 +255,7 @@ test("an edition's project group sits between the core pages and Settings, under
       "settings:evals:",
       "settings:sandbox:",
       "settings:catalog:",
+      "footer:mcp-setup:",
       "settings:settings:",
     ],
   );
@@ -306,6 +312,7 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
       "settings:sandbox:",
       "settings:catalog:",
       "settings:group-apis:",
+      "footer:mcp-setup:",
       "settings:settings:",
     ],
   );
@@ -352,6 +359,10 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
     project.filter(({ section }) => section === "settings").map(({ id }) => id),
     ["evals", "sandbox", "catalog", "group-apis", "settings"],
   );
+  assert.deepEqual(
+    project.filter(({ section }) => section === "footer").map(({ id }) => id),
+    ["mcp-setup"],
+  );
   const row = project.find(({ id }) => id === "group-apis");
   assert.equal(row?.icon, "apis");
   assert.deepEqual(row?.keywords, ["hosted apis", "embeddings", "tool picker"]);
@@ -393,7 +404,7 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
   assert.equal(first("credits"), "Billing");
 });
 
-test("Settings sits in a section of its own in both rails, the edition's items in another", () => {
+test("Settings sits in a section of its own in both rails, MCP in the footer, the edition's items in another", () => {
   const sectionsOf = (items: ReturnType<typeof consoleNav>) =>
     items.map(({ id, section }) => `${section ?? "main"}:${id}`);
   assert.deepEqual(
@@ -409,6 +420,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "settings:evals",
       "settings:sandbox",
       "settings:catalog",
+      "footer:mcp-setup",
       "settings:settings",
       "edition:edition:/admin",
     ],
@@ -454,6 +466,99 @@ test("an item is lit on every path it has absorbed, old URLs included", () => {
   assert.equal(active("/improvement/match-quality"), "quality");
   assert.equal(active("/runtime-events"), "settings");
   assert.equal(active("/calibrations"), null, "an absorbed path matches whole segments");
+});
+
+test("Dashboards, Explore, Scorers and Alerts are Monitor items only with customMonitoring on", () => {
+  for (const focusedConsole of [false, true]) {
+    const off = consoleNav({ projectId: P1, additions: [], focusedConsole });
+    assert.deepEqual(
+      consoleNav({ projectId: P1, additions: [], focusedConsole, customMonitoring: false }),
+      off,
+    );
+    const on = consoleNav({ projectId: P1, additions: [], focusedConsole, customMonitoring: true });
+    assert.deepEqual(
+      on
+        .filter(({ section }) => section === "group:monitor")
+        .map(({ label, href, sectionLabel }) => [label, href, sectionLabel]),
+      [
+        ["Overview", `/project/${P1}`, "Monitor"],
+        ["Dashboards", `/project/${P1}/dashboards`, undefined],
+        ["Explore", `/project/${P1}/explore`, undefined],
+        ["Agent health", `/project/${P1}/health`, undefined],
+        ["Traces", `/project/${P1}/traces`, undefined],
+        ["Alerts", `/project/${P1}/alerts`, undefined],
+      ],
+    );
+    assert.equal(on.find(({ id }) => id === "overview")?.children, undefined);
+    // DESIGN.md's budget: at most 12 items in the list, and 15 with customMonitoring. The
+    // footer's MCP does not count. No item lists scorers.
+    const list = (items: typeof on) => items.filter(({ section }) => section !== "footer");
+    assert.ok(list(off).length <= 12);
+    assert.ok(list(on).length <= 15);
+    assert.equal(on.length, off.length + 3);
+    assert.equal(
+      on.some(({ id }) => id === "scorers"),
+      false,
+    );
+    // Everything else on the rail is as it was.
+    const pages = ["dashboards", "explore", "alerts"];
+    const rest = (items: typeof on) =>
+      items.filter(({ id }) => !pages.includes(id)).map((item) => ({ ...item, also: undefined }));
+    assert.deepEqual(rest(on), rest(off));
+  }
+});
+
+test("no two items of a project rail share an icon or a jump, with customMonitoring on", () => {
+  const on = consoleNav({
+    projectId: P1,
+    additions: [],
+    focusedConsole: true,
+    customMonitoring: true,
+  });
+  const icons = on.map(({ icon }) => icon);
+  assert.equal(new Set(icons).size, icons.length);
+  const jumps = flattenNav(on).flatMap(({ shortcut }) => shortcut ?? []);
+  assert.equal(new Set(jumps).size, jumps.length);
+});
+
+test("with customMonitoring on, each monitoring page lights its own item, not Overview", () => {
+  const on = consoleNav({ projectId: P1, additions: [], customMonitoring: true });
+  assert.equal(activeNavItemId(`/project/${P1}`, on), "overview");
+  assert.equal(activeNavItemId(`/project/${P1}/insights`, on), "overview");
+  // A scorer is picked on Dashboards, so one scorer's page lights Dashboards.
+  assert.equal(activeNavItemId(`/project/${P1}/scorers/s1`, on), "dashboards");
+  assert.equal(activeNavItemId(`/project/${P1}/dashboards`, on), "dashboards");
+  assert.equal(activeNavItemId(`/project/${P1}/dashboards/d1`, on), "dashboards");
+  assert.equal(activeNavItemId(`/project/${P1}/explore`, on), "explore");
+  assert.equal(activeNavItemId(`/project/${P1}/alerts`, on), "alerts");
+  assert.deepEqual(on.find(({ id }) => id === "overview")?.also, [`/project/${P1}/insights`]);
+  const off = consoleNav({ projectId: P1, additions: [] });
+  assert.equal(activeNavItemId(`/project/${P1}/dashboards`, off), "overview");
+});
+
+test("the command menu names /dashboards for what the page is: Dashboards, else Usage and spend", () => {
+  for (const [customMonitoring, expected] of [
+    [false, ["Overview|Usage and spend"]],
+    [true, ["Project|Dashboards"]],
+  ] as const) {
+    const entries = commandEntries({
+      items: consoleNav({ projectId: P1, additions: [], customMonitoring }),
+      projectId: P1,
+      projects: [],
+      pathname: `/project/${P1}`,
+    });
+    assert.deepEqual(
+      entries
+        .filter(({ href }) => href === `/project/${P1}/dashboards`)
+        .map(({ group, label }) => `${group}|${label}`),
+      expected,
+    );
+  }
+});
+
+test("the organization rail has no monitoring page", () => {
+  const rail = { projectId: undefined, organizationSlug: "acme", additions: [] };
+  assert.deepEqual(consoleNav({ ...rail, customMonitoring: true }), consoleNav(rail));
 });
 
 test("switching project keeps the section the reader is on", () => {
@@ -514,6 +619,7 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Tools|/project/${P1}/catalogs/tools`,
       `Project|Skills|/project/${P1}/catalogs/skills`,
       `Project|Test a search|/project/${P1}/playground`,
+      `Project|MCP|/project/${P1}/mcp-setup`,
       `Project|Settings|/project/${P1}/settings`,
       `Pages|Admin|/admin`,
       `Overview|Usage and spend|/project/${P1}/dashboards`,
@@ -574,7 +680,9 @@ test("the command menu finds a page by its keywords, not only its name", () => {
   assert.equal(first("experiments"), "Experiments");
   assert.equal(first("sdk events"), "SDK events");
   assert.equal(first("retries"), "Self-corrections");
-  assert.equal(first("cursor"), "Integrations");
+  // Inside a project its own MCP page comes first; the organization's Integrations stays reachable.
+  assert.equal(first("cursor"), "MCP");
+  assert.equal(first("model context protocol"), "MCP");
   assert.deepEqual(searchCommands(entries, "zzz"), []);
 });
 
@@ -636,6 +744,7 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "evals:",
       "sandbox:",
       "catalog:c",
+      "mcp-setup:",
       "settings:s",
       "edition:/admin:",
     ],
@@ -683,6 +792,7 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
       "evals|settings|",
       "sandbox|settings|",
       "catalog|settings|",
+      "mcp-setup|footer|",
       "settings|settings|",
     ],
   );
@@ -750,6 +860,7 @@ test("focusedConsole on: Self-corrections is an insight and Agent health has no 
       "evals|settings|",
       "sandbox|settings|",
       "catalog|settings|",
+      "mcp-setup|footer|",
       "settings|settings|",
     ],
   );
@@ -778,4 +889,88 @@ test("the command menu finds Self-corrections by its keywords, flag off and on",
       assert.equal(searchCommands(entries, word)[0]?.href, href, word);
     }
   }
+});
+
+test("MCP sits in the rail footer of every project rail, and Settings stays last in the list", () => {
+  const cloud = createComposition("cloud", { eeComposition: createComposition("oss") });
+  for (const focusedConsole of [false, true]) {
+    for (const customMonitoring of [false, true]) {
+      for (const projectGroups of [[], cloud.projectNav]) {
+        const items = consoleNav({
+          projectId: P1,
+          additions: [],
+          projectGroups,
+          focusedConsole,
+          customMonitoring,
+        });
+        const { list, footer } = railParts(items);
+        assert.deepEqual(
+          footer.map(({ id }) => id),
+          ["mcp-setup"],
+        );
+        assert.equal(list.at(-1)?.id, "settings");
+        assert.equal(list.at(-1)?.section, "settings");
+      }
+    }
+  }
+  const items = consoleNav({ projectId: P1, additions: [] });
+  const mcp = items.find(({ id }) => id === "mcp-setup");
+  assert.equal(mcp?.label, "MCP");
+  assert.equal(mcp?.icon, "integrations", "the glyph of the organization's Integrations page");
+  assert.equal(mcp?.href, `/project/${P1}/mcp-setup`);
+  assert.equal(activeNavItemId(`/project/${P1}/mcp-setup`, items), "mcp-setup");
+  assert.notEqual(
+    activeNavItemId(`/project/${P1}/mcp`, items),
+    "mcp-setup",
+    "the MCP servers page is another page",
+  );
+  // The organization rail is as it was: Integrations, no project MCP item.
+  assert.deepEqual(
+    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }).map(
+      ({ id }) => id,
+    ),
+    ["projects", "integrations", "org-settings"],
+  );
+});
+
+test("railParts splits a rail into the scrolling list and the pinned footer, in rail order", () => {
+  const project = consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] });
+  const { list, footer } = railParts(project);
+  assert.deepEqual(
+    footer.map(({ id }) => id),
+    ["mcp-setup"],
+  );
+  assert.deepEqual(
+    list.map(({ id }) => id),
+    [
+      "overview",
+      "health",
+      "traces",
+      "tasks",
+      "intents",
+      "improvements",
+      "ship",
+      "evals",
+      "sandbox",
+      "catalog",
+      "settings",
+      "edition:/admin",
+    ],
+    "Catalog, Settings and the edition's items stay in the list",
+  );
+  const organization = railParts(
+    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }),
+  );
+  assert.deepEqual(
+    organization.list.map(({ id }) => id),
+    ["projects", "integrations", "org-settings"],
+  );
+  assert.deepEqual(organization.footer, [], "the organization rail has no footer item");
+  // The footer item keeps its active state and its ⌘K entry.
+  assert.equal(activeNavItemId(`/project/${P1}/mcp-setup`, project), "mcp-setup");
+  assert.ok(
+    commandEntries({ items: project, projectId: P1, projects: [], pathname: "/" }).some(
+      ({ href }) => href === `/project/${P1}/mcp-setup`,
+    ),
+  );
 });

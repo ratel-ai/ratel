@@ -1,5 +1,6 @@
-import { gunzipSync, inflateSync } from "node:zlib";
+import { gunzipSync, gzipSync, inflateSync } from "node:zlib";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
+import type { RedactedExport } from "@/lib/ingest/geo/redact";
 import {
   ingestRateLimitedResponse,
   type PublishableIngestLimits,
@@ -10,7 +11,12 @@ import type {
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
-import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import type { OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import {
+  enqueueOtlpBatch,
+  type IngestQueueAcceptDeps,
+  storedEncoding,
+} from "@/lib/ingest/queue/accept";
 import type { IntentGraphFoldScheduleDeps } from "@/lib/ingest/trace-events/fold-schedule";
 import type { insertTraceEvents as insertTraceEventsFn } from "@/lib/ingest/trace-events/queries";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
@@ -29,9 +35,9 @@ import type {
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import { reportServerException } from "@/lib/platform/telemetry";
 import type { AgentSpanDedupeDeps } from "./agent-span-dedupe";
-import { decodeOtlp, OtlpDecodeError } from "./decode";
-import { otlpSuccessResponse, transportFor } from "./http";
-import { type IngestLogDeps, logTracesIngested } from "./ingest-log";
+import { OtlpDecodeError } from "./decode";
+import { type OtlpTransport, otlpSuccessResponse, transportFor } from "./http";
+import type { IngestLogDeps } from "./ingest-log";
 import {
   type IngestObservabilityDeps,
   type IngestRejectionReason,
@@ -39,10 +45,11 @@ import {
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
-import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
+import type { PersistSpansContext, PersistSpansDeps } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
+import { decodeTraceExport, storeTraceExport } from "./traces-export";
 
 /**
  * The monthly event cap, through the entitlements port: `checkEventQuota` before the
@@ -85,8 +92,8 @@ export function inflateBody(bytes: Uint8Array, contentEncoding: string | null): 
     return { ok: false, reason: err instanceof RangeError ? "too_large" : "malformed" };
   }
 }
-/** Cap spans decoded from one export so a giant batch can't stall the request. */
-export const MAX_SPANS = 5_000;
+export { MAX_SPANS } from "./traces-export";
+
 const logger = getLogger("otlp/traces");
 const defaultLogError: LogError = (message, error, fields) =>
   logger.error({ ...fields, err: error }, message);
@@ -124,12 +131,23 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   agentSpanDedupe: AgentSpanDedupeDeps;
   /** Stored `gen_ai` log records join their spans; absent, none are read. */
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
+  /** Where each span comes from (`lib/ingest/geo`); absent, no span is located. */
+  locate?: PersistSpansDeps["locate"];
+  /** The same for an export that is queued: what must not be stored, taken out of its body. */
+  redact?: (
+    projectId: string,
+    organization: PersistSpansContext["organization"],
+    transport: OtlpTransport,
+    body: Uint8Array,
+  ) => Promise<RedactedExport | null>;
   /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** The project's own prices (RC-482); absent, the current built-in prices. */
   modelPricing?: PersistSpansDeps["modelPricing"];
   /** Where the Datadog ingest lines go; absent, the app log and the cached project lookup. */
   ingestLog?: IngestLogDeps;
+  /** The ingest queue (RTL-314); absent or off, every export is decoded and stored in the request. */
+  ingestQueue?: IngestQueueAcceptDeps;
 }
 
 export async function handleTracesRequest(
@@ -291,33 +309,65 @@ export async function handleTracesRequest(
   }
   const bytes = inflated.bytes;
 
-  let spans: ReturnType<typeof decodeOtlp>;
-  try {
-    spans = decodeOtlp(transport === "json" ? "application/json" : "application/x-protobuf", bytes);
-  } catch (err) {
-    if (err instanceof OtlpDecodeError) {
+  // The ingest queue (RTL-314): keep the body as it arrived and answer; a worker decodes and
+  // persists it. An ingest-only key stays inline: its budget counts decoded spans. So does a batch
+  // whose address cannot be taken out: the queue stores the body.
+  let queueable = deps.ingestQueue?.enabled() && !auth.policy.sharedKeyLimits;
+  let redacted: RedactedExport | null = null;
+  if (queueable && deps.redact) {
+    try {
+      redacted = await deps.redact(apiKey.projectId, organization, transport, bytes);
+    } catch (err) {
+      queueable = false;
+      if (!(err instanceof OtlpDecodeError)) {
+        logError("span location failed", err, { project_id: apiKey.projectId });
+        captureProcessingFailure(err, apiKey.projectId, deps);
+      }
+    }
+  }
+  if (queueable && deps.ingestQueue) {
+    const contentEncoding = req.headers.get("content-encoding");
+    // Compressed when it came compressed.
+    const gzip = redacted !== null && storedEncoding(contentEncoding) !== null;
+    const queued = await enqueueOtlpBatch(
+      {
+        projectId: apiKey.projectId,
+        signal: "traces",
+        transport,
+        received: redacted ? (gzip ? gzipSync(redacted.body) : redacted.body) : read.bytes,
+        contentEncoding: gzip ? "gzip" : contentEncoding,
+        appendOnly: auth.policy.appendOnlyIngest,
+        ...(redacted ? { geo: { addressed: redacted.addressed } } : {}),
+      },
+      deps.ingestQueue,
+      { logError, captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps) },
+    );
+    if (!queued.ok) {
       return rejectTraceRequest(
-        json({ error: `Malformed OTLP payload: ${err.message}` }, 400),
-        "malformed",
+        json({ error: "Failed to store telemetry." }, 500),
+        "storage",
         startedAt,
         deps,
         apiKey.projectId,
         organization?.id,
       );
     }
-    throw err;
+    await finishAcceptedTraces(apiKey, organization?.id, { queued: 1 }, startedAt, deps);
+    return otlpSuccessResponse(transport, { queued: 1 });
   }
 
-  if (spans.length > MAX_SPANS) {
+  const decoded = decodeTraceExport(transport, bytes);
+  if (!decoded.ok) {
     return rejectTraceRequest(
-      json({ error: `Too many spans in one export (max ${MAX_SPANS}).` }, 413),
-      "oversized",
+      json({ error: decoded.error }, decoded.status),
+      decoded.reason,
       startedAt,
       deps,
       apiKey.projectId,
       organization?.id,
     );
   }
+  const spans = decoded.spans;
 
   // An ingest-only key's budget counts spans too, not only requests (RC-585).
   if (auth.policy.sharedKeyLimits) {
@@ -338,24 +388,26 @@ export async function handleTracesRequest(
     }
   }
 
-  // 3. Normalize, group, persist: shared with the Agent health importer.
-  const persisted = await persistDecodedSpans(
+  // 3. Normalize, group, persist: shared with the Agent health importer and the ingest queue.
+  const stored = await storeTraceExport(
     spans,
     {
       projectId: apiKey.projectId,
       organization,
       quotaOrgId,
-      endpoint: "/v1/traces",
-      foldIntentGraph: true,
       meterTraces,
+      transport,
+      body: bytes,
+      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
     },
+    deps,
     {
-      ...deps,
       logError,
+      logWarn: deps.logWarn ?? defaultLogWarn,
       captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
     },
   );
-  if (!persisted.ok && persisted.stage === "refused") {
+  if (!stored.ok && stored.stage === "refused") {
     return rejectTraceRequest(
       json({ error: "Span limit reached for this trace or this billing period." }, 429),
       "quota",
@@ -365,7 +417,7 @@ export async function handleTracesRequest(
       organization?.id,
     );
   }
-  if (!persisted.ok) {
+  if (!stored.ok) {
     return rejectTraceRequest(
       json({ error: "Failed to store telemetry." }, 500),
       "storage",
@@ -375,61 +427,48 @@ export async function handleTracesRequest(
       organization?.id,
     );
   }
-  const { accepted, calls } = persisted;
-  await logTracesIngested(apiKey.projectId, spans, persisted.rows, deps.ingestLog);
-
-  // Raw capture after a stored export, so garbage and retried failures are
-  // never kept. Nor is a partly refused one: its body holds the refused spans. Fails open: it never
-  // changes the response.
-  if (!persisted.refused)
-    await captureOtlpRawExport(
-      {
-        projectId: apiKey.projectId,
-        signal: "traces",
-        contentType: transport === "json" ? "application/json" : "application/x-protobuf",
-        body: bytes,
-        gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
-        itemCount: spans.length,
-        traceIds: [...new Set(spans.map((span) => span.traceId))],
-      },
-      organization,
-      deps.otlpRawCapture,
-      {
-        logError,
-        logWarn: deps.logWarn ?? defaultLogWarn,
-        captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
-        trackServerEvent: deps.trackServerEvent,
-      },
-    );
-
-  // Best-effort heartbeat; must never turn a successful insert into a 500.
-  await deps.touchApiKey(apiKey.id).catch(() => {});
-
-  if (apiKey.lastUsedAt === null) {
-    await trackFirstTraceReceived({
-      endpoint: "/v1/traces",
-      projectId: apiKey.projectId,
-      organizationId: organization?.id,
-      startedAt,
-      deps,
-    });
-  }
-  await trackAcceptedIngestRequest(
+  const { accepted, calls } = stored;
+  await finishAcceptedTraces(
+    apiKey,
+    organization?.id,
     { accepted, calls, spans: spans.length },
-    {
-      endpoint: "/v1/traces",
-      projectId: apiKey.projectId,
-      organizationId: organization?.id,
-      startedAt,
-      deps,
-    },
+    startedAt,
+    deps,
   );
 
   return otlpSuccessResponse(transport, {
     accepted,
     calls,
     spans: spans.length,
-    ...(persisted.refused ? { refused: persisted.refused } : {}),
+    ...(stored.refused ? { refused: stored.refused } : {}),
+  });
+}
+
+/** After an accepted export, stored or queued: the key's heartbeat and the accepted-request events. */
+async function finishAcceptedTraces(
+  apiKey: { id: string; projectId: string; lastUsedAt: Date | null },
+  organizationId: string | undefined,
+  counts: Record<string, number>,
+  startedAt: number,
+  deps: TracesHandlerDeps,
+): Promise<void> {
+  // Best-effort heartbeat; must never turn a successful insert into a 500.
+  await deps.touchApiKey(apiKey.id).catch(() => {});
+  if (apiKey.lastUsedAt === null) {
+    await trackFirstTraceReceived({
+      endpoint: "/v1/traces",
+      projectId: apiKey.projectId,
+      organizationId,
+      startedAt,
+      deps,
+    });
+  }
+  await trackAcceptedIngestRequest(counts, {
+    endpoint: "/v1/traces",
+    projectId: apiKey.projectId,
+    organizationId,
+    startedAt,
+    deps,
   });
 }
 

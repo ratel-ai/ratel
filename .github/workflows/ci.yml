@@ -13,6 +13,10 @@ name: ci
 # check cannot deadlock a merge; marking the PR ready fires `ready_for_review`, which runs
 # the pipeline and posts `ci-gate`.
 #
+# A newer push to main cancels the older run (see `concurrency`). Its `ci-gate` then does
+# not run, because a superseded run is not a failure. PR and dispatch runs stay strict: a required
+# check that does not run can count as a pass.
+#
 # Skip-green: `changes` runs scripts/ci-filters.mjs on the pull-request file list so
 # untouched areas skip. Platform and design-system name packages/brand and
 # packages/design-system by name (never a packages catch-all). Every rule treats
@@ -57,7 +61,7 @@ jobs:
       lockfiles: ${{ steps.c.outputs.lockfiles }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: f
         with:
           list-files: json
@@ -105,8 +109,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: pnpm
@@ -127,8 +131,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: pnpm
@@ -176,18 +180,18 @@ jobs:
   # @ratel/platform tests (PGlite), sharded like private platform-tests. A WASM crash
   # then hits one shard. Shard names stay off the ruleset; ci-gate needs this job id.
   platform-test:
-    name: platform-test (${{ matrix.shard }}/4)
+    name: platform-test (${{ matrix.shard }}/6)
     needs: changes
     if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: pnpm
@@ -195,7 +199,7 @@ jobs:
         run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
       - name: Test
         env:
-          TEST_SHARD: ${{ matrix.shard }}/4
+          TEST_SHARD: ${{ matrix.shard }}/6
         run: pnpm --filter @ratel/platform test
 
   # The cloud deployer: deploy.sh and the modules under deploy/terraform, checked with both
@@ -208,7 +212,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Shellcheck deploy.sh
         run: shellcheck -s sh deploy.sh deploy/terraform/check.sh
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: false
       - uses: opentofu/setup-opentofu@v1
@@ -219,7 +223,7 @@ jobs:
       - name: OpenTofu fmt and validate
         run: deploy/terraform/check.sh tofu
       # GCP Infrastructure Manager runs Terraform 1.5.7 at no cost: the modules must stay valid there.
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.5.7
           terraform_wrapper: false
@@ -249,7 +253,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and start
-        run: docker compose up --build --detach --wait --wait-timeout 180
+        # web, worker and demo in one build: the demo image, with the whole source tree, takes 45 s
+        # to export, and here that overlaps the Next build.
+        run: |
+          docker compose --profile demo build
+          docker compose up --detach --wait --wait-timeout 180
       - name: Scan the image (fixable HIGH and CRITICAL in app dependencies)
         # Same build as above, no second one. Operating-system packages are listed but do not
         # gate: the base tag moves under us and a Debian fix lands before the Node image does.
@@ -362,6 +370,7 @@ jobs:
     needs: [changes, design-system, platform-build, platform-test, platform-compose, deploy, dependency-scan, secret-scan]
     if: >-
       always() &&
+      (github.event_name != 'push' || !cancelled()) &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:

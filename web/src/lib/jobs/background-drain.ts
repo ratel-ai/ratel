@@ -61,9 +61,10 @@ export async function startBackgroundDrain(
   if (req.headers.get("authorization") !== `Bearer ${secret}`) {
     return new Response("Unauthorized", { status: 401 });
   }
-  // An API-only process leaves the sweeps and the drain to the worker, which runs them on its
-  // own timer.
-  if (deps.role?.() === "api")
+  // An API-only, ingest-only or persist-only process leaves the sweeps and the drain to the
+  // worker, which runs them on its own timer.
+  const role = deps.role?.();
+  if (role === "api" || role === "ingest" || role === "persist")
     return Response.json({ ok: true, skipped: "worker" }, { status: 202 });
   if (current) {
     deps.log("info", { running_for_ms: Date.now() - current.startedAt }, "drain_skipped_busy");

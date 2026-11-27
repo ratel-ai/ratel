@@ -7,7 +7,7 @@ import { Tooltip } from "@ratel/design-system/tooltip";
 import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
-import type { NavItem } from "@/lib/console/navigation";
+import { type NavItem, railParts } from "@/lib/console/navigation";
 import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
 import { AccountMenu } from "./AccountMenu";
 import { AnalysisFreshness } from "./AnalysisFreshness";
@@ -36,8 +36,8 @@ export type SidebarProps = {
 };
 
 /**
- * The left of the inverted L (DESIGN.md, Layout): where you are, search, the rail, and you. Dimmer than
- * the page; the selection mark is the only color on it.
+ * The left of the inverted L (DESIGN.md, Layout): where you are, search, the rail, and you. The
+ * rail's `footer` items (MCP) are pinned at its foot, above the analysis line and the account. Dimmer than the page; the selection mark is the only color on it.
  */
 export function SidebarContent({
   items,
@@ -56,6 +56,9 @@ export function SidebarContent({
   onShortcuts,
   onNavigate,
 }: SidebarProps) {
+  const { list, footer } = railParts(items);
+  const isActive = (item: NavItem) =>
+    item.id === activeId || Boolean(item.children?.some(({ id: childId }) => childId === activeId));
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div
@@ -127,7 +130,7 @@ export function SidebarContent({
           collapsed && "items-center",
         )}
       >
-        {sections(items).map(({ id, items: sectionItems }) => (
+        {sections(list).map(({ id, items: sectionItems }) => (
           <div key={id} className={cn("flex flex-col gap-0.5", collapsed && "items-center")}>
             {sectionItems[0]?.sectionLabel && !collapsed ? (
               <span className="px-2 pt-1 pb-1 text-xs font-medium text-fg-faint">
@@ -141,10 +144,7 @@ export function SidebarContent({
                 <RailLink
                   key={item.id}
                   item={item}
-                  active={
-                    item.id === activeId ||
-                    Boolean(item.children?.some(({ id: childId }) => childId === activeId))
-                  }
+                  active={isActive(item)}
                   collapsed={collapsed}
                   onNavigate={onNavigate}
                 />
@@ -154,8 +154,25 @@ export function SidebarContent({
         ))}
       </nav>
 
-      {project || account ? (
+      {footer.length > 0 || project || account ? (
         <div className="shrink-0 border-t border-line p-2">
+          {/* Pinned under the list, so they stay in view when it scrolls. */}
+          {footer.length > 0 ? (
+            <nav
+              aria-label={`${railLandmark(Boolean(project))} footer`}
+              className={cn("flex flex-col gap-0.5 pb-2", collapsed && "items-center")}
+            >
+              {footer.map((item) => (
+                <RailLink
+                  key={item.id}
+                  item={item}
+                  active={isActive(item)}
+                  collapsed={collapsed}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </nav>
+          ) : null}
           {project ? <AnalysisFreshness projectId={project.id} collapsed={collapsed} /> : null}
           {account ? (
             <AccountMenu

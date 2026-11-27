@@ -198,7 +198,9 @@ test("a large option set is re-read over its top options, which decide the order
   const client = decisionClient({ apiKey: "k", fetchImpl, sleep: noSleep });
   const result = await client.decideChoice("q", options, FRAMING);
 
-  const reread = (calls[1]?.body.questions as Array<{ choices: Array<{ value: string }> }>)[0]!
+  const rerank = calls[1];
+  assert.ok(rerank, "a second call reranks");
+  const reread = (rerank.body.questions as Array<{ choices: Array<{ value: string }> }>)[0]!
     .choices;
   assert.equal(reread.length, RERANK_DEPTH);
   assert.deepEqual(

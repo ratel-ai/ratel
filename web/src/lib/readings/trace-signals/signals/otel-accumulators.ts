@@ -302,6 +302,17 @@ export function modelMixOf(stats: Pick<OtelStats, "mix" | "linkedMix">): TurnSou
   };
 }
 
+/**
+ * Whether a called name is on the turn's tool menu. Shell calls are counted
+ * per command (`Bash:grep`, `Bash:gh`), while the model was handed the one
+ * tool before the colon, so that tool on the menu covers them.
+ */
+export function onMenu(menus: ReadonlySet<string>, toolId: string): boolean {
+  if (menus.has(toolId)) return true;
+  const colon = toolId.indexOf(":");
+  return colon > 0 && menus.has(toolId.slice(0, colon));
+}
+
 function addCalls(
   stats: OtelStats,
   turn: SignalTurn,
@@ -335,7 +346,8 @@ function addCalls(
         tool.blockedEvidence.add(sample(turn, call.traceEventId)),
       );
     }
-    const byMenu = trace !== undefined && trace.menuCalls > 0 && !trace.menus.has(call.targetId);
+    const byMenu =
+      trace !== undefined && trace.menuCalls > 0 && !onMenu(trace.menus, call.targetId);
     if (byError) {
       tool.unknownByError += 1;
       once(flagged, `error:${tool.id}`, () =>

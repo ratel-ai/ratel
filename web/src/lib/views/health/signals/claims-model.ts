@@ -264,20 +264,32 @@ const COPY: Record<SignalKind, (c: Ctx) => KindCopy> = {
       caveat: junk ? "Junk is estimated from score gaps, not judged." : undefined,
     };
   },
-  latency_outlier: ({ m, name, a }) => ({
-    parts: [
-      { chip: a },
-      `'s slowest calls take ${duration(num(m, "p95Ms"))}, against ${duration(num(m, "medianMs"))} for a typical call.`,
-    ],
-    figure: {
-      value: num(m, "p95Ms"),
-      unit: "ms",
-      display: duration(num(m, "p95Ms")),
-      raw: `slowest 5% of ${plural(num(m, "calls"), "call", "calls")}`,
-    },
-    cost: `${waiting((num(m, "calls") * Math.max(0, num(m, "p95Ms") - num(m, "medianMs"))) / 1_000)}.`,
-    fix: `Nothing to change in the catalog. The time is spent inside ${name(a)}.`,
-  }),
+  latency_outlier: ({ r, m, name, a }) => {
+    // Readings stored before the evidence guards carry no `toolMedianMs`: they
+    // compared with the project's median and priced every call at the p95.
+    const own = m.toolMedianMs !== undefined;
+    return {
+      parts: own
+        ? [
+            { chip: a },
+            `'s slowest calls take ${duration(num(m, "p95Ms"))}; a typical call of it takes ${duration(num(m, "toolMedianMs"))}.`,
+          ]
+        : [
+            { chip: a },
+            `'s slowest calls take ${duration(num(m, "p95Ms"))}, against ${duration(num(m, "medianMs"))} for a typical call in this project.`,
+          ],
+      figure: {
+        value: num(m, "p95Ms"),
+        unit: "ms",
+        display: duration(num(m, "p95Ms")),
+        raw: `slowest 5% of ${plural(num(m, "calls"), "call", "calls")}`,
+      },
+      cost: own
+        ? `${waiting(r.impact)} in ${name(a)}.`
+        : `${waiting((num(m, "calls") * Math.max(0, num(m, "p95Ms") - num(m, "medianMs"))) / 1_000)}.`,
+      fix: `Nothing to change in the catalog. The time is spent inside ${name(a)}.`,
+    };
+  },
   unstable_intent: ({ m }) => ({
     parts: [`The same ask resolves to ${count(num(m, "distinct"))} different tools.`],
     figure: share(

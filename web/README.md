@@ -37,6 +37,7 @@ pnpm --filter @ratel/platform lint         # biome
 pnpm --filter @ratel/platform test         # node:test; integration tests run on an embedded Postgres (pglite)
 pnpm --filter @ratel/platform seed         # Site Copilot OTLP + catalog into the local database
 pnpm --filter @ratel/platform seed:quality # Quality: its searches, answer key, runs and rewrites (needs the seed above)
+pnpm --filter @ratel/platform load-test:ingest -- --mode queued  # ADR-0009's load test, local database only
 pnpm check:boundary && pnpm check:layers   # from the repository root: the structural rules
 ```
 
@@ -71,23 +72,28 @@ Next reads, `next.config.ts`'s build-time variables and the variables a third-pa
 stay outside it (listed at the top of `config.ts`).
 
 Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`,
-`toolRunInsights`, `focusedConsole`): in the file `flags.<key>`, in the environment `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS` and
-`FF_FOCUSED_CONSOLE`. A flag
+`toolRunInsights`, `focusedConsole`, `customMonitoring`): in the file `flags.<key>`, in the
+environment `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`,
+`FF_TOOL_RUN_INSIGHTS`, `FF_FOCUSED_CONSOLE` and `FF_CUSTOM_MONITORING` (it also turns on RQL). A
+flag
 takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
 `APP_ROLE=worker` makes it run them, which is how `docker-compose.yml` runs `web` and `worker`
-([`lib/jobs/README.md`](src/lib/jobs/README.md)).
+([`lib/jobs/README.md`](src/lib/jobs/README.md)). With the experimental ingest queue
+(`EXPERIMENTAL_INGEST_QUEUE=1`, [ADR-0009](../docs/adr/0009-queued-ingest.md)) two more roles
+exist: `ingest` only queues ingest batches and never migrates, `persist` only persists them.
 
 `BASE_URL` is where the console's SDK snippets point: this deployment's origin. The console adds
-`/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
+`/api/v1` when it builds API and ingest URLs. Every snippet passes that address to the Cloud SDK
+explicitly rather than leaning on the SDK's hosted default
+([`snippet-endpoints.test.ts`](src/lib/console/onboarding/snippet-endpoints.test.ts) checks). It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
 
 `RATEL_EXPERIMENTAL_FEATURES=1` (`experimentalFeatures`) turns on the experimental features left in the open-source
 edition: the eval gate, adaptive ranking's catalog drift (the gone-tool warning only for tools a
 published catalog dropped, closable warnings, gone tools pruned on rebuild), MCP Apps, the MCP
-server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), and tool-run
+server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), Scorers, custom Dashboards, Alerts, and tool-run
 insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
 confidence). Cloud ignores it and reads each flag (`evalGate`, `rankingCatalogDrift`, `mcpApps`,

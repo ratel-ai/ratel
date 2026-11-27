@@ -1012,3 +1012,191 @@ export function declaredToolsResult(rows: ReturnType<typeof declaredTools>) {
     tools: rows,
   };
 }
+
+/* - Custom monitoring (lib/mcp/operations/monitoring) ------------------------ */
+
+const SCORER_NAMES = ["Fast enough", "Polite", "Cites a source", "No refund promised", "Short"];
+
+export function scorers(count: number, seed = 31) {
+  const random = seeded(seed);
+  return Array.from({ length: count }, (_, index) => {
+    const kind = index % 2 === 0 ? ("check" as const) : ("judge" as const);
+    const scored = Math.round(random() * 900);
+    const passRate = Math.round(random() * 1000) / 1000;
+    const name = `${SCORER_NAMES[index % SCORER_NAMES.length]}${index < 5 ? "" : ` ${index}`}`;
+    return {
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name,
+      kind,
+      summary:
+        kind === "check"
+          ? "Duration (ms) is at most 2000"
+          : "Is the answer polite to the customer?",
+      answers: "pass_or_fail",
+      traces: index % 3 === 0 ? "Every trace" : "2 tasks",
+      tasks: index % 3 === 0 ? null : ["t1", "t2"],
+      sampleRate: kind === "check" ? 100 : 25,
+      enabled: index % 4 !== 3,
+      status: index % 4 === 3 ? "off" : "on",
+      last7Days: { scored, passRate, average: passRate },
+      result: `${Math.round(passRate * 100)}% passed, ${scored} results`,
+      href: `/project/p1/scorers/${index}`,
+    };
+  });
+}
+
+export function scorerDetail(scorer: ReturnType<typeof scorers>[number], days = 14) {
+  const random = seeded(scorer.name.length + days);
+  return {
+    summary: `${scorer.name} (${scorer.kind}, ${scorer.status}): ${scorer.result} in 7 days.`,
+    scorer: {
+      ...scorer,
+      config: { path: "duration_ms", op: "lte", value: 2000 },
+      filter: {},
+      createdAt: "2026-11-01T09:00:00.000Z",
+      updatedAt: "2026-11-09T09:00:00.000Z",
+    },
+    trend: Array.from({ length: days }, (_, index) => {
+      const passRate = Math.round(random() * 1000) / 1000;
+      return {
+        day: new Date(NOW - (days - 1 - index) * 86_400_000).toISOString().slice(0, 10),
+        scored: Math.round(random() * 90),
+        passRate,
+        average: passRate,
+      };
+    }),
+    latest: traces(days, 41).map((trace, index) => ({
+      traceId: trace.traceId,
+      traceStartedAt: trace.startedAt,
+      scoredAt: trace.startedAt,
+      result: index % 5 === 0 ? "Fail" : "Pass",
+      value: index % 5 === 0 ? 0 : 1,
+      passed: index % 5 !== 0,
+      confidence: null,
+      href: `/project/p1/traces/${trace.traceId}`,
+    })),
+  };
+}
+
+const ALERT_STATES = [
+  { state: "alerting", status: "Alerting" },
+  { state: "ok", status: "OK" },
+  { state: "no_data", status: "No data" },
+  { state: "ok", status: "Paused" },
+  { state: "ok", status: "Needs attention" },
+] as const;
+
+export function alerts(count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const { state, status } = ALERT_STATES[index % ALERT_STATES.length];
+    return {
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      name: index === 0 ? "Too many errors" : `Slow answers ${index}`,
+      condition:
+        index % 2 === 0
+          ? "Error rate is above 5% over 15 minutes"
+          : "Latency p95 is above 4 s over 1 hour",
+      operator: "above",
+      threshold: index % 2 === 0 ? 0.05 : 4000,
+      windowMinutes: index % 2 === 0 ? 15 : 60,
+      unit: index % 2 === 0 ? "ratio" : "ms",
+      enabled: status !== "Paused",
+      state,
+      status,
+      problem: status === "Needs attention" ? "The query is invalid." : null,
+      lastValue: state === "no_data" ? null : index % 2 === 0 ? 0.072 : 5200,
+      lastValueText: state === "no_data" ? null : index % 2 === 0 ? "7.2%" : "5.2 s",
+      stateChangedAt: new Date(NOW - index * 3_600_000).toISOString(),
+      destinationCount: 1,
+      href: `/project/p1/alerts/${index}`,
+    };
+  });
+}
+
+export function alertDetail(alert: ReturnType<typeof alerts>[number], changes = 4) {
+  return {
+    summary: `${alert.name} (${alert.status}): ${alert.condition}.`,
+    alert: {
+      ...alert,
+      query: {
+        version: 1,
+        kind: "metric",
+        measures: [{ measure: "error_rate", aggregation: "rate" }],
+        dimensions: [],
+        filters: {},
+      },
+      destinations: changes === 0 ? [] : [{ id: "d1", name: "#agent-alerts" }],
+    },
+    history: Array.from({ length: changes }, (_, index) => ({
+      at: new Date(NOW - index * 5_400_000).toISOString(),
+      from: index % 2 === 0 ? "ok" : "alerting",
+      to: index % 2 === 0 ? "alerting" : "ok",
+      value: index % 2 === 0 ? 0.072 : 0.02,
+      valueText: index % 2 === 0 ? "7.2%" : "2%",
+      condition: alert.condition,
+      message: index % 2 === 0 ? "fire" : "recovery",
+      delivery: "sent",
+      sentTo: ["#agent-alerts"],
+      error: null,
+    })),
+  };
+}
+
+export function alertDestinations(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    index % 3 === 1
+      ? { id: `d${index}`, name: `Ops webhook ${index}`, kind: "webhook", lastFour: "a1b2" }
+      : {
+          id: `d${index}`,
+          name: index === 0 ? "#agent-alerts" : `#team-${index}`,
+          kind: "slack_channel",
+          channelId: `C${String(index).padStart(10, "0")}`,
+          warning: index % 3 === 2 ? "Invite the app to this channel." : null,
+        },
+  );
+}
+
+export function slackChannels(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `C${String(index).padStart(10, "0")}`,
+    name: index === 0 ? "agent-alerts" : `team-${index}`,
+    isPrivate: index % 4 === 3,
+  }));
+}
+
+/** A project has five; more `copies` only fill a dense list. */
+export function locationAttributes(prefix = "", copies = 1) {
+  const five = [
+    { key: "address", holds: "IP address, resolved and never stored", attribute: "client.address" },
+    { key: "country", holds: "Country code (ISO 3166-1)", attribute: "geo.country.iso_code" },
+    { key: "region", holds: "Region code (ISO 3166-2)", attribute: "geo.region.iso_code" },
+    { key: "latitude", holds: "Latitude in degrees", attribute: "geo.location.lat" },
+    { key: "longitude", holds: "Longitude in degrees", attribute: "geo.location.lon" },
+  ];
+  const rows = Array.from({ length: copies }, (_, copy) =>
+    five.map((row) => ({
+      ...row,
+      key: copy ? `${row.key}_${copy}` : row.key,
+      attribute: `${prefix}${row.attribute}`,
+      source: prefix ? "custom" : "default",
+    })),
+  ).flat();
+  return {
+    rows,
+    attributes: Object.fromEntries(rows.map(({ key, attribute }) => [key, attribute])),
+    href: "/project/p1/settings/general",
+  };
+}
+
+export function dashboards(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    name: index === 0 ? "Support agent" : `Board ${index}`,
+    widgetCount: 8 - (index % 7),
+    filters: {},
+    range: null,
+    updatedAt: new Date(NOW - index * 7_200_000).toISOString(),
+    updatedBy: index % 2 === 0 ? "An agent (MCP)" : "Ann Example",
+    href: `/project/p1/dashboards/${index}`,
+  }));
+}

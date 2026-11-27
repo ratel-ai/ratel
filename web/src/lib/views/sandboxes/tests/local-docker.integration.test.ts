@@ -145,7 +145,7 @@ describe("local Docker provider, end to end", {
     ]);
     assert.equal(listed(["ps", "-a", "--filter", `label=ratel-deployment=${DEPLOYMENT}`]), "");
     assert.deepEqual(
-      (ready?.smoke as { output: { echo: { input: unknown } } }).output.echo.input,
+      (ready?.smoke as { output: { echo: { input: unknown } } } | undefined)?.output.echo.input,
       CONFIG.input.example,
     );
 
@@ -167,7 +167,7 @@ describe("local Docker provider, end to end", {
     snapshots.push((await t.versions.get(PROJECT_ID, command))?.imageRef ?? "");
     const third = await t.run(command, { params: { model: EVIL_PARAM } });
     assert.equal(third.status, "completed", `${third.errorCode}: ${third.reason}`);
-    assert.equal((third.response?.output as { agent: string }).agent, "e2e");
+    assert.equal((third.response?.output as { agent: string } | undefined)?.agent, "e2e");
 
     // No run container, volume or file stays in a run VM.
     for (const vmRef of new Set([first.instanceRef, third.instanceRef])) {

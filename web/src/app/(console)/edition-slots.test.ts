@@ -24,8 +24,10 @@ afterEach(() => {
   else process.env.DATABASE_URL = databaseUrl;
 });
 
+const Nothing = () => null;
+
 function useEdition(slots: Partial<EditionUi>): EditionUi {
-  const ui: EditionUi = { RootProvider: () => null, AccountMenuItems: () => null, ...slots };
+  const ui: EditionUi = { RootProvider: Nothing, AccountMenuItems: Nothing, ...slots };
   composition.ui = async () => ui;
   return ui;
 }
