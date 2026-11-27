@@ -3,7 +3,7 @@ import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
 /** A project-level scorer: what it reads on a trace, which traces, and how many of them. */
 
-export const SCORER_KINDS = ["check", "judge"] as const;
+export const SCORER_KINDS = ["check", "judge", "preset"] as const;
 export type ScorerKind = (typeof SCORER_KINDS)[number];
 
 export {
@@ -25,9 +25,34 @@ export interface JudgeConfig {
   output: JudgeOutput;
 }
 
+/**
+ * A task kind of `views/task-scorers` that grades one run of a task. A preset scores the traces of
+ * its tasks with the run (`trace_turns`) each belongs to, as `task-scorers/engine.ts` grades it.
+ * `judge_criteria` is no preset: it is a judge.
+ */
+export const PRESET_KINDS = [
+  "ends_well",
+  "max_self_corrections",
+  "max_latency_ms",
+  "max_cost_usd",
+  "expected_tool",
+  "max_tool_calls",
+] as const;
+export type PresetKind = (typeof PRESET_KINDS)[number];
+
+/** A preset as stored: the task kind under `preset`, with its setting. */
+export type PresetConfig =
+  | { preset: "ends_well" }
+  | {
+      preset: "max_self_corrections" | "max_latency_ms" | "max_cost_usd" | "max_tool_calls";
+      max: number;
+    }
+  | { preset: "expected_tool"; tool: string };
+
 export type ScorerDefinition =
   | { kind: "check"; config: CheckConfig }
-  | { kind: "judge"; config: JudgeConfig };
+  | { kind: "judge"; config: JudgeConfig }
+  | { kind: "preset"; config: PresetConfig };
 
 /** The Traces filter, as a scorer stores it. */
 export type ScorerFilter = TraceFilter;
@@ -99,4 +124,8 @@ export type SkipReason =
   /** The model answered, with nothing that can be stored. */
   | "no_answer"
   /** The call failed, so there is no answer yet. */
-  | "call_failed";
+  | "call_failed"
+  /** Preset only: the trace belongs to no closed run of the scorer's tasks. */
+  | "no_run"
+  /** Preset only: the run does not have the measurement. */
+  | "not_measured";

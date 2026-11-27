@@ -1,3 +1,4 @@
+import { ingestQueueRouteDeps } from "@/lib/composition/registry";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-handler";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
@@ -54,5 +55,7 @@ async function handlePost(request: Request): Promise<Response> {
     scheduleProjectDrain,
     setRequestLogContext,
     trackServerEvent,
+    // Queue the batch for a worker when EXPERIMENTAL_INGEST_QUEUE=1 (RTL-314).
+    ingestQueue: ingestQueueRouteDeps(),
   });
 }

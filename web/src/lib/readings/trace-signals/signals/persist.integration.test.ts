@@ -131,6 +131,26 @@ test("upserts keep one row per signal, two misses resolve and a re-detection reo
   assert.equal(resolvedAt.rows[0]?.resolved_at, null);
 });
 
+test("a signal found before the evidence guards resolves at the first guarded run that does not find it", async () => {
+  const { client, db } = await setupDb();
+  await run(db, 0, [signal("magnet", "old"), signal("magnet", "kept")]);
+  // As stored by a release before the guards: no guardsVersion in metrics.
+  await client.query(
+    `update trace_signals set metrics = metrics - 'guardsVersion' where subject_key = 'old'`,
+  );
+  const next = await run(db, 1, [signal("magnet", "kept")]);
+  assert.equal(next.resolved, 1, "one miss is enough for a pre-guard signal");
+  const s = await states(client);
+  assert.equal(s.old?.status, "resolved");
+  assert.equal(s.kept?.status, "open");
+
+  // A signal the guarded release found keeps the usual two misses.
+  await run(db, 2, []);
+  assert.equal((await states(client)).kept?.status, "open");
+  await run(db, 3, []);
+  assert.equal((await states(client)).kept?.status, "resolved");
+});
+
 test("acknowledged is preserved, fixed and muted are never touched, unmeasured kinds are not missed", async () => {
   const { client, db } = await setupDb();
   await run(db, 0, [

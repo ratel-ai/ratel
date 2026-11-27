@@ -36,8 +36,8 @@ README_SERVER_URL="https://github.com/ratel-ai/ratel#on-a-server"
 MIN_COMPOSE=2.24
 MIN_RAM_MB=4096
 MIN_DISK_MB=5120
-# The two secrets README.md "On a server" asks for, and the external scheduler's bearer.
-ENV_SECRETS="POSTGRES_PASSWORD TRACE_SIGNALS_HASH_SALT CRON_SECRET"
+# The three secrets README.md "On a server" asks for, and the external scheduler's bearer.
+ENV_SECRETS="POSTGRES_PASSWORD TRACE_SIGNALS_HASH_SALT RATEL_SECRET_KEY CRON_SECRET"
 SUDO=""
 # The published image, and the public access mode: docker-compose.caddy.yml runs this image in front of web.
 IMAGE=ratelai/ratel
@@ -522,7 +522,7 @@ write_env() {
   )
   mv "$tmp" "$1/.env"
   ok "Created .env with new random secrets ($(echo "$ENV_SECRETS" | sed 's/ /, /g'))."
-  info "Keep a copy of .env: a lost TRACE_SIGNALS_HASH_SALT splits old hashes from new."
+  info "Keep a copy of .env: a lost TRACE_SIGNALS_HASH_SALT splits old hashes from new, and a lost RATEL_SECRET_KEY opens no stored Slack secret."
 }
 
 # Pins the release in .env, or adds the build override for a source build, and names the compose

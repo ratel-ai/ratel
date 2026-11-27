@@ -11,7 +11,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import { GridCells } from "@/components/console/grid/GridCells";
+import { type GridCell, GridCells } from "@/components/console/grid/GridCells";
 import {
   compacted,
   type GridItem,
@@ -27,7 +27,7 @@ const ArrangeGrid = lazy(() => import("@/components/console/grid/ArrangeGrid"));
 /** Tailwind's `lg`. Below it the cards are one column, in reading order, and stay where they are. */
 const WIDE = "(min-width: 1024px)";
 
-export interface GridCard extends GridItem {
+export interface GridCard extends GridCell {
   min: GridMinimum;
 }
 

@@ -115,6 +115,20 @@ export const SERVER_EVENT_NAMES = [
   "eval_experiment_finished",
   "mcp_servers_viewed",
   "agents_viewed",
+  "feature.scorers.changed",
+  "feature.scorers.swept",
+  "feature.scorers.judge_skipped",
+  "feature.alerts.changed",
+  "feature.alerts.destination_changed",
+  "feature.slack.app_changed",
+  "feature.slack.install_finished",
+  "feature.slack.disconnected",
+  "feature.alerts.fired",
+  "feature.alerts.recovered",
+  "feature.alerts.delivery_failed",
+  "feature.alerts.skipped",
+  "feature.rql.query_run",
+  "dashboard_changed",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];
@@ -197,7 +211,7 @@ export type ProductEventProperties = {
   organization_settings_updated: { name_changed: boolean; slug_changed: boolean };
   organization_deleted: { organization_slug: string };
   project_created: { project_slug: string };
-  project_settings_updated: { field: "name" };
+  project_settings_updated: { field: "name" | "geo_attributes" };
   project_deleted: { project_slug: string };
   api_key_created: { key_prefix: string; named: boolean; expires_in: string; access?: string };
   api_key_revoked: { key_prefix: string };

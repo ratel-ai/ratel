@@ -1,31 +1,14 @@
-import type { OverviewLayout, OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
+import type { OverviewItemId, OverviewLayout } from "@/lib/views/overview-layout/domain/layout";
 
 /** The decisions of edit mode. Pure. */
 
 export const HISTORY_ID = "overview-history";
 
-/** What is on the page when a key goes down, before anything reacts to it. */
-export interface KeyMoment {
-  key: string;
-  /** Held down, or part of a text composition. */
-  continued: boolean;
-  /** A dialog, menu, Panel, command palette or list is open: the key is its own. */
-  layerOpen: boolean;
-  /** A drag or a resize is in progress. */
-  arranging: boolean;
-  /** The focus is in a text field or in a toast, which answer the key themselves. */
-  fieldFocused: boolean;
-}
-
-export function keyLeavesEditMode(at: KeyMoment): boolean {
-  return at.key === "Escape" && !at.continued && !at.layerOpen && !at.arranging && !at.fieldFocused;
-}
-
 /** The last added widget that is still on the page: a removal or a failed save takes it away. */
 export function widgetToReveal(
-  added: readonly OverviewWidgetId[],
+  added: readonly OverviewItemId[],
   layout: OverviewLayout,
-): OverviewWidgetId | null {
+): OverviewItemId | null {
   const visible = new Set(layout.filter(({ removed }) => !removed).map(({ id }) => id));
   return added.findLast((id) => visible.has(id)) ?? null;
 }

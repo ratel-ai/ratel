@@ -10,3 +10,5 @@
 ^https://console\.aws\.amazon\.com/cloudformation/
 ^https://portal\.azure\.com/
 ^https://shell\.cloud\.google\.com/
+# release-please tags after the release PR merges; its compare URL in CHANGELOG.md 404s until then.
+^https://github\.com/ratel-ai/ratel/compare/v[0-9]+\.[0-9]+\.[0-9]+\.\.\.v[0-9]+\.[0-9]+\.[0-9]+$

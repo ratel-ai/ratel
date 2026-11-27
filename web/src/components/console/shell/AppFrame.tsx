@@ -98,6 +98,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     organization && data.focusedConsoleOrganizations?.includes(organization.id),
   );
   const sandboxPage = Boolean(organization && data.sandboxOrganizations?.includes(organization.id));
+  const customMonitoring = Boolean(
+    organization && data.customMonitoringOrganizations?.includes(organization.id),
+  );
   const evalsPage = Boolean(organization && data.evalsOrganizations?.includes(organization.id));
   const items = useMemo(
     () =>
@@ -110,6 +113,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         entityPages,
         focusedConsole,
         sandboxPage,
+        customMonitoring,
         evalsPage,
       }),
     [
@@ -121,6 +125,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       entityPages,
       focusedConsole,
       sandboxPage,
+      customMonitoring,
       evalsPage,
     ],
   );

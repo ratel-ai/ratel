@@ -5,10 +5,9 @@ import { buttonVariants } from "@ratel/design-system/button-variants";
 import { EmptyState } from "@ratel/design-system/states";
 import { CalendarRange, SearchX } from "lucide-react";
 import Link from "next/link";
+import { TRACES_DOCS } from "@/lib/console/docs-links";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
-
-export const TRACES_DOCS = "https://docs.ratel.sh/observability";
 
 export type TracesEmptyKind = "no-telemetry" | "events-only" | "outside-window" | "filtered";
 
