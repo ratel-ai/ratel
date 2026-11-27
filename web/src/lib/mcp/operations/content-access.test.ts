@@ -5,6 +5,7 @@ import {
   CONTENT_WITHHELD_HINT,
   contentHint,
   experimentAttributesFor,
+  mayCopyContent,
   mayReadContent,
   withheldMarker,
 } from "./content-access";
@@ -123,4 +124,20 @@ test("every MCP tool module that reads the content opt-in also asks the credenti
     [],
     "gate captured text with mayReadContent or credentialMayReadContent",
   );
+});
+
+test("copying captured text into a row or case needs the project's opt-in, for a signed-in member too", async () => {
+  const optIn = (value: boolean) => ({ contentOptIn: async () => value });
+  assert.equal(await mayCopyContent({ auth: oauth, projectId: PROJECT }, optIn(false)), false);
+  assert.equal(await mayCopyContent({ auth: oauth, projectId: PROJECT }, optIn(true)), true);
+  assert.equal(await mayCopyContent({ auth: apiKey, projectId: PROJECT }, optIn(false)), false);
+  assert.equal(await mayCopyContent({ auth: apiKey, projectId: PROJECT }, optIn(true)), true);
+  const noScope = { ...apiKey, scopes: ["mcp:read" as const] };
+  assert.equal(await mayCopyContent({ auth: noScope, projectId: PROJECT }, optIn(true)), false);
+  const failing = {
+    contentOptIn: async () => {
+      throw new Error("statement timeout");
+    },
+  };
+  assert.equal(await mayCopyContent({ auth: oauth, projectId: PROJECT }, failing), false);
 });

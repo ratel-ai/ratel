@@ -73,6 +73,7 @@ async function setup(over: Partial<EvalDatasetsDeps> = {}) {
           } as unknown as SandboxRun)
         : null,
     mayReadContent: async () => true,
+    mayCopyContent: async () => true,
     traces: () => fakeTraceSource(),
     now: () => new Date(),
     ...over,
@@ -176,7 +177,10 @@ test("each query kind is created with its settings, and a query dataset takes no
 });
 
 test("a row from a turn needs content access, and the refusal says so", async () => {
-  const { call } = await setup({ mayReadContent: async () => false });
+  const { call } = await setup({
+    mayReadContent: async () => false,
+    mayCopyContent: async () => false,
+  });
   ok(await call("evals_create_dataset", { name: "Asks" }));
   const refused = failure(await call("evals_add_dataset_row", { dataset: "Asks", turnId: TURN }));
   assert.deepEqual([refused.error, refused.reason], ["forbidden", "no_content_access"]);
@@ -293,4 +297,14 @@ test("an RQL dataset is refused at create and preview when RQL (customMonitoring
   const preview = ok<{ ok: boolean; reason: string }>(await call("evals_preview_dataset", rql));
   assert.deepEqual([preview.data.ok, preview.data.reason], [false, "rql_off"]);
   ok(await call("evals_create_dataset", { name: "Last", kind: "last_traces" }));
+});
+
+test("a row from a turn needs the project's opt-in, even for a signed-in member who may read", async () => {
+  const { call } = await setup({
+    mayReadContent: async () => true,
+    mayCopyContent: async () => false,
+  });
+  ok(await call("evals_create_dataset", { name: "Asks" }));
+  const refused = failure(await call("evals_add_dataset_row", { dataset: "Asks", turnId: TURN }));
+  assert.deepEqual([refused.error, refused.reason], ["forbidden", "no_content_access"]);
 });

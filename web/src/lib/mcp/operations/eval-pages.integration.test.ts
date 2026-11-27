@@ -82,6 +82,7 @@ async function setup(readable = true) {
     createEval: (input) => evals.create(input),
     actions: () => actions,
     mayReadContent: async () => readable,
+    mayCopyContent: async () => readable,
     organizationIdOf: async () => ORGANIZATION_ID,
     advance: () => {},
     now: () => new Date(),

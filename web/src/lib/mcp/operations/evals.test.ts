@@ -321,6 +321,7 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
     getSandboxRun: async (projectId, id) =>
       projectId === PROJECT && id === SANDBOX_RUN ? sandboxRun() : null,
     mayReadContent: async () => true,
+    mayCopyContent: async () => true,
     organizationIdOf: async () => "org-1",
     now: () => T0,
     sleep: async () => {},
@@ -1003,9 +1004,22 @@ test("evals_create_case: more tasks need one in task, no task needs an eval, and
   const none = failure(await call("evals_create_case", { turnId: CASE }));
   assert.equal(none.error, "invalid_params");
   const hidden = failure(
-    await call("evals_create_case", { turnId: CASE }, { mayReadContent: async () => false }),
+    await call(
+      "evals_create_case",
+      { turnId: CASE },
+      { mayReadContent: async () => false, mayCopyContent: async () => false },
+    ),
   );
   assert.deepEqual([hidden.error, hidden.reason], ["forbidden", "no_content_access"]);
+  // A member who may read, in a project whose opt-in is off: the case would copy the text.
+  const optedOut = failure(
+    await call(
+      "evals_create_case",
+      { turnId: CASE },
+      { mayReadContent: async () => true, mayCopyContent: async () => false },
+    ),
+  );
+  assert.deepEqual([optedOut.error, optedOut.reason], ["forbidden", "no_content_access"]);
 });
 
 test("evals_create_case: a task with more evals needs one in eval", async () => {
