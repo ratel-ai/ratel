@@ -11,6 +11,7 @@ import type { TraceSource } from "./ports/trace-source";
 export type ResolveRefusal =
   | "not_a_query"
   | "no_content_access"
+  | "rql_off"
   | "query_failed"
   | "too_many_rows"
   | "no_rows";
@@ -20,6 +21,18 @@ export type ResolveResult =
   | { ok: false; reason: ResolveRefusal; message: string };
 
 const TRACE_COLUMN = "trace_id";
+export const RQL_OFF_MESSAGE =
+  "RQL is not on for this project, so an RQL dataset cannot run. Use another kind of dataset.";
+
+/** An RQL dataset needs RQL (`customMonitoring`) on for the project. Null: it may run. */
+export async function rqlRefusal(
+  projectId: string,
+  query: DatasetQuery,
+  source: Pick<TraceSource, "rqlEnabled">,
+): Promise<{ ok: false; reason: "rql_off"; message: string } | null> {
+  if (query.kind !== "rql" || (await source.rqlEnabled(projectId))) return null;
+  return refused("rql_off", RQL_OFF_MESSAGE);
+}
 /** Turns loaded at the same time: each one reads its traces. */
 const PARALLEL = 5;
 
@@ -89,6 +102,8 @@ async function findTurns(
   source: TraceSource,
 ): Promise<{ ok: true; turnIds: string[] } | Extract<ResolveResult, { ok: false }>> {
   if (!isQueryKind(query)) return refused("not_a_query", "A fixed dataset holds its rows.");
+  const rqlOff = await rqlRefusal(projectId, query, source);
+  if (rqlOff) return rqlOff;
   if (!(await source.readContent(projectId))) {
     return refused(
       "no_content_access",
@@ -160,6 +175,6 @@ async function inParallel<T>(
   await Promise.all(Array.from({ length: PARALLEL }, lane));
 }
 
-function refused(reason: ResolveRefusal, message: string) {
+function refused<R extends ResolveRefusal>(reason: R, message: string) {
   return { ok: false as const, reason, message };
 }

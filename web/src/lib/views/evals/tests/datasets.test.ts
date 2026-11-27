@@ -24,6 +24,7 @@ function fakeSource(over: Partial<TraceSource> = {}): TraceSource & { calls: str
   return {
     calls,
     readContent: async () => true,
+    rqlEnabled: async () => true,
     lastTurns: async (_, limit) => {
       calls.push(`last:${limit}`);
       return ["t1", "t2", "t3"].slice(0, limit);
@@ -177,4 +178,22 @@ test("a turn with no captured input is left out, and no row at all is refused", 
 test("a fixed dataset is not resolved", async () => {
   const result = await resolveDataset(PROJECT, query({ kind: "fixed" }), fakeSource());
   assert.equal(result.ok ? null : result.reason, "not_a_query");
+});
+
+test("an RQL dataset does not run when RQL (customMonitoring) is off for the project", async () => {
+  const source = fakeSource({ rqlEnabled: async () => false });
+  const result = await resolveDataset(
+    PROJECT,
+    query({ kind: "rql", text: "select trace_id from traces" }),
+    source,
+  );
+  assert.equal(result.ok ? null : result.reason, "rql_off");
+  assert.match(result.ok ? "" : result.message, /RQL is not on for this project/);
+  assert.deepEqual(
+    source.calls.filter((call) => call.startsWith("rql:")),
+    [],
+  );
+  // The other kinds do not need it.
+  const last = await resolveDataset(PROJECT, query({ kind: "last_traces", limit: 2 }), source);
+  assert.ok(last.ok);
 });

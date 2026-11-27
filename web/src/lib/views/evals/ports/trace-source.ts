@@ -14,6 +14,11 @@ export interface TraceSource {
   readContent(projectId: string): Promise<boolean>;
   lastTurns(projectId: string, limit: number): Promise<string[]>;
   taskTurns(projectId: string, taskId: string, limit: number): Promise<string[]>;
+  /**
+   * Whether the project may run RQL: `customMonitoring`, the flag of every other RQL caller. Without
+   * it an RQL dataset is refused at create, preview and run.
+   */
+  rqlEnabled(projectId: string): Promise<boolean>;
   runRql(projectId: string, text: string): Promise<RqlTable>;
   /** The turn of each trace that has one, by the trace id. */
   turnsOfTraces(projectId: string, traceIds: readonly string[]): Promise<Map<string, string>>;

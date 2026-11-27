@@ -15,6 +15,7 @@ import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle
 import { createTraceSource } from "@/lib/views/evals/adapters/trace-source";
 import type { Compared } from "@/lib/views/evals/baseline";
 import { readOnlyTools } from "@/lib/views/evals/console-deps";
+import { rqlRefusal } from "@/lib/views/evals/datasets";
 import { currentVersion as currentRow } from "@/lib/views/evals/domain/case";
 import {
   DATASET_KINDS,
@@ -238,6 +239,10 @@ export function evalDatasetsOperations(deps: EvalDatasetsDeps = defaultDeps): Mc
           throw invalidParams(issue?.message ?? "The query is not valid.", [
             { path: String(issue?.path[0] ?? "kind"), message: issue?.message ?? "Not valid." },
           ]);
+        }
+        const rqlOff = await rqlRefusal(ctx.projectId, query.data, deps.traces());
+        if (rqlOff) {
+          throw new McpOperationError("forbidden", rqlOff.message, { reason: rqlOff.reason });
         }
         const made = await deps.datasets().create({
           projectId: ctx.projectId,

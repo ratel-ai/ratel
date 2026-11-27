@@ -1417,6 +1417,7 @@ const START_REFUSAL = {
   invalid_params: "invalid_params",
   wrong_sandbox: "conflict",
   no_content_access: "forbidden",
+  rql_off: "forbidden",
   query_failed: "invalid_params",
   too_many_rows: "invalid_params",
   invalid_scorers: "invalid_params",

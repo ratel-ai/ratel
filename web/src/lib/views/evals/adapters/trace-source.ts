@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { QUERY_VERSION } from "@/lib/contracts/query";
 import { traceTurns } from "@/lib/ledger/schema";
 import type { getDb } from "@/lib/platform/db/client";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { runQuery } from "@/lib/synthesis/metrics/query";
 // Fills `metricSeams.sql`: an RQL dataset runs its query through `runQuery`.
 import "@/lib/synthesis/rql/query";
@@ -60,6 +61,8 @@ export function createTraceSource(
     async taskTurns(projectId, taskId, limit) {
       return (await closedTurns(projectId, limit, taskId)).map(({ id }) => id);
     },
+
+    rqlEnabled: (projectId) => featureEnabled("customMonitoring", { projectId }),
 
     async runRql(projectId, text) {
       const until = deps.now();

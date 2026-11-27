@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
-import { type PreviewResult, previewDataset, resolveDataset } from "./datasets";
+import { type PreviewResult, previewDataset, resolveDataset, rqlRefusal } from "./datasets";
 import {
   type Dataset,
   datasetDetailsSchema,
@@ -132,6 +132,8 @@ export async function createDataset(
   if (turnIds && query.kind !== "fixed") {
     return refused("invalid", "A query dataset holds no row. A run resolves it.");
   }
+  const rqlOff = await rqlRefusal(projectId, query, deps.traces);
+  if (rqlOff) return rqlOff;
   const rows = turnIds
     ? await rowsOf(
         projectId,
@@ -186,6 +188,8 @@ export async function previewQuery(
   query: z.output<typeof datasetQuerySchema>,
   deps: Pick<ActionDeps, "traces">,
 ): Promise<PreviewResult> {
+  const rqlOff = await rqlRefusal(projectId, query, deps.traces);
+  if (rqlOff) return rqlOff;
   if (!actor.mayReadContent) {
     return {
       ok: false,

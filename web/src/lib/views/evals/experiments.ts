@@ -91,6 +91,7 @@ export type StartRefusal =
   | "invalid_params"
   | "wrong_sandbox"
   | "no_content_access"
+  | "rql_off"
   | "query_failed"
   | "too_many_rows"
   | "invalid_scorers"

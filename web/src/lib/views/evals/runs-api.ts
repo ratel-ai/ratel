@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { refuse, reply } from "@/lib/console/scope/member-access";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
+import { rqlRefusal } from "./datasets";
 import { currentVersion as currentRow } from "./domain/case";
 import {
   type Dataset,
@@ -53,6 +54,7 @@ const STATUS: Record<StartRefusal, number> = {
   invalid_params: 400,
   wrong_sandbox: 409,
   no_content_access: 403,
+  rql_off: 403,
   query_failed: 422,
   too_many_rows: 413,
   invalid_scorers: 400,
@@ -293,6 +295,8 @@ export function handleCreateDatasetByKey(request: Request, deps: RunsApiDeps): P
     if (asked && query.kind !== "fixed") {
       return refuse(400, "invalid", "rows: a query dataset holds no row. A run resolves it.");
     }
+    const rqlOff = await rqlRefusal(projectId, query, deps.experiments().traces);
+    if (rqlOff) return refuse(STATUS[rqlOff.reason], rqlOff.reason, rqlOff.message);
     const rows = asked ? await newRows(projectId, asked, deps) : null;
     if (rows && !rows.ok) return refuse(404, "not_found", rows.message);
     const { datasets } = deps.catalog();

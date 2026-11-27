@@ -282,3 +282,15 @@ test("a preview reads a query now, with the content rule of the key", async () =
   };
   assert.equal(closed.reason, "no_content_access");
 });
+
+test("an RQL dataset is refused at create and preview when RQL (customMonitoring) is off", async () => {
+  const { call } = await setup({
+    traces: () => fakeTraceSource({ rqlEnabled: async () => false }),
+  });
+  const rql = { kind: "rql", text: "select trace_id from traces" };
+  const created = failure(await call("evals_create_dataset", { name: "By RQL", ...rql }));
+  assert.deepEqual([created.error, created.reason], ["forbidden", "rql_off"]);
+  const preview = ok<{ ok: boolean; reason: string }>(await call("evals_preview_dataset", rql));
+  assert.deepEqual([preview.data.ok, preview.data.reason], [false, "rql_off"]);
+  ok(await call("evals_create_dataset", { name: "Last", kind: "last_traces" }));
+});

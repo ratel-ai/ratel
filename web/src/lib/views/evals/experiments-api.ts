@@ -72,6 +72,7 @@ const STATUS: Record<StartRefusal, number> = {
   invalid_params: 400,
   wrong_sandbox: 409,
   no_content_access: 403,
+  rql_off: 403,
   query_failed: 422,
   too_many_rows: 413,
   invalid_scorers: 400,
