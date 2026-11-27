@@ -39,6 +39,7 @@ import {
 import { type CompareRefusal, type Comparison, compare } from "@/lib/views/evals/domain/compare";
 import {
   currentVersion,
+  datasetOf,
   type EvalDefinition,
   type EvalScorer,
   evalContentSchema,
@@ -65,8 +66,8 @@ import {
 } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
-import type { NewCase } from "@/lib/views/evals/ports/case-store";
-import type { NewEval } from "@/lib/views/evals/ports/eval-store";
+import type { CaseStore, NewCase } from "@/lib/views/evals/ports/case-store";
+import type { EvalStore, NewEval } from "@/lib/views/evals/ports/eval-store";
 import { type SaveOptions, type SaveSource, saveOptions } from "@/lib/views/evals/save-target";
 import { suiteTable } from "@/lib/views/evals/suite-view";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
@@ -99,9 +100,9 @@ export interface EvalsOperationDeps {
   pinnedRun(projectId: string): Promise<ComparedRun | null>;
   getCase(projectId: string, caseId: string): Promise<EvalCase | null>;
   /** One case for each input, in one transaction. */
-  createCases(inputs: readonly NewCase[]): Promise<EvalCase[] | "eval_not_found">;
+  createCases(inputs: readonly NewCase[]): ReturnType<CaseStore["createAll"]>;
   getEvalByName(projectId: string, name: string): Promise<EvalDefinition | null>;
-  createEval(input: NewEval): Promise<EvalDefinition | "name_taken">;
+  createEval(input: NewEval): ReturnType<EvalStore["create"]>;
   startExperiment(subject: UsageSubject, start: StartExperiment): Promise<StartExperimentResult>;
   /**
    * Drives a new eval run in this process until it closes, so an agent does not wait for the
@@ -242,7 +243,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         return {
           data: {
             evals: evals.map((definition) => {
-              const dataset = byDataset.get(definition.datasetId) ?? [];
+              const dataset = byDataset.get(datasetOf(definition)) ?? [];
               const version = currentVersion(definition);
               return {
                 evalId: definition.id,
@@ -377,6 +378,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             reason: "name_taken",
           });
         }
+        if (created === "dataset_not_found") throw notFound("dataset");
         const problem = runProblem(currentVersion(created));
         return {
           data: { evalId: created.id, name: created.name, version: 1 },
@@ -532,6 +534,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           })),
         );
         if (created === "eval_not_found") throw notFound("eval");
+        if (created === "dataset_not_fixed") throw notFixed();
         const cases = created.map((evalCase, n) => {
           const target = targets[n];
           const problem = target ? runProblem(currentVersion(target)) : null;
@@ -1033,10 +1036,19 @@ async function createTaskEval(
     content: target.content,
     createdBy: requester(ctx.auth),
   });
+  if (created === "dataset_not_found") throw notFound("dataset");
   if (created !== "name_taken") return created;
   const made = await deps.getEvalByName(ctx.projectId, target.name);
   if (!made) throw notFound("eval");
   return made;
+}
+
+function notFixed(): McpOperationError {
+  return new McpOperationError(
+    "conflict",
+    "The dataset of the eval is a query: a run resolves its rows. Add the row to a fixed dataset.",
+    { reason: "dataset_not_fixed" },
+  );
 }
 
 /** An eval by its name, else by its id. */
@@ -1079,6 +1091,7 @@ async function evalNamed(
     content: content.data,
     createdBy: requester(ctx.auth),
   });
+  if (created === "dataset_not_found") throw notFound("dataset");
   if (created !== "name_taken") return created;
   // Another call made it at the same time.
   const made = await deps.getEvalByName(ctx.projectId, name);
@@ -1125,6 +1138,7 @@ const START_REFUSAL = {
   no_content_access: "forbidden",
   query_failed: "invalid_params",
   too_many_rows: "invalid_params",
+  invalid_scorers: "invalid_params",
 } as const;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {

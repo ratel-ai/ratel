@@ -28,15 +28,17 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
     async create({ projectId, name, taskId, content, createdBy }) {
       try {
         return await db.transaction(async (tx) => {
-          const datasetId = await createOwnDataset(tx, { projectId, name, createdBy });
+          const datasetId =
+            content.datasetId ?? (await createOwnDataset(tx, { projectId, name, createdBy }));
+          if (!(await inProject(tx, projectId, datasetId))) return "dataset_not_found";
           const [row] = await tx
             .insert(evalDefinitions)
-            .values({ ...storable({ name, taskId }), projectId, datasetId, createdBy })
+            .values({ ...storable({ name, taskId }), projectId, createdBy })
             .returning();
           if (!row) throw new Error("the eval row is missing");
           const [version] = await tx
             .insert(evalDefinitionVersions)
-            .values({ ...columns(content), evalId: row.id, number: 1, createdBy })
+            .values({ ...columns(content, datasetId), evalId: row.id, number: 1, createdBy })
             .returning();
           if (!version) throw new Error("the eval version row is missing");
           return toEval(row, [version]);
@@ -100,9 +102,13 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
             .where(eq(evalDefinitions.id, evalId))
             .returning();
           if (!row) throw new Error("the eval row is missing");
-          if (!sameContent(storable(content), toVersion(newest))) {
+          const datasetId = content.datasetId ?? newest.datasetId;
+          if (datasetId !== newest.datasetId && !(await inProject(tx, projectId, datasetId))) {
+            throw new DatasetNotFound();
+          }
+          if (!sameContent(storable({ ...content, datasetId }), toVersion(newest))) {
             await tx.insert(evalDefinitionVersions).values({
-              ...columns(content),
+              ...columns(content, datasetId),
               evalId,
               number: newest.number + 1,
               createdBy: userId,
@@ -113,10 +119,23 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
         });
       } catch (error) {
         if (isUniqueViolation(error)) return "name_taken";
+        if (error instanceof DatasetNotFound) return "dataset_not_found";
         throw error;
       }
     },
   };
+}
+
+/** A rollback: the dataset of an edit is not in the project. */
+class DatasetNotFound extends Error {}
+
+async function inProject(tx: Tx, projectId: string, datasetId: string): Promise<boolean> {
+  const [found] = await tx
+    .select({ id: evalDatasets.id })
+    .from(evalDatasets)
+    .where(and(eq(evalDatasets.projectId, projectId), eq(evalDatasets.id, datasetId)))
+    .for("share");
+  return found !== undefined;
 }
 
 /** A new eval gets a fixed dataset with its name, or with a number after it when that is taken. */
@@ -149,16 +168,33 @@ async function withVersions(db: Pick<Db, "select">, row: EvalRow): Promise<EvalD
   return toEval(row, versions);
 }
 
-function columns({ sandboxName, params, trials, scorers }: EvalContent) {
-  return storable({ sandboxName, params, trials, scorers });
+function columns(
+  { sandboxName, sandboxVersionId, matrix, params, trials, scorers }: EvalContent,
+  datasetId: string,
+) {
+  return storable({ datasetId, sandboxName, sandboxVersionId, matrix, params, trials, scorers });
 }
 
 function toEval(row: EvalRow, versions: VersionRow[]): EvalDefinition {
-  const { id, projectId, name, taskId, datasetId, createdAt } = row;
-  return { id, projectId, name, taskId, datasetId, createdAt, versions: versions.map(toVersion) };
+  const { id, projectId, name, taskId, createdAt } = row;
+  return { id, projectId, name, taskId, createdAt, versions: versions.map(toVersion) };
 }
 
 function toVersion(row: VersionRow): EvalVersion {
-  const { id, evalId, number, sandboxName, params, trials, scorers, createdBy, createdAt } = row;
-  return { id, evalId, number, sandboxName, params, trials, scorers, createdBy, createdAt };
+  const { id, evalId, number, datasetId, sandboxName, sandboxVersionId, matrix } = row;
+  const { params, trials, scorers, createdBy, createdAt } = row;
+  return {
+    id,
+    evalId,
+    number,
+    datasetId,
+    sandboxName,
+    sandboxVersionId,
+    matrix,
+    params,
+    trials,
+    scorers,
+    createdBy,
+    createdAt,
+  };
 }

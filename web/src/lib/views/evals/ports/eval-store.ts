@@ -4,12 +4,15 @@ export type NewEval = EvalDetails & { projectId: string; content: EvalContent; c
 
 export type EvalEdit = EvalDetails & { content: EvalContent };
 
-export type EvalWriteRefusal = "not_found" | "changed" | "name_taken";
+export type EvalWriteRefusal = "not_found" | "changed" | "name_taken" | "dataset_not_found";
 
 /** The evals of a project. No method changes a version: an edit adds one. */
 export interface EvalStore {
-  /** Adds an eval with its first version. */
-  create(input: NewEval): Promise<EvalDefinition | "name_taken">;
+  /**
+   * Adds an eval with its first version. With no dataset, the eval gets its own fixed dataset.
+   * `dataset_not_found`: the project has no such dataset.
+   */
+  create(input: NewEval): Promise<EvalDefinition | "name_taken" | "dataset_not_found">;
   get(projectId: string, evalId: string): Promise<EvalDefinition | null>;
   /** By name, as a person or an agent writes it. */
   getByName(projectId: string, name: string): Promise<EvalDefinition | null>;

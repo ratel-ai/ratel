@@ -80,6 +80,9 @@ function evalCase(versions: CaseVersion[] = [caseVersion()]): EvalCase {
 
 function evalDefinition(input: Partial<NewEval> = {}): EvalDefinition {
   const content = input.content ?? {
+    datasetId: null,
+    sandboxVersionId: null,
+    matrix: {},
     sandboxName: null,
     params: {},
     trials: 3,
@@ -88,12 +91,19 @@ function evalDefinition(input: Partial<NewEval> = {}): EvalDefinition {
   return {
     id: EVAL,
     projectId: PROJECT,
-    datasetId: EVAL,
     name: input.name ?? "Refunds",
     taskId: input.taskId ?? null,
     createdAt: T0,
     versions: [
-      { ...content, id: EVAL_VERSION, evalId: EVAL, number: 1, createdBy: "u", createdAt: T0 },
+      {
+        ...content,
+        datasetId: EVAL,
+        id: EVAL_VERSION,
+        evalId: EVAL,
+        number: 1,
+        createdBy: "u",
+        createdAt: T0,
+      },
     ],
   };
 }
@@ -103,6 +113,10 @@ function experiment(overrides: Partial<Experiment> = {}): Experiment {
     id: RUN,
     projectId: PROJECT,
     organizationId: "org-1",
+    evalId: null,
+    datasetId: null,
+    variants: [],
+    changes: {},
     sandboxVersionId: "sv-1",
     sandboxName: "support-agent",
     name: null,
@@ -127,6 +141,7 @@ function trial(overrides: Partial<Trial> = {}): Trial {
     id: TRIAL,
     experimentId: RUN,
     caseVersionId: VERSION,
+    variant: 0,
     index: 0,
     state: "done",
     result: "pass",
@@ -249,14 +264,19 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
       toolCalls: [],
     }),
     caseVersion: async (id) => (id === VERSION ? caseVersion() : null),
-    getBaseline: async () => ({ experimentId: BASE_RUN, pinnedBy: "x", pinnedAt: T0 }),
+    getBaseline: async () => ({
+      evalId: null,
+      experimentId: BASE_RUN,
+      pinnedBy: "x",
+      pinnedAt: T0,
+    }),
     pinBaseline: async (_projectId, experimentId, pinnedBy) => ({
       ok: true,
-      baseline: { experimentId, pinnedBy, pinnedAt: T0 },
+      baseline: { evalId: null, experimentId, pinnedBy, pinnedAt: T0 },
     }),
     compareWithBaseline: async () => ({
       ok: true,
-      pin: { experimentId: BASE_RUN, pinnedBy: "x", pinnedAt: T0 },
+      pin: { evalId: null, experimentId: BASE_RUN, pinnedBy: "x", pinnedAt: T0 },
       baseline: { experiment: baseline, trials: [baselineTrial] },
       candidate: { experiment: experiment(), trials: [trial()] },
       comparison: {
@@ -884,7 +904,15 @@ const NEW_TARGET = {
   kind: "new" as const,
   name: "Refund an order",
   taskId: "wf-refunds",
-  content: { sandboxName: "support-demo", params: {}, trials: 3, scorers: [GATING_CHECK] },
+  content: {
+    datasetId: null,
+    sandboxVersionId: null,
+    matrix: {},
+    sandboxName: "support-demo",
+    params: {},
+    trials: 3,
+    scorers: [GATING_CHECK],
+  },
 };
 
 test("evals_create_case: a turn goes into the eval of its task", async () => {

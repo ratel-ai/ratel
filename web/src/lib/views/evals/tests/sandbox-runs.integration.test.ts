@@ -24,6 +24,7 @@ import { advanceExperiment, type ExperimentDeps, startExperiment } from "../expe
 import {
   content,
   createEvalsDb,
+  fakeLibrary,
   fakeTraceSource,
   inEval,
   ORGANIZATION_ID,
@@ -100,6 +101,7 @@ async function setup(agent: AgentScript = {}) {
     experiments,
     datasets: createDrizzleDatasetStore(db),
     traces: fakeTraceSource(),
+    library: fakeLibrary(),
     sandboxes: {
       enabled: async () => true,
       listVersions: async () => [summary],

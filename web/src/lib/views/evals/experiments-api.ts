@@ -70,6 +70,7 @@ const STATUS: Record<StartRefusal, number> = {
   no_content_access: 403,
   query_failed: 422,
   too_many_rows: 413,
+  invalid_scorers: 400,
 };
 
 export function handleStartByKey(request: Request, deps: KeyDeps): Promise<Response> {

@@ -7,12 +7,14 @@ import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { currentVersion } from "../domain/case";
 import { datasetQuerySchema, rowKindOf } from "../domain/dataset";
+import { datasetOf } from "../domain/eval";
 import type { TurnContent } from "../domain/from-turn";
 import { type ExperimentDeps, startExperiment } from "../experiments";
 import type { TraceSource } from "../ports/trace-source";
 import {
   content,
   createEvalsDb,
+  fakeLibrary,
   fakeTraceSource,
   ORGANIZATION_ID,
   PROJECT_ID,
@@ -139,7 +141,7 @@ test("a new eval gets a fixed dataset with its name, and its cases go there", as
     createdBy: "user_1",
   });
   const refunds = await seedEval(db);
-  const own = await datasets.get(PROJECT_ID, refunds.datasetId);
+  const own = await datasets.get(PROJECT_ID, datasetOf(refunds));
   assert.equal(own?.name, "Refunds (2)");
   assert.equal(own?.query.kind, "fixed");
   const cases = createDrizzleCaseStore(db);
@@ -151,14 +153,14 @@ test("a new eval gets a fixed dataset with its name, and its cases go there", as
     content: content(),
     createdBy: "user_1",
   });
-  assert.ok(made !== "eval_not_found");
-  assert.equal(made.datasetId, refunds.datasetId);
+  assert.ok(typeof made !== "string");
+  assert.equal(made.datasetId, datasetOf(refunds));
   assert.deepEqual(
     (await cases.list(PROJECT_ID, refunds.id)).map(({ id }) => id),
     [made.id],
   );
   assert.deepEqual(
-    (await datasets.rows(PROJECT_ID, refunds.datasetId)).map(({ id }) => id),
+    (await datasets.rows(PROJECT_ID, datasetOf(refunds))).map(({ id }) => id),
     [made.id],
   );
 });
@@ -175,8 +177,8 @@ test("a run resolves a query dataset, freezes the rows that it found, and keeps 
     createdBy: "user_1",
   });
   if (query === "name_taken") throw new Error("taken");
-  // RP-449 gives an eval its dataset by a version. Here the eval reads the query dataset.
-  await client.query("update eval_definitions set dataset_id = $1 where id = $2", [
+  // The version of the eval reads the query dataset.
+  await client.query("update eval_definition_versions set dataset_id = $1 where eval_id = $2", [
     query.id,
     refunds.id,
   ]);
@@ -228,7 +230,7 @@ test("a query dataset that cannot resolve refuses the run with its reason", asyn
     createdBy: "user_1",
   });
   if (query === "name_taken") throw new Error("taken");
-  await client.query("update eval_definitions set dataset_id = $1 where id = $2", [
+  await client.query("update eval_definition_versions set dataset_id = $1 where eval_id = $2", [
     query.id,
     refunds.id,
   ]);
@@ -255,6 +257,7 @@ function depsOf(db: any, traces: TraceSource): ExperimentDeps {
     evals: createDrizzleEvalStore(db),
     datasets: createDrizzleDatasetStore(db),
     traces,
+    library: fakeLibrary(),
     experiments: createDrizzleExperimentStore(db),
     sandboxes: {
       enabled: async () => true,

@@ -12,7 +12,7 @@ import { refusedParam } from "@/lib/views/sandboxes/run-form";
 import { resolveDataset } from "./datasets";
 import { type CaseVersion, type EvalCase, runInputOf } from "./domain/case";
 import { isQueryKind } from "./domain/dataset";
-import { currentVersion, type EvalDefinition, runProblem } from "./domain/eval";
+import { currentVersion, datasetOf, type EvalDefinition, runProblem } from "./domain/eval";
 import {
   type Experiment,
   type FrozenSuite,
@@ -29,6 +29,7 @@ import type { CaseStore } from "./ports/case-store";
 import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import type { ExperimentStore } from "./ports/experiment-store";
+import type { ScorerLibrary } from "./ports/scorer-library";
 import type { TraceSource } from "./ports/trace-source";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
@@ -48,7 +49,8 @@ export type ExperimentDeps = {
   experiments: ExperimentStore;
   cases: Pick<CaseStore, "list">;
   evals: Pick<EvalStore, "list">;
-  datasets: Pick<DatasetStore, "get" | "keepResolved">;
+  datasets: Pick<DatasetStore, "get" | "keepResolved" | "rows" | "addRunRows">;
+  library: ScorerLibrary;
   /** The traces that a query dataset resolves when a run starts. */
   traces: TraceSource;
   sandboxes: SandboxPort;
@@ -90,7 +92,8 @@ export type StartRefusal =
   | "wrong_sandbox"
   | "no_content_access"
   | "query_failed"
-  | "too_many_rows";
+  | "too_many_rows"
+  | "invalid_scorers";
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -167,6 +170,10 @@ export async function startExperiment(
     ...frozen,
     projectId,
     organizationId,
+    evalId: null,
+    datasetId: null,
+    variants: [],
+    changes: {},
     sandboxVersionId: version.id,
     sandboxName: version.name,
     name: name ?? null,
@@ -332,7 +339,7 @@ async function startTrial(
         projectId,
         organizationId,
         requestedBy: `${EVAL_TRIAL_PREFIX}${trial.id}`,
-        params: paramsOfTrial(experiment, trial.caseVersionId),
+        params: paramsOfTrial(experiment, trial),
         fixtures: version.toolFixtures,
       },
     );
@@ -407,7 +414,7 @@ async function resolveQueryDatasets(
   deps: ExperimentDeps,
 ): Promise<{ ok: true; cases: EvalCase[] } | Extract<StartExperimentResult, { ok: false }>> {
   const cases: EvalCase[] = [];
-  for (const datasetId of new Set(evals.map((one) => one.datasetId))) {
+  for (const datasetId of new Set(evals.map(datasetOf))) {
     const dataset = await deps.datasets.get(projectId, datasetId);
     if (!dataset || !isQueryKind(dataset.query)) continue;
     const result = await resolveDataset(projectId, dataset.query, deps.traces);

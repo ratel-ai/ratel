@@ -74,6 +74,7 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
               rows.map(({ id }) => id),
             ),
             isNull(evalCases.resolvedTurnId),
+            eq(evalCases.runOnly, false),
           ),
         )
         .groupBy(evalCases.datasetId);
@@ -101,6 +102,25 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
       });
     },
 
+    addRunRows(projectId, datasetId, rows, createdBy) {
+      return db.transaction(async (tx) => {
+        const [dataset] = await tx
+          .select({ id: evalDatasets.id })
+          .from(evalDatasets)
+          .where(and(eq(evalDatasets.projectId, projectId), eq(evalDatasets.id, datasetId)))
+          .for("share");
+        if (!dataset) return "not_found";
+        const now = new Date();
+        const made: EvalCase[] = [];
+        for (const row of rows) {
+          made.push(
+            await insertRow(tx, { projectId, datasetId, createdBy, now, runOnly: true }, row),
+          );
+        }
+        return made;
+      });
+    },
+
     async rows(projectId, datasetId) {
       const rows = await db
         .select()
@@ -110,6 +130,7 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
             eq(evalCases.projectId, projectId),
             eq(evalCases.datasetId, datasetId),
             isNull(evalCases.resolvedTurnId),
+            eq(evalCases.runOnly, false),
           ),
         )
         .orderBy(desc(evalCases.createdAt), desc(evalCases.id));
@@ -184,10 +205,11 @@ async function insertRow(
     createdBy: string;
     now: Date;
     resolvedTurnId?: string;
+    runOnly?: boolean;
   },
   row: NewRow,
 ): Promise<EvalCase> {
-  const { projectId, datasetId, createdBy, now, resolvedTurnId } = at;
+  const { projectId, datasetId, createdBy, now, resolvedTurnId, runOnly } = at;
   const content = row.kind === "values" ? valuesContent(row.row) : row.content;
   const [made] = await tx
     .insert(evalCases)
@@ -197,6 +219,7 @@ async function insertRow(
       datasetId,
       evalId: null,
       resolvedTurnId: resolvedTurnId ?? null,
+      runOnly: runOnly ?? false,
       createdBy,
       createdAt: now,
     })

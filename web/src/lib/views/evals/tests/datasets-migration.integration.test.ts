@@ -9,6 +9,7 @@ import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
 import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
+import { datasetOf } from "../domain/eval";
 import { freezeSuite } from "../domain/experiment";
 import { ORGANIZATION_ID, PROJECT_ID } from "./support";
 
@@ -28,7 +29,7 @@ test("each existing eval gets a fixed dataset with its rows", async () => {
   const evals = createDrizzleEvalStore(db);
   const datasets = createDrizzleDatasetStore(db);
   const refunds = await evals.get(PROJECT_ID, REFUNDS);
-  assert.equal(refunds?.datasetId, REFUNDS);
+  assert.equal(refunds && datasetOf(refunds), REFUNDS);
   const listed = await datasets.list(PROJECT_ID);
   assert.deepEqual(listed.map(({ name, query, rowCount }) => [name, query.kind, rowCount]).sort(), [
     ["Refunds", "fixed", 1],

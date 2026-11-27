@@ -10,6 +10,7 @@ import {
   sandboxesEnabledForProject,
   startRun,
 } from "@/lib/views/sandboxes";
+import { listScorers } from "@/lib/views/scorers/store";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
@@ -32,6 +33,7 @@ export function experimentDeps(): ExperimentDeps {
     evals: createDrizzleEvalStore(db),
     datasets: createDrizzleDatasetStore(db),
     traces: createTraceSource(db, { readOnlyTools, now: () => new Date() }),
+    library: { projectScorers: (projectId) => listScorers(projectId, db) },
     sandboxes: {
       enabled: (projectId) => sandboxesEnabledForProject(projectId),
       listVersions: listSandboxVersions,

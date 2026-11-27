@@ -36,6 +36,7 @@ import {
   content,
   createEvalsDb,
   evalContent,
+  fakeLibrary,
   fakeTraceSource,
   inEval,
   NO_REFUND,
@@ -101,6 +102,7 @@ async function setup() {
     experiments,
     datasets: createDrizzleDatasetStore(db),
     traces: fakeTraceSource(),
+    library: fakeLibrary(),
     sandboxes: {
       enabled: async () => true,
       listVersions: async () => versions,

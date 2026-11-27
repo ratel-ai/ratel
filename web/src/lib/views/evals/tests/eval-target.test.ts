@@ -12,13 +12,13 @@ function definition(id: string, name: string, taskId: string | null): EvalDefini
   return {
     id,
     projectId: PROJECT_ID,
-    datasetId: id,
     name,
     taskId,
     createdAt: new Date(0),
     versions: [
       {
         ...evalContent(),
+        datasetId: id,
         id: `${id}-v1`,
         evalId: id,
         number: 1,
@@ -77,7 +77,15 @@ test("a task with no eval gets a new eval with the task's default scorers and th
     // The name of the task is taken: the new eval gets a number.
     name: "Refund an order 2",
     taskId: REFUNDS.id,
-    content: { sandboxName: "support-demo", params: {}, trials: 3, scorers: [NO_REFUND] },
+    content: {
+      datasetId: null,
+      sandboxVersionId: null,
+      matrix: {},
+      sandboxName: "support-demo",
+      params: {},
+      trials: 3,
+      scorers: [NO_REFUND],
+    },
   });
 });
 

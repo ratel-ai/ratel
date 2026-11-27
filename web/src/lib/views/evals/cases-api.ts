@@ -195,6 +195,13 @@ async function create(
     })),
   );
   if (created === "eval_not_found") return refuse(404, "not_found", "There is no such eval.");
+  if (created === "dataset_not_fixed") {
+    return refuse(
+      409,
+      "dataset_not_fixed",
+      "The dataset of the eval is a query: a run resolves its rows. Add the row to a fixed dataset.",
+    );
+  }
   await Promise.all(
     created.map(() => deps.track({ name: "eval_case_created", source: origin.source }, member)),
   );
@@ -218,6 +225,7 @@ async function evalOf(target: Target, member: Member, deps: CasesApiDeps): Promi
     content,
     createdBy: member.externalId,
   });
+  if (made === "dataset_not_found") return null;
   if (made !== "name_taken") {
     await deps.track({ name: "eval_created", source: "save_case" }, member);
     return made.id;

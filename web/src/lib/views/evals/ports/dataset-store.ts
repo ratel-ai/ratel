@@ -41,7 +41,17 @@ export interface DatasetStore {
     rows: readonly NewRow[],
     createdBy: string,
   ): Promise<EvalCase[] | "not_found" | "not_fixed">;
-  /** The rows of a fixed dataset, the newest first. No row that a query resolved. */
+  /**
+   * Adds rows that one run uses for itself only: they are not rows of the dataset. A dataset of any
+   * kind takes them.
+   */
+  addRunRows(
+    projectId: string,
+    datasetId: string,
+    rows: readonly NewRow[],
+    createdBy: string,
+  ): Promise<EvalCase[] | "not_found">;
+  /** The rows of a fixed dataset, the newest first. No row that a query resolved or a run added. */
   rows(projectId: string, datasetId: string): Promise<EvalCase[]>;
   /**
    * Keeps the rows that a query resolved, one row for each turn: a turn seen before gets a new

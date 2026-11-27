@@ -21,13 +21,13 @@ function definition(id: string, taskId: string | null = null): EvalDefinition {
   return {
     id,
     projectId: PROJECT_ID,
-    datasetId: id,
     name: id,
     taskId,
     createdAt: new Date(0),
     versions: [
       {
         ...evalContent(),
+        datasetId: id,
         id: `${id}-v1`,
         evalId: id,
         number: 1,

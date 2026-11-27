@@ -373,6 +373,9 @@ test("save options: a turn of one task whose eval does not exist yet gets a new 
     name: "Refund an order",
     taskId: "wf-refunds",
     content: {
+      datasetId: null,
+      sandboxVersionId: null,
+      matrix: {},
       sandboxName: "support-demo",
       params: {},
       trials: 3,

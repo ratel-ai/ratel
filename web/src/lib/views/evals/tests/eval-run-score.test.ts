@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { combinations, evalContentSchema, MAX_COMBINATIONS } from "../domain/eval";
+import type { Experiment, Trial } from "../domain/experiment";
+import { snapshotOf } from "../domain/score";
+import { RUN_SCORE_RULE, runDelta, runScore } from "../domain/suite";
+import { NO_REFUND } from "./support";
+
+const POLITE = { ...NO_REFUND, id: "polite", name: "Polite", gating: false };
+
+/** A completed run of the eval `e1` with one case, and these results of NO_REFUND for each variant. */
+function run(
+  id: string,
+  results: Array<Array<"pass" | "fail">>,
+  scorers = [NO_REFUND],
+): { experiment: Experiment; trials: Trial[] } {
+  const versionId = `${id}-c1`;
+  const variants =
+    results.length > 1 ? results.map((_, index) => ({ index, params: { n: index } })) : [];
+  const experiment = {
+    id,
+    evalId: "e1",
+    state: "completed",
+    variants,
+    caseVersions: [{ caseId: "c1", versionId, number: 1, name: "c1", evalId: "e1" }],
+    evalVersions: [
+      { evalId: "e1", versionId: "v1", number: 1, name: "Refunds", params: {}, trials: 2 },
+    ],
+    scorerSnapshots: { [versionId]: scorers.map(snapshotOf) },
+  } as unknown as Experiment;
+  const trials = results.flatMap((variant, index) =>
+    variant.map(
+      (result, trial) =>
+        ({
+          id: `${id}-${index}-${trial}`,
+          caseVersionId: versionId,
+          variant: variants.length === 0 ? 0 : index,
+          result,
+          scorers: scorers.map((scorer) => ({
+            scorerId: scorer.id,
+            name: scorer.name,
+            kind: "check",
+            gating: scorer.gating,
+            status: result,
+            reason: "",
+          })),
+        }) as unknown as Trial,
+    ),
+  );
+  return { experiment, trials };
+}
+
+test("the score of a run is the mean of the scores of its variants, and says so", () => {
+  const score = runScore(
+    run("r1", [
+      ["pass", "pass"],
+      ["pass", "fail"],
+    ]),
+  );
+  assert.deepEqual(
+    score.variants.map(({ variant, score: one }) => [variant?.index, one.score]),
+    [
+      [0, 1],
+      [1, 0.5],
+    ],
+  );
+  assert.equal(score.score, 0.75);
+  assert.equal(score.rule, RUN_SCORE_RULE);
+  assert.equal(runScore(run("r2", [["pass", "fail"]])).variants[0]?.variant, null);
+});
+
+test("the delta of a run is its score minus the baseline score", () => {
+  const delta = runDelta(run("base", [["pass", "fail"]]), run("next", [["pass", "pass"]]));
+  assert.ok(delta.ok);
+  assert.equal(delta.score, 0.5);
+});
+
+test("the delta has no value, with its reason, when the scorer snapshots differ", () => {
+  const delta = runDelta(
+    run("base", [["pass", "fail"]]),
+    run("next", [["pass"]], [NO_REFUND, POLITE]),
+  );
+  assert.equal(delta.ok, false);
+  assert.equal(delta.ok ? null : delta.reason, "scorers_differ");
+  assert.match(delta.ok ? "" : delta.message, /"Polite"/);
+});
+
+test("a matrix has each combination, and at most 12 of them", () => {
+  assert.deepEqual(combinations({ model: ["a", "b"], depth: [1, 2, 3] }).length, 6);
+  assert.deepEqual(combinations({}), []);
+  const twelve = evalContentSchema.safeParse({ matrix: { a: [1, 2, 3], b: [1, 2, 3, 4] } });
+  assert.equal(twelve.success, true);
+  const more = evalContentSchema.safeParse({ matrix: { a: [1, 2, 3], b: [1, 2, 3, 4, 5] } });
+  assert.equal(more.success, false);
+  assert.match(more.error?.issues[0]?.message ?? "", new RegExp(`at most ${MAX_COMBINATIONS}`));
+});

@@ -62,13 +62,18 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
           .returning();
         if (!row) throw new Error("the experiment row is missing");
         let position = 0;
+        // Each case runs its trials in each variant of the run, or one time with no variant.
+        const variants = input.variants.length === 0 ? [0] : input.variants.map((one) => one.index);
         const rows = input.caseVersions.flatMap((frozen) =>
-          Array.from({ length: trialsOfCase(input, frozen) }, (_, index) => ({
-            experimentId: row.id,
-            caseVersionId: frozen.versionId,
-            position: position++,
-            index,
-          })),
+          variants.flatMap((variant) =>
+            Array.from({ length: trialsOfCase(input, frozen) }, (_, index) => ({
+              experimentId: row.id,
+              caseVersionId: frozen.versionId,
+              variant,
+              position: position++,
+              index,
+            })),
+          ),
         );
         for (let start = 0; start < rows.length; start += CHUNK) {
           await tx.insert(evalTrials).values(rows.slice(start, start + CHUNK));
