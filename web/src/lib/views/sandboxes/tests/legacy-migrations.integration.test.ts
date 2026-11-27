@@ -14,7 +14,7 @@ import { versionView } from "../domain/version";
 import { ORGANIZATION_ID, PROJECT_ID } from "./support";
 
 /** The first migration of images: the rows before it are legacy rows. */
-const FIRST_IMAGE_MIGRATION = "0063_";
+const FIRST_IMAGE_MIGRATION = "0064_";
 const SANDBOX_ID = "44444444-4444-4444-8444-444444444444";
 const VERSION_ID = "55555555-5555-4555-8555-555555555555";
 const COMPLETED_RUN_ID = "66666666-6666-4666-8666-666666666666";

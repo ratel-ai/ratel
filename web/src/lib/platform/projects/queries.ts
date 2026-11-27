@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { cache } from "react";
 import { isApiKeyExpired } from "@/lib/platform/api-keys";
 import {
@@ -198,4 +198,26 @@ export async function findActiveApiKeyByHash(
 
 export async function touchApiKey(id: string): Promise<void> {
   await getDb().update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, id));
+}
+
+/**
+ * Moves the key's last use forward to `at`, never back. `first`: the key had no use before, which
+ * only one call finds.
+ */
+export async function touchApiKeyAt(
+  id: string,
+  at: Date,
+  db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
+): Promise<{ first: boolean }> {
+  const first = await db
+    .update(apiKeys)
+    .set({ lastUsedAt: at })
+    .where(and(eq(apiKeys.id, id), isNull(apiKeys.lastUsedAt)))
+    .returning({ id: apiKeys.id });
+  if (first.length > 0) return { first: true };
+  await db
+    .update(apiKeys)
+    .set({ lastUsedAt: at })
+    .where(and(eq(apiKeys.id, id), lt(apiKeys.lastUsedAt, at)));
+  return { first: false };
 }

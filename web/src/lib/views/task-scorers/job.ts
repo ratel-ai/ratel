@@ -7,6 +7,7 @@ import { jobs } from "@/lib/jobs/schema";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { type EvalDb, loadRuns } from "@/lib/views/eval-gate/runs";
@@ -250,6 +251,7 @@ export async function enqueueDueTaskScores(
     .from(projects)
     .where(
       and(
+        notOnHold(projects.id),
         exists(
           db
             .select({ id: traceTurns.id })

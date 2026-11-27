@@ -14,6 +14,7 @@ import type {
 } from "@/lib/readings/trace-signals/view";
 import type { Suggestion } from "@/lib/synthesis/dashboard";
 import { productWords } from "@/lib/views/fixes/copy";
+import type { HealthLock } from "@/lib/views/health/unlock";
 import type { TaskRef, UnansweredIntent } from "@/lib/views/home/glance";
 import type { ContextSplit } from "@/lib/views/home/overview-model";
 
@@ -83,6 +84,11 @@ export interface AttentionInput {
   issues: readonly AttentionIssue[];
   /** Issues the plan hides. */
   lockedIssues: number;
+  /**
+   * Agent health still locked (`healthUnlock`): its issues are not listed, since
+   * none of them can be opened yet. Null or absent when it is open or off.
+   */
+  healthLock?: HealthLock | null;
   /** An issue's own place: its panel on Agent health. */
   issueHref: (issueId: string) => string;
   /** The fix that resolves an issue, when there is one. */
@@ -108,6 +114,8 @@ export interface Attention {
   items: AttentionItem[];
   /** Agent health issues past the cut, for a "N more in Agent health" link. */
   moreIssues: number;
+  /** Agent health is still locked: its progress line stands where its issues would. */
+  healthLock: HealthLock | null;
 }
 
 /** Rows shown. */
@@ -128,7 +136,9 @@ const LEADING_ISSUES = 2;
 export function buildAttention(input: AttentionInput): Attention {
   const limit = input.limit ?? ATTENTION_LIMIT;
   const errors = errorItem(input.errors);
-  const groups = issueGroups(input.issues, input.taskSteps);
+  const healthLock = input.healthLock ?? null;
+  // The same rule as Agent health's: nothing it cannot open yet is listed.
+  const groups = healthLock ? [] : issueGroups(input.issues, input.taskSteps);
   const issueItems = groups.map((group) => issueItem(group, input));
   const intentItems = input.unanswered.map(unansweredItem);
   const rewriteItems =
@@ -152,10 +162,11 @@ export function buildAttention(input: AttentionInput): Attention {
   ];
   const items = ordered.slice(0, limit);
   const shownIssues = items.filter((item) => item.key.startsWith(ISSUE_KEY)).length;
-  const moreIssues = input.healthHref
-    ? groups.length - shownIssues + Math.max(0, input.lockedIssues)
-    : 0;
-  return { items, moreIssues };
+  const moreIssues =
+    input.healthHref && !healthLock
+      ? groups.length - shownIssues + Math.max(0, input.lockedIssues)
+      : 0;
+  return { items, moreIssues, healthLock };
 }
 
 function errorItem({ count, total, href }: AttentionInput["errors"]): AttentionItem | null {

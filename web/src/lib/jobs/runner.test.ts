@@ -7,6 +7,7 @@ import {
   type JobRecord,
   type JobStore,
   jobFinishedLines,
+  jobLateResultLine,
 } from "./runner";
 
 function job(over: Partial<JobRecord> = {}): JobRecord {
@@ -28,9 +29,11 @@ function fakeStore(queue: JobRecord[]) {
     claimNextQueued: async () => queue.shift() ?? null,
     markDone: async (id, result) => {
       done.push({ id, result });
+      return true;
     },
     markError: async (id, error) => {
       errors.push({ id, error });
+      return true;
     },
   };
   return { store, done, errors };
@@ -207,8 +210,8 @@ test("an unknown job kind is marked error, never thrown out of the drain", async
 test("respects the max-iterations safety cap against a runaway queue", async () => {
   const store: JobStore = {
     claimNextQueued: async () => job(), // endless supply
-    markDone: async () => {},
-    markError: async () => {},
+    markDone: async () => true,
+    markError: async () => true,
   };
   const res = await drainJobs(store, noopHandlers, { max: 5 });
   assert.equal(res.done, 5);
@@ -233,8 +236,8 @@ test("a job a handler queues mid-drain waits for the next drain instead of loopi
       );
       return at === -1 ? null : queue.splice(at, 1)[0];
     },
-    markDone: async () => {},
-    markError: async () => {},
+    markDone: async () => true,
+    markError: async () => true,
     queueClock: async () => new Date(clock++),
   };
   let calls = 0;
@@ -262,8 +265,8 @@ test("a store without a queue clock drains without a bound", async () => {
       seen.push(createdBefore);
       return null;
     },
-    markDone: async () => {},
-    markError: async () => {},
+    markDone: async () => true,
+    markError: async () => true,
   };
   await drainJobs(store, noopHandlers);
   assert.deepEqual(seen, [undefined]);
@@ -281,8 +284,8 @@ test("a cross-project drain tells the store which projects it just served; a pro
       seen.push(options?.avoidProjects ? [...options.avoidProjects] : undefined);
       return queue.shift() ?? null;
     },
-    markDone: async () => {},
-    markError: async () => {},
+    markDone: async () => true,
+    markError: async () => true,
   };
   await drainJobs(store, noopHandlers);
   assert.deepEqual(seen, [[], ["A"], ["A", "B"], ["B", "A"]], "most recently served last");
@@ -293,8 +296,8 @@ test("a cross-project drain tells the store which projects it just served; a pro
       scoped.push(options);
       return null;
     },
-    markDone: async () => {},
-    markError: async () => {},
+    markDone: async () => true,
+    markError: async () => true,
   };
   await drainJobs(one, noopHandlers, { projectId: "A" });
   assert.deepEqual(scoped, [undefined]);
@@ -331,4 +334,75 @@ test("each finished job is one line with its project, kind, run time and queue w
       budget_ms: 60_000,
     },
   });
+});
+
+test("a reaped job finishing late does not emit completion or increment done", async () => {
+  const { store } = fakeStore([job({ id: "late-success" })]);
+  store.markDone = async () => false;
+
+  const observed = observability();
+  const result = await drainJobs(
+    store,
+    { match_quality_run: async () => ({ ok: true }) },
+    { observability: observed.deps },
+  );
+
+  assert.deepEqual(result, { done: 0, failed: 0 });
+  assert.deepEqual(observed.events, []);
+});
+
+test("a reaped job failing late does not emit failure or increment failed", async () => {
+  const { store } = fakeStore([job({ id: "late-failure" })]);
+  store.markError = async () => false;
+
+  const observed = observability();
+  const result = await drainJobs(
+    store,
+    {
+      match_quality_run: async () => {
+        throw new Error("late failure");
+      },
+    },
+    { observability: observed.deps },
+  );
+
+  assert.deepEqual(result, { done: 0, failed: 0 });
+  assert.deepEqual(observed.events, []);
+  assert.deepEqual(observed.captured, []);
+});
+
+test("a late result the store refuses is one warn line with its project, kind, run time and attempted outcome", () => {
+  const late = { id: "a", projectId: "p1", kind: "build_trace_turns" };
+  assert.deepEqual(jobLateResultLine(late, "done", 1_200), {
+    level: "warn",
+    msg: "job_late_result_ignored",
+    fields: {
+      project_id: "p1",
+      kind: "build_trace_turns",
+      job_id: "a",
+      outcome: "done",
+      duration_ms: 1_200,
+    },
+  });
+  assert.equal(jobLateResultLine(late, "error", 0).fields.outcome, "error");
+});
+
+test("an observer failure after completion cannot turn a completed job into a failure", async () => {
+  const { store, done, errors } = fakeStore([job({ id: "completed" })]);
+  const observer = {
+    ...observability().deps,
+    trackServerEvent: async () => {
+      throw new Error("telemetry unavailable");
+    },
+  };
+
+  const result = await drainJobs(
+    store,
+    { match_quality_run: async () => ({ ok: true }) },
+    { observability: observer },
+  );
+
+  assert.deepEqual(result, { done: 1, failed: 0 });
+  assert.deepEqual(done, [{ id: "completed", result: { ok: true } }]);
+  assert.deepEqual(errors, []);
 });

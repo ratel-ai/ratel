@@ -7,6 +7,7 @@ import { cn } from "@ratel/design-system/cn";
 import { Check, ChevronLeft, ChevronRight, Copy, ListTree, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { DecisionChip } from "@/components/console/session-replay/DecisionChip";
+import { PanelBoundary } from "@/components/console/session-replay/PanelBoundary";
 import { WhatIfPanel } from "@/components/console/session-replay/WhatIfPanel";
 import {
   type CallView,
@@ -237,14 +238,16 @@ function CallInspector({
       )}
       {whatIf && fork ? (
         <div data-call-what-if>
-          <WhatIfPanel
-            key={call.stepIndex}
-            projectId={whatIf.projectId}
-            target={fork}
-            options={whatIf.options}
-            runs={whatIf.runs}
-            readContent={whatIf.readContent}
-          />
+          <PanelBoundary name="What if… panel" resetKey={call.stepIndex}>
+            <WhatIfPanel
+              key={call.stepIndex}
+              projectId={whatIf.projectId}
+              target={fork}
+              options={whatIf.options}
+              runs={whatIf.runs}
+              readContent={whatIf.readContent}
+            />
+          </PanelBoundary>
         </div>
       ) : null}
     </div>
@@ -627,6 +630,13 @@ function Loading({ error }: { error: string | null }) {
   );
 }
 
+/**
+ * How long a step must stay open before its text is read: following the
+ * playhead past a dozen calls in a second reads only the one it stops on
+ * (RTL-368), not a full request for each.
+ */
+const CONTENT_READ_DELAY_MS = 150;
+
 /** The stored text behind a view, read on demand from `source` (default: the trace tables); a null request reads nothing. */
 function useStepContent(
   projectId: string,
@@ -649,24 +659,27 @@ function useStepContent(
   useEffect(() => {
     if (!key) return;
     let live = true;
-    load(JSON.parse(key) as StepContentRequest).then(
-      (result) => {
-        if (!live) return;
-        setState(
-          result.ok
-            ? {
-                key,
-                data: result.content,
-                error: result.content ? null : "Message text is off for this project.",
-              }
-            : { key, data: null, error: result.error },
-        );
-      },
-      () =>
-        live && setState({ key, data: null, error: "This step could not be loaded. Try again." }),
-    );
+    const timer = setTimeout(() => {
+      load(JSON.parse(key) as StepContentRequest).then(
+        (result) => {
+          if (!live) return;
+          setState(
+            result.ok
+              ? {
+                  key,
+                  data: result.content,
+                  error: result.content ? null : "Message text is off for this project.",
+                }
+              : { key, data: null, error: result.error },
+          );
+        },
+        () =>
+          live && setState({ key, data: null, error: "This step could not be loaded. Try again." }),
+      );
+    }, CONTENT_READ_DELAY_MS);
     return () => {
       live = false;
+      clearTimeout(timer);
     };
   }, [load, key]);
   return state.key === key ? { data: state.data, error: state.error } : { data: null, error: null };

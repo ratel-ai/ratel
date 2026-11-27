@@ -280,10 +280,18 @@ test("an empty Needs attention says whether anything was checked", async () => {
   assert.equal(await state(quiet), "clear");
   const none = async () => ({ ...clear, turns: 0 });
   assert.equal(await state({ traces: async () => NO_RUNS, health: none }), "no_data");
-  assert.equal(await state({ ...quiet, health: async () => ({ ...clear, turns: 3 }) }), "early");
-  assert.equal(await state({ ...quiet, health: none }), "early");
+  // Agent health still locked: its progress stands in for the list (RTL-367).
+  assert.equal(
+    await state({ ...quiet, health: async () => ({ ...clear, turns: 3 }) }),
+    "collecting",
+  );
+  assert.equal(await state({ ...quiet, health: none }), "collecting");
   assert.equal(
     await state({ ...quiet, health: async () => ({ ...clear, computedAt: null }) }),
+    "collecting",
+  );
+  assert.equal(
+    await state({ ...quiet, health: async () => ({ ...clear, emptyEarlyReading: true }) }),
     "early",
   );
   assert.equal(
@@ -332,4 +340,40 @@ test("without a score, the card says which reason it is and how many turns are m
     assert.deepEqual(of({ workflows: { ...workflows, blocked } }), [blocked, null]);
   const failed = healthCard(null);
   assert.equal(failed.kind === "state" && failed.reason, "failed");
+});
+
+test("Needs attention lists Agent health's issues only once Agent health unlocks", async () => {
+  const attention = async (health: FocusedReads["health"]) =>
+    (await load({ health }, only("attention"))).data.attention;
+  const locked = await attention(async () => ({ ...MOCK_HEALTH_MODEL, turns: 36 }));
+  assert.deepEqual(
+    locked?.items.filter(({ key }) => key.startsWith("issue:")),
+    [],
+    "no issue Agent health cannot open",
+  );
+  assert.equal(locked?.moreIssues, 0);
+  assert.deepEqual(locked?.healthLock, { unlocked: false, turns: 36, floor: 50 });
+
+  const open = await attention(async () => MOCK_HEALTH_MODEL);
+  assert.ok(open?.items.some(({ key }) => key.startsWith("issue:")));
+  assert.equal(open?.healthLock, null);
+});
+
+test("Needs attention opens at Agent health's own floor, low confidence included", async () => {
+  // toolRunInsights: Agent health shows a reading from 10 turns on, so the Overview lists it too.
+  const early = {
+    ...MOCK_HEALTH_MODEL,
+    turns: 12,
+    floor: 10,
+    lowConfidence: { turns: 12, firmsUpAt: 50 },
+  };
+  const data = (await load({ health: async () => early }, only("attention"))).data;
+  assert.equal(data.attention?.healthLock, null);
+  assert.ok(data.attention?.items.some(({ key }) => key.startsWith("issue:")));
+});
+
+test("a failed Agent health read is partial, not locked", async () => {
+  const data = (await load({ health: fail }, only("attention"))).data;
+  assert.equal(data.attention?.partial, true);
+  assert.equal(data.attention?.healthLock, null);
 });

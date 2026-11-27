@@ -8,6 +8,7 @@ import {
 } from "@/components/console/health/v2/SummaryView";
 import { composition } from "@/lib/composition";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
+import { hasUsableApiKey } from "@/lib/console/has-api-key";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -146,6 +147,9 @@ export default async function AgentHealthPage({
     readOnly: inSupportSession,
   });
 
+  // Before a reading, the state block points at the key onboarding made, or asks for one.
+  const hasApiKey = state !== null && state.kind !== "ready" && (await hasUsableApiKey(project.id));
+
   // Imported runs with no tool calls: read what their spans still say.
   const partial =
     state?.kind === "imported_no_tools"
@@ -208,6 +212,7 @@ export default async function AgentHealthPage({
     share,
     partial,
     inferredTools,
+    hasApiKey,
   };
   return focused ? (
     <FocusedHealthView {...view} />
