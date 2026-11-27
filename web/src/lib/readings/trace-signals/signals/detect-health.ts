@@ -24,7 +24,11 @@ import type { SignalKind } from "@/lib/readings/trace-signals/view";
  * - `latency_outlier`: a tool whose p95 (over a reservoir of its durations)
  *   exceeds both the absolute floor and a multiple of the project's median
  *   call. Severity is the Wilson lower bound of the sample's share above that
- *   bar; impact is seconds of waiting, calls times (p95 - median).
+ *   bar; impact is the seconds really spent in the tool (calls times its mean
+ *   sampled duration), and the card compares the slow calls with the tool's
+ *   own typical call (`toolMedianMs`), not the project's. Tools built to wait
+ *   (a long-poll by name, or calls piling up at a timeout cap) are left out:
+ *   their slowness is their job ({@link builtToWait}).
  * - `dead_tool`: catalog tools never listed and never run in the window, when
  *   the ledger is old and busy enough to say so and `tool_usage_counters`
  *   agrees. One project-level signal naming them all, not one card per tool.
@@ -92,6 +96,28 @@ function errorLoop(entry: Entry, floors: Floors): DetectedSignal[] {
   ];
 }
 
+/** A tool id that names a wait: `wait_for_chat`, `eve__task_wait`, `poll_status`. */
+const WAIT_NAME = /(^|[^a-z])(wait|poll|sleep)(?=[^a-z]|$)/i;
+/** Share of a tool's sampled calls at its ceiling that marks a timeout cap. */
+const CAP_SHARE = 0.05;
+const CAP_MIN_CALLS = 3;
+
+/**
+ * Whether a tool's calls look like a deliberate wait rather than slowness:
+ * a waiting name, or at least {@link CAP_SHARE} of its sampled calls ending
+ * within 1% of the slowest one while that ceiling is at least twice the
+ * typical call (a timeout cap, as a long-poll returns at).
+ */
+export function builtToWait(toolId: string, sample: readonly number[]): boolean {
+  if (WAIT_NAME.test(toolId)) return true;
+  if (sample.length === 0) return false;
+  const max = Math.max(...sample);
+  const typical = quantile(sample, 0.5) ?? 0;
+  if (max < 2 * typical) return false;
+  const atCap = sample.filter((ms) => ms >= max * 0.99).length;
+  return atCap >= CAP_MIN_CALLS && atCap / sample.length >= CAP_SHARE;
+}
+
 function latencyOutlier(
   entry: Entry,
   projectMedian: number | null,
@@ -104,20 +130,23 @@ function latencyOutlier(
   const p95 = quantile(sample, 0.95);
   const bar = Math.max(f.minP95Ms, f.medianMultiple * projectMedian);
   if (p95 === null || p95 <= bar) return [];
+  if (builtToWait(entrySubject(entry).subjectKey, sample)) return [];
   const slow = sample.filter((ms) => ms > bar).length;
   const slowCalls = entry.slowCalls.values().filter((call) => call.tookMs > bar);
+  const meanMs = sample.reduce((sum, ms) => sum + ms, 0) / Math.max(1, sample.length);
   return [
     {
       kind: "latency_outlier",
       ...entrySubject(entry),
       lane: laneOf(entry.mix),
       severity: round4(wilsonLow(slow, sample.length)),
-      impact: Math.round((n * Math.max(0, p95 - projectMedian)) / 1_000),
+      impact: Math.round((n * meanMs) / 1_000),
       n,
       route: "none",
       metrics: {
         p95Ms: Math.round(p95),
         medianMs: Math.round(projectMedian),
+        toolMedianMs: Math.round(quantile(sample, 0.5) ?? 0),
         barMs: Math.round(bar),
         calls: n,
         sampled: sample.length,

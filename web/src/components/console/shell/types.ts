@@ -32,6 +32,8 @@ export type ShellData = {
   focusedConsoleOrganizations?: readonly string[];
   /** The organizations with `sandboxes` on: their rail shows Ratel sandbox. */
   sandboxOrganizations?: readonly string[];
+  /** The organizations with `customMonitoring` on: their rail shows Dashboards, Explore and Alerts. */
+  customMonitoringOrganizations?: readonly string[];
   /** The organizations with `evals` on: their rail shows Evals. */
   evalsOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */

@@ -179,7 +179,12 @@ export async function dispatchOperation(
       );
     }
 
-    const call = { toolName: operation.id, args: parsed.data, auth: deps.auth, ...scope };
+    const call = {
+      toolName: operation.id,
+      args: withoutSecrets(parsed.data, operation.secretParams),
+      auth: deps.auth,
+      ...scope,
+    };
     const result: OperationResult = await traceMcpToolCall(call, () =>
       operation.execute(
         {
@@ -216,4 +221,15 @@ export async function dispatchOperation(
       ).toBody(),
     );
   }
+}
+
+/** The args as telemetry records them. */
+function withoutSecrets(
+  args: Record<string, unknown>,
+  secretParams: readonly string[] = [],
+): Record<string, unknown> {
+  const held = secretParams.filter((name) => args[name] !== undefined);
+  return held.length === 0
+    ? args
+    : { ...args, ...Object.fromEntries(held.map((name) => [name, "[secret]"])) };
 }

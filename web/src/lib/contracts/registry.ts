@@ -80,9 +80,22 @@ export type EditionMcpOperation<Params extends z.ZodObject = z.ZodObject> = {
   execute(context: EditionMcpContext, params: z.output<Params>): Promise<EditionMcpResult>;
 };
 
+/**
+ * A loop the worker runs beside its own lanes (the ingest queue's persist lane, RTL-314):
+ * `concurrency` copies of it, each a `step` at a time, waiting a few seconds after a step that
+ * ran nothing.
+ */
+export type WorkerLane = {
+  name: string;
+  concurrency: number;
+  step(): Promise<{ done: number; failed: number }>;
+};
+
 export type Registration = {
   jobs?: Record<string, JobHandler>;
   drainSteps?: DrainStep[];
+  /** Lanes the worker (and a persist-only process) runs; read once when the worker starts. */
+  workerLanes?: () => WorkerLane[];
   /** MCP tools the edition adds (`lib/mcp/operations/edition.ts`). The open-source edition has none. */
   mcpOperations?: EditionMcpOperation[];
   /**

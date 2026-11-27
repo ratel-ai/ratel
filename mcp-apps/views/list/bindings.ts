@@ -21,6 +21,17 @@ const SYNC_LABELS = { fresh: "Synced", stale: "Stale", inactive: "Inactive" };
 const ISSUE_TONES = { fix_now: "danger", watch: "warning", early: "neutral" } as const;
 const ISSUE_TONE_LABELS = { fix_now: "Fix now", watch: "Watch", early: "Too early" };
 
+/** A scorer's switch, and an alert's state as the Alerts page says it. */
+export const SWITCH_TONES = { on: "success", off: "neutral" } as const;
+export const SWITCH_LABELS = { on: "On", off: "Off" };
+export const ALERT_TONES = {
+  OK: "success",
+  Alerting: "danger",
+  "No data": "neutral",
+  Paused: "neutral",
+  "Needs attention": "warning",
+} as const;
+
 /** Lists of records: one view, the columns and filters per tool. */
 export const listBindings: ListBinding[] = [
   {
@@ -535,6 +546,176 @@ export const listBindings: ListBinding[] = [
       empty: {
         title: "No tools yet",
         description: "Tools show up here once your runtime registers them.",
+      },
+    },
+  },
+  // Custom monitoring (RTL-213): the console's Scorers, Alerts and Dashboards pages.
+  {
+    tool: "list_scorers",
+    config: {
+      rows: "scorers",
+      rowKey: "id",
+      title: "name",
+      noun: { one: "scorer", many: "scorers" },
+      columns: [
+        { key: "name", label: "Scorer" },
+        {
+          key: "kind",
+          label: "Kind",
+          format: "badge",
+          width: "6rem",
+          labels: { check: "Check", judge: "Judged" },
+        },
+        { key: "summary", label: "Checks", hiddenBelow: "md" },
+        { key: "traces", label: "Traces", width: "9rem", hiddenBelow: "lg" },
+        { key: "result", label: "Last 7 days", width: "12rem" },
+        {
+          key: "status",
+          label: "Status",
+          format: "badge",
+          width: "5rem",
+          tones: SWITCH_TONES,
+          labels: SWITCH_LABELS,
+        },
+      ],
+      search: ["name", "summary"],
+      filters: [
+        {
+          key: "kind",
+          label: "Kind",
+          kind: "values",
+          badgeLabels: { check: "Check", judge: "Judged" },
+        },
+        { key: "status", label: "Status", kind: "values", badgeLabels: SWITCH_LABELS },
+      ],
+      detail: { tool: "get_scorer", args: { scorerId: "id" } },
+      empty: {
+        title: "No scorers yet",
+        description:
+          "Ask the agent to create one: a check of each trace, or a question to a judge.",
+      },
+    },
+  },
+  {
+    tool: "list_alerts",
+    config: {
+      rows: "alerts",
+      rowKey: "id",
+      title: "name",
+      noun: { one: "alert", many: "alerts" },
+      columns: [
+        { key: "status", label: "State", format: "badge", width: "8rem", tones: ALERT_TONES },
+        { key: "name", label: "Alert" },
+        { key: "condition", label: "Condition", hiddenBelow: "md" },
+        { key: "lastValueText", label: "Last value", width: "7rem" },
+        {
+          key: "stateChangedAt",
+          label: "Changed",
+          format: "relative",
+          width: "7rem",
+          hiddenBelow: "sm",
+        },
+      ],
+      search: ["name", "condition"],
+      filters: [{ key: "status", label: "State", kind: "values" }],
+      detail: { tool: "get_alert", args: { alertId: "id" } },
+      empty: {
+        title: "No alerts yet",
+        description: "Ask the agent to watch a metric: it compares one number with a threshold.",
+      },
+    },
+  },
+  {
+    tool: "list_alert_destinations",
+    config: {
+      rows: "destinations",
+      rowKey: "id",
+      title: "name",
+      noun: { one: "destination", many: "destinations" },
+      columns: [
+        { key: "name", label: "Destination" },
+        {
+          key: "kind",
+          label: "Kind",
+          format: "badge",
+          width: "9rem",
+          labels: { webhook: "Webhook", slack_channel: "Slack channel" },
+        },
+        { key: "warning", label: "Problem", hiddenBelow: "sm" },
+      ],
+      search: ["name"],
+      empty: {
+        title: "No destinations yet",
+        description: "Ask the agent to add a Slack channel or an incoming webhook.",
+      },
+    },
+  },
+  {
+    tool: "list_slack_channels",
+    config: {
+      rows: "channels",
+      rowKey: "id",
+      title: "name",
+      noun: { one: "channel", many: "channels" },
+      columns: [
+        { key: "name", label: "Channel" },
+        { key: "id", label: "ID", format: "id", width: "9rem" },
+        {
+          key: "isPrivate",
+          label: "Access",
+          format: "badge",
+          width: "7rem",
+          labels: { true: "Private", false: "Public" },
+        },
+      ],
+      search: ["name", "id"],
+      filters: [{ key: "isPrivate", label: "Private", kind: "flag" }],
+      empty: {
+        title: "No channels",
+        description:
+          "An organization admin connects Slack in Settings, Notifications; its channels are listed here.",
+      },
+    },
+  },
+  {
+    tool: "get_location_attributes",
+    config: {
+      rows: "rows",
+      rowKey: "key",
+      title: "holds",
+      noun: { one: "location attribute", many: "location attributes" },
+      columns: [
+        { key: "holds", label: "Holds" },
+        { key: "attribute", label: "Span attribute" },
+        {
+          key: "source",
+          label: "Source",
+          format: "badge",
+          width: "7rem",
+          labels: { default: "Default", custom: "Changed" },
+          tones: { default: "neutral", custom: "info" },
+        },
+      ],
+      empty: { title: "No location attributes" },
+    },
+  },
+  {
+    tool: "list_dashboards",
+    config: {
+      rows: "dashboards",
+      rowKey: "id",
+      title: "name",
+      noun: { one: "dashboard", many: "dashboards" },
+      columns: [
+        { key: "name", label: "Dashboard" },
+        { key: "widgetCount", label: "Widgets", format: "number", width: "6rem" },
+        { key: "updatedBy", label: "Changed by", hiddenBelow: "sm" },
+        { key: "updatedAt", label: "Changed", format: "relative", width: "7rem" },
+      ],
+      search: ["name"],
+      empty: {
+        title: "No dashboards yet",
+        description: "Ask the agent to make one from a description of what it shows.",
       },
     },
   },

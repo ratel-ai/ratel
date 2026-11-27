@@ -13,6 +13,7 @@ import { recordSharedHealthView, sharedHealthFor } from "@/lib/views/health/shar
 
 type Share = NonNullable<EditionUi["HealthShare"]>;
 
+const NoDialog = () => null;
 const editionUi = composition.ui;
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -21,7 +22,7 @@ function withShare(share: Partial<Share>): void {
     ({
       HealthShare: {
         load: async () => ({ link: null, canManage: false }),
-        Dialog: () => null,
+        Dialog: NoDialog,
         resolve: async () => null,
         recordView: async () => {},
         ...share,

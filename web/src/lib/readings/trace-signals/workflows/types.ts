@@ -233,6 +233,10 @@ export interface WorkflowHealth {
   /** Runs with any tool call ending in `error`. */
   errorRuns: number;
   meanToolCalls: number;
+  /** Share of the runs' time spent in timed tool calls; null when no call carries a duration (`health.ts`). */
+  toolTimeShare?: number | null;
+  /** Share of the runs' tool calls that carry a duration. */
+  timedCallShare?: number;
   turnSourceMix: TurnSourceMix;
   /** Up to `evidenceTurns` failed runs, newest first, with the failing step. */
   failedExamples: readonly WorkflowExample[];

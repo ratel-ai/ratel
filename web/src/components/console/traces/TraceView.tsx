@@ -9,7 +9,7 @@ import { Callout } from "@ratel/design-system/states";
 import { Tabs } from "@ratel/design-system/tabs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import type { RawSpanView, TraceRawRouteResponse } from "@/lib/ingest/otlp-raw/trace-raw-route";
 import {
   buildTraceContentView,
@@ -73,6 +73,8 @@ export interface TraceViewProps {
   embedded?: boolean;
   /** The session this turn is part of, and its turns (RC-472). */
   session?: TraceSession | null;
+  /** The scorers' results of this trace, under its numbers. */
+  scores?: ReactNode;
   /**
    * Read the run's raw spans from the app's raw route (views redesign). Off in
    * an MCP view, which cannot reach the app's routes: the span pane keeps the
@@ -255,6 +257,8 @@ export function TraceView(props: TraceViewProps) {
           { label: "Cost", value: costLabel(totals.costUsd, totals.unpricedCalls ?? 0) },
         ]}
       />
+
+      {props.scores}
 
       <Tabs
         value={tab}

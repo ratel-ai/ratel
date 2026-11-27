@@ -10,6 +10,7 @@ import {
 } from "@/lib/readings/trace-signals/signals/catalog";
 import { Reservoir } from "@/lib/readings/trace-signals/signals/severity";
 import {
+  callRounds,
   entryKey,
   type InvokeStep,
   isInvoke,
@@ -393,10 +394,11 @@ function accumulateEntryTurn(
     entry.evidence.errorLoop.add(sample(turn, errors[0]!.traceEventId));
   }
   if (errors.length >= 2) entry.loopTurns += 1;
-  const ok = calls.filter((call) => call.outcome === "ok").length;
-  if (ok >= floors.repeat_invoke.minCalls) {
+  // Rounds, not calls: one call per item in a single model step is a fan-out (`callRounds`).
+  const okRounds = callRounds(calls.filter((call) => call.outcome === "ok"));
+  if (okRounds >= floors.repeat_invoke.minCalls) {
     entry.repeatTurns += 1;
-    entry.repeatExtra += calls.length - 1;
+    entry.repeatExtra += callRounds(calls) - 1;
     entry.evidence.repeat.add(sample(turn, calls[1]!.traceEventId));
   }
 }

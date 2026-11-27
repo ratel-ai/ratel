@@ -21,6 +21,8 @@ export type PanelProps = {
   onNext?: () => void;
   /** `wide` for a body built around a drawing that needs the room (an ask's workflow). */
   size?: "default" | "wide";
+  /** `dialog`: it opens from inside a Dialog, so it takes the Dialog's layer and shows above it. */
+  layer?: "panel" | "dialog";
   /** Where focus lands on open, when the body has one obvious first field. Defaults to the first control. */
   initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
@@ -44,6 +46,7 @@ export function Panel({
   onPrevious,
   onNext,
   size = "default",
+  layer = "panel",
   initialFocus,
   children,
   className,
@@ -72,7 +75,8 @@ export function Panel({
           onKeyDown={onKeyDown}
           initialFocus={initialFocus}
           className={cn(
-            "fixed inset-y-2 right-2 z-panel flex flex-col overflow-hidden rounded-xl border border-line bg-overlay text-fg shadow-dialog outline-none focus-visible:outline-none",
+            "fixed inset-y-2 right-2 flex flex-col overflow-hidden rounded-xl border border-line bg-overlay text-fg shadow-dialog outline-none focus-visible:outline-none",
+            layer === "dialog" ? "z-dialog" : "z-panel",
             size === "wide" ? "w-[min(48rem,calc(100vw-1rem))]" : "w-[min(36rem,calc(100vw-1rem))]",
             "transition-[translate,opacity] duration-200 ease-enter data-starting-style:translate-x-6 data-starting-style:opacity-0",
             "data-ending-style:translate-x-6 data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-exit motion-reduce:transition-none",

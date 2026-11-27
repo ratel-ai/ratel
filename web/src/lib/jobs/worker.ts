@@ -1,3 +1,4 @@
+import type { WorkerLane } from "@/lib/contracts/registry";
 import { getLogger } from "@/lib/platform/logger";
 
 const logger = getLogger("jobs/worker");
@@ -18,6 +19,13 @@ export interface WorkerDeps {
    * the sweeps. Absent, imports go through `drain` like any job.
    */
   drainImports?: () => Promise<{ done: number; failed: number }>;
+  /** The registrations' lanes (`Registration.workerLanes`), each run `concurrency` times. */
+  extraLanes?: readonly WorkerLane[];
+  /**
+   * `false`: run only `extraLanes`, with no analysis lane, no sweep and no imports (a persist-only
+   * process, APP_ROLE=persist).
+   */
+  analysis?: boolean;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
@@ -54,19 +62,33 @@ export function startWorker(deps: WorkerDeps): WorkerHandle {
   };
 
   logger.info({}, "background worker started");
-  const lanes = [
-    lane("analysis", async () => {
-      if (deps.now() - lastSweepAt >= SWEEP_EVERY_MS) {
-        lastSweepAt = deps.now();
-        await deps.sweep();
-        return true;
-      }
-      const { done, failed } = await deps.drain();
-      return done + failed > 0;
-    }),
-  ];
+  const analysis = deps.analysis !== false;
+  const lanes: Promise<void>[] = [];
+  if (analysis) {
+    lanes.push(
+      lane("analysis", async () => {
+        if (deps.now() - lastSweepAt >= SWEEP_EVERY_MS) {
+          lastSweepAt = deps.now();
+          await deps.sweep();
+          return true;
+        }
+        const { done, failed } = await deps.drain();
+        return done + failed > 0;
+      }),
+    );
+  }
+  for (const extra of deps.extraLanes ?? []) {
+    for (let copy = 0; copy < Math.max(1, extra.concurrency); copy++) {
+      lanes.push(
+        lane(extra.name, async () => {
+          const { done, failed } = await extra.step();
+          return done + failed > 0;
+        }),
+      );
+    }
+  }
   const imports = deps.drainImports;
-  if (imports) {
+  if (imports && analysis) {
     lanes.push(
       lane("imports", async () => {
         const { done, failed } = await imports();

@@ -51,9 +51,14 @@ export const CONFIG_DEFAULTS = {
     rejectionSampleRate: 100,
     otlpRawDailyBytes: 1024 ** 3,
     otlpRawRetentionDays: 30,
+    experimentalQueue: false,
+    persistPerProject: 1,
+    persistConcurrency: 2,
+    batchMaxAttempts: 5,
   },
   anthropic: {},
   openai: {},
+  slack: { url: "https://slack.com" },
   models: {},
   evalGate: {
     mockModel: false,
@@ -76,6 +81,8 @@ export const CONFIG_DEFAULTS = {
     sameAskJaccard: 0.5,
     askedAgainGapMs: 10 * 60_000,
     askedAgainTextJaccard: 0.8,
+    askedAgainMinWords: 3,
+    fanOutGapMs: 250,
     pairToolMinTurns: 20,
     maxQueryHashes: 20_000,
     windowDays: 30,
@@ -108,6 +115,9 @@ export const CONFIG_DEFAULTS = {
         minConditional: 0.4,
         dependencyShare: 0.8,
         workflowViaSearch: 0.5,
+        // The card says the two "always run together": at least this share of the turns of one
+        // of them must hold the pair (one MCP server's reading showed 7%).
+        alwaysShare: 0.75,
       },
       sibling_confusion: { minCoHitShare: 0.3, minSwaps: 5, minSplit: 0.2 },
       error_loop: { minErrors: 5, minLoopTurns: 3, minLow: 0.2 },

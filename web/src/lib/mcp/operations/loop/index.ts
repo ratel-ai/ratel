@@ -27,6 +27,7 @@ import {
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
@@ -62,6 +63,7 @@ import {
 } from "@/lib/views/lineage/loop-refs";
 import { fixSourceRef } from "@/lib/views/lineage/refs";
 import type { LineageRef } from "@/lib/views/lineage/types";
+import { loadTaskScorers } from "@/lib/views/scorers/task-scores";
 import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
 import { taskEvalViewFor } from "@/lib/views/task-evals/store";
@@ -104,6 +106,10 @@ export interface LoopOperationDeps {
   latestFixDraft: (projectId: string, fixId: string) => ReturnType<typeof latestFixDraft>;
   scorersFor: (projectId: string, taskId: string) => ReturnType<typeof scorersFor>;
   dailyScoresFor: (projectId: string, taskId: string) => ReturnType<typeof dailyScoresFor>;
+  /** Whether the project's live scoring is the one scorer model (`customMonitoring`). */
+  scorersOn: (projectId: string) => Promise<boolean>;
+  /** With it on: the scorers attached to the task, with their results of its traces (`trace_scores`). */
+  liveTaskScorers: (projectId: string, taskId: string) => ReturnType<typeof loadTaskScorers>;
   taskEvalViewFor: (projectId: string, taskId: string) => ReturnType<typeof taskEvalViewFor>;
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
   /** Agent health's Issues rows (one per kind of issue), for list_insights' view; null when they cannot be read. */
@@ -150,6 +156,8 @@ export const defaultLoopDeps: LoopOperationDeps = {
   latestFixDraft: (projectId, fixId) => latestFixDraft(projectId, fixId),
   scorersFor: (projectId, taskId) => scorersFor(projectId, taskId),
   dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId),
+  scorersOn: (projectId) => featureEnabled("customMonitoring", { projectId }),
+  liveTaskScorers: (projectId, taskId) => loadTaskScorers(projectId, taskId, new Date()),
   taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId),
   loadOpenInsights,
   // Only for a view, so a failed read costs the view its grouping, never the agent its result.
@@ -531,7 +539,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "observability",
       title: "Get task",
       description:
-        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. With custom monitoring on, scorers are the ones attached to the task, each with its 7-day result and 14-day trend, and scoreSeries is empty. Use list_fixes for the task's fixes.",
       keywords: ["get task", "task scorers", "task eval set"],
       scope: "project",
       mutates: false,
@@ -545,19 +553,25 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
         const task = read.row;
         const tracker = new TruncationTracker();
         const enabled = await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId));
-        const [scorers, scores, evalSet, shipments] = enabled
-          ? await Promise.all([
-              deps.scorersFor(ctx.projectId, task.id),
-              deps.dailyScoresFor(ctx.projectId, task.id),
-              deps.taskEvalViewFor(ctx.projectId, task.id),
-              deps.taskShipmentsFor(ctx.projectId, task.id),
-            ])
-          : [[], [], null, null];
+        // As the Task page: with custom monitoring on, the task's scorers of the one model, whatever
+        // the eval gate; else the task scorers and their daily scores, with the eval gate on.
+        const live = await deps.scorersOn(ctx.projectId);
+        const [scorers, scores, evalSet, shipments] = await Promise.all([
+          live
+            ? deps.liveTaskScorers(ctx.projectId, task.id)
+            : enabled
+              ? deps.scorersFor(ctx.projectId, task.id)
+              : [],
+          live || !enabled ? [] : deps.dailyScoresFor(ctx.projectId, task.id),
+          enabled ? deps.taskEvalViewFor(ctx.projectId, task.id) : null,
+          enabled ? deps.taskShipmentsFor(ctx.projectId, task.id) : null,
+        ]);
         return {
           data: {
             task: {
               ...task,
               href: topLevelTasksHref(ctx.projectId, task.id),
+              // With custom monitoring on, each scorer carries its own 14-day trend from `trace_scores`.
               scorers,
               scoreSeries: tracker.take(capRows(scores, 200)),
               evalSet: evalSet
