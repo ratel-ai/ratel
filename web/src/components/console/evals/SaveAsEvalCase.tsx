@@ -9,10 +9,31 @@ import { Callout } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import type { CheckOperator } from "@/lib/contracts/check";
+import type { EvalScorer } from "@/lib/views/evals/domain/eval";
 import type { SaveTarget } from "@/lib/views/evals/domain/eval-target";
-import { caseHref } from "@/lib/views/evals/paths";
-import { chosenTargets, type SaveOptions } from "@/lib/views/evals/save-target";
-import { scorerSentence } from "./ScorerFields";
+import { datasetHref } from "@/lib/views/evals/paths";
+import { chosenTargets, type SaveOptions, targetDataset } from "@/lib/views/evals/save-target";
+
+const OPERATORS: Record<CheckOperator, string> = {
+  eq: "is",
+  ne: "is not",
+  contains: "contains",
+  gt: "is more than",
+  gte: "is at least",
+  lt: "is less than",
+  lte: "is at most",
+  exists: "exists",
+};
+
+/** A scorer in one line: its name, whether it decides the trial, and what it checks or asks. */
+function scorerSentence({ name, gating, definition }: EvalScorer): string {
+  const what =
+    definition.kind === "judge"
+      ? `judge: ${definition.config.prompt}`
+      : `${definition.config.path} ${OPERATORS[definition.config.op]} ${definition.config.value ?? ""}`;
+  return `${name} (${gating ? "gating" : "advisory"}): ${what.trim()}`;
+}
 
 /** What the case is made from: a trace turn, or a sandbox run with the trace it made. */
 export type SaveSource =
@@ -28,9 +49,10 @@ const NEW_EVAL = "__new__";
 /**
  * "Save as eval case" (decision `trace-to-eval`). The dialog starts from the tasks of the trace:
  * one task, or the task of the page, is chosen first. Else the person chooses one or more, and the
- * turn becomes one row in the eval of each. A task with more evals needs the choice of one. A new
- * eval of a task gets the task's default scorers, and the person confirms it. With no task, the
- * person chooses or names the eval. The rows count at once.
+ * turn becomes one row in the dataset of the eval of each. A task with more evals needs the choice
+ * of one. A new eval of a task gets the task's default scorers and a dataset of its own, and the
+ * person confirms it. With no task, the person chooses or names the eval. The dialog names the
+ * dataset that the row joins. The rows count at once.
  */
 export function SaveAsEvalCase({
   projectId,
@@ -96,16 +118,22 @@ export function SaveAsEvalCase({
         body: JSON.stringify({ ...content, targets }),
       });
       const body = (await response.json().catch(() => ({}))) as {
-        cases?: Array<{ caseId: string }>;
+        cases?: Array<{ caseId: string; datasetId: string }>;
         message?: string;
       };
       const [only, ...more] = body.cases ?? [];
       if (response.ok && only) {
         if (more.length === 0) {
-          toast({ title: "Saved as a case. It counts in the next run.", tone: "success" });
-          return router.push(caseHref(projectId, only.caseId));
+          toast({
+            title: "Saved as a row of the dataset. It counts in the next run.",
+            tone: "success",
+          });
+          return router.push(datasetHref(projectId, only.datasetId));
         }
-        toast({ title: `Saved as ${more.length + 1} cases, one in each eval.`, tone: "success" });
+        toast({
+          title: `Saved as ${more.length + 1} rows, one in the dataset of each eval.`,
+          tone: "success",
+        });
         setOpen(false);
         setPending(false);
         return router.refresh();
@@ -128,7 +156,7 @@ export function SaveAsEvalCase({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           title="Save as eval case"
-          description="The case is a row of the dataset of an eval. It counts in the next run."
+          description="The case is a row of the dataset of an eval. It counts in the next run of each eval that uses the dataset."
           footer={
             <>
               <DialogClose render={<Button variant="secondary" />}>Cancel</DialogClose>
@@ -172,6 +200,7 @@ export function SaveAsEvalCase({
                     <TargetLine
                       key={id}
                       target={target}
+                      options={options}
                       chosenEval={evalOfTask[id] ?? ""}
                       onChoose={(evalId) => setEvalOfTask({ ...evalOfTask, [id]: evalId })}
                     />
@@ -179,6 +208,7 @@ export function SaveAsEvalCase({
                 })
               ) : (
                 <NoTask
+                  options={options}
                   evals={options.evals}
                   chosenEval={chosenEval}
                   onChoose={setChosenEval}
@@ -200,33 +230,35 @@ export function SaveAsEvalCase({
  */
 function TargetLine({
   target,
+  options,
   chosenEval,
   onChoose,
 }: {
   target: SaveTarget;
+  options: SaveOptions;
   chosenEval: string;
   onChoose: (evalId: string) => void;
 }) {
   if (target.kind === "existing") {
-    return (
-      <p className="text-ui text-fg">
-        The case goes into the eval <strong>{target.name}</strong>.
-      </p>
-    );
+    return <DatasetLine options={options} evalId={target.evalId} evalName={target.name} />;
   }
   if (target.kind === "choose") {
+    const name = target.evals.find(({ id }) => id === chosenEval)?.name ?? null;
     return (
-      <Field label="The task has more evals. Choose the eval of the case.">
-        {() => (
-          <Select
-            aria-label="Eval of the task"
-            value={chosenEval}
-            placeholder="Choose an eval"
-            onValueChange={onChoose}
-            options={target.evals.map(({ id, name }) => ({ value: id, label: name }))}
-          />
-        )}
-      </Field>
+      <>
+        <Field label="The task has more evals. Choose the eval of the case.">
+          {() => (
+            <Select
+              aria-label="Eval of the task"
+              value={chosenEval}
+              placeholder="Choose an eval"
+              onValueChange={onChoose}
+              options={target.evals.map(({ id, name: one }) => ({ value: id, label: one }))}
+            />
+          )}
+        </Field>
+        {name ? <DatasetLine options={options} evalId={chosenEval} evalName={name} /> : null}
+      </>
     );
   }
   if (target.kind !== "new") return null;
@@ -235,7 +267,8 @@ function TargetLine({
     <div className="flex flex-col gap-2 text-ui">
       <p className="text-fg">
         The task has no eval. Ratel creates the eval <strong>{target.name}</strong>
-        {sandboxName ? ` on the sandbox ${sandboxName}` : ""}, and the case goes into it.
+        {sandboxName ? ` on the sandbox ${sandboxName}` : ""} with a new dataset of its own,{" "}
+        <strong>{target.name}</strong>, and the case becomes its first row.
       </p>
       {scorers.length > 0 ? (
         <ul className="list-disc pl-5 text-fg-muted">
@@ -251,12 +284,14 @@ function TargetLine({
 }
 
 function NoTask({
+  options,
   evals,
   chosenEval,
   onChoose,
   newName,
   onName,
 }: {
+  options: SaveOptions;
   evals: SaveOptions["evals"];
   chosenEval: string;
   onChoose: (id: string) => void;
@@ -266,9 +301,9 @@ function NoTask({
   return (
     <>
       <p className="text-ui text-fg-muted">
-        No task matched this run. Ratel finds a task in many runs that call the same tools. A run on
-        a Ratel sandbox gets the task of its sandbox about a minute after its trace arrives. Choose
-        or name its eval.
+        No task matched this run. Ratel finds a task in many runs that call the same tools. A run in
+        a sandbox gets the task of its sandbox about a minute after its trace arrives. Choose or
+        name its eval.
       </p>
       <Field label="Eval">
         {() => (
@@ -283,6 +318,17 @@ function NoTask({
           />
         )}
       </Field>
+      {chosenEval !== NEW_EVAL ? (
+        <DatasetLine
+          options={options}
+          evalId={chosenEval}
+          evalName={evals.find(({ id }) => id === chosenEval)?.name ?? ""}
+        />
+      ) : (
+        <p className="text-ui text-fg-muted">
+          The new eval gets a dataset of its own, with its name, and the case becomes its first row.
+        </p>
+      )}
       {chosenEval === NEW_EVAL ? (
         <Field label="Name of the new eval">
           {(control) => (
@@ -296,5 +342,32 @@ function NoTask({
         </Field>
       ) : null}
     </>
+  );
+}
+
+/** The dataset that the row joins, named (decision `trace-to-eval`). */
+function DatasetLine({
+  options,
+  evalId,
+  evalName,
+}: {
+  options: SaveOptions;
+  evalId: string;
+  evalName: string;
+}) {
+  const dataset = targetDataset(options, evalId);
+  return (
+    <p className="text-ui text-fg">
+      {dataset ? (
+        <>
+          The case becomes a row of the dataset <strong>{dataset}</strong>, which the eval{" "}
+          <strong>{evalName}</strong> runs.
+        </>
+      ) : (
+        <>
+          The case becomes a row of the dataset of the eval <strong>{evalName}</strong>.
+        </>
+      )}
+    </p>
   );
 }

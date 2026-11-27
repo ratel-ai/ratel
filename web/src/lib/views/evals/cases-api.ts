@@ -20,6 +20,7 @@ import {
 import { evalContentSchema, evalDetailsSchema } from "./domain/eval";
 import { caseFromTurn, type TurnContent } from "./domain/from-turn";
 import type { CaseStore } from "./ports/case-store";
+import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import type { TaskLinks } from "./ports/task-links";
 import { saveOptions } from "./save-target";
@@ -33,6 +34,8 @@ export type CasesApiDeps = MemberAccessDeps & {
   cases: () => CaseStore;
   evals: () => EvalStore;
   taskLinks: () => TaskLinks;
+  /** Names the dataset of each eval in the save dialog. */
+  datasets?: () => Pick<DatasetStore, "list">;
   /** Whether the project lets the product read captured text. */
   readContent: (projectId: string) => Promise<boolean>;
   loadTurn: (projectId: string, turnId: string) => Promise<TurnContent | null>;
@@ -134,6 +137,7 @@ export function handleSaveOptions(
     const options = await saveOptions(member.projectId, source, task ?? null, {
       taskLinks: deps.taskLinks(),
       evals: deps.evals(),
+      ...(deps.datasets ? { datasets: deps.datasets() } : {}),
     });
     return reply(200, options);
   });
@@ -248,6 +252,7 @@ function rowView(evalCase: EvalCase) {
   return {
     caseId: evalCase.id,
     evalId: evalCase.evalId,
+    datasetId: evalCase.datasetId,
     versionId: version?.id ?? null,
     number: version?.number ?? null,
   };

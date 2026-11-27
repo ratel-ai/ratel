@@ -1,6 +1,7 @@
 import { sandboxOfTask } from "@/lib/readings/trace-signals/workflows/sandbox-tasks";
-import type { EvalContent } from "./domain/eval";
+import { datasetOf, type EvalContent, type EvalDefinition } from "./domain/eval";
 import { defaultTask, type SaveTarget, saveTarget, type TaskRef } from "./domain/eval-target";
+import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import type { TaskLinks } from "./ports/task-links";
 
@@ -17,11 +18,18 @@ export type SaveOptions = {
   targets: Record<string, SaveTarget>;
   /** The evals of the project, for a turn with no task. */
   evals: Array<{ id: string; name: string }>;
+  /** The dataset that each eval saves into, by the eval id (decision `trace-to-eval`). */
+  datasetOfEval?: Record<string, string>;
 };
 
 export type SaveSource = { turnId: string } | { traceId: string } | null;
 
-export type SaveOptionsDeps = { taskLinks: TaskLinks; evals: Pick<EvalStore, "list"> };
+export type SaveOptionsDeps = {
+  taskLinks: TaskLinks;
+  evals: Pick<EvalStore, "list">;
+  /** Names the dataset of each eval. Without it the dialog names the eval only. */
+  datasets?: Pick<DatasetStore, "list">;
+};
 
 /** What the person chose in the dialog. With no task: an eval of the project, or a new name. */
 export type SaveChoice = {
@@ -41,15 +49,16 @@ export async function saveOptions(
   projectId: string,
   source: SaveSource,
   pageTaskId: string | null,
-  { taskLinks, evals }: SaveOptionsDeps,
+  { taskLinks, evals, datasets }: SaveOptionsDeps,
 ): Promise<SaveOptions> {
-  const [tasks, all] = await Promise.all([
+  const [tasks, all, summaries] = await Promise.all([
     source === null
       ? []
       : "turnId" in source
         ? taskLinks.tasksOfTurn(projectId, source.turnId)
         : taskLinks.tasksOfTrace(projectId, source.traceId),
     evals.list(projectId),
+    datasets ? datasets.list(projectId) : [],
   ]);
   const sandboxName = tasks.length > 0 ? await taskLinks.lastSandbox(projectId) : null;
   const targets = await Promise.all(
@@ -69,7 +78,26 @@ export async function saveOptions(
     defaultTaskId: defaultTask(tasks, pageTaskId)?.id ?? null,
     targets: Object.fromEntries(targets),
     evals: all.map(({ id, name }) => ({ id, name })),
+    ...(datasets ? { datasetOfEval: datasetNames(all, summaries) } : {}),
   };
+}
+
+/** The name of the dataset that a row saved into this eval joins. */
+export function targetDataset(options: SaveOptions, evalId: string): string | null {
+  return options.datasetOfEval?.[evalId] ?? null;
+}
+
+function datasetNames(
+  evals: readonly EvalDefinition[],
+  datasets: ReadonlyArray<{ id: string; name: string }>,
+): Record<string, string> {
+  const names = new Map(datasets.map(({ id, name }) => [id, name]));
+  return Object.fromEntries(
+    evals.flatMap((definition) => {
+      const name = names.get(datasetOf(definition));
+      return name ? [[definition.id, name]] : [];
+    }),
+  );
 }
 
 /** The targets of the request, one for each chosen task. Null until each choice is made. */

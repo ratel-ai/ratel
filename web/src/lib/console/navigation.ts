@@ -557,8 +557,16 @@ function stageRailNav(
             id: "evals",
             label: "Evals",
             href: `${root}/evals`,
-            icon: "improvements" as const,
-            keywords: ["evals", "cases", "experiments", "trials"],
+            icon: "evals" as const,
+            keywords: ["evals", "runs", "scores", "baseline", "trials", "matrix"],
+            section: "settings" as const,
+          },
+          {
+            id: "datasets",
+            label: "Datasets",
+            href: `${root}/datasets`,
+            icon: "datasets" as const,
+            keywords: ["datasets", "cases", "rows", "eval cases", "rql"],
             section: "settings" as const,
           },
         ]

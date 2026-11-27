@@ -237,19 +237,29 @@ test("a row is removed from a fixed dataset of the project, and a query has no r
   const added = ok(
     await call("evals_add_dataset_row", { dataset: "Typed", name: "One", values: { order: "A1" } }),
   ).data as { rowId: string };
-  const removed = ok(await call("evals_remove_dataset_row", { dataset: "Typed", rowId: added.rowId }));
+  const removed = ok(
+    await call("evals_remove_dataset_row", { dataset: "Typed", rowId: added.rowId }),
+  );
   assert.deepEqual((removed.data as { rowId: string }).rowId, added.rowId);
-  const read = ok(await call("evals_get_dataset", { dataset: "Typed" })).data as { rows: unknown[] };
+  const read = ok(await call("evals_get_dataset", { dataset: "Typed" })).data as {
+    rows: unknown[];
+  };
   assert.equal(read.rows.length, 0);
-  const again = failure(await call("evals_remove_dataset_row", { dataset: "Typed", rowId: added.rowId }));
+  const again = failure(
+    await call("evals_remove_dataset_row", { dataset: "Typed", rowId: added.rowId }),
+  );
   assert.equal(again.error, "not_found");
   await call("evals_create_dataset", { name: "Last", kind: "last_traces", limit: 5 });
-  const query = failure(await call("evals_remove_dataset_row", { dataset: "Last", rowId: added.rowId }));
+  const query = failure(
+    await call("evals_remove_dataset_row", { dataset: "Last", rowId: added.rowId }),
+  );
   assert.equal(query.error, "conflict");
 });
 
 test("a preview reads a query now, with the content rule of the key", async () => {
-  const turns = new Map([[TURN, { ask: "refund A200", messages: [], toolCalls: [], conversation: null }]]);
+  const turns = new Map([
+    [TURN, { ask: "refund A200", messages: [], toolCalls: [], conversation: null }],
+  ]);
   const { call } = await setup({
     traces: () =>
       fakeTraceSource({
@@ -257,7 +267,8 @@ test("a preview reads a query now, with the content rule of the key", async () =
         loadTurn: async (_, id) => turns.get(id) ?? null,
       }),
   });
-  const preview = ok(await call("evals_preview_dataset", { kind: "last_traces", limit: 5 })).data as {
+  const preview = ok(await call("evals_preview_dataset", { kind: "last_traces", limit: 5 }))
+    .data as {
     ok: boolean;
     found: number;
   };

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ParamSpec } from "@/lib/views/sandboxes/run-form";
 import {
+  checkDatasetDraft,
   checkEvalDraft,
   checkRunDraft,
   type EvalDraft,
+  emptyDatasetDraft,
   emptyEvalDraft,
   type FormContext,
   libraryKey,
@@ -24,8 +26,20 @@ const MODEL: ParamSpec = {
   description: null,
   options: ["sonnet", "haiku", "opus"],
 };
-const TONE: ParamSpec = { name: "tone", type: "string", default: "friendly", description: null, options: [] };
-const TEMP: ParamSpec = { name: "temperature", type: "number", default: 0, description: null, options: [] };
+const TONE: ParamSpec = {
+  name: "tone",
+  type: "string",
+  default: "friendly",
+  description: null,
+  options: [],
+};
+const TEMP: ParamSpec = {
+  name: "temperature",
+  type: "number",
+  default: 0,
+  description: null,
+  options: [],
+};
 const V2 = "22222222-2222-4222-8222-222222222222";
 const V1 = "11111111-1111-4111-8111-111111111111";
 
@@ -92,7 +106,11 @@ function draft(over: Partial<EvalDraft> = {}): EvalDraft {
 
 test("a new eval starts on the first sandbox at its newest ready version, with a query dataset", () => {
   const empty = emptyEvalDraft(CTX, null);
-  assert.deepEqual(empty.runtime, { kind: "sandbox", sandboxName: "support-demo", version: "latest" });
+  assert.deepEqual(empty.runtime, {
+    kind: "sandbox",
+    sandboxName: "support-demo",
+    version: "latest",
+  });
   assert.deepEqual(empty.dataset, { kind: "last_traces", limit: "50" });
   assert.deepEqual(emptyEvalDraft(CTX, "d1").dataset, { kind: "existing", datasetId: "d1" });
   assert.deepEqual(emptyEvalDraft({ ...CTX, sandboxes: [] }, null).runtime, { kind: "production" });
@@ -136,7 +154,10 @@ test("an eval is made with each runtime and each dataset choice", () => {
       { kind: "rql", text: "SELECT trace_id FROM traces", limit: "30" },
       { query: { kind: "rql", text: "SELECT trace_id FROM traces", limit: 30 } },
     ],
-    [{ kind: "auto", taskId: "", limit: "10" }, { query: { kind: "auto", taskId: null, limit: 10 } }],
+    [
+      { kind: "auto", taskId: "", limit: "10" },
+      { query: { kind: "auto", taskId: null, limit: 10 } },
+    ],
   ] as const;
   for (const [dataset, body] of datasets) {
     const made = checkEvalDraft(draft({ dataset }), CTX);
@@ -157,14 +178,20 @@ test("each field refuses with its reason", () => {
   );
   assert.ok(!refused.ok);
   assert.deepEqual(Object.keys(refused.errors).sort(), ["limit", "name", "scorers", "trials"]);
-  const noTask = checkEvalDraft(draft({ dataset: { kind: "task_traces", taskId: "", limit: "5" } }), CTX);
+  const noTask = checkEvalDraft(
+    draft({ dataset: { kind: "task_traces", taskId: "", limit: "5" } }),
+    CTX,
+  );
   assert.equal(noTask.ok ? null : noTask.errors.dataset, "Choose a task.");
   const noText = checkEvalDraft(draft({ dataset: { kind: "rql", text: "", limit: "5" } }), CTX);
   assert.match(noText.ok ? "" : (noText.errors.dataset ?? ""), /trace_id column/);
   const noDataset = checkEvalDraft(draft({ dataset: { kind: "existing", datasetId: "" } }), CTX);
   assert.equal(noDataset.ok ? null : noDataset.errors.dataset, "Choose a dataset.");
   const badParam = checkEvalDraft(draft({ params: { temperature: "hot" } }), CTX);
-  assert.equal(badParam.ok ? null : badParam.errors["params.temperature"], "temperature must be a number.");
+  assert.equal(
+    badParam.ok ? null : badParam.errors["params.temperature"],
+    "temperature must be a number.",
+  );
 });
 
 test("Production agent is refused as coming soon, and no sandbox says to push one", () => {
@@ -183,7 +210,10 @@ test("Production agent is refused as coming soon, and no sandbox says to push on
 });
 
 test("a matrix is typed by the declared params, counts its combinations and stops at 12", () => {
-  const made = matrixOf([MODEL, TONE, TEMP], { model: "sonnet, haiku", tone: "formal,friendly,formal" });
+  const made = matrixOf([MODEL, TONE, TEMP], {
+    model: "sonnet, haiku",
+    tone: "formal,friendly,formal",
+  });
   assert.deepEqual(made, {
     ok: true,
     matrix: { model: ["sonnet", "haiku"], tone: ["formal", "friendly"] },
@@ -220,7 +250,10 @@ test("a matrix is typed by the declared params, counts its combinations and stop
     draft({ matrixOn: true, matrix: { model: "sonnet, haiku, opus", tone: "a, b, c, d, e" } }),
     CTX,
   );
-  assert.match(eval13.ok ? "" : (eval13.errors.matrix ?? ""), /at most 12 combinations, and this one has 15/);
+  assert.match(
+    eval13.ok ? "" : (eval13.errors.matrix ?? ""),
+    /at most 12 combinations, and this one has 15/,
+  );
 });
 
 test("scorers come from the library: settings, an unusable scorer, at least one gating", () => {
@@ -228,7 +261,10 @@ test("scorers come from the library: settings, an unusable scorer, at least one 
     draft({ scorers: [{ key: libraryKey(PREDEFINED), gating: true, settings: {} }] }),
     CTX,
   );
-  assert.match(settings.ok ? "" : (settings.errors["scorer.predefined:output_contains.value"] ?? ""), /needs this/);
+  assert.match(
+    settings.ok ? "" : (settings.errors["scorer.predefined:output_contains.value"] ?? ""),
+    /needs this/,
+  );
   const twice = checkEvalDraft(
     draft({
       scorers: [
@@ -324,7 +360,12 @@ test("a run sends only what it changes, for itself only", () => {
     params: { tone: "formal" },
     trials: 1,
     scorers: [
-      { id: "is_safe", name: "Answer is safe", gating: true, ref: { source: "predefined", key: "is_safe", settings: {} } },
+      {
+        id: "is_safe",
+        name: "Answer is safe",
+        gating: true,
+        ref: { source: "predefined", key: "is_safe", settings: {} },
+      },
     ],
   });
 });
@@ -359,9 +400,17 @@ test("added rows: the last N traces, Ratel's choice, a pick that is empty or too
     CTX,
   );
   assert.deepEqual(last.ok && last.body, { rows: { kind: "last_traces", limit: 10 } });
-  const auto = checkRunDraft({ ...runDraftOf(DEFAULTS), addRows: { kind: "auto", limit: "x" } }, DEFAULTS, CTX);
+  const auto = checkRunDraft(
+    { ...runDraftOf(DEFAULTS), addRows: { kind: "auto", limit: "x" } },
+    DEFAULTS,
+    CTX,
+  );
   assert.ok(!auto.ok && auto.errors.limit);
-  const none = checkRunDraft({ ...runDraftOf(DEFAULTS), addRows: { kind: "turns", turnIds: [] } }, DEFAULTS, CTX);
+  const none = checkRunDraft(
+    { ...runDraftOf(DEFAULTS), addRows: { kind: "turns", turnIds: [] } },
+    DEFAULTS,
+    CTX,
+  );
   assert.equal(none.ok ? null : none.errors.rows, "Choose at least one trace.");
   const many = checkRunDraft(
     {
@@ -379,4 +428,43 @@ test("a pinned eval runs its pinned version unless the run asks for the newest",
   assert.deepEqual(checkRunDraft(runDraftOf(pinned), pinned, CTX), { ok: true, body: {} });
   const newest = checkRunDraft({ ...runDraftOf(pinned), version: "latest" }, pinned, CTX);
   assert.deepEqual(newest.ok && newest.body, { sandboxVersion: "latest" });
+});
+
+// — New dataset ———————————————————————————————————————————————————————————————
+
+test("a new dataset is fixed (empty or from traces) or one query kind", () => {
+  const base = { ...emptyDatasetDraft(), name: " Refund asks " };
+  assert.deepEqual(checkDatasetDraft(base), {
+    ok: true,
+    body: { name: "Refund asks", description: null, query: { kind: "fixed" } },
+  });
+  assert.deepEqual(checkDatasetDraft({ ...base, turnIds: ["t1"] }), {
+    ok: true,
+    body: { name: "Refund asks", description: null, query: { kind: "fixed" }, turnIds: ["t1"] },
+  });
+  const kinds = [
+    [
+      { kind: "last_traces", limit: "20" },
+      { kind: "last_traces", limit: 20 },
+    ],
+    [
+      { kind: "task_traces", taskId: "task-1", limit: "5" },
+      { kind: "task_traces", taskId: "task-1", limit: 5 },
+    ],
+    [
+      { kind: "rql", text: "SELECT trace_id FROM traces", limit: "50" },
+      { kind: "rql", text: "SELECT trace_id FROM traces", limit: 50 },
+    ],
+    [
+      { kind: "auto", taskId: "", limit: "10" },
+      { kind: "auto", taskId: null, limit: 10 },
+    ],
+  ] as const;
+  for (const [over, query] of kinds) {
+    const made = checkDatasetDraft({ ...base, ...over, turnIds: ["ignored"] });
+    assert.ok(made.ok, over.kind);
+    assert.deepEqual(made.body, { name: "Refund asks", description: null, query });
+  }
+  const refused = checkDatasetDraft({ ...emptyDatasetDraft(), kind: "rql", limit: "0" });
+  assert.deepEqual(Object.keys(refused.ok ? {} : refused.errors).sort(), ["limit", "name"]);
 });

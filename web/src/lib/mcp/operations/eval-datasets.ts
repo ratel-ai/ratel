@@ -7,10 +7,12 @@ import { defineOperation, type McpOperation, type OperationContext } from "@/lib
 import { capRows } from "@/lib/mcp/serialize";
 import { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
+import { previewQuery, removeDatasetRow } from "@/lib/views/evals/actions";
 import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
 import { createDrizzleDatasetStore } from "@/lib/views/evals/adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
+import { createTraceSource } from "@/lib/views/evals/adapters/trace-source";
 import type { Compared } from "@/lib/views/evals/baseline";
 import { readOnlyTools } from "@/lib/views/evals/console-deps";
 import { currentVersion as currentRow } from "@/lib/views/evals/domain/case";
@@ -28,12 +30,10 @@ import { datasetsView, evalHistory, withPinnedRuns } from "@/lib/views/evals/his
 import type { DatasetStore, NewRow } from "@/lib/views/evals/ports/dataset-store";
 import type { EvalStore } from "@/lib/views/evals/ports/eval-store";
 import type { ScorerLibrary } from "@/lib/views/evals/ports/scorer-library";
+import type { TraceSource } from "@/lib/views/evals/ports/trace-source";
 import { rowOfSandboxRun } from "@/lib/views/evals/sandbox-rows";
 import { listScorerLibrary } from "@/lib/views/evals/scorer-library";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
-import { previewQuery, removeDatasetRow } from "@/lib/views/evals/actions";
-import { createTraceSource } from "@/lib/views/evals/adapters/trace-source";
-import type { TraceSource } from "@/lib/views/evals/ports/trace-source";
 import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
 import { listScorers } from "@/lib/views/scorers/store";
 

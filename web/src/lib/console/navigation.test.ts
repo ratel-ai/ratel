@@ -952,3 +952,29 @@ test("railParts splits a rail into the scrolling list and the pinned footer, in 
     ),
   );
 });
+
+test("with evals on, Evals, Datasets and Sandboxes come before Catalog, within DESIGN.md's budget", () => {
+  for (const focusedConsole of [false, true]) {
+    for (const customMonitoring of [false, true]) {
+      const items = consoleNav({
+        projectId: P1,
+        additions: [],
+        focusedConsole,
+        customMonitoring,
+        evalsPage: true,
+        sandboxPage: true,
+      });
+      const list = items.filter(({ section }) => section !== "footer");
+      // DESIGN.md: at most 10 (14 with customMonitoring), three more with evals.
+      assert.ok(list.length <= (customMonitoring ? 17 : 13), `${list.length} items`);
+      const ids = list.map(({ id }) => id);
+      const at = (id: string) => ids.indexOf(id);
+      assert.ok(at("evals") >= 0 && at("evals") < at("datasets"));
+      assert.ok(at("datasets") < at("sandboxes") && at("sandboxes") < at("catalog"));
+      const datasets = items.find(({ id }) => id === "datasets");
+      assert.equal(datasets?.href, `/project/${P1}/datasets`);
+      const icons = list.map(({ icon }) => icon);
+      assert.equal(new Set(icons).size, icons.length, "no two items share an icon");
+    }
+  }
+});

@@ -22,11 +22,12 @@ import {
   runBodySchema,
   startRun,
 } from "./actions";
-import { currentVersion } from "./domain/eval";
 import { datasetQuerySchema } from "./domain/dataset";
+import { currentVersion } from "./domain/eval";
 import type { Experiment } from "./domain/experiment";
 import { readJson } from "./experiments-api";
 import { runHref } from "./paths";
+import type { RecentTurn } from "./recent-turns";
 
 /**
  * The session routes of the Datasets and Evals pages. Each one checks the member, the `evals`
@@ -34,6 +35,8 @@ import { runHref } from "./paths";
  * (`actions.ts`). A row from a trace copies captured text: the project must let Ratel read it.
  */
 export type ConsoleApiDeps = MemberAccessDeps & {
+  /** The trace picker: the newest closed turns, with their ask when captured text is readable. */
+  recentTurns: (projectId: string, readContent: boolean) => Promise<RecentTurn[]>;
   actions: () => ActionDeps;
   /** The content rule of the project. */
   readContent: (projectId: string) => Promise<boolean>;
@@ -80,9 +83,17 @@ export function handleCreateDatasetByMember(
   return write(projectId, "create_dataset", deps, async (member) => {
     const body = newDatasetSchema.safeParse(await readJson(request));
     if (!body.success) return invalid(body.error);
-    const made = await createDataset(member.projectId, await actorOf(member, deps), body.data, deps.actions());
+    const made = await createDataset(
+      member.projectId,
+      await actorOf(member, deps),
+      body.data,
+      deps.actions(),
+    );
     if (!made.ok) return refuse(STATUS[made.reason], made.reason, made.message);
-    await deps.track("eval_dataset_created", member, { kind: made.dataset.query.kind, rows: made.rows });
+    await deps.track("eval_dataset_created", member, {
+      kind: made.dataset.query.kind,
+      rows: made.rows,
+    });
     return reply(201, { datasetId: made.dataset.id, rows: made.rows });
   });
 }
@@ -136,18 +147,42 @@ export function handlePreviewDatasetByMember(
   projectId: string,
   deps: ConsoleApiDeps,
 ): Promise<Response> {
-  return forMember(projectId, { feature: "evals", operation: "preview_dataset" }, deps, async (member) => {
-    const body = previewSchema.safeParse(await readJson(request));
-    if (!body.success) return invalid(body.error);
-    const preview = await previewQuery(
-      member.projectId,
-      await actorOf(member, deps),
-      body.data.query,
-      deps.actions(),
-    );
-    // A refusal is the answer of the preview, not an error of the request.
-    return reply(200, preview);
-  });
+  return forMember(
+    projectId,
+    { feature: "evals", operation: "preview_dataset" },
+    deps,
+    async (member) => {
+      const body = previewSchema.safeParse(await readJson(request));
+      if (!body.success) return invalid(body.error);
+      const preview = await previewQuery(
+        member.projectId,
+        await actorOf(member, deps),
+        body.data.query,
+        deps.actions(),
+      );
+      // A refusal is the answer of the preview, not an error of the request.
+      return reply(200, preview);
+    },
+  );
+}
+
+/** GET /api/projects/[projectId]/evals/recent-turns: the turns of the trace picker. */
+export function handleRecentTurnsByMember(
+  projectId: string,
+  deps: ConsoleApiDeps,
+): Promise<Response> {
+  return forMember(
+    projectId,
+    { feature: "evals", operation: "recent_turns" },
+    deps,
+    async (member) => {
+      const turns = await deps.recentTurns(
+        member.projectId,
+        await deps.readContent(member.projectId),
+      );
+      return reply(200, { turns });
+    },
+  );
 }
 
 /** POST /api/projects/[projectId]/evals/definitions: an eval from the "New eval" dialog. */
@@ -159,7 +194,12 @@ export function handleCreateEvalByMember(
   return write(projectId, "create_eval", deps, async (member) => {
     const body = evalBodySchema.safeParse(await readJson(request));
     if (!body.success) return invalid(body.error);
-    const made = await createEval(member.projectId, await actorOf(member, deps), body.data, deps.actions());
+    const made = await createEval(
+      member.projectId,
+      await actorOf(member, deps),
+      body.data,
+      deps.actions(),
+    );
     if (!made.ok) return refuse(STATUS[made.reason], made.reason, made.message);
     const version = currentVersion(made.eval);
     await deps.track("eval_created", member, {

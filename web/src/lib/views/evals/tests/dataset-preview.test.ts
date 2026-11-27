@@ -73,7 +73,11 @@ test("a preview refuses as a run would: no captured text, a failed query, too ma
 });
 
 test("a query that finds no turn says so", async () => {
-  const empty = await previewDataset(PROJECT, { kind: "auto", taskId: null, limit: 5 }, fakeTraceSource());
+  const empty = await previewDataset(
+    PROJECT,
+    { kind: "auto", taskId: null, limit: 5 },
+    fakeTraceSource(),
+  );
   assert.equal(empty.ok ? null : empty.reason, "no_rows");
 });
 

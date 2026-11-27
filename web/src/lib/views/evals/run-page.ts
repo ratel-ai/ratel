@@ -29,7 +29,12 @@ export type RunVariantColumn = {
 
 export type ScorerCell = { pass: number; rated: number };
 
-export type RunTrialLink = { trialId: string; index: number; result: Trial["result"]; href: string };
+export type RunTrialLink = {
+  trialId: string;
+  index: number;
+  result: Trial["result"];
+  href: string;
+};
 
 export type RunVariantCell = {
   variant: number;
@@ -123,7 +128,10 @@ export function runPageModel({
         counts: countTrials(ofVariant),
       };
     }),
-    scorers: scorerColumns(experiment, frozen.map(({ versionId }) => versionId)),
+    scorers: scorerColumns(
+      experiment,
+      frozen.map(({ versionId }) => versionId),
+    ),
     rows: frozen.map((row) => {
       const version = byVersion.get(row.versionId);
       const ofRow = own.filter(({ caseVersionId }) => caseVersionId === row.versionId);

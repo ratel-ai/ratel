@@ -18,7 +18,12 @@ export function runHref(projectId: string, evalId: string, runId: string): strin
 }
 
 /** One trial of a run, next to the baseline trial of the same row. */
-export function trialHref(projectId: string, evalId: string, runId: string, trialId: string): string {
+export function trialHref(
+  projectId: string,
+  evalId: string,
+  runId: string,
+  trialId: string,
+): string {
   return `${runHref(projectId, evalId, runId)}/trials/${trialId}`;
 }
 

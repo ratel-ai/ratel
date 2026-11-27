@@ -9,7 +9,6 @@ import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { currentVersion } from "../domain/eval";
-import { experimentPageModel } from "../page-model";
 import { NO_REFUND, ORGANIZATION_ID, OTHER_PROJECT_ID, PROJECT_ID } from "./support";
 
 /**
@@ -190,10 +189,9 @@ test("an experiment created before the change still opens", async () => {
     versions.map(({ input }) => input),
     [{ message: "refund A200" }],
   );
-  const page = experimentPageModel(experiment, trials, { versions });
-  assert.equal(page.id, EXPERIMENT_ID);
+  assert.equal(experiment.id, EXPERIMENT_ID);
   assert.deepEqual(
-    page.scorers.map(({ name }) => name),
+    experiment.scorerSnapshots[versionA]?.map(({ name }) => name),
     ["No refund"],
   );
   assert.equal(trials[0]?.result, "pass");

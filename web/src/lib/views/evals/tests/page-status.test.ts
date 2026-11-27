@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createElement, type ReactNode, Suspense } from "react";
 import { renderToReadableStream } from "react-dom/server.edge";
-import { suiteHref } from "../paths";
+import { resetConfigForTests } from "@/config";
 
 /**
  * The HTTP status of the pages of evals. Next commits to 200 when the first bytes of a page stream,
@@ -16,12 +16,19 @@ const APP = fileURLToPath(new URL("../../../../app", import.meta.url));
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const PAGE_TEXT = "the page";
 const PAGES = [
+  "datasets",
+  "datasets/[datasetId]",
   "evals",
+  "evals/[evalId]",
+  "evals/[evalId]/runs/[runId]",
+  "evals/[evalId]/runs/[runId]/trials/[trialId]",
+];
+/** The old addresses: routes that lead to the new pages, and 404 with the flag off. */
+const OLD_ADDRESSES = [
+  "evals/new",
   "evals/cases/[caseId]",
   "evals/experiments/[experimentId]",
   "evals/experiments/[experimentId]/compare",
-  "evals/[evalId]",
-  "evals/new",
   "evals/experiments/[experimentId]/trials/[trialId]",
 ];
 const EXPERIMENT_ID = "22222222-2222-4222-8222-222222222222";
@@ -49,21 +56,51 @@ for (const name of PAGES) {
       default: (props: { params: Promise<{ projectId: string }> }) => Promise<ReactNode>;
     };
     await assert.rejects(
-      Page({ params: Promise.resolve({ projectId: PROJECT_ID, caseId: "new" }) }),
+      Page({
+        params: Promise.resolve({
+          projectId: PROJECT_ID,
+          datasetId: EXPERIMENT_ID,
+          evalId: EXPERIMENT_ID,
+          runId: EXPERIMENT_ID,
+          trialId: EXPERIMENT_ID,
+        }),
+        searchParams: Promise.resolve({}),
+      } as never),
       (error: { digest?: string }) => String(error.digest).endsWith(";404"),
     );
   });
 }
 
-test("the old comparison address leads to the suite table of the run", () => {
-  // With the flag on, the page only redirects: it reads no data.
-  const page = readFileSync(findPage("evals/experiments/[experimentId]/compare"), "utf8");
-  assert.match(page, /notFound\(\);\s*redirect\(suiteHref\(projectId, experimentId\)\);/);
-  assert.equal(
-    suiteHref(PROJECT_ID, EXPERIMENT_ID),
-    `/project/${PROJECT_ID}/evals?run=${EXPERIMENT_ID}`,
+for (const name of OLD_ADDRESSES) {
+  test(`the old address ${name} is a route: 404 with the flag off, before any read`, async () => {
+    assert.ok(!existsSync(join(dirname(findRoute(name)), "page.tsx")), "no page streams first");
+    const { GET } = (await import(pathToFileURL(findRoute(name)).href)) as {
+      GET: (
+        request: Request,
+        context: { params: Promise<Record<string, string>> },
+      ) => Promise<Response>;
+    };
+    delete process.env.FF_EVALS;
+    resetConfigForTests();
+    const answer = await GET(new Request(`https://ratel.example/project/${PROJECT_ID}/${name}`), {
+      params: Promise.resolve({
+        projectId: PROJECT_ID,
+        experimentId: EXPERIMENT_ID,
+        trialId: EXPERIMENT_ID,
+        caseId: EXPERIMENT_ID,
+      }),
+    });
+    assert.equal(answer.status, 404);
+  });
+}
+
+function findRoute(name: string): string {
+  const route = readdirSync(APP, { recursive: true, encoding: "utf8" }).find((file) =>
+    file.endsWith(join("project", "[projectId]", name, "route.ts")),
   );
-});
+  assert.ok(route, name);
+  return join(APP, route);
+}
 
 /** The stream of the page inside its layouts. Rejects when no byte was sent before an error. */
 async function streamPage(name: string) {

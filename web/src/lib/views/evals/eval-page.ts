@@ -168,9 +168,7 @@ export function evalPageModel({
         },
         scorers: row.scorers,
         params:
-          row.variants.length > 0
-            ? `matrix (${row.variants.length})`
-            : paramsText(row.params),
+          row.variants.length > 0 ? `matrix (${row.variants.length})` : paramsText(row.params),
         score: row.score,
         delta: row.delta?.score ?? null,
         deltaNote: row.deltaRefusal?.message ?? null,

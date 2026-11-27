@@ -1174,7 +1174,9 @@ test("evals_start_run: eval and evals together are refused", async () => {
 });
 
 test("evals: unpin removes the pin of a baseline run, and says when that run is not pinned", async () => {
-  const done = ok<{ unpinnedRunId: string }>(await call("evals_unpin_baseline", { runId: BASE_RUN }));
+  const done = ok<{ unpinnedRunId: string }>(
+    await call("evals_unpin_baseline", { runId: BASE_RUN }),
+  );
   assert.equal(done.data.unpinnedRunId, BASE_RUN);
   assert.equal(failure(await call("evals_unpin_baseline", { runId: RUN })).error, "not_found");
 });

@@ -19,8 +19,8 @@ import {
 } from "./domain/eval";
 import type { Experiment } from "./domain/experiment";
 import type { CaseFromTurn } from "./domain/from-turn";
-import { type EvalRunChanges, startEvalRun } from "./eval-runs";
 import { MAX_PICKED_TURNS } from "./eval-form";
+import { type EvalRunChanges, startEvalRun } from "./eval-runs";
 import type { ExperimentDeps, StartRefusal } from "./experiments";
 import type { DatasetStore, NewRow } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
@@ -61,7 +61,11 @@ const paramValue = z.union([z.string(), z.number(), z.boolean()]);
 const turnIdsSchema = z.array(z.uuid()).min(1).max(MAX_PICKED_TURNS);
 
 export const rowInputSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("turn"), turnId: z.uuid(), name: z.string().trim().min(1).max(200).optional() }),
+  z.object({
+    kind: z.literal("turn"),
+    turnId: z.uuid(),
+    name: z.string().trim().min(1).max(200).optional(),
+  }),
   valueRowSchema.extend({ kind: z.literal("values"), name: z.string().trim().min(1).max(200) }),
 ]);
 export type RowInput = z.infer<typeof rowInputSchema>;
@@ -138,7 +142,8 @@ export async function createDataset(
     : null;
   if (rows && !rows.ok) return rows;
   const made = await deps.datasets.create({ projectId, ...details, query, createdBy: actor.by });
-  if (made === "name_taken") return refused("name_taken", "Another dataset of the project has this name.");
+  if (made === "name_taken")
+    return refused("name_taken", "Another dataset of the project has this name.");
   if (rows) await deps.datasets.addRows(projectId, made.id, rows.rows, actor.by);
   return { ok: true, dataset: made, rows: rows?.rows.length ?? 0 };
 }
@@ -209,7 +214,8 @@ export async function createEval(
     content: content.content,
     createdBy: actor.by,
   });
-  if (made === "name_taken") return refused("name_taken", "Another eval of the project has this name.");
+  if (made === "name_taken")
+    return refused("name_taken", "Another eval of the project has this name.");
   if (made === "dataset_not_found") return refused("not_found", "There is no such dataset.");
   return { ok: true, eval: made };
 }
@@ -234,8 +240,10 @@ export async function editEval(
     { userId: actor.by, now: actor.now },
   );
   if (saved === "not_found") return refused("not_found", "There is no such eval.");
-  if (saved === "changed") return refused("changed", "Another person changed this eval. Read it again.");
-  if (saved === "name_taken") return refused("name_taken", "Another eval of the project has this name.");
+  if (saved === "changed")
+    return refused("changed", "Another person changed this eval. Read it again.");
+  if (saved === "name_taken")
+    return refused("name_taken", "Another eval of the project has this name.");
   if (saved === "dataset_not_found") return refused("not_found", "There is no such dataset.");
   return { ok: true, eval: saved };
 }
@@ -308,23 +316,24 @@ export async function datasetFor(
 ): Promise<Done<{ datasetId: string }>> {
   if ("datasetId" in choice) {
     const found = await deps.datasets.get(projectId, choice.datasetId);
-    return found ? { ok: true, datasetId: found.id } : refused("not_found", "There is no such dataset.");
+    return found
+      ? { ok: true, datasetId: found.id }
+      : refused("not_found", "There is no such dataset.");
   }
   const made = await createDataset(
     projectId,
     actor,
-    { name: await freeDatasetName(projectId, evalName, deps), description: null, query: choice.query },
+    {
+      name: await freeDatasetName(projectId, evalName, deps),
+      description: null,
+      query: choice.query,
+    },
     deps,
   );
   return made.ok ? { ok: true, datasetId: made.dataset.id } : made;
 }
 
-async function contentOf(
-  projectId: string,
-  actor: Actor,
-  body: EvalBody,
-  deps: ActionDeps,
-) {
+async function contentOf(projectId: string, actor: Actor, body: EvalBody, deps: ActionDeps) {
   const scorers = await withDefinitions(projectId, body.scorers, deps);
   if (!scorers.ok) return scorers;
   const dataset = await datasetFor(projectId, actor, body.dataset, body.name, deps);
@@ -346,7 +355,11 @@ async function contentOf(
 }
 
 /** A name that no dataset of the project has: the eval name, then "(2)", "(3)". */
-async function freeDatasetName(projectId: string, name: string, deps: Pick<ActionDeps, "datasets">) {
+async function freeDatasetName(
+  projectId: string,
+  name: string,
+  deps: Pick<ActionDeps, "datasets">,
+) {
   const taken = new Set((await deps.datasets.list(projectId)).map((one) => one.name));
   let free = name;
   for (let n = 2; taken.has(free); n++) free = `${name} (${n})`.slice(0, 100);

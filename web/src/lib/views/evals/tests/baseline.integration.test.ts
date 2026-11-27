@@ -208,7 +208,7 @@ test("the comparison has the verdict, the rule and the changed cases, with no ca
   assert.equal(view.baseline.experimentId, base);
   assert.equal(
     view.url,
-    `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}/compare`,
+    `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}`,
   );
   assert.deepEqual(
     [view.changedCases.length, view.changedCases[0].name, view.changedCases[0].change],
@@ -244,7 +244,7 @@ test("a chosen experiment is the other side, and the pinned baseline is the defa
   assert.ok(!("pinnedBy" in view.baseline) && !("pinnedAt" in view.baseline));
   assert.equal(
     view.url,
-    `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}/compare?baseline=${chosen}`,
+    `https://ratel.test/project/${PROJECT_ID}/evals/experiments/${next}?baseline=${chosen}`,
   );
   const byMember = await handleCompareByMember(PROJECT_ID, next, t.member(), chosen);
   assert.equal((await byMember.json()).verdict, "regressed");

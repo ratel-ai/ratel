@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
+import type { EvalBody } from "../actions";
 import {
   type ActionDeps,
   addDatasetRows,
@@ -17,7 +18,6 @@ import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { currentVersion } from "../domain/eval";
 import type { TurnContent } from "../domain/from-turn";
-import type { EvalBody } from "../actions";
 import {
   content,
   createEvalsDb,
@@ -74,7 +74,11 @@ async function setup() {
     now: () => new Date("2026-11-27T10:00:00Z"),
     turnRow: async (projectId, turnId) =>
       projectId === PROJECT_ID && turnId === TURN_1
-        ? { name: "Case from a turn", content: content({ input: "refund A200" }), sourceOutput: "Done." }
+        ? {
+            name: "Case from a turn",
+            content: content({ input: "refund A200" }),
+            sourceOutput: "Done.",
+          }
         : null,
   };
   return { db, deps };
@@ -170,7 +174,12 @@ test("rows are added and removed in the dataset of the project only", async () =
   assert.equal(other.ok ? null : other.reason, "not_found");
   const [first] = added.rows;
   assert.ok(first);
-  const removedElsewhere = await removeDatasetRow(OTHER_PROJECT_ID, made.dataset.id, first.rowId, deps);
+  const removedElsewhere = await removeDatasetRow(
+    OTHER_PROJECT_ID,
+    made.dataset.id,
+    first.rowId,
+    deps,
+  );
   assert.equal(removedElsewhere.ok ? null : removedElsewhere.reason, "not_found");
   assert.ok((await removeDatasetRow(PROJECT_ID, made.dataset.id, first.rowId, deps)).ok);
   assert.equal((await deps.datasets.rows(PROJECT_ID, made.dataset.id)).length, 1);
@@ -187,7 +196,12 @@ test("a preview needs captured text", async () => {
 
 test("an eval with a query made in the dialog gets a dataset named after it, and library scorers", async () => {
   const { deps } = await setup();
-  await createDataset(PROJECT_ID, ACTOR, { name: "Refunds", description: null, query: { kind: "fixed" } }, deps);
+  await createDataset(
+    PROJECT_ID,
+    ACTOR,
+    { name: "Refunds", description: null, query: { kind: "fixed" } },
+    deps,
+  );
   const made = await createEval(PROJECT_ID, ACTOR, EVAL, deps);
   assert.ok(made.ok);
   const version = currentVersion(made.eval);
@@ -293,7 +307,13 @@ test("a run records what it changed: rows from turns, scorers, params, a matrix"
   // The rows of one run are not rows of the dataset.
   assert.equal((await deps.datasets.rows(PROJECT_ID, fixed.dataset.id)).length, 1);
 
-  const closed = await startRun(SUBJECT, made.eval.id, NO_TEXT, { rows: { kind: "turns", turnIds: [TURN_1] } }, deps);
+  const closed = await startRun(
+    SUBJECT,
+    made.eval.id,
+    NO_TEXT,
+    { rows: { kind: "turns", turnIds: [TURN_1] } },
+    deps,
+  );
   assert.equal(closed.ok ? null : closed.reason, "no_content_access");
   const elsewhere = await startRun(
     { ...SUBJECT, projectId: OTHER_PROJECT_ID },

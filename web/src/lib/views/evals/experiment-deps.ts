@@ -3,7 +3,6 @@ import { getDb } from "@/lib/platform/db/client";
 import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import { publicUrl } from "@/lib/platform/public-url";
 import { trackServerEvent } from "@/lib/platform/telemetry";
-import { contentOptIn } from "@/lib/views/session-replay/runs";
 import {
   getRun,
   getSandboxVersion,
@@ -12,6 +11,7 @@ import {
   startRun,
 } from "@/lib/views/sandboxes";
 import { listScorers } from "@/lib/views/scorers/store";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
@@ -19,13 +19,14 @@ import { createDrizzleExperimentStore } from "./adapters/drizzle-experiment-stor
 import { createTraceSource } from "./adapters/trace-source";
 import { pinnedRun } from "./baseline";
 import { baselineDeps } from "./baseline-deps";
+import type { ConsoleApiDeps } from "./console-api";
 import { evalsAccess, readOnlyTools } from "./console-deps";
 import type { Experiment } from "./domain/experiment";
+import { caseFromTurn } from "./domain/from-turn";
 import { advanceExperiment, type ExperimentDeps } from "./experiments";
 import type { ConsoleDeps, ExperimentsApiDeps } from "./experiments-api";
-import type { ConsoleApiDeps } from "./console-api";
-import { caseFromTurn } from "./domain/from-turn";
 import { judgeDeps } from "./judge-deps";
+import { recentTurns } from "./recent-turns";
 import { loadTurnContent } from "./turn-content";
 
 /** Experiments over the real database, sandboxes and judge. */
@@ -104,6 +105,12 @@ export const consoleApiDeps: ConsoleApiDeps = {
     turnRow,
   }),
   readContent: (projectId) => contentOptIn(projectId),
+  recentTurns: (projectId, readContent) =>
+    recentTurns(projectId, {
+      db: getDb(),
+      readContent,
+      loadAsk: async (id, turnId) => (await loadTurnContent(id, turnId))?.ask ?? null,
+    }),
   advance: experimentsApiDeps.advance,
   track: (event, { externalId, projectId, organizationId }, fields) =>
     trackServerEvent(

@@ -1,5 +1,5 @@
 import { type ParamDraft, type ParamSpec, paramsOfDraft } from "@/lib/views/sandboxes/run-form";
-import { DEFAULT_ROW_LIMIT, type DatasetQuery, MAX_ROW_LIMIT } from "./domain/dataset";
+import { type DatasetQuery, DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT } from "./domain/dataset";
 import {
   combinationCount,
   DEFAULT_EVAL_TRIALS,
@@ -65,7 +65,9 @@ export type FormContext = {
 /** A scorer of a request: a library reference with the name and the id it has in the eval. */
 export type ScorerBody = { id: string; name: string; gating: boolean; ref: ScorerRef };
 
-export type DatasetBody = { datasetId: string } | { query: Exclude<DatasetQuery, { kind: "fixed" }> };
+export type DatasetBody =
+  | { datasetId: string }
+  | { query: Exclude<DatasetQuery, { kind: "fixed" }> };
 
 export type NewEvalBody = {
   name: string;
@@ -171,7 +173,8 @@ export function checkEvalDraft(draft: EvalDraft, ctx: FormContext): Checked<NewE
   const dataset = checkDataset(draft.dataset, errors);
   const params = runtimeParams(ctx, draft.runtime);
   const typed = paramsOfDraft(params, draft.params);
-  if (!typed.ok) for (const [key, value] of Object.entries(typed.errors)) errors[`params.${key}`] = value;
+  if (!typed.ok)
+    for (const [key, value] of Object.entries(typed.errors)) errors[`params.${key}`] = value;
   let matrix: NewEvalBody["matrix"] = {};
   if (draft.matrixOn) {
     const made = matrixOf(params, draft.matrix);
@@ -315,10 +318,17 @@ export function checkScorers(
       }
       settings[setting.name] = value;
     }
-    const id = uniqueId(entry.source === "predefined" ? entry.id : `scorer-${entry.id.slice(0, 8)}`, ids);
+    const id = uniqueId(
+      entry.source === "predefined" ? entry.id : `scorer-${entry.id.slice(0, 8)}`,
+      ids,
+    );
     const ref: ScorerRef =
       entry.source === "predefined"
-        ? { source: "predefined", key: entry.id as Extract<ScorerRef, { source: "predefined" }>["key"], settings }
+        ? {
+            source: "predefined",
+            key: entry.id as Extract<ScorerRef, { source: "predefined" }>["key"],
+            settings,
+          }
         : { source: "project", scorerId: entry.id };
     made.push({ id, name: scorerName(entry, settings), gating: pick.gating, ref });
   }
@@ -347,7 +357,10 @@ export function scorerGroups(
     (entry.description ?? "").toLowerCase().includes(wanted);
   return [
     { label: "This project", entries: library.filter((e) => e.source === "project" && matches(e)) },
-    { label: "Pre-defined", entries: library.filter((e) => e.source === "predefined" && matches(e)) },
+    {
+      label: "Pre-defined",
+      entries: library.filter((e) => e.source === "predefined" && matches(e)),
+    },
   ];
 }
 
@@ -561,4 +574,80 @@ function checkAddRows(draft: AddRowsDraft, errors: Errors): RowsBody | null {
 
 function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+// — New dataset ————————————————————————————————————————————————————————————————
+
+/** A fixed dataset, empty or from chosen traces, or one query kind. */
+export type NewDatasetDraft = {
+  name: string;
+  description: string;
+  kind: "fixed" | Exclude<DatasetDraft["kind"], "existing">;
+  turnIds: string[];
+  limit: string;
+  taskId: string;
+  text: string;
+};
+
+export type NewDatasetBody = {
+  name: string;
+  description: string | null;
+  query: DatasetQuery;
+  turnIds?: string[];
+};
+
+export function emptyDatasetDraft(): NewDatasetDraft {
+  return {
+    name: "",
+    description: "",
+    kind: "fixed",
+    turnIds: [],
+    limit: String(DEFAULT_ROW_LIMIT),
+    taskId: "",
+    text: "",
+  };
+}
+
+/** The query draft of a kind, for the fields that a query kind shares with "New eval". */
+export function queryDraftOf(
+  draft: NewDatasetDraft,
+): Exclude<DatasetDraft, { kind: "existing" }> | null {
+  switch (draft.kind) {
+    case "fixed":
+      return null;
+    case "last_traces":
+      return { kind: "last_traces", limit: draft.limit };
+    case "task_traces":
+      return { kind: "task_traces", taskId: draft.taskId, limit: draft.limit };
+    case "rql":
+      return { kind: "rql", text: draft.text, limit: draft.limit };
+    case "auto":
+      return { kind: "auto", taskId: draft.taskId, limit: draft.limit };
+  }
+}
+
+export function checkDatasetDraft(draft: NewDatasetDraft): Checked<NewDatasetBody> {
+  const errors: Errors = {};
+  const name = draft.name.trim();
+  if (name === "") errors.name = "Give the dataset a name.";
+  else if (name.length > 100) errors.name = "A name has at most 100 characters.";
+  const description = draft.description.trim() === "" ? null : draft.description.trim();
+  const queryDraft = queryDraftOf(draft);
+  let query: DatasetQuery = { kind: "fixed" };
+  if (queryDraft) {
+    const made = checkDataset(queryDraft, errors);
+    if (made && "query" in made) query = made.query;
+  } else if (draft.turnIds.length > MAX_PICKED_TURNS) {
+    errors.rows = `Choose at most ${MAX_PICKED_TURNS} traces.`;
+  }
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return {
+    ok: true,
+    body: {
+      name,
+      description,
+      query,
+      ...(query.kind === "fixed" && draft.turnIds.length > 0 ? { turnIds: draft.turnIds } : {}),
+    },
+  };
 }

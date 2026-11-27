@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Compared } from "../baseline";
+import { datasetPageModel, datasetsPageModel, filterDatasets, KIND_LABELS } from "../datasets-page";
 import type { EvalCase } from "../domain/case";
 import type { Dataset } from "../domain/dataset";
 import type { EvalDefinition, EvalScorer } from "../domain/eval";
 import type { TrialResult } from "../domain/score";
-import { datasetPageModel, datasetsPageModel, filterDatasets, KIND_LABELS } from "../datasets-page";
 import { changedText, evalPageModel, paramsText } from "../eval-page";
 import { evalsPageModel, filterEvals } from "../evals-page";
 import { evalHistory, evalsOverview } from "../history-view";
@@ -196,7 +196,10 @@ test("the Datasets page shows the kind, the rows or the query, and the evals tha
       summary("d2", { query: { kind: "rql", text: "SELECT trace_id FROM traces", limit: 50 } }),
       summary("d3", { query: { kind: "task_traces", taskId: "task-9", limit: 30 } }),
     ],
-    [definition("e1"), { ...definition("e2"), versions: [{ ...definition("e2").versions[0]!, datasetId: "d1" }] }],
+    [
+      definition("e1"),
+      { ...definition("e2"), versions: [{ ...definition("e2").versions[0]!, datasetId: "d1" }] },
+    ],
     new Map([["task-9", "Refund an order"]]),
   );
   assert.deepEqual(
@@ -210,7 +213,13 @@ test("the Datasets page shows the kind, the rows or the query, and the evals tha
     [
       ["Data d1", "Fixed rows", "1 row", false, ["Eval e2"]],
       ["Data d2", "RQL query", "SELECT trace_id FROM traces", true, []],
-      ["Data d3", "Traces of a task", 'The last 30 traces of the task "Refund an order"', false, []],
+      [
+        "Data d3",
+        "Traces of a task",
+        'The last 30 traces of the task "Refund an order"',
+        false,
+        [],
+      ],
     ],
   );
   assert.deepEqual(
@@ -223,7 +232,10 @@ test("the Datasets page shows the kind, the rows or the query, and the evals tha
   );
 });
 
-function row(id: string, over: { turnId?: string | null; input?: unknown; expected?: string | null }): EvalCase {
+function row(
+  id: string,
+  over: { turnId?: string | null; input?: unknown; expected?: string | null },
+): EvalCase {
   return {
     id,
     projectId: PROJECT_ID,
@@ -302,7 +314,11 @@ test("a dataset page links a trace row to its turn, and hides captured text by t
   });
   // The trace row keeps its link and loses its text; typed values are not captured text.
   assert.deepEqual(
-    closed.rows.map(({ input, expectedOutput, traceHref }) => [input, expectedOutput, traceHref !== null]),
+    closed.rows.map(({ input, expectedOutput, traceHref }) => [
+      input,
+      expectedOutput,
+      traceHref !== null,
+    ]),
     [
       [null, null, true],
       ['{"order":"A1"}', "No.", false],
@@ -323,6 +339,7 @@ test("a query dataset page shows its query in words and its RQL text", () => {
     words: "Up to 40 traces of an RQL query",
     rql: "SELECT trace_id FROM traces",
     limit: 40,
+    taskId: null,
   });
   assert.equal(model.kindLabel, KIND_LABELS.rql);
 });
@@ -390,10 +407,19 @@ test("an eval page has a line for each scorer and the mean, and a row for each r
 });
 
 test("params and changes read in words", () => {
-  assert.equal(paramsText({ tone: "formal", model: "haiku", n: 2 }), "model=haiku, n=2, tone=formal");
+  assert.equal(
+    paramsText({ tone: "formal", model: "haiku", n: 2 }),
+    "model=haiku, n=2, tone=formal",
+  );
   assert.deepEqual(changedText({}), []);
   assert.deepEqual(
-    changedText({ datasetId: "d", scorers: true, sandboxVersionId: "v", trials: 1, params: { a: 1 } }),
+    changedText({
+      datasetId: "d",
+      scorers: true,
+      sandboxVersionId: "v",
+      trials: 1,
+      params: { a: 1 },
+    }),
     ["dataset", "scorers", "runtime version", "params", "trials"],
   );
 });

@@ -10,6 +10,7 @@ import {
   CreditCard,
   Crosshair,
   Database,
+  FlaskConical,
   Gauge,
   HeartPulse,
   House,
@@ -21,6 +22,7 @@ import {
   RotateCcw,
   Settings,
   Sparkles,
+  Table2,
   Users,
 } from "lucide-react";
 import type { NavIconName } from "@/lib/console/navigation";
@@ -48,5 +50,7 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   ship: Rocket,
   "self-corrections": RotateCcw,
   apis: Plug,
+  evals: FlaskConical,
+  datasets: Table2,
   edition: Blocks,
 };

@@ -2,9 +2,9 @@ import { currentVersion as currentRow, type EvalCase } from "./domain/case";
 import { type Dataset, type DatasetKind, type DatasetQuery, rowKindOf } from "./domain/dataset";
 import { datasetOf, type EvalDefinition } from "./domain/eval";
 import { datasetsView } from "./history-view";
-import type { DatasetSummary } from "./ports/dataset-store";
 import { preview } from "./page-model";
 import { evalHref, turnHref } from "./paths";
+import type { DatasetSummary } from "./ports/dataset-store";
 
 /**
  * The Datasets page and one dataset (decision `datasets-first-class`), as plain data. A row saved
@@ -102,7 +102,7 @@ export type DatasetPageModel = {
   kind: DatasetKind;
   kindLabel: string;
   /** A query kind: what it reads, in words, and the RQL text. Null for a fixed dataset. */
-  query: { words: string; rql: string | null; limit: number } | null;
+  query: { words: string; rql: string | null; limit: number; taskId: string | null } | null;
   rows: DatasetRowView[];
   /** True when a trace row hides its input: the project does not let Ratel read captured text. */
   contentWithheld: boolean;
@@ -160,6 +160,7 @@ export function datasetPageModel({
             words: queryWords(query, taskNames),
             rql: query.kind === "rql" ? query.text : null,
             limit: query.limit,
+            taskId: "taskId" in query ? query.taskId : null,
           },
     rows: views,
     contentWithheld: !readContent && views.some(({ kind }) => kind === "trace"),

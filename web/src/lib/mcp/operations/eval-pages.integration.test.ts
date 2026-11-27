@@ -90,7 +90,15 @@ async function setup(readable = true) {
       if (!result.ok) return result;
       return {
         ok: true,
-        runs: [{ eval: one ?? "", evalId: result.experiment.evalId ?? "", ok: true, experiment: result.experiment, note: null }],
+        runs: [
+          {
+            eval: one ?? "",
+            evalId: result.experiment.evalId ?? "",
+            ok: true,
+            experiment: result.experiment,
+            note: null,
+          },
+        ],
       };
     },
   };
@@ -107,7 +115,9 @@ async function setup(readable = true) {
   return { call, evals, actions };
 }
 
-function ok<Data>(result: Awaited<ReturnType<typeof dispatchOperation>>): DispatchSuccess & { data: Data } {
+function ok<Data>(
+  result: Awaited<ReturnType<typeof dispatchOperation>>,
+): DispatchSuccess & { data: Data } {
   assert.equal(result.ok, true, `expected success, got ${JSON.stringify(result)}`);
   return result as DispatchSuccess & { data: Data };
 }
@@ -122,7 +132,10 @@ test("evals_create takes a runtime, a query dataset, a matrix and library scorer
       datasetQuery: { kind: "last_traces", limit: 10 },
       matrix: { model: ["sonnet", "haiku"] },
       scorers: [
-        { name: "Says refund", ref: { source: "predefined", key: "output_contains", settings: { value: "refund" } } },
+        {
+          name: "Says refund",
+          ref: { source: "predefined", key: "output_contains", settings: { value: "refund" } },
+        },
         { kind: "judge", name: "Polite", gating: false, question: "Is it polite?" },
       ],
     }),
@@ -133,21 +146,31 @@ test("evals_create takes a runtime, a query dataset, a matrix and library scorer
   assert.equal(version.sandboxVersionId, VERSION.id);
   assert.deepEqual(version.matrix, { model: ["sonnet", "haiku"] });
   assert.deepEqual(
-    version.scorers.map(({ name, ref, definition }) => [name, ref?.source ?? null, definition.kind]),
+    version.scorers.map(({ name, ref, definition }) => [
+      name,
+      ref?.source ?? null,
+      definition.kind,
+    ]),
     [
       ["Says refund", "predefined", "check"],
       ["Polite", null, "judge"],
     ],
   );
   const dataset = await actions.datasets.get(PROJECT_ID, version.datasetId);
-  assert.deepEqual([dataset?.name, dataset?.query], ["Refunds", { kind: "last_traces", limit: 10 }]);
+  assert.deepEqual(
+    [dataset?.name, dataset?.query],
+    ["Refunds", { kind: "last_traces", limit: 10 }],
+  );
 
   const edited = ok<{ version: number }>(
     await call("evals_edit", { eval: "Refunds", trials: 1, sandboxVersionId: null }),
   );
   assert.equal(edited.data.version, 2);
   const after = currentVersion((await evals.get(PROJECT_ID, made.data.evalId)) ?? found);
-  assert.deepEqual([after.trials, after.sandboxVersionId, after.datasetId], [1, null, version.datasetId]);
+  assert.deepEqual(
+    [after.trials, after.sandboxVersionId, after.datasetId],
+    [1, null, version.datasetId],
+  );
   const same = ok<{ version: number }>(await call("evals_edit", { eval: "Refunds", trials: 1 }));
   assert.equal(same.data.version, 2);
 });
@@ -166,7 +189,12 @@ test("evals_start_run adds rows and scorers for one run, and needs captured text
     await call("evals_start_run", {
       eval: "Refunds",
       rows: { kind: "turns", turnIds: [TURN] },
-      scorers: [{ name: "Says refund", ref: { source: "predefined", key: "output_contains", settings: { value: "refund" } } }],
+      scorers: [
+        {
+          name: "Says refund",
+          ref: { source: "predefined", key: "output_contains", settings: { value: "refund" } },
+        },
+      ],
     }),
   );
   assert.equal(started.data.runs[0]?.cases, 2);

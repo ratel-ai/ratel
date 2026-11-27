@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chosenTargets, type SaveOptions, saveOptions } from "../save-target";
-import { evalContent } from "./support";
+import type { EvalDefinition } from "../domain/eval";
+import { chosenTargets, type SaveOptions, saveOptions, targetDataset } from "../save-target";
+import { evalContent, PROJECT_ID } from "./support";
 
 const OPTIONS: SaveOptions = {
   tasks: [
@@ -68,4 +69,38 @@ test("a run of a Ratel sandbox saves into a new eval of the task of its sandbox,
   assert.equal(target?.kind, "new");
   assert.equal(target?.kind === "new" ? target.name : null, "support-demo");
   assert.equal(target?.kind === "new" ? target.content.sandboxName : null, "support-demo");
+});
+
+test("the dialog names the dataset that each eval saves into", async () => {
+  const refunds: EvalDefinition = {
+    id: "e1",
+    projectId: PROJECT_ID,
+    name: "Refunds",
+    taskId: null,
+    createdAt: new Date(0),
+    versions: [
+      {
+        ...evalContent(),
+        datasetId: "d1",
+        id: "v1",
+        evalId: "e1",
+        number: 1,
+        createdBy: "u",
+        createdAt: new Date(0),
+      },
+    ],
+  };
+  const options = await saveOptions(PROJECT_ID, null, null, {
+    taskLinks: {
+      tasksOfTurn: async () => [],
+      tasksOfTrace: async () => [],
+      defaultScorers: async () => [],
+      lastSandbox: async () => null,
+    },
+    evals: { list: async () => [refunds] },
+    datasets: { list: async () => [{ id: "d1", name: "Refund asks" } as never] },
+  });
+  assert.deepEqual(options.datasetOfEval, { e1: "Refund asks" });
+  assert.equal(targetDataset(options, "e1"), "Refund asks");
+  assert.equal(targetDataset(options, "e9"), null);
 });

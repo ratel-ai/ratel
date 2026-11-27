@@ -16,6 +16,13 @@ import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { storable } from "@/lib/platform/storable";
+import {
+  type ActionDeps,
+  type Actor,
+  datasetFor,
+  runChanges,
+  withDefinitions,
+} from "@/lib/views/evals/actions";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
 import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
@@ -37,6 +44,7 @@ import {
   type EvalCase,
 } from "@/lib/views/evals/domain/case";
 import { type CompareRefusal, type Comparison, compare } from "@/lib/views/evals/domain/compare";
+import { datasetQuerySchema } from "@/lib/views/evals/domain/dataset";
 import {
   currentVersion,
   datasetOf,
@@ -65,15 +73,7 @@ import {
   startEachEvalRun,
   startEvalRun,
 } from "@/lib/views/evals/eval-runs";
-import {
-  type ActionDeps,
-  type Actor,
-  datasetFor,
-  runChanges,
-  withDefinitions,
-} from "@/lib/views/evals/actions";
 import { advance, consoleApiDeps, experimentDeps } from "@/lib/views/evals/experiment-deps";
-import { datasetQuerySchema } from "@/lib/views/evals/domain/dataset";
 import { caseCounts, runFields, trialsByCase } from "@/lib/views/evals/experiment-view";
 import type { StartExperimentResult } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
@@ -285,7 +285,9 @@ const datasetNameParam = z
   .describe("A dataset of the project (name or id). evals_list_datasets gives them.");
 const matrixParam = z
   .record(z.string(), z.array(z.union([z.string(), z.number(), z.boolean()])).min(1))
-  .describe("For each param, the values to try. A run has one variant for each combination, at most 12.");
+  .describe(
+    "For each param, the values to try. A run has one variant for each combination, at most 12.",
+  );
 
 export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOperation[] {
   return [
@@ -1665,7 +1667,10 @@ async function datasetIdOf(
   deps: EvalsOperationDeps,
   ctx: Pick<OperationContext, "auth" | "projectId">,
   evalName: string,
-  params: { dataset?: string | undefined; datasetQuery?: z.output<typeof datasetQueryParam> | undefined },
+  params: {
+    dataset?: string | undefined;
+    datasetQuery?: z.output<typeof datasetQueryParam> | undefined;
+  },
 ): Promise<string | null> {
   if (params.dataset === undefined && params.datasetQuery === undefined) return null;
   const actions = deps.actions();
@@ -1683,7 +1688,13 @@ async function datasetIdOf(
     }
     choice = { query: query.data };
   }
-  const found = await datasetFor(ctx.projectId, await actorOf(deps, ctx), choice, evalName, actions);
+  const found = await datasetFor(
+    ctx.projectId,
+    await actorOf(deps, ctx),
+    choice,
+    evalName,
+    actions,
+  );
   if (!found.ok) {
     if (found.reason === "not_found") throw notFound("dataset");
     throw new McpOperationError("invalid_params", found.message, { reason: found.reason });

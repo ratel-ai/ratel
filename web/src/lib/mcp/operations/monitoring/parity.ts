@@ -44,6 +44,7 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "lib/views/evals/console-api.ts#handleAddDatasetRowsByMember": "evals_add_dataset_row",
   "lib/views/evals/console-api.ts#handleRemoveDatasetRowByMember": "evals_remove_dataset_row",
   "lib/views/evals/console-api.ts#handlePreviewDatasetByMember": "evals_preview_dataset",
+  "lib/views/evals/console-api.ts#handleRecentTurnsByMember": "list_traces",
   "lib/views/evals/console-api.ts#handleCreateEvalByMember": "evals_create",
   "lib/views/evals/console-api.ts#handleEditEvalByMember": "evals_edit",
   "lib/views/evals/console-api.ts#handleStartRunByMember": "evals_start_run",
