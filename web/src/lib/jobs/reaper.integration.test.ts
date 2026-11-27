@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { getJobForProject, listInFlightJobs, reapStaleRunningJobs } from "@/lib/jobs/queries";
+import {
+  getJobForProject,
+  listInFlightJobs,
+  markJobDone,
+  reapStaleRunningJobs,
+} from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -73,4 +78,21 @@ test("getJobForProject returns the job only to its owning project (Bearer isolat
   assert.equal(await getJobForProject(OTHER_PROJECT, JOB_FRESH, db), null);
   // A missing job id is a clean null, not a throw.
   assert.equal(await getJobForProject(PROJ, "00000000-0000-4000-8000-000000000000", db), null);
+});
+
+test("a completed worker must not overwrite a job already reaped as timed out", async () => {
+  const db = await setup();
+
+  const reaped = await reapStaleRunningJobs(new Date(Date.now() - 10 * 60 * 1000), db);
+  assert.equal(reaped, 1);
+
+  await markJobDone(JOB_STALE, { completed: true }, db);
+
+  const [row] = await db.select().from(jobs).where(eq(jobs.id, JOB_STALE));
+
+  assert.equal(
+    row.status,
+    "error",
+    "a timed-out job must remain terminal even if its worker finishes late",
+  );
 });
