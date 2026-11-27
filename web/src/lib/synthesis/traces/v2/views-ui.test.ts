@@ -244,7 +244,7 @@ test("an empty project teaches the first step; a filtered-out list offers to cle
   assert.match(first, /No turns yet/);
   assert.match(
     first,
-    new RegExp(`href="/project/${PROJECT}/settings/api-keys"[^>]*>Create API key`),
+    new RegExp(`href="/project/${PROJECT}/settings/api-keys"[^>]*>Create an API key`),
   );
   assert.match(first, /href="https:\/\/docs\.ratel\.sh\/observability"/);
   assert.doesNotMatch(first, /role="toolbar"/, "nothing to filter yet");
@@ -252,6 +252,16 @@ test("an empty project teaches the first step; a filtered-out list offers to cle
   assert.match(filtered, /No turns match/);
   assert.match(filtered, />Clear filters</);
   assert.match(filtered, /role="toolbar"/);
+});
+
+test("an empty project that has a key sends the first trace, and only views its keys", () => {
+  const html = renderRuns("", { rows: [], empty: "no-telemetry", hasApiKey: true });
+  assert.match(html, /href="https:\/\/docs\.ratel\.sh\/observability"[^>]*>Send your first trace</);
+  assert.match(
+    html,
+    new RegExp(`href="/project/${PROJECT}/settings/api-keys"[^>]*>View API keys<`),
+  );
+  assert.doesNotMatch(html, /Create (an )?API key/, "never asked to make a second key");
 });
 
 const T0 = Date.parse("2026-09-03T10:43:35.413Z");

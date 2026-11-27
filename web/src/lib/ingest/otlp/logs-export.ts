@@ -12,6 +12,7 @@ import type { trackServerEvent as trackServerEventFn } from "@/lib/platform/tele
 import { decodeOtlpLogs, OtlpDecodeError } from "./decode-logs";
 import type { OtlpTransport } from "./http";
 import { toOtelLogRows } from "./log-rows";
+import type { RedeliveredContext } from "./traces-export";
 
 /**
  * The two halves of a log export after the request's checks, shared by the inline route and the
@@ -56,7 +57,7 @@ export function decodeLogExport(transport: OtlpTransport, bytes: Uint8Array): De
   return { ok: true, records };
 }
 
-export interface StoreLogsContext {
+export interface StoreLogsContext extends RedeliveredContext {
   projectId: string;
   organization: Organization | null;
   /** The key only adds rows (RC-590): its records never rewrite catalog definitions or restate calls. */
@@ -86,13 +87,15 @@ export async function storeLogExport(
   deps: StoreLogsDeps,
   observers: { logError: LogError; logWarn: LogWarn; captureFailure: (error: unknown) => void },
 ): Promise<StoreLogsResult> {
-  const { projectId, organization, appendOnly } = context;
-  const { rows, dropped } = toOtelLogRows(projectId, records);
+  const { projectId, organization, appendOnly, receivedAt, redelivers } = context;
+  const { rows, dropped } = toOtelLogRows(projectId, records, receivedAt);
   const stored = appendOnly ? rows.map(({ catalogDefinition: _definition, ...row }) => row) : rows;
   let accepted = 0;
   if (stored.length > 0) {
     try {
-      ({ accepted } = await deps.insertOtelLogs(projectId, stored));
+      ({ accepted } = redelivers
+        ? await deps.insertOtelLogs(projectId, stored, undefined, { redelivers })
+        : await deps.insertOtelLogs(projectId, stored));
     } catch (error) {
       observers.logError("log record insert failed", error, { project_id: projectId });
       observers.captureFailure(error);
@@ -101,23 +104,27 @@ export async function storeLogExport(
   }
 
   // Spans before logs: restate the model calls these records belong to.
-  // Fails open: the logs are stored, and a retry of the export joins again.
+  // Fails open: the logs are stored, and a retry of the export joins again. A redelivered one is
+  // delivered again for it.
   if (deps.genAiLogJoin && !appendOnly) {
     const keys = distinctSpanKeys(rows.filter((row) => row.eventName.startsWith("gen_ai.")));
     try {
       await rejoinStoredModelCalls(projectId, organization, keys, {
         ...deps.genAiLogJoin,
         captureFailure: observers.captureFailure,
+        ...(receivedAt ? { receivedAt } : {}),
       });
     } catch (error) {
       observers.logError("gen_ai log join failed", error, { project_id: projectId });
       observers.captureFailure(error);
+      if (redelivers) return { ok: false, stage: "storage" };
     }
   }
 
   // Raw capture after a stored export; fails open, never changes the response.
   await captureOtlpRawExport(
     {
+      ...(context.captureId ? { id: context.captureId } : {}),
       projectId,
       signal: "logs",
       contentType: context.transport === "json" ? "application/json" : "application/x-protobuf",

@@ -5,7 +5,8 @@ import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { ChartGantt, Check, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
+import { PanelBoundary } from "@/components/console/session-replay/PanelBoundary";
 import {
   type ChatTurn,
   formatDuration,
@@ -13,7 +14,7 @@ import {
   type SessionChat,
 } from "@/lib/views/session-chat/model";
 import type { StepContentSource } from "@/lib/views/session-chat/panel-client";
-import { type ChatPeek, sessionTraceHref } from "@/lib/views/session-chat/peek";
+import { type ChatPeek, chatPeekId, sessionTraceHref } from "@/lib/views/session-chat/peek";
 import { clockTime, segmentTime, stepWords } from "./format";
 import type { ChatWhatIf, InspectorActions } from "./SessionChatView";
 import { StepInspector } from "./StepInspector";
@@ -47,7 +48,12 @@ export interface SessionChatPanelProps {
   className?: string;
 }
 
-export function SessionChatPanel(props: SessionChatPanelProps) {
+/**
+ * Memo'd: the chat view re-renders on every move of the playhead, the panel
+ * only when what it shows changes (RTL-368). Its body sits in an error
+ * boundary, so a step that fails to render leaves the replay working.
+ */
+export const SessionChatPanel = memo(function SessionChatPanel(props: SessionChatPanelProps) {
   const body = panelBody(props);
   return (
     <aside
@@ -73,10 +79,14 @@ export function SessionChatPanel(props: SessionChatPanelProps) {
           onClick={props.onClose}
         />
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{body.content}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        <PanelBoundary name="step inspector" resetKey={chatPeekId(props.peek)}>
+          {body.content}
+        </PanelBoundary>
+      </div>
     </aside>
   );
-}
+});
 
 function panelBody({
   projectId,

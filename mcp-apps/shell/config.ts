@@ -19,8 +19,8 @@ import type { Noun } from "@ratel/design-system/entity";
  * The last four print a number as the console page for that entity prints it,
  * through the page's own formatter, so a view and the page never round apart:
  * share (a 0 to 1 share on the task pages: "9%", "<1%", ">99%"), whole (a 0 to
- * 1 share on the intent pages: a whole percent), per100 (the task pages' "per
- * 100 runs"), taskCost (a task's cost per run: "~$0.12" when estimated,
+ * 1 share on the intent pages: a whole percent), per100 (the task pages'
+ * self-corrections "per 100 turns"), taskCost (a task's cost per run: "~$0.12" when estimated,
  * "Not priced") and points (what fixing an issue wins back on the Health
  * score: "+7 pts", a dash under one point, as Agent health's table).
  */

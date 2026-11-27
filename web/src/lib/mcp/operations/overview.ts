@@ -15,6 +15,7 @@ import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
+import { healthUnlockLine } from "@/lib/views/health/unlock";
 import type { AttentionItem } from "@/lib/views/home/attention";
 import {
   type FocusedAlerts,
@@ -770,6 +771,16 @@ function attentionView(attention: FocusedAttention, root: string) {
   return {
     rows: attention.items.map((item) => attentionRow(item, root)),
     moreIssues: attention.moreIssues,
+    // Agent health still locked: its issues are not listed until it opens (`healthUnlock`).
+    ...(attention.healthLock
+      ? {
+          healthLock: {
+            turns: attention.healthLock.turns,
+            floor: attention.healthLock.floor,
+            line: healthUnlockLine(attention.healthLock),
+          },
+        }
+      : {}),
     ...(attention.items.length === 0 && !attention.partial ? { state: attention.state } : {}),
     href: attention.healthHref,
     ...(attention.partial ? { partial: true } : {}),

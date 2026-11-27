@@ -74,7 +74,7 @@ export const evalDefinitionVersions = pgTable(
       .notNull()
       .references(() => evalDefinitions.id, { onDelete: "cascade" }),
     number: integer("number").notNull(),
-    // The dataset of the version. Migration 0068 gave each version the dataset of its eval.
+    // The dataset of the version. Migration 0069 gave each version the dataset of its eval.
     datasetId: uuid("dataset_id")
       .notNull()
       .references(() => evalDatasets.id, { onDelete: "no action" }),
