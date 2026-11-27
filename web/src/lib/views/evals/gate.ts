@@ -6,7 +6,8 @@ import {
 } from "@/lib/platform/experimental-features";
 
 /**
- * Whether evals are on for a project: the `evals` switch, off by default (ADR-0004).
+ * Whether evals are on for a project: the `evals` switch, off by default (ADR-0004). The same
+ * switch gates Ratel sandboxes (`sandboxes/gate`).
  * Owner: rstagi. Remove this file and the flag once it is on for every organization.
  */
 export function evalsEnabledForProject(

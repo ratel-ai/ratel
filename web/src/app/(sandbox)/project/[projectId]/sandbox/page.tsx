@@ -17,7 +17,7 @@ import { loadSandboxPage } from "@/lib/views/sandboxes/page-model";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ratel sandbox" };
 
-/** The project's sandbox: versions, secrets and one run by hand (the `sandboxes` flag). */
+/** The project's sandbox: versions, secrets and one run by hand (the `evals` flag). */
 export default async function SandboxPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
   // Next renders a page next to its layout: the layout's 404 does not stop this data.

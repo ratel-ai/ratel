@@ -42,7 +42,7 @@ const KEYS: Record<string, { projectId: string; scopes: string[] }> = {
   push: { projectId: PROJECT_ID, scopes: ["sandboxes:write"] },
   other: { projectId: OTHER_PROJECT_ID, scopes: ["*"] },
 };
-const ON = resolveConfig({ env: { FF_SANDBOXES: "1" } });
+const ON = resolveConfig({ env: { FF_EVALS: "1" } });
 
 type Over = {
   key?: string;
