@@ -1,0 +1,7 @@
+$ curl -sI http://localhost:3461/project/<project>/sandbox
+HTTP/1.1 307 Temporary Redirect
+location: http://localhost:3461/project/<project>/sandboxes
+$ curl -s .../api/projects/<project>/sandboxes/by-name/support-demo/secrets
+{"sandbox":"support-demo","secrets":[{"name":"ANTHROPIC_API_KEY","source":"sandbox","updatedAt":"2026-11-27T09:45:35.875Z"}],"undeclared":[]}
+$ curl -s .../api/projects/<project>/sandboxes/by-name/triage-demo/secrets
+{"sandbox":"triage-demo","secrets":[{"name":"ANTHROPIC_API_KEY","source":"project","updatedAt":"2026-11-27T09:45:16.040Z"}],"undeclared":[]}
