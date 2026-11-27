@@ -218,6 +218,21 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
       versions: [caseVersion({ ...input.content, sourceOutput: input.source?.output ?? null })],
     }),
     getEvalByName: async () => null,
+    listEvals: async () => [evalDefinition()],
+    getEval: async (projectId, id) =>
+      projectId === PROJECT && id === EVAL ? evalDefinition() : null,
+    saveOptions: async () => ({ tasks: [], defaultTaskId: null, targets: {}, evals: [] }),
+    turnCase: async () => ({
+      name: "Case from a turn",
+      content: {
+        input: { message: "refund A200" },
+        earlierTurns: [],
+        toolFixtures: [],
+        expectedOutput: null,
+      },
+      sourceOutput: "Refunded.",
+    }),
+    pinnedRun: async () => ({ experiment: baseline, trials: [baselineTrial] }),
     createEval: async (input) => evalDefinition(input),
     approveCase: async () => "approved",
     startExperiment: async () => ({
@@ -303,6 +318,9 @@ function failure(result: Awaited<ReturnType<typeof call>>) {
 }
 
 const PARAMS: Record<string, Record<string, unknown>> = {
+  evals_list: {},
+  evals_get: { eval: "Refunds" },
+  evals_create: { name: "Status", scorers: [] },
   evals_list_cases: {},
   evals_get_case: { caseId: CASE },
   evals_create_case: { eval: "Refunds", name: "x", input: "hi" },
@@ -327,11 +345,12 @@ test("evals: the tools are listed only when the flag is on for the caller", () =
   }
 });
 
-test("evals: create, approve, start and pin mutate; the rest only read", () => {
+test("evals: create, create case, approve, start and pin mutate; the rest only read", () => {
   const mutating = evalsOperations(fakeDeps())
     .filter((operation) => operation.mutates)
     .map((operation) => operation.id);
   assert.deepEqual(mutating, [
+    "evals_create",
     "evals_create_case",
     "evals_approve_case",
     "evals_start_run",
@@ -362,6 +381,7 @@ test("evals_list_cases: says which cases are approved, and hints when none is", 
   assert.equal(result.data.approved, 0);
   assert.deepEqual(result.data.cases[0], {
     caseId: CASE,
+    evalId: EVAL,
     name: "refund ask",
     labels: [],
     approvedVersion: null,
@@ -802,3 +822,193 @@ function advancingClock(): Pick<EvalsOperationDeps, "now" | "sleep"> {
     },
   };
 }
+
+// — Evals and their datasets (decision `eval-definitions`) ————————————————————————————
+
+test("evals_list: each eval with its scorers and the numbers of approved and draft cases", async () => {
+  const result = ok<{ evals: Array<Record<string, unknown>> }>(await call("evals_list", {}));
+  assert.deepEqual(result.data.evals[0], {
+    evalId: EVAL,
+    name: "Refunds",
+    taskId: null,
+    version: 1,
+    sandboxName: null,
+    trials: 3,
+    scorers: ["mentions refund"],
+    approvedCases: 0,
+    draftCases: 1,
+  });
+});
+
+test("evals_get: by name, its definition and its dataset; an unknown eval is not_found", async () => {
+  const byName = {
+    getEvalByName: async (_projectId: string, name: string) =>
+      name === "Refunds" ? evalDefinition() : null,
+  };
+  const result = ok<{ scorers: Array<{ check?: unknown }>; cases: unknown[]; trials: number }>(
+    await call("evals_get", { eval: "Refunds" }, byName),
+  );
+  assert.equal(result.data.trials, 3);
+  assert.deepEqual(result.data.scorers[0]?.check, GATING_CHECK.definition.config);
+  assert.equal(result.data.cases.length, 1);
+  assert.equal(failure(await call("evals_get", { eval: "Nope" }, byName)).error, "not_found");
+});
+
+test("evals_create: an eval with its scorers; a name that is taken is a conflict", async () => {
+  let made: NewEval | undefined;
+  const result = ok<{ evalId: string }>(
+    await call(
+      "evals_create",
+      {
+        name: "Status",
+        taskId: "wf-status",
+        trials: 2,
+        scorers: [
+          { kind: "check", name: "says status", path: "output", op: "contains", value: "shipped" },
+        ],
+      },
+      {
+        createEval: async (input) => {
+          made = input;
+          return evalDefinition(input);
+        },
+      },
+    ),
+  );
+  assert.equal(result.data.evalId, EVAL);
+  assert.deepEqual([made?.name, made?.taskId, made?.content.trials], ["Status", "wf-status", 2]);
+  const taken = failure(
+    await call(
+      "evals_create",
+      { name: "Refunds", scorers: [] },
+      { createEval: async () => "name_taken" },
+    ),
+  );
+  assert.deepEqual([taken.error, taken.reason], ["conflict", "name_taken"]);
+});
+
+const TASKS = {
+  tasks: [{ id: "wf-refunds", name: "Refund an order" }],
+  defaultTaskId: "wf-refunds",
+  evals: [],
+};
+const NEW_TARGET = {
+  kind: "new" as const,
+  name: "Refund an order",
+  taskId: "wf-refunds",
+  content: { sandboxName: "support-demo", params: {}, trials: 3, scorers: [GATING_CHECK] },
+};
+
+test("evals_create_case: a turn goes into the eval of its task", async () => {
+  let saved: NewCase | undefined;
+  const result = ok<{ evalId: string; name: string }>(
+    await call(
+      "evals_create_case",
+      { turnId: CASE },
+      {
+        saveOptions: async () => ({
+          ...TASKS,
+          targets: {
+            "wf-refunds": { kind: "existing", evalId: EVAL, name: "Refunds", taskId: "wf-refunds" },
+          },
+        }),
+        createCase: async (input) => {
+          saved = input;
+          return fakeDeps().createCase(input);
+        },
+      },
+    ),
+  );
+  assert.equal(result.data.evalId, EVAL);
+  assert.equal(saved?.name, "Case from a turn");
+  assert.deepEqual(saved?.source, { turnId: CASE, output: "Refunded." });
+});
+
+test("evals_create_case: a task with no eval needs confirmNewEval, then the eval gets the task's scorers", async () => {
+  const options = {
+    saveOptions: async () => ({ ...TASKS, targets: { "wf-refunds": NEW_TARGET } }),
+  };
+  const refused = failure(await call("evals_create_case", { turnId: CASE }, options));
+  assert.deepEqual([refused.error, refused.reason], ["conflict", "confirm_new_eval"]);
+  assert.match(refused.message, /"Refund an order".*"mentions refund"/);
+  let made: NewEval | undefined;
+  const result = ok<{ evalId: string }>(
+    await call(
+      "evals_create_case",
+      { turnId: CASE, confirmNewEval: true },
+      {
+        ...options,
+        createEval: async (input) => {
+          made = input;
+          return evalDefinition(input);
+        },
+      },
+    ),
+  );
+  assert.equal(result.data.evalId, EVAL);
+  assert.deepEqual(
+    [made?.name, made?.taskId, made?.content.scorers],
+    ["Refund an order", "wf-refunds", [GATING_CHECK]],
+  );
+});
+
+test("evals_create_case: more tasks need one in task, no task needs an eval, and no content access is refused", async () => {
+  const two = {
+    saveOptions: async () => ({
+      tasks: [
+        { id: "wf-refunds", name: "Refund an order" },
+        { id: "wf-status", name: "Track an order" },
+      ],
+      defaultTaskId: null,
+      targets: { "wf-refunds": NEW_TARGET, "wf-status": { ...NEW_TARGET, taskId: "wf-status" } },
+      evals: [],
+    }),
+  };
+  const choose = failure(await call("evals_create_case", { turnId: CASE }, two));
+  assert.deepEqual([choose.error, choose.reason], ["conflict", "choose_task"]);
+  assert.match(choose.message, /wf-refunds.*wf-status/);
+  const none = failure(await call("evals_create_case", { turnId: CASE }));
+  assert.equal(none.error, "invalid_params");
+  const hidden = failure(
+    await call("evals_create_case", { turnId: CASE }, { mayReadContent: async () => false }),
+  );
+  assert.deepEqual([hidden.error, hidden.reason], ["forbidden", "no_content_access"]);
+});
+
+test("evals_start_run: the suite, or the evals that you name; the trials of each eval by default", async () => {
+  const starts: unknown[] = [];
+  const startExperiment: EvalsOperationDeps["startExperiment"] = async (_subject, start) => {
+    starts.push(start);
+    return { ok: true, experiment: experiment({ state: "running", finishedAt: null }) };
+  };
+  ok(await call("evals_start_run", {}, { startExperiment }));
+  ok(await call("evals_start_run", { evals: ["Refunds"], trials: 2 }, { startExperiment }));
+  const [suite, chosen] = starts as Array<Record<string, unknown>>;
+  assert.deepEqual([suite?.evals, suite?.trialsPerCase], [undefined, undefined]);
+  assert.deepEqual([chosen?.evals, chosen?.trialsPerCase], [["Refunds"], 2]);
+  const wrong = failure(
+    await call(
+      "evals_start_run",
+      { evals: ["Billing"] },
+      {
+        startExperiment: async () => ({
+          ok: false,
+          reason: "wrong_sandbox",
+          message: "Other sandbox.",
+        }),
+      },
+    ),
+  );
+  assert.deepEqual([wrong.error, wrong.reason], ["conflict", "wrong_sandbox"]);
+});
+
+test("evals_get_run: the suite table, each eval with its score and its delta, and the verdict", async () => {
+  const result = ok<{
+    baselineRunId: string | null;
+    evals: Array<{ score: number | null; delta: unknown; deltaRefusal: unknown }>;
+    verdict: { ok: boolean } | null;
+  }>(await call("evals_get_run", { runId: RUN }));
+  assert.equal(result.data.baselineRunId, BASE_RUN);
+  assert.equal(result.data.evals.length, 1);
+  assert.ok(result.data.verdict);
+});

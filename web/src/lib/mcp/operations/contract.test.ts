@@ -237,7 +237,11 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["sandbox_get_version", false],
   ["sandbox_run", true],
   ["sandbox_get_run", false],
-  // Evals on Ratel sandbox (decision `mcp-surface`), behind the `evals` flag.
+  // Evals on Ratel sandbox (decision `mcp-surface`), behind the `evals` flag. Evals own their
+  // scorers and a dataset (decision `eval-definitions`).
+  ["evals_list", false],
+  ["evals_get", false],
+  ["evals_create", true],
   ["evals_list_cases", false],
   ["evals_get_case", false],
   ["evals_create_case", true],
@@ -269,6 +273,9 @@ const EXPECTED_API_KEY_SCOPES: Readonly<Record<string, string>> = {
   sandbox_get_version: "sandboxes:read",
   sandbox_run: "sandboxes:run",
   sandbox_get_run: "sandboxes:read",
+  evals_list: "evals:read",
+  evals_get: "evals:read",
+  evals_create: "evals:write",
   evals_list_cases: "evals:read",
   evals_get_case: "evals:read",
   evals_create_case: "evals:write",

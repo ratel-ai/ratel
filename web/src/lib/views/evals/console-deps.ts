@@ -40,7 +40,7 @@ export const casesApiDeps: CasesApiDeps = {
 };
 
 /** A tool that the newest version of any sandbox declares with side effects is not read-only. */
-async function readOnlyTools(projectId: string): Promise<ReadonlySet<string>> {
+export async function readOnlyTools(projectId: string): Promise<ReadonlySet<string>> {
   const newest = new Map<string, boolean>();
   const seen = new Set<string>();
   for (const { sandboxId, tools } of await listSandboxVersions(projectId, 100)) {
