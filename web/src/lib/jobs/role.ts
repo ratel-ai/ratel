@@ -47,3 +47,13 @@ export function runsIngestLane(config: Pick<Config, "app"> = getConfig()): boole
   const role = appRole(config);
   return role === "worker" || role === "persist";
 }
+
+/**
+ * Whether this process stores the telemetry that a gateway put on Kafka (ADR-0010): the one that runs
+ * background work, with `INGEST_QUEUE=kafka`. The ingest lane's own processes (`ingest`, `persist`) do
+ * not.
+ */
+export function consumesKafkaIngest(config: Pick<Config, "app" | "ingest"> = getConfig()): boolean {
+  const role = appRole(config);
+  return config.ingest.queue === "kafka" && (role === "worker" || role === "all");
+}

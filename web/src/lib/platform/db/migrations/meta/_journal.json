@@ -414,6 +414,13 @@
       "when": 1795678589859,
       "tag": "0058_alert_rule_last_error",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795680186842,
+      "tag": "0059_org_holds",
+      "breakpoints": true
     }
   ]
 }

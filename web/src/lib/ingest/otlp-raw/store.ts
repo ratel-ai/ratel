@@ -62,7 +62,8 @@ export function createOtlpRawStore(options: OtlpRawStoreOptions = {}): OtlpRawSt
           capBytes,
         };
       }
-      const [row] = await insertExport(db, {
+      const row = await insertExport(db, {
+        ...(input.id ? { id: input.id } : {}),
         projectId: input.projectId,
         receivedAt,
         signal: input.signal,
@@ -73,7 +74,10 @@ export function createOtlpRawStore(options: OtlpRawStoreOptions = {}): OtlpRawSt
         itemCount: input.itemCount,
         traceIds: input.traceIds,
       });
-      return { stored: true, id: row.id, rawBytes, storedBytes };
+      // No row: this id is stored already.
+      const id = row?.id ?? input.id;
+      if (!id) throw new Error("otlp raw insert returned no row");
+      return { stored: true, id, rawBytes, storedBytes };
     },
   };
 }
@@ -119,9 +123,14 @@ export async function readOtlpRawExportPage(
 async function insertExport(
   db: OtlpRawStoreDb,
   values: typeof otlpRawExports.$inferInsert,
-): Promise<Array<{ id: string }>> {
+): Promise<{ id: string } | undefined> {
   try {
-    return await db.insert(otlpRawExports).values(values).returning({ id: otlpRawExports.id });
+    const [row] = await db
+      .insert(otlpRawExports)
+      .values(values)
+      .onConflictDoNothing({ target: otlpRawExports.id })
+      .returning({ id: otlpRawExports.id });
+    return row;
   } catch (thrown) {
     throw new OtlpRawInsertError(thrown);
   }

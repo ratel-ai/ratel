@@ -57,6 +57,7 @@
     "@ratel/brand": "workspace:*",
     "@ratel/design-system": "workspace:*",
     "@ratel/mcp-apps": "workspace:*",
+    "aws-msk-iam-sasl-signer-js": "^1.0.3",
     "canvas-confetti": "^1.9.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -69,6 +70,7 @@
     "drizzle-orm": "^0.45.2",
     "fflate": "0.8.3",
     "geist": "^1.9.2",
+    "kafkajs": "2.2.4",
     "lucide-react": "^1.77.0",
     "mmdb-lib": "3.0.5",
     "next": "16.4.6",
@@ -90,6 +92,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.17",
     "@opentelemetry/otlp-transformer": "^0.301.2",
+    "@ratel-ai/cloud-sdk": "0.6.0",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/canvas-confetti": "^1.9.0",
     "@types/d3-force": "3.0.10",

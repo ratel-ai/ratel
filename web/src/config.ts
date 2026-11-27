@@ -232,7 +232,42 @@ const CONFIG_SCHEMA = schema({
     /** The project those calls write to, whose own analysis is not exported. */
     projectId: optional("RATEL_SELF_TELEMETRY_PROJECT_ID", configured),
   },
+  /** Service-to-service routes (`docs/internal-api.md`). Unset: they answer 404. */
+  internal: {
+    secret: optional("RATEL_INTERNAL_SECRET", configured, { sensitive: true }),
+  },
   ingest: {
+    /**
+     * What the worker stores besides this deployment's own ingest (ADR-0010). `direct`: nothing.
+     * `kafka`: the topics that a gateway writes. The routes and their queue (`experimentalQueue`) do
+     * not depend on it.
+     */
+    queue: setting(
+      "INGEST_QUEUE",
+      z.preprocess(lower, z.enum(["direct", "kafka"])),
+      D.ingest.queue,
+    ),
+    /** Read only with `queue` = `kafka`. */
+    kafka: {
+      /** Comma-separated `host:port`. */
+      brokers: optional("INGEST_KAFKA_BROKERS", trimmed),
+      /** `iam`: Amazon MSK's IAM login over TLS, with the AWS credential chain. */
+      security: setting(
+        "INGEST_KAFKA_SECURITY",
+        z.preprocess(lower, z.enum(["plaintext", "tls", "iam"])),
+        D.ingest.kafka.security,
+      ),
+      region: optional("INGEST_KAFKA_REGION", trimmed),
+      /** The topics that the worker consumes, comma-separated: a list, never a pattern. */
+      topics: optional("INGEST_KAFKA_TOPICS", trimmed),
+      /** With `{topic}` here and in `deadLetterTopic`, each topic has a group of its own. */
+      groupId: setting("INGEST_KAFKA_GROUP_ID", trimmed, D.ingest.kafka.groupId),
+      deadLetterTopic: setting(
+        "INGEST_KAFKA_DEAD_LETTER_TOPIC",
+        trimmed,
+        D.ingest.kafka.deadLetterTopic,
+      ),
+    },
     publishableKeyLimitPerMinute: setting(
       "RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE",
       positiveInt,

@@ -479,8 +479,9 @@ export function otlpDedupeHash(call: GroupedCall): string {
 }
 
 /** Plausible occurred-at, or null (→ receipt time) for a broken clock. */
-export function plausibleOccurredAt(startUnixMs: number): Date | null {
-  if (startUnixMs < MIN_TS_MS || startUnixMs > Date.now() + FUTURE_SKEW_MS) return null;
+export function plausibleOccurredAt(startUnixMs: number, receivedAt?: Date): Date | null {
+  const now = receivedAt?.getTime() ?? Date.now();
+  if (startUnixMs < MIN_TS_MS || startUnixMs > now + FUTURE_SKEW_MS) return null;
   return new Date(startUnixMs);
 }
 
@@ -505,12 +506,16 @@ export function toRow(projectId: string, call: GroupedCall, prices?: BatchPrices
  * limits stay until `backfill:tool-counts` runs: a span that arrives in an earlier
  * batch than its producer counts once more, and a history call that a batch's first
  * call shows first is not recovered.
+ *
+ * With `receivedAt` (a queued export, ADR-0010), a call with a broken clock occurred then, and the
+ * rows do not depend on when they are built. Without it, the call occurred at an unknown time.
  */
 export function toRows(
   projectId: string,
   calls: GroupedCall[],
   capture: PayloadCapture = {},
   prices?: BatchPrices,
+  receivedAt?: Date,
 ): EventWithMetric[] {
   const contents = calls.map(callContent);
   const scopes = toolSpanScopes(calls, contents);
@@ -533,7 +538,9 @@ export function toRows(
     );
     indexes.forEach((callIndex, at) => recovered.set(callIndex, found[at]));
   }
-  return calls.map((call, i) => rowOf(projectId, call, events[i], recovered.get(i) ?? [], prices));
+  return calls.map((call, i) =>
+    rowOf(projectId, call, events[i], recovered.get(i) ?? [], prices, receivedAt),
+  );
 }
 
 /** Per trace, the indexes of the calls that have content, in time order. */
@@ -554,8 +561,9 @@ function rowOf(
   e: CloudEvent,
   recovered: ToolCallBlock[] = [],
   prices?: BatchPrices,
+  receivedAt?: Date,
 ): EventWithMetric {
-  const occurredAt = plausibleOccurredAt(call.anchor.startUnixMs);
+  const occurredAt = plausibleOccurredAt(call.anchor.startUnixMs, receivedAt) ?? receivedAt ?? null;
   const eventTime = occurredAt ?? new Date();
 
   const usage = e.usage;

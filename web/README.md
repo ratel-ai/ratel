@@ -128,4 +128,6 @@ or record; `RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE`, `RATEL_PUBLISHABLE_SOURCE_L
 `rate_limit_per_minute`), and is append-only: it never replaces a stored row, opens a facts era,
 rewrites the runtime catalog or restates a stored model call. `apiKeyPolicy` (`policy.ts`) is the one
 place that reads a key's scopes, and `routes.test.ts` fails a bearer route that does not declare and
-pass its scope (`BEARER_ROUTE_SCOPES`). The quickstart snippets embed the newest Full key.
+pass its scope (`BEARER_ROUTE_SCOPES`). `POST /api/internal/keys/resolve` is the one other key lookup: it
+takes `RATEL_INTERNAL_SECRET` instead of a key and answers 404 while that is unset
+([`docs/internal-api.md`](../docs/internal-api.md)). The quickstart snippets embed the newest Full key.
