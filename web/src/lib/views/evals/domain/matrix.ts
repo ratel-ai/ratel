@@ -68,5 +68,9 @@ export function matrixProblem(matrix: Matrix, declared: ReadonlySet<string> | nu
 
 /** The key of a combination: the same values give the same key, in any order. */
 export function combinationKey(values: Record<string, unknown>): string {
-  return JSON.stringify(Object.keys(values).sort().map((name) => [name, values[name]]));
+  return JSON.stringify(
+    Object.keys(values)
+      .sort()
+      .map((name) => [name, values[name]]),
+  );
 }

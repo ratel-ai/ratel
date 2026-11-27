@@ -356,6 +356,11 @@ const PARAMS: Record<string, Record<string, unknown>> = {
   evals_get_trial: { runId: RUN, trialId: TRIAL },
   evals_compare: { runId: RUN },
   evals_pin_baseline: { runId: RUN },
+  evals_list_datasets: {},
+  evals_get_dataset: { dataset: "Golden" },
+  evals_create_dataset: { name: "Golden" },
+  evals_add_to_dataset: { dataset: "Golden", name: "x", input: "hi" },
+  evals_list_scorers: {},
 };
 const IDS = Object.keys(PARAMS);
 
@@ -1132,7 +1137,11 @@ test("evals_start_run: each eval, or the eval that you name, with the changes fo
     trials: 2,
   });
   const tooMany = failure(
-    await call("evals_start_run", { matrix: { a: [1, 2, 3, 4], b: [1, 2, 3, 4] } }, { startEachEval }),
+    await call(
+      "evals_start_run",
+      { matrix: { a: [1, 2, 3, 4], b: [1, 2, 3, 4] } },
+      { startEachEval },
+    ),
   );
   assert.equal(tooMany.error, "invalid_params");
   const unknownScorer = failure(
@@ -1175,4 +1184,153 @@ test("evals_get_run: the suite table, each eval with its score and its delta, an
   assert.equal(result.data.baselineRunId, BASE_RUN);
   assert.equal(result.data.evals.length, 1);
   assert.ok(result.data.verdict);
+});
+
+// — Datasets and the scorer library ————————————————————————————————————————————————
+
+const GOLDEN = {
+  id: DATASET,
+  projectId: PROJECT,
+  name: "Golden",
+  definition: { kind: "fixed" as const },
+  createdBy: "u",
+  createdAt: T0,
+  updatedAt: T0,
+};
+
+test("evals_create_dataset and evals_list_datasets: a query dataset with its settings", async () => {
+  let made: unknown;
+  const created = ok<{ definition: { kind: string; limit: number } }>(
+    await call(
+      "evals_create_dataset",
+      { name: "Live", definition: { kind: "last_traces" } },
+      {
+        createDataset: async (_projectId, input, by) => {
+          made = { ...input, by };
+          return { ...GOLDEN, name: input.name, definition: input.definition };
+        },
+      },
+    ),
+  );
+  assert.deepEqual(created.data.definition, { kind: "last_traces", limit: 50 });
+  assert.deepEqual(made, {
+    name: "Live",
+    definition: { kind: "last_traces", limit: 50 },
+    by: "mcp:key:key-1",
+  });
+  const over = failure(
+    await call("evals_create_dataset", {
+      name: "Big",
+      definition: { kind: "last_traces", limit: 501 },
+    }),
+  );
+  assert.equal(over.error, "invalid_params");
+  const taken = failure(await call("evals_create_dataset", { name: "Golden" }));
+  assert.deepEqual([taken.error, taken.reason], ["conflict", "name_taken"]);
+  const rows = [
+    {
+      datasetId: DATASET,
+      name: "Golden",
+      kind: "fixed" as const,
+      rows: 1,
+      query: null,
+      updatedAt: T0.toISOString(),
+      evals: [{ evalId: EVAL, name: "Refunds" }],
+    },
+  ];
+  const listed = ok<{ datasets: unknown[] }>(
+    await call("evals_list_datasets", {}, { listDatasets: async () => rows }),
+  );
+  assert.deepEqual(listed.data.datasets, rows);
+});
+
+test("evals_add_to_dataset: a trace turn, a Playground run or typed values; a query dataset takes no row", async () => {
+  const saved: unknown[] = [];
+  const deps: Partial<EvalsOperationDeps> = {
+    getDataset: async (_projectId, wanted) =>
+      wanted === "Golden"
+        ? { dataset: GOLDEN, rows: [], evals: [] }
+        : wanted === "Live"
+          ? {
+              dataset: { ...GOLDEN, name: "Live", definition: { kind: "last_traces", limit: 5 } },
+              rows: [],
+              evals: [],
+            }
+          : null,
+    addRows: async (_projectId, datasetId, rows) => {
+      saved.push(...rows);
+      return rows.map((row) => ({ ...evalCase(), datasetId, name: row.name }));
+    },
+  };
+  ok(await call("evals_add_to_dataset", { dataset: "Golden", turnId: CASE }, deps));
+  ok(await call("evals_add_to_dataset", { dataset: "Golden", sandboxRunId: SANDBOX_RUN }, deps));
+  ok(
+    await call("evals_add_to_dataset", { dataset: "Golden", name: "typed", input: { a: 1 } }, deps),
+  );
+  assert.deepEqual(
+    (
+      saved as Array<{ name: string; source?: { turnId: string | null; output: string | null } }>
+    ).map(({ name, source }) => [name, source ?? null]),
+    [
+      ["Case from a turn", { turnId: CASE, output: "Refunded." }],
+      ["Row from a Playground run", { turnId: null, output: '{"reply":"No."}' }],
+      ["typed", null],
+    ],
+  );
+  const query = failure(
+    await call("evals_add_to_dataset", { dataset: "Live", name: "x", input: "hi" }, deps),
+  );
+  assert.deepEqual([query.error, query.reason], ["conflict", "not_fixed"]);
+  const hidden = failure(
+    await call(
+      "evals_add_to_dataset",
+      { dataset: "Golden", turnId: CASE },
+      { ...deps, mayReadContent: async () => false },
+    ),
+  );
+  assert.deepEqual([hidden.error, hidden.reason], ["forbidden", "no_content_access"]);
+  assert.equal(
+    failure(await call("evals_add_to_dataset", { dataset: "Nope", input: "x", name: "x" }, deps))
+      .error,
+    "not_found",
+  );
+});
+
+test("evals_get_dataset: withholds the captured input from a key without content access", async () => {
+  const deps: Partial<EvalsOperationDeps> = {
+    getDataset: async () => ({ dataset: GOLDEN, rows: [evalCase()], evals: [] }),
+  };
+  const shown = ok<{ rows: Array<{ version: { input: unknown } }> }>(
+    await call("evals_get_dataset", { dataset: "Golden" }, deps),
+  );
+  assert.deepEqual(shown.data.rows[0]?.version.input, { message: "I want my money back" });
+  const hidden = ok<{ rows: Array<{ version: { input: unknown } }>; contentWithheld?: boolean }>(
+    await call(
+      "evals_get_dataset",
+      { dataset: "Golden" },
+      { ...deps, mayReadContent: async () => false },
+    ),
+  );
+  assert.equal(hidden.data.rows[0]?.version.input, null);
+  assert.equal(hidden.data.contentWithheld, true);
+});
+
+test("evals_list_scorers: the library with the id to give evals_create", async () => {
+  const scorers = [
+    {
+      source: "predefined" as const,
+      refId: "predefined:cost_under",
+      name: "Cost under a limit",
+      kind: "check" as const,
+      description: "d",
+      setting: "max_usd" as const,
+      usable: true,
+      reason: null,
+    },
+  ];
+  const result = ok<{ scorers: unknown[] }>(
+    await call("evals_list_scorers", {}, { library: async () => scorers }),
+  );
+  assert.deepEqual(result.data.scorers, scorers);
+  assert.match(result.hint ?? "", /kind: "library"/);
 });

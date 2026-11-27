@@ -18,7 +18,11 @@ export interface DatasetSources {
   /** The newest closed turns of one task, at most `limit`. */
   taskTurns(projectId: string, taskId: string, limit: number): Promise<string[]>;
   /** The trace ids of an RQL query: its `trace_id` column. */
-  rqlTraces(projectId: string, text: string, window: { since: Date; until: Date }): Promise<RqlTraces>;
+  rqlTraces(
+    projectId: string,
+    text: string,
+    window: { since: Date; until: Date },
+  ): Promise<RqlTraces>;
   /** The closed turns of these traces, in their order, each one time. */
   turnsOfTraces(projectId: string, traceIds: readonly string[]): Promise<string[]>;
   /** Recent closed turns with what Ratel knows of their result, for "let Ratel choose". */

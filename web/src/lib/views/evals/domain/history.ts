@@ -125,7 +125,9 @@ function scoreIn(
 function refusalOf(baseline: ScoredRunOf, run: ScoredRunOf, evalId: string): NoDelta | null {
   const delta = evalDeltas(baseline, run).get(evalId);
   if (!delta || delta.ok) return null;
-  return delta.reason === "scorers_differ" ? { reason: delta.reason, message: delta.message } : null;
+  return delta.reason === "scorers_differ"
+    ? { reason: delta.reason, message: delta.message }
+    : null;
 }
 
 export function mean(values: ReadonlyArray<number | null>): number | null {

@@ -97,7 +97,8 @@ function suiteFields({ baselineId, verdict, rows }: SuiteTable, run: RunScore | 
             own && "score" in own
               ? { score: own.score, scorers: delta?.ok ? delta.scorers : [] }
               : null,
-          deltaRefusal: own && "reason" in own ? { reason: own.reason, message: own.message } : null,
+          deltaRefusal:
+            own && "reason" in own ? { reason: own.reason, message: own.message } : null,
         };
       }
       return {

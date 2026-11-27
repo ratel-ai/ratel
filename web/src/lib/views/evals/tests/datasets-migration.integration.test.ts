@@ -152,7 +152,14 @@ async function migrated() {
         { caseId: CASE_B, versionId: VERSION_B, number: 1, name: "b", evalId: TONE },
       ]),
       JSON.stringify([
-        { evalId: REFUNDS, versionId: VERSION_A, number: 1, name: "Refunds", params: {}, trials: 1 },
+        {
+          evalId: REFUNDS,
+          versionId: VERSION_A,
+          number: 1,
+          name: "Refunds",
+          params: {},
+          trials: 1,
+        },
         { evalId: TONE, versionId: VERSION_B, number: 1, name: "Tone", params: {}, trials: 1 },
       ]),
       JSON.stringify({ [VERSION_A]: JSON.parse(snapshot), [VERSION_B]: JSON.parse(snapshot) }),

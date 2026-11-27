@@ -148,9 +148,7 @@ export function frozenCase(evalCase: EvalCase, version: CaseVersion, evalId: str
 }
 
 /** The variants of a run: each run param the same in each. With no variant (a run from before), one. */
-export function variantsOf(
-  experiment: Pick<Experiment, "variants" | "params">,
-): Variant[] {
+export function variantsOf(experiment: Pick<Experiment, "variants" | "params">): Variant[] {
   return experiment.variants.length > 0
     ? experiment.variants
     : [{ index: 0, values: {}, params: experiment.params }];

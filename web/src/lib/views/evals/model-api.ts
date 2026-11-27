@@ -2,10 +2,12 @@ import { z } from "zod";
 import { refuse, reply } from "@/lib/console/scope/member-access";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import { storable } from "@/lib/platform/storable";
+import { NO_CONTENT_MESSAGE } from "./datasets";
 import { caseContentSchema, currentVersion as currentRow, type EvalCase } from "./domain/case";
 import { MAX_ROW_LIMIT } from "./domain/dataset";
 import { currentVersion, evalScorersSchema, MAX_SANDBOX_NAME_CHARS } from "./domain/eval";
-import { MAX_TRIALS, type Experiment } from "./domain/experiment";
+import { type Experiment, MAX_TRIALS } from "./domain/experiment";
+import type { CaseFromTurn } from "./domain/from-turn";
 import { matrixInputSchema } from "./domain/matrix";
 import {
   addRows,
@@ -22,8 +24,6 @@ import {
 } from "./evals-service";
 import { type EachEvalResult, type ExperimentDeps, startEachEval } from "./experiments";
 import { forKey, type KeyAccess, notFound, readJson, STATUS, urlOf } from "./experiments-api";
-import { NO_CONTENT_MESSAGE } from "./datasets";
-import type { CaseFromTurn } from "./domain/from-turn";
 
 /**
  * The routes of a project key for datasets, evals, the scorer library and runs of one eval
@@ -167,7 +167,11 @@ export function handleAddRowsByKey(
     const added = await addRows(projectId, dataset.id, rows, `key:${apiKeyId}`, service);
     if (added === "eval_not_found") return notFound();
     if (added === "not_fixed") {
-      return refuse(409, "not_fixed", "A query dataset has no rows of its own. Add rows to a fixed dataset.");
+      return refuse(
+        409,
+        "not_fixed",
+        "A query dataset has no rows of its own. Add rows to a fixed dataset.",
+      );
     }
     return reply(201, { datasetId: dataset.id, rows: added.map(rowView) });
   });
@@ -200,7 +204,11 @@ export function handleGetEvalByKey(evalId: string, deps: ModelApiDeps): Promise<
         trials: version.trials,
         scorers: version.scorers,
       },
-      dataset: dataset && { datasetId: dataset.id, name: dataset.name, kind: dataset.definition.kind },
+      dataset: dataset && {
+        datasetId: dataset.id,
+        name: dataset.name,
+        kind: dataset.definition.kind,
+      },
       ...series,
       runs: rows.map((run) => ({
         ...run,
@@ -257,8 +265,19 @@ async function startRuns(
   startedBy: string,
   deps: ModelApiDeps,
 ): Promise<Response> {
-  const { evals, sandbox, sandboxVersion, label, name, dataset, rows, scorers, params, matrix, trials } =
-    body;
+  const {
+    evals,
+    sandbox,
+    sandboxVersion,
+    label,
+    name,
+    dataset,
+    rows,
+    scorers,
+    params,
+    matrix,
+    trials,
+  } = body;
   const result = await startEachEval(
     subject,
     {

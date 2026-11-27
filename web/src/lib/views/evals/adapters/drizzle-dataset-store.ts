@@ -48,7 +48,11 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
 
     async rowStats(projectId) {
       const rows = await db
-        .select({ datasetId: evalCases.datasetId, rows: count(), lastAddedAt: max(evalCases.createdAt) })
+        .select({
+          datasetId: evalCases.datasetId,
+          rows: count(),
+          lastAddedAt: max(evalCases.createdAt),
+        })
         .from(evalCases)
         .where(eq(evalCases.projectId, projectId))
         .groupBy(evalCases.datasetId);

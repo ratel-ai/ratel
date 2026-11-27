@@ -127,7 +127,11 @@ test("the migration puts each case into an eval of its task label and its scorer
   const { db, ids } = await beforeAndAfter();
   const evals = await createDrizzleEvalStore(db).list(PROJECT_ID);
   assert.deepEqual(
-    evals.map((one) => [one.name, one.taskId, ownScorers(currentVersion(one).scorers).map(({ id }) => id)]),
+    evals.map((one) => [
+      one.name,
+      one.taskId,
+      ownScorers(currentVersion(one).scorers).map(({ id }) => id),
+    ]),
     [
       ["refunds", null, ["no-refund"]],
       ["refunds #2", null, ["no-refund", "polite"]],

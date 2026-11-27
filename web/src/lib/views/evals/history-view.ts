@@ -166,9 +166,7 @@ export function evalRunsView(
     name: definition.name,
     scoreRule: SCORE_RULE,
     baselineRunId: baseline?.experiment.id ?? null,
-    runs: scored
-      .map(({ run, score }) => runRow(definition.id, run, score, baseline))
-      .reverse(),
+    runs: scored.map(({ run, score }) => runRow(definition.id, run, score, baseline)).reverse(),
     scorerSeries: [...series.values()],
   };
 }

@@ -1,10 +1,7 @@
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { withRequestLog } from "@/lib/platform/request-log";
 import { keyModelDeps } from "@/lib/views/evals/key-deps";
-import {
-  handleCreateDatasetByKey,
-  handleListDatasetsByKey,
-} from "@/lib/views/evals/model-api";
+import { handleCreateDatasetByKey, handleListDatasetsByKey } from "@/lib/views/evals/model-api";
 
 export const runtime = "nodejs";
 

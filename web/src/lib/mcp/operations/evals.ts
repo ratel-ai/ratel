@@ -30,6 +30,7 @@ import {
 } from "@/lib/views/evals/baseline";
 import { baselineDeps } from "@/lib/views/evals/baseline-deps";
 import { readOnlyTools } from "@/lib/views/evals/console-deps";
+import { NO_CONTENT_MESSAGE } from "@/lib/views/evals/datasets";
 import {
   type CaseVersion,
   caseContentSchema,
@@ -37,6 +38,12 @@ import {
   type EvalCase,
 } from "@/lib/views/evals/domain/case";
 import { type CompareRefusal, type Comparison, compare } from "@/lib/views/evals/domain/compare";
+import type { Dataset } from "@/lib/views/evals/domain/dataset";
+import {
+  datasetSettingsSchema,
+  MAX_DATASET_NAME_CHARS,
+  MAX_ROW_LIMIT,
+} from "@/lib/views/evals/domain/dataset";
 import {
   currentVersion,
   type EvalDefinition,
@@ -57,7 +64,23 @@ import {
   trialsOfCase,
 } from "@/lib/views/evals/domain/experiment";
 import { type CaseFromTurn, caseFromTurn } from "@/lib/views/evals/domain/from-turn";
+import { runScore } from "@/lib/views/evals/domain/history";
+import { matrixInputSchema } from "@/lib/views/evals/domain/matrix";
+import { PREDEFINED_KEYS, predefinedScorer } from "@/lib/views/evals/domain/predefined-scorers";
+import type { LibraryScorer } from "@/lib/views/evals/domain/scorer-library";
 import { deltaKey } from "@/lib/views/evals/domain/suite";
+import {
+  addRows,
+  createDataset,
+  type DatasetRead,
+  type EvalRead,
+  loadDataset,
+  loadDatasets,
+  loadEval,
+  loadLibrary,
+  loadOverview,
+  type NewRow,
+} from "@/lib/views/evals/evals-service";
 import { advance, experimentDeps } from "@/lib/views/evals/experiment-deps";
 import { caseCounts, trialsByCase } from "@/lib/views/evals/experiment-view";
 import {
@@ -66,31 +89,12 @@ import {
   startEachEval,
 } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
+import type { DatasetListRow, EvalsOverview } from "@/lib/views/evals/history-view";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
 import type { CaseRefusal, NewCase } from "@/lib/views/evals/ports/case-store";
 import type { NewEval } from "@/lib/views/evals/ports/eval-store";
-import type { Dataset } from "@/lib/views/evals/domain/dataset";
-import { datasetSettingsSchema, MAX_DATASET_NAME_CHARS, MAX_ROW_LIMIT } from "@/lib/views/evals/domain/dataset";
-import { matrixInputSchema } from "@/lib/views/evals/domain/matrix";
-import { PREDEFINED_KEYS, predefinedScorer } from "@/lib/views/evals/domain/predefined-scorers";
-import type { LibraryScorer } from "@/lib/views/evals/domain/scorer-library";
-import { runScore } from "@/lib/views/evals/domain/history";
-import {
-  addRows,
-  createDataset,
-  type DatasetRead,
-  type EvalRead,
-  type NewRow,
-  loadDataset,
-  loadDatasets,
-  loadEval,
-  loadLibrary,
-  loadOverview,
-} from "@/lib/views/evals/evals-service";
-import type { DatasetListRow, EvalsOverview } from "@/lib/views/evals/history-view";
-import { evalsServiceDeps } from "@/lib/views/evals/service-deps";
-import { NO_CONTENT_MESSAGE } from "@/lib/views/evals/datasets";
 import { type SaveOptions, type SaveSource, saveOptions } from "@/lib/views/evals/save-target";
+import { evalsServiceDeps } from "@/lib/views/evals/service-deps";
 import { suiteTable } from "@/lib/views/evals/suite-view";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
 import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
@@ -126,10 +130,7 @@ export interface EvalsOperationDeps {
   getEvalByName(projectId: string, name: string): Promise<EvalDefinition | null>;
   createEval(input: NewEval): Promise<EvalDefinition | "name_taken" | "dataset_not_found">;
   /** One run for each eval, or for each eval named (decision `runs-per-eval`). */
-  startEachEval(
-    subject: UsageSubject,
-    start: StartEachEval,
-  ): ReturnType<typeof startEachEval>;
+  startEachEval(subject: UsageSubject, start: StartEachEval): ReturnType<typeof startEachEval>;
   /** Each eval with its rows, scorers, baseline score, newest score and series. */
   overview(projectId: string): Promise<EvalsOverview>;
   /** One eval (id or name) with its dataset and its runs. */
@@ -274,7 +275,9 @@ const scorerParam = z.discriminatedUnion("kind", [
     value: z
       .union([z.string().trim().min(1).max(500), z.number().min(0)])
       .optional()
-      .describe("The setting of a pre-defined scorer that needs one: a text, a tool name or a limit."),
+      .describe(
+        "The setting of a pre-defined scorer that needs one: a text, a tool name or a limit.",
+      ),
     gating: z.boolean().default(true),
   }),
   z.object({
@@ -458,7 +461,9 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
-        const dataset = params.dataset ? await deps.getDataset(ctx.projectId, params.dataset) : null;
+        const dataset = params.dataset
+          ? await deps.getDataset(ctx.projectId, params.dataset)
+          : null;
         if (params.dataset && !dataset) throw notFound("dataset");
         const content = evalContentSchema.safeParse(
           storable({
@@ -686,7 +691,9 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:write",
       params: z.object({
         ...projectScoped,
-        eval: evalParam.optional().describe("The eval to run. Omit it to start a run of each eval."),
+        eval: evalParam
+          .optional()
+          .describe("The eval to run. Omit it to start a run of each eval."),
         evals: z
           .array(evalParam)
           .min(1)
@@ -827,7 +834,10 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           experiments.map(async (experiment) => ({
             runId: experiment.id,
             evalId: experiment.evalId,
-            eval: experiment.evalVersions.length === 1 ? (experiment.evalVersions[0]?.name ?? null) : null,
+            eval:
+              experiment.evalVersions.length === 1
+                ? (experiment.evalVersions[0]?.name ?? null)
+                : null,
             state: experiment.state,
             sandboxVersionId: experiment.sandboxVersionId,
             sandboxName: experiment.sandboxName,
@@ -1087,7 +1097,12 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:write",
       params: z.object({
         ...projectScoped,
-        name: z.string().trim().min(1).max(MAX_DATASET_NAME_CHARS).describe("The name of the dataset."),
+        name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(MAX_DATASET_NAME_CHARS)
+          .describe("The name of the dataset."),
         definition: datasetSettingsSchema
           .default({ kind: "fixed" })
           .describe("The kind and its settings. Omit it for a fixed dataset."),
@@ -1127,7 +1142,9 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         ...projectScoped,
         dataset: datasetParam,
         name: z.string().trim().min(1).max(200).optional().describe("The name of the row."),
-        turnId: uuidParam().optional().describe("A trace turn to copy: its input and its tool fixtures."),
+        turnId: uuidParam()
+          .optional()
+          .describe("A trace turn to copy: its input and its tool fixtures."),
         sandboxRunId: uuidParam()
           .optional()
           .describe("A Playground (sandbox) run to copy. Its input becomes the input of the row."),
@@ -1151,7 +1168,10 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             reason: "no_content_access",
           });
         }
-        const made = await caseSource(deps, ctx, params);
+        const made = await caseSource(deps, ctx, {
+          ...params,
+          name: params.name ?? (params.sandboxRunId ? "Row from a Playground run" : undefined),
+        });
         const content = caseContentSchema.safeParse(storable(made.content));
         if (!content.success) throw contentRefusal(content.error);
         const added = await deps.addRows(
@@ -1169,7 +1189,9 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         );
         if (added === "eval_not_found") throw notFound("dataset");
         if (added === "not_fixed") {
-          throw new McpOperationError("conflict", "The dataset is a query.", { reason: "not_fixed" });
+          throw new McpOperationError("conflict", "The dataset is a query.", {
+            reason: "not_fixed",
+          });
         }
         return {
           data: {
@@ -1573,7 +1595,14 @@ const START_REFUSAL = {
   no_content_access: "forbidden",
   too_many_rows: "invalid_params",
   invalid_query: "invalid_params",
-} as const satisfies Record<StartExperimentResult extends infer R ? R extends { ok: false; reason: infer K } ? K & string : never : never, string>;
+} as const satisfies Record<
+  StartExperimentResult extends infer R
+    ? R extends { ok: false; reason: infer K }
+      ? K & string
+      : never
+    : never,
+  string
+>;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {
   return new McpOperationError(START_REFUSAL[result.reason], result.message, {

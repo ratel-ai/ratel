@@ -117,7 +117,7 @@ export function rowLimit(definition: DatasetDefinition): number {
 /** Why a set of `count` rows cannot run, or null. */
 export function tooManyRows(count: number, max: number = MAX_ROW_LIMIT): string | null {
   return count > max
-    ? `The dataset gives ${count} rows. A run takes at most ${max} rows. Make the dataset smaller.`
+    ? `The dataset gives ${count} rows. A run takes at most ${max}. Make the dataset smaller.`
     : null;
 }
 

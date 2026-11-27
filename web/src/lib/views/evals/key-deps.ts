@@ -1,17 +1,17 @@
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import type { BaselineKeyDeps } from "./baseline-api";
 import { baselineApiDeps } from "./baseline-deps";
-import { experimentDeps, experimentsApiDeps } from "./experiment-deps";
-import type { ModelApiDeps } from "./model-api";
-import { evalsServiceDeps } from "./service-deps";
-import type { KeyAccess, KeyDeps } from "./experiments-api";
-import { evalsEnabledForProject, evalsOffForAll } from "./gate";
 import { readOnlyTools } from "./console-deps";
 import { caseFromTurn } from "./domain/from-turn";
+import { experimentDeps, experimentsApiDeps } from "./experiment-deps";
+import type { KeyAccess, KeyDeps } from "./experiments-api";
+import { evalsEnabledForProject, evalsOffForAll } from "./gate";
+import type { ModelApiDeps } from "./model-api";
+import { evalsServiceDeps } from "./service-deps";
 import { loadTurnContent } from "./turn-content";
-import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 /** The routes of a project key, over the real key and database. */
 export function keyExperimentDeps(request: Request, scope: ApiKeyScope): KeyDeps {

@@ -50,7 +50,10 @@ export function trialDefinitionOf(
           };
     case "judge":
       return definition.config.output === "boolean"
-        ? { ok: true, definition: { kind: "judge", config: { ...definition.config, output: "boolean" } } }
+        ? {
+            ok: true,
+            definition: { kind: "judge", config: { ...definition.config, output: "boolean" } },
+          }
         : { ok: false, reason: "A judge of an eval answers yes or no. This judge gives 1 to 5." };
     case "preset": {
       const check = trialCheckOfPreset(definition.config);

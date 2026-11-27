@@ -11,8 +11,8 @@ import type {
 } from "@/lib/views/sandboxes";
 import { EVAL_TRIAL_PREFIX } from "@/lib/views/sandboxes/domain/run";
 import { refusedParam } from "@/lib/views/sandboxes/run-form";
-import { type CaseVersion, caseContentSchema, runInputOf } from "./domain/case";
 import { type DatasetRow, type ResolveRefusal, resolveDataset } from "./datasets";
+import { type CaseVersion, caseContentSchema, runInputOf } from "./domain/case";
 import {
   type Dataset,
   type FrozenDataset,
@@ -44,8 +44,14 @@ import {
   type Variant,
 } from "./domain/experiment";
 import { combinations, type Matrix, matrixProblem } from "./domain/matrix";
+import {
+  type JudgeOutcome,
+  type ScorerSnapshot,
+  scoreTrial,
+  snapshotOf,
+  type TrialRecord,
+} from "./domain/score";
 import { resolveScorers } from "./domain/scorer-library";
-import { type JudgeOutcome, type ScorerSnapshot, scoreTrial, snapshotOf, type TrialRecord } from "./domain/score";
 import { type JudgeDeps, judgeTrial } from "./judge";
 import type { CaseStore } from "./ports/case-store";
 import type { DatasetSources } from "./ports/dataset-sources";
@@ -307,7 +313,10 @@ export async function startEachEval(
   subject: UsageSubject,
   start: StartEachEval,
   deps: ExperimentDeps,
-): Promise<{ ok: true; runs: EachEvalResult[]; skipped: EachEvalResult[] } | Extract<StartExperimentResult, { ok: false }>> {
+): Promise<
+  | { ok: true; runs: EachEvalResult[]; skipped: EachEvalResult[] }
+  | Extract<StartExperimentResult, { ok: false }>
+> {
   const { projectId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
     return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
@@ -321,7 +330,9 @@ export async function startEachEval(
   if (wantedVersion && wantedVersion !== "latest" && !pinned) {
     return refused("not_found", "There is no such sandbox version.");
   }
-  const sandboxOfRun = start.sandbox ?? pinned?.name ?? null;
+  // Only a sandbox that the caller names chooses the evals. A version does not: it applies to the
+  // evals of its sandbox, and each other eval runs on its own runtime.
+  const sandboxOfRun = start.sandbox ?? null;
   let chosen: EvalDefinition[];
   if (start.evals) {
     chosen = [];
@@ -337,7 +348,12 @@ export async function startEachEval(
     });
   }
   if (chosen.length === 0) {
-    return refused("not_found", sandboxOfRun ? `No eval runs on the sandbox ${sandboxOfRun}.` : "The project has no eval. Create one first.");
+    return refused(
+      "not_found",
+      sandboxOfRun
+        ? `No eval runs on the sandbox ${sandboxOfRun}.`
+        : "The project has no eval. Create one first.",
+    );
   }
   const runs: EachEvalResult[] = [];
   const skipped: EachEvalResult[] = [];
@@ -350,7 +366,12 @@ export async function startEachEval(
     const note = otherSandbox
       ? `The version ${pinned.id} is of the sandbox ${pinned.name}. This eval runs on the sandbox ${own}, so it used its own runtime.`
       : null;
-    const result = await startOne(subject, definition, { ...start, eval: definition.id, changes }, deps);
+    const result = await startOne(
+      subject,
+      definition,
+      { ...start, eval: definition.id, changes },
+      deps,
+    );
     const entry = { evalId: definition.id, name: definition.name, result, note };
     if (!result.ok && start.evals === undefined && SKIPPED.has(result.reason)) skipped.push(entry);
     else runs.push(entry);
@@ -373,7 +394,13 @@ async function startOne(
 ): Promise<StartExperimentResult> {
   const own = currentVersion(definition);
   const changes = start.changes ?? {};
-  const runtime = await runtimeOf(projectId, definition, changes.sandboxVersion, start.sandbox, deps);
+  const runtime = await runtimeOf(
+    projectId,
+    definition,
+    changes.sandboxVersion,
+    start.sandbox,
+    deps,
+  );
   if (!runtime.ok) return runtime;
   const { version } = runtime;
   const prepared = await prepareEval(projectId, definition, changes, start.label ?? null, deps);
@@ -394,7 +421,9 @@ async function startOne(
   const frozen: FrozenSuite = {
     caseVersions: prepared.cases,
     evalVersions: [prepared.frozenEval],
-    scorerSnapshots: Object.fromEntries(prepared.cases.map(({ versionId }) => [versionId, prepared.snapshots])),
+    scorerSnapshots: Object.fromEntries(
+      prepared.cases.map(({ versionId }) => [versionId, prepared.snapshots]),
+    ),
   };
   const trials = totalTrials(frozen, variants.length);
   if (trials > MAX_EXPERIMENT_TRIALS) {
@@ -404,7 +433,9 @@ async function startOne(
     );
   }
   const recorded: RunChanges = {
-    ...(prepared.dataset.datasetId !== own.datasetId ? { datasetId: prepared.dataset.datasetId } : {}),
+    ...(prepared.dataset.datasetId !== own.datasetId
+      ? { datasetId: prepared.dataset.datasetId }
+      : {}),
     ...(changes.rows?.length ? { extraRows: changes.rows.length } : {}),
     ...(changes.scorers ? { scorers: changes.scorers } : {}),
     ...(changes.sandboxVersion ? { sandboxVersionId: version.id } : {}),
@@ -459,14 +490,22 @@ async function prepareEval(
   const own = currentVersion(definition);
   const refs = evalScorersSchema.safeParse(changes.scorers ?? own.scorers);
   if (!refs.success) {
-    return { ok: false, reason: "invalid_scorers", message: refs.error.issues[0]?.message ?? "The scorers are not valid." };
+    return {
+      ok: false,
+      reason: "invalid_scorers",
+      message: refs.error.issues[0]?.message ?? "The scorers are not valid.",
+    };
   }
   const gating = runProblem({ scorers: refs.data });
   if (gating) return { ok: false, reason: "invalid_scorers", message: gating };
   const scorers = resolveScorers(refs.data, await deps.library.projectScorers(projectId));
   if (!scorers.ok) return { ok: false, reason: "invalid_scorers", message: scorers.message };
   if (scorers.scorers.filter(({ definition: one }) => one.kind === "judge").length > MAX_JUDGES) {
-    return { ok: false, reason: "invalid_scorers", message: `A run has at most ${MAX_JUDGES} judges.` };
+    return {
+      ok: false,
+      reason: "invalid_scorers",
+      message: `A run has at most ${MAX_JUDGES} judges.`,
+    };
   }
   const dataset = await datasetOf(projectId, changes.dataset ?? own.datasetId, deps);
   if (!dataset) return { ok: false, reason: "not_found", message: "There is no such dataset." };
@@ -474,7 +513,10 @@ async function prepareEval(
   if (!resolved.ok) return { ok: false, reason: resolved.reason, message: resolved.message };
   const extra = extraRows(changes.rows ?? []);
   if (!extra.ok) return { ok: false, reason: "invalid_rows", message: extra.message };
-  const rows: DatasetRow[] = [...resolved.rows, ...extra.rows.map((row) => ({ kind: "run" as const, row }))];
+  const rows: DatasetRow[] = [
+    ...resolved.rows,
+    ...extra.rows.map((row) => ({ kind: "run" as const, row })),
+  ];
   const over = tooManyRows(rows.length, MAX_ROW_LIMIT);
   if (over) return { ok: false, reason: "too_many_rows", message: over };
   if (rows.length === 0) {
@@ -535,7 +577,9 @@ async function datasetOf(
   deps: ExperimentDeps,
 ): Promise<Dataset | null> {
   if (wanted === null) return null;
-  const byId = z.uuid().safeParse(wanted).success ? await deps.datasets.get(projectId, wanted) : null;
+  const byId = z.uuid().safeParse(wanted).success
+    ? await deps.datasets.get(projectId, wanted)
+    : null;
   return byId ?? (await deps.datasets.getByName(projectId, wanted));
 }
 
@@ -573,9 +617,12 @@ async function runtimeOf(
   wanted: string | undefined,
   sandboxOfCaller: string | undefined,
   { sandboxes }: ExperimentDeps,
-): Promise<{ ok: true; version: SandboxVersionSummary } | Extract<StartExperimentResult, { ok: false }>> {
+): Promise<
+  { ok: true; version: SandboxVersionSummary } | Extract<StartExperimentResult, { ok: false }>
+> {
   const own = currentVersion(definition);
-  const versionId = wanted && wanted !== "latest" ? wanted : wanted === "latest" ? null : own.sandboxVersionId;
+  const versionId =
+    wanted && wanted !== "latest" ? wanted : wanted === "latest" ? null : own.sandboxVersionId;
   const sandbox = own.sandboxName ?? sandboxOfCaller ?? null;
   let version: SandboxVersionSummary | null;
   if (versionId) {
@@ -590,8 +637,9 @@ async function runtimeOf(
   } else {
     const versions = await sandboxes.listVersions(projectId, LATEST_OF);
     version =
-      versions.find(({ status, name }) => status === "ready" && (sandbox === null || name === sandbox)) ??
-      null;
+      versions.find(
+        ({ status, name }) => status === "ready" && (sandbox === null || name === sandbox),
+      ) ?? null;
     if (!version) {
       return sandbox === null
         ? refused("not_ready", "No sandbox version is ready. Push one first.")
@@ -858,7 +906,9 @@ function chooseEvals(
 
 function totalTrials({ caseVersions, evalVersions }: FrozenSuite, variants: number): number {
   const trials = new Map(evalVersions.map(({ evalId, trials: count }) => [evalId, count]));
-  return caseVersions.reduce((sum, { evalId }) => sum + (trials.get(evalId ?? "") ?? 0), 0) * variants;
+  return (
+    caseVersions.reduce((sum, { evalId }) => sum + (trials.get(evalId ?? "") ?? 0), 0) * variants
+  );
 }
 
 /**

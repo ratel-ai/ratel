@@ -81,7 +81,11 @@ const predefinedRefSchema = z.object({
 const ownScorerSchema = evalScorerSchema.extend({ source: z.literal("eval").optional() });
 
 /** A scorer of an eval: a reference to the library, or a scorer of its own. */
-export const evalScorerRefSchema = z.union([projectRefSchema, predefinedRefSchema, ownScorerSchema]);
+export const evalScorerRefSchema = z.union([
+  projectRefSchema,
+  predefinedRefSchema,
+  ownScorerSchema,
+]);
 export type EvalScorerRef = z.infer<typeof evalScorerRefSchema>;
 
 /**

@@ -4,7 +4,13 @@ import type { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
 import type { CaseContent, CaseVersion, EvalCase } from "../domain/case";
 import type { CaseRefusal, CaseStore, NewCase } from "../ports/case-store";
-import { evalCases, evalCaseVersions, evalDatasets, evalDefinitionVersions, evalDefinitions } from "../schema";
+import {
+  evalCases,
+  evalCaseVersions,
+  evalDatasets,
+  evalDefinitions,
+  evalDefinitionVersions,
+} from "../schema";
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -80,7 +86,9 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
     async list(projectId, evalId) {
       if (evalId === undefined) return listWhere(eq(evalCases.projectId, projectId));
       const datasetId = await datasetOfEval(db, projectId, evalId);
-      return datasetId === null ? [] : listWhere(and(eq(evalCases.projectId, projectId), eq(evalCases.datasetId, datasetId)));
+      return datasetId === null
+        ? []
+        : listWhere(and(eq(evalCases.projectId, projectId), eq(evalCases.datasetId, datasetId)));
     },
 
     listDataset(projectId, datasetId) {
@@ -161,8 +169,16 @@ async function insertCase(
   const datasetId =
     given ?? (evalId === undefined ? null : await datasetOfEval(tx, projectId, evalId));
   if (!datasetId) return "eval_not_found";
-  // Two evals of one batch can share the dataset: the row goes into it one time.
-  const same = batch.find((one) => one.datasetId === datasetId);
+  // Two evals of one batch can share the dataset: the same row for each goes into it one time.
+  const same =
+    evalId === undefined
+      ? undefined
+      : batch.find(
+          (one) =>
+            one.datasetId === datasetId &&
+            one.name === name &&
+            isDeepStrictEqual(columns(content), columns(one.versions[0] ?? content)),
+        );
   if (same) return same;
   // The lock keeps the dataset while the case joins it.
   const [owner] = await tx

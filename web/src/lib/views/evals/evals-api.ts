@@ -87,7 +87,9 @@ function keptContent(content: EvalContent, json: unknown, newest: EvalVersion): 
       ? ((json as { content?: unknown }).content ?? {})
       : {};
   const has = (key: string) => typeof given === "object" && given !== null && key in given;
-  const onlyOwn = content.scorers.every((ref) => ref.source !== "project" && ref.source !== "predefined");
+  const onlyOwn = content.scorers.every(
+    (ref) => ref.source !== "project" && ref.source !== "predefined",
+  );
   return {
     ...content,
     matrix: has("matrix") ? content.matrix : newest.matrix,
