@@ -378,7 +378,8 @@ jobs:
 
   # gitleaks on the commits a PR or push adds (not the whole history each time). Triaged
   # false positives live in .gitleaksignore, each with a comment. workflow_dispatch and a
-  # new-branch push scan everything.
+  # new-branch push scan the whole history of the commit under test (HEAD), not every branch
+  # of the repository: another branch's fixtures are scanned when that branch is checked.
   secret-scan:
     needs: changes
     runs-on: ubuntu-latest
@@ -392,7 +393,7 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          range="--all"
+          range="HEAD"
           if [ "${{ github.event_name }}" = pull_request ]; then
             range="$PR_BASE..$PR_HEAD"
           elif [ "${{ github.event_name }}" = push ] && [ "${PUSH_BEFORE//0/}" != "" ]; then
