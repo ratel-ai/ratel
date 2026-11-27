@@ -8,7 +8,6 @@ import type { ExperimentRow } from "./page-model";
 import { preview } from "./page-model";
 import { evalHref, trialHref } from "./paths";
 import {
-  type EvalDetail,
   evalDetail,
   type PairedTrial,
   type SuiteRow,
@@ -223,7 +222,7 @@ export function evalPageModel({
           expectedOutput: shown?.expectedOutput ? preview(shown.expectedOutput) : null,
           output: first ? (outputs.get(first.id) ?? null) : null,
           status: scored?.status ?? null,
-          change: scored ? changeOf(scored) : null,
+          change: scored?.change ?? null,
           scorers: scored ? cellsOf(scored.scorers, null) : {},
           trials: caseTrials.map((trial) => ({
             id: trial.id,
@@ -283,13 +282,6 @@ function cellsOf(
       },
     ]),
   );
-}
-
-function changeOf({ status, baseline }: EvalDetail["cases"][number]): CaseChange {
-  if (!baseline) return "added";
-  if (status === "invalid" || baseline.status === "invalid") return "inconclusive";
-  if (status === baseline.status) return "unchanged";
-  return status === "fail" ? "regressed" : "improved";
 }
 
 function runLabel(run: ExperimentRow): string {

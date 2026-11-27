@@ -491,6 +491,29 @@ test("evals_create_case: a case goes into the eval with that name, and its score
   assert.equal(result.data.approvalProblem, undefined);
 });
 
+test("evals_create_case: an eval id names that eval, and no new eval is made", async () => {
+  let created = false;
+  let saved: NewCase | undefined;
+  ok(
+    await call(
+      "evals_create_case",
+      { eval: EVAL, name: "x", input: "hi" },
+      {
+        createEval: async (input) => {
+          created = true;
+          return evalDefinition(input);
+        },
+        createCase: async (input) => {
+          saved = input;
+          return fakeDeps().createCase(input);
+        },
+      },
+    ),
+  );
+  assert.equal(created, false);
+  assert.equal(saved?.evalId, EVAL);
+});
+
 test("evals_create_case: a check that reads a path a trial does not have is refused", async () => {
   const result = failure(
     await call("evals_create_case", {

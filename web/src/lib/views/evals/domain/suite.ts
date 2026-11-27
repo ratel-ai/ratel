@@ -88,7 +88,10 @@ export function caseScores(
   if (!group) return [];
   return group.cases.map((frozen) => ({
     frozen,
-    score: scoreOf({ ...group, cases: [frozen] }, run.trials),
+    score: scoreOf(
+      { ...group, cases: [frozen], snapshots: group.ofCase[frozen.versionId] ?? group.snapshots },
+      run.trials,
+    ),
   }));
 }
 
@@ -104,6 +107,8 @@ type Group = {
   number: number | null;
   cases: FrozenCase[];
   snapshots: ScorerSnapshot[];
+  /** The scorers that each case version froze: a trial reports the scorer ids of its own case. */
+  ofCase: ScoredRun["experiment"]["scorerSnapshots"];
 };
 
 function evalGroups(experiment: ScoredRun["experiment"]): Group[] {
@@ -111,7 +116,7 @@ function evalGroups(experiment: ScoredRun["experiment"]): Group[] {
   const snapshotsOf = (cases: FrozenCase[]) => scorerSnapshots[cases[0]?.versionId ?? ""] ?? [];
   if (evalVersions.length === 0) {
     if (caseVersions.length === 0) return [];
-    // An old run: the scorers were the case's. Its first case names them.
+    // An old run: the scorers were the case's, each with its own ids.
     return [
       {
         key: LEGACY_KEY,
@@ -119,25 +124,49 @@ function evalGroups(experiment: ScoredRun["experiment"]): Group[] {
         name: LEGACY_GROUP,
         number: null,
         cases: [...caseVersions],
-        snapshots: snapshotsOf(caseVersions),
+        snapshots: sharedSnapshots(caseVersions, scorerSnapshots),
+        ofCase: scorerSnapshots,
       },
     ];
   }
   const byEval = Map.groupBy(caseVersions, ({ evalId }) => evalId ?? LEGACY_KEY);
   return evalVersions.map(({ evalId, name, number }) => {
     const cases = byEval.get(evalId) ?? [];
-    return { key: evalId, evalId, name, number, cases, snapshots: snapshotsOf(cases) };
+    return {
+      key: evalId,
+      evalId,
+      name,
+      number,
+      cases,
+      snapshots: snapshotsOf(cases),
+      ofCase: scorerSnapshots,
+    };
   });
+}
+
+/** The scorers of the first case when each case has the same scorers, else none: no score. */
+function sharedSnapshots(
+  cases: readonly FrozenCase[],
+  ofCase: ScoredRun["experiment"]["scorerSnapshots"],
+): ScorerSnapshot[] {
+  const keys = (versionId: string) => (ofCase[versionId] ?? []).map(pairKey).sort().join("\n");
+  const first = cases[0]?.versionId ?? "";
+  const same = cases.every(({ versionId }) => keys(versionId) === keys(first));
+  return same ? (ofCase[first] ?? []) : [];
 }
 
 function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
   const versions = new Set(group.cases.map(({ versionId }) => versionId));
   const trials = allTrials.filter(({ caseVersionId }) => versions.has(caseVersionId));
   const valid = trials.filter(({ result }) => result === "pass" || result === "fail");
-  const scorers = group.snapshots.map(({ id, name, gating, hash }): ScorerScore => {
+  const scorers = group.snapshots.map((snapshot): ScorerScore => {
+    const { id, name, gating, hash } = snapshot;
     let [pass, fail, notScored] = [0, 0, 0];
     for (const trial of valid) {
-      const status = trial.scorers.find(({ scorerId }) => scorerId === id)?.status;
+      const own = group.ofCase[trial.caseVersionId]?.find(
+        (one) => pairKey(one) === pairKey(snapshot),
+      );
+      const status = trial.scorers.find(({ scorerId }) => scorerId === (own?.id ?? id))?.status;
       if (status === "pass") pass += 1;
       else if (status === "fail") fail += 1;
       else notScored += 1;
@@ -165,16 +194,14 @@ function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
   };
 }
 
+/** The score delta is the mean delta of the scorers rated on both sides. */
 function deltaOf(baseline: EvalScore, candidate: EvalScore): EvalDelta {
   const before = new Map(baseline.scorers.map((scorer) => [pairKey(scorer), scorer]));
-  return {
-    ok: true,
-    score: minus(candidate.score, baseline.score),
-    scorers: candidate.scorers.map((scorer) => ({
-      scorerId: scorer.scorerId,
-      delta: minus(scorer.passRate, before.get(pairKey(scorer))?.passRate ?? null),
-    })),
-  };
+  const scorers = candidate.scorers.map((scorer) => ({
+    scorerId: scorer.scorerId,
+    delta: minus(scorer.passRate, before.get(pairKey(scorer))?.passRate ?? null),
+  }));
+  return { ok: true, score: mean(scorers.map(({ delta }) => delta)), scorers };
 }
 
 function sideOf(group: Group, run: ScoredRun) {
@@ -198,9 +225,9 @@ function differ(changes: ScorerChange[]): EvalDelta {
   return { ok: false, reason: "scorers_differ", message, changes };
 }
 
-/** Two scorers with the same content and the same gating are one scorer. */
-function pairKey({ hash, gating }: Pick<ScorerScore, "hash" | "gating">): string {
-  return `${hash}:${gating}`;
+/** Two scorers with the same content and the same gating are one scorer. With no hash, the name. */
+function pairKey({ hash, name, gating }: Pick<ScorerScore, "hash" | "name" | "gating">): string {
+  return hash ? `${hash}:${gating}` : `name:${name}:${gating}`;
 }
 
 function mean(values: ReadonlyArray<number | null>): number | null {

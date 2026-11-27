@@ -1,5 +1,13 @@
 import type { Compared } from "./baseline";
-import { type CaseStatus, compare, statusOf, type Verdict } from "./domain/compare";
+import {
+  type CaseChange,
+  type CaseStatus,
+  type CompareRefusal,
+  type Comparison,
+  compare,
+  statusOf,
+  type Verdict,
+} from "./domain/compare";
 import type { Counts, Trial } from "./domain/experiment";
 import { pairedTrials } from "./domain/paired-trials";
 import {
@@ -49,6 +57,8 @@ export type CaseScoreRow = {
   status: CaseStatus;
   counts: Counts;
   scorers: ScorerScore[];
+  /** The change of the case in the run verdict. Null when the runs are not compared. */
+  change: CaseChange | null;
   /** The same case in the baseline run. Null when it is not there. */
   baseline: { status: CaseStatus; counts: Counts; scorers: ScorerScore[] } | null;
 };
@@ -67,7 +77,7 @@ export type PairedTrial = {
 
 /** Each eval of the run with its score, its scorers and its delta against the baseline. */
 export function suiteTable(candidate: Compared, baseline: Compared | null): SuiteTable {
-  const other = baseline && baseline.experiment.id !== candidate.experiment.id ? baseline : null;
+  const other = otherRun(candidate, baseline);
   const deltas = other ? evalDeltas(other, candidate) : null;
   const rows = evalScores(candidate).map((score) => ({
     ...score,
@@ -80,7 +90,7 @@ export function suiteTable(candidate: Compared, baseline: Compared | null): Suit
     sandboxName: experiment.sandboxName,
     createdAt: experiment.createdAt.toISOString(),
     baselineId: other?.experiment.id ?? null,
-    verdict: other ? verdictOf(other, candidate) : null,
+    verdict: other ? verdictOf(compare(other, candidate)) : null,
     scorerColumns: [...new Set(rows.flatMap(({ scorers }) => scorers.map(({ name }) => name)))],
     rows,
   };
@@ -94,10 +104,13 @@ export function evalDetail(
 ): EvalDetail | null {
   const row = suiteTable(candidate, baseline).rows.find((one) => deltaKey(one) === key);
   if (!row) return null;
+  const other = otherRun(candidate, baseline);
   const before = new Map(
-    baseline && baseline.experiment.id !== candidate.experiment.id
-      ? caseScores(baseline, key).map(({ frozen, score }) => [frozen.caseId, score])
-      : [],
+    other ? caseScores(other, key).map(({ frozen, score }) => [frozen.caseId, score]) : [],
+  );
+  const compared = other ? compare(other, candidate) : null;
+  const changes = new Map(
+    compared?.ok ? compared.cases.map(({ caseId, change }) => [caseId, change]) : [],
   );
   const cases = caseScores(candidate, key).map(({ frozen, score }): CaseScoreRow => {
     const old = before.get(frozen.caseId);
@@ -109,6 +122,7 @@ export function evalDetail(
       status: statusOf(score.counts),
       counts: score.counts,
       scorers: score.scorers,
+      change: changes.get(frozen.caseId) ?? null,
       baseline: old
         ? { status: statusOf(old.counts), counts: old.counts, scorers: old.scorers }
         : null,
@@ -128,9 +142,10 @@ export function pairedTrial(
     ({ versionId }) => versionId === trial?.caseVersionId,
   );
   if (!trial || !frozen) return null;
-  const old = baseline?.experiment.caseVersions.find(({ caseId }) => caseId === frozen.caseId);
+  const other = otherRun(candidate, baseline);
+  const old = other?.experiment.caseVersions.find(({ caseId }) => caseId === frozen.caseId);
   const oldTrials = old
-    ? (baseline?.trials ?? []).filter(({ caseVersionId }) => caseVersionId === old.versionId)
+    ? (other?.trials ?? []).filter(({ caseVersionId }) => caseVersionId === old.versionId)
     : [];
   const pair = pairedTrials(oldTrials, [trial]).find(({ index }) => index === trial.index);
   return {
@@ -139,12 +154,16 @@ export function pairedTrial(
     evalId: frozen.evalId ?? null,
     trial,
     baselineTrial: pair?.baseline ?? null,
-    baselineId: old ? (baseline?.experiment.id ?? null) : null,
+    baselineId: old ? (other?.experiment.id ?? null) : null,
   };
 }
 
-function verdictOf(baseline: Compared, candidate: Compared): SuiteVerdict {
-  const result = compare(baseline, candidate);
+/** The baseline run, unless it is the candidate run itself. */
+function otherRun(candidate: Compared, baseline: Compared | null): Compared | null {
+  return baseline && baseline.experiment.id !== candidate.experiment.id ? baseline : null;
+}
+
+function verdictOf(result: Comparison | CompareRefusal): SuiteVerdict {
   return result.ok
     ? {
         ok: true,

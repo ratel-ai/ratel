@@ -129,7 +129,6 @@ test("an edit adds a version only when the content changes, and keeps the older 
     [2, 1, [NO_REFUND, JUDGE], "user_2"],
   );
   assert.deepEqual(older, first, "the first version did not change");
-  assert.deepEqual(await t.evals.versions([first.id]), [first]);
 });
 
 test("an edit from a version that is not the newest, or of another project, changes nothing", async () => {

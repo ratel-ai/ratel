@@ -1,4 +1,4 @@
-import type { EvalContent, EvalDefinition, EvalDetails, EvalVersion } from "../domain/eval";
+import type { EvalContent, EvalDefinition, EvalDetails } from "../domain/eval";
 
 export type NewEval = EvalDetails & { projectId: string; content: EvalContent; createdBy: string };
 
@@ -26,6 +26,4 @@ export interface EvalStore {
     base: string,
     by: { userId: string; now: Date },
   ): Promise<EvalDefinition | EvalWriteRefusal>;
-  /** The versions with these ids, for the runs that froze them. */
-  versions(versionIds: readonly string[]): Promise<EvalVersion[]>;
 }

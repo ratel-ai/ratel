@@ -112,15 +112,6 @@ export function createDrizzleEvalStore(db: Db): EvalStore {
         throw error;
       }
     },
-
-    async versions(versionIds) {
-      if (versionIds.length === 0) return [];
-      const rows = await db
-        .select()
-        .from(evalDefinitionVersions)
-        .where(inArray(evalDefinitionVersions.id, [...versionIds]));
-      return rows.map(toVersion);
-    },
   };
 }
 

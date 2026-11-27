@@ -190,6 +190,28 @@ test("an eval page has its definition and its dataset with the output and a brea
   );
 });
 
+test("an eval page takes the change of each row from the run verdict", () => {
+  const page = (candidate: typeof NEXT) =>
+    evalPageModel({
+      projectId: PROJECT_ID,
+      definition: EVALS[1] as EvalDefinition,
+      cases: CASES,
+      run: candidate,
+      baseline: BASE,
+    });
+  // The scorers of "status" changed: its row is not compared, so it did not regress.
+  assert.deepEqual(
+    page(NEXT).dataset.map(({ caseId, change }) => [caseId, change]),
+    [["s", "excluded"]],
+  );
+  // A run that has not ended is not compared.
+  const running = { ...NEXT, experiment: { ...NEXT.experiment, state: "running" as const } };
+  assert.deepEqual(
+    page(running).dataset.map(({ change }) => change),
+    [null],
+  );
+});
+
 test("a trial page has both trials of the same row and index", () => {
   const paired = pairedTrial(NEXT, BASE, "next-a-t1");
   assert.ok(paired);

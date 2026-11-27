@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
@@ -41,7 +41,7 @@ export function createTaskLinks(db: Db = getDb()): TaskLinks {
         .where(
           and(
             eq(traceTurns.projectId, projectId),
-            inArray(traceTurns.turnKey, [`${OTLP_KEY}${traceId}`]),
+            eq(traceTurns.turnKey, `${OTLP_KEY}${traceId.toLowerCase()}`),
             isNotNull(traceTurns.workflowId),
           ),
         );

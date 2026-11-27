@@ -233,3 +233,75 @@ test("a baseline from before evals had definitions gives no delta, and says why"
   assert.equal(delta.reason, "not_in_baseline");
   assert.match(delta.message, /before evals had definitions/);
 });
+
+test("an old run scores each trial with the scorers of its own case", () => {
+  // Each old case made its own scorer ids: the same scorer has another id in each case.
+  const legacy = ownScorerIds(
+    run("r0", { refunds: { rows: { a: { trials: [passed] }, b: { trials: [failed] } } } }, true),
+  );
+  const [all] = evalScores(legacy);
+  assert.equal(all?.score, 0.5);
+  assert.deepEqual(
+    all?.scorers.map(({ pass, fail, notScored }) => [pass, fail, notScored]),
+    [[1, 1, 0]],
+  );
+});
+
+test("an old run whose cases have other scorers has no score", () => {
+  const legacy = run(
+    "r0",
+    {
+      refunds: { rows: { a: { trials: [passed] } } },
+      status: {
+        scorers: [POLITE],
+        rows: { b: { trials: [{ result: "pass", scorers: { polite: "pass" } }] } },
+      },
+    },
+    true,
+  );
+  const [all] = evalScores(legacy);
+  assert.equal(all?.score, null);
+  assert.deepEqual(all?.counts, { pass: 2, fail: 0, invalid: 0, open: 0 });
+});
+
+test("the score delta counts only the scorers rated on both sides", () => {
+  const side = (id: string, scorers: Record<string, ScorerResult["status"]>) =>
+    run(id, {
+      refunds: {
+        scorers: [NO_REFUND, POLITE],
+        rows: { a: { trials: [{ result: "pass", scorers }] } },
+      },
+    });
+  const baseline = side("base", { "no-refund": "pass", polite: "fail" });
+  // Polite did not run: it has no pass rate, so it does not move the delta.
+  const delta = evalDeltas(baseline, side("next", { "no-refund": "pass" })).get("refunds");
+  assert.ok(delta?.ok);
+  assert.equal(delta.score, 0);
+  const none = evalDeltas(
+    side("base", { "no-refund": "pass" }),
+    side("next", { polite: "pass" }),
+  ).get("refunds");
+  assert.ok(none?.ok);
+  assert.equal(none.score, null);
+});
+
+/** The run, with the scorer ids of each case made its own, as the cases of an old run had them. */
+function ownScorerIds(made: ScoredRun): ScoredRun {
+  const own = (versionId: string, id: string) => `${id}@${versionId}`;
+  const scorerSnapshots = Object.fromEntries(
+    Object.entries(made.experiment.scorerSnapshots).map(([versionId, snapshots]) => [
+      versionId,
+      snapshots.map((snapshot) => ({ ...snapshot, id: own(versionId, snapshot.id) })),
+    ]),
+  );
+  return {
+    experiment: { ...made.experiment, scorerSnapshots },
+    trials: made.trials.map((trial) => ({
+      ...trial,
+      scorers: trial.scorers.map((scorer) => ({
+        ...scorer,
+        scorerId: own(trial.caseVersionId, scorer.scorerId),
+      })),
+    })),
+  };
+}

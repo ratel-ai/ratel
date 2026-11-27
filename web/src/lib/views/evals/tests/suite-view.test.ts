@@ -73,3 +73,8 @@ test("a trial opens next to the baseline trial of the same row and index", () =>
   assert.deepEqual([alone?.baselineTrial, alone?.baselineId], [null, null]);
   assert.equal(pairedTrial(NEXT, BASE, "missing"), null);
 });
+
+test("a trial of the baseline run itself has no baseline trial", () => {
+  const paired = pairedTrial(BASE, BASE, "base-a-t1");
+  assert.deepEqual([paired?.baselineTrial, paired?.baselineId], [null, null]);
+});

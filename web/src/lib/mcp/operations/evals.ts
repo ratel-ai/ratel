@@ -1096,14 +1096,14 @@ function evalScorerView({ name, gating, definition }: EvalScorer, readable: bool
   };
 }
 
-/** The eval with this name. When there is none, a new eval with these scorers. */
+/** The eval with this name or id. When there is none, a new eval with this name and these scorers. */
 async function evalNamed(
   deps: EvalsOperationDeps,
   ctx: Pick<OperationContext, "auth" | "projectId">,
   name: string,
   scorers: readonly z.output<typeof scorerParam>[],
 ): Promise<EvalDefinition> {
-  const found = await deps.getEvalByName(ctx.projectId, name);
+  const found = await findEval(deps, ctx.projectId, name);
   if (found) return found;
   const content = evalContentSchema.safeParse({ scorers: scorers.map(evalScorer) });
   if (!content.success) throw contentRefusal(content.error);

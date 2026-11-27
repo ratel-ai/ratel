@@ -26,40 +26,17 @@ const JUDGE = {
 };
 const EXPERIMENT_ID = "77777777-7777-4777-8777-777777777777";
 
+type OldCaseArgs = [
+  id: string,
+  projectId: string,
+  labels: string[],
+  versions: Array<{ state: "draft" | "approved"; scorers: object[] }>,
+  createdAt: string,
+];
+
 async function beforeAndAfter() {
-  const client = new PGlite();
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-  for (const file of files.filter((name) => name < MIGRATION)) {
-    await client.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
-  }
-  await client.exec(`
-    create table organizations (id uuid primary key, name text not null, slug text not null unique);
-    insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
-    insert into projects (id, organization_id, name, slug) values
-      ('${PROJECT_ID}', '${ORGANIZATION_ID}', 'Agent', 'agent'),
-      ('${OTHER_PROJECT_ID}', '${ORGANIZATION_ID}', 'Other', 'other');
-  `);
-  const oldCase = async (
-    id: string,
-    projectId: string,
-    labels: string[],
-    versions: Array<{ state: "draft" | "approved"; scorers: object[] }>,
-    createdAt: string,
-  ) => {
-    await client.query(
-      "insert into eval_cases (id, project_id, name, labels, created_by, created_at) values ($1, $2, $3, $4, 'user_1', $5)",
-      [id, projectId, `case ${id.slice(0, 1)}`, labels, createdAt],
-    );
-    for (const [n, { state, scorers }] of versions.entries()) {
-      await client.query(
-        `insert into eval_case_versions (id, case_id, number, state, input, earlier_turns, tool_fixtures, scorers)
-         values ($1, $2, $3, $4, '{"value": {"message": "refund A200"}}', '[]', '[]', $5)`,
-        [`${id.slice(0, 35)}${n}`, id, n + 1, state, JSON.stringify(scorers)],
-      );
-    }
-  };
+  const client = await beforeMigration();
+  const oldCase = (...args: OldCaseArgs) => insertOldCase(client, ...args);
   const A = "a0000000-0000-4000-8000-000000000000";
   const B = "b0000000-0000-4000-8000-000000000000";
   const C = "c0000000-0000-4000-8000-000000000000";
@@ -77,9 +54,9 @@ async function beforeAndAfter() {
     B,
     PROJECT_ID,
     ["Task:refunds"],
-    // The approved version counts, not the newer draft.
+    // The approved version counts, not the newer draft. Each case made its own scorer ids.
     [
-      { state: "approved", scorers: [NO_REFUND] },
+      { state: "approved", scorers: [{ ...NO_REFUND, id: "no-refund-b" }] },
       { state: "draft", scorers: [NO_REFUND, JUDGE] },
     ],
     "2026-11-02",
@@ -140,7 +117,7 @@ async function beforeAndAfter() {
     ],
   );
 
-  await client.exec(readFileSync(join(MIGRATIONS_DIR, MIGRATION), "utf8"));
+  await migrate(client);
   // biome-ignore lint/suspicious/noExplicitAny: PGlite stands in for the Postgres client
   const db = drizzle(client) as any;
   return { client, db, ids: { A, B, C, D, E }, versionA };
@@ -221,3 +198,100 @@ test("an experiment created before the change still opens", async () => {
   );
   assert.equal(trials[0]?.result, "pass");
 });
+
+test("cases with the same label and the same scorers share an eval, whatever their scorer ids", async () => {
+  const client = await beforeMigration();
+  for (const n of [1, 2, 3]) {
+    await insertOldCase(
+      client,
+      `a000000${n}-0000-4000-8000-000000000000`,
+      PROJECT_ID,
+      ["task: refunds"],
+      [{ state: "approved", scorers: [{ ...NO_REFUND, id: crypto.randomUUID() }, JUDGE] }],
+      `2026-11-0${n}`,
+    );
+  }
+  await migrate(client);
+  // biome-ignore lint/suspicious/noExplicitAny: PGlite stands in for the Postgres client
+  const db = drizzle(client) as any;
+  const evals = await createDrizzleEvalStore(db).list(PROJECT_ID);
+  assert.deepEqual(
+    evals.map(({ name }) => name),
+    ["refunds"],
+  );
+  assert.deepEqual(
+    (await createDrizzleCaseStore(db).list(PROJECT_ID)).map(({ evalId }) => evalId),
+    [evals[0]?.id, evals[0]?.id, evals[0]?.id],
+  );
+});
+
+test("a numbered name never takes the name of another label", async () => {
+  const client = await beforeMigration();
+  const other = {
+    ...NO_REFUND,
+    definition: { kind: "check", config: { path: "output", op: "exists" } },
+  };
+  const seed: Array<[string, string, object]> = [
+    ["b0000001-0000-4000-8000-000000000000", "task: X", NO_REFUND],
+    ["b0000002-0000-4000-8000-000000000000", "task: X", other],
+    ["b0000003-0000-4000-8000-000000000000", "task: X #2", NO_REFUND],
+  ];
+  for (const [n, [id, label, scorer]] of seed.entries()) {
+    await insertOldCase(
+      client,
+      id,
+      PROJECT_ID,
+      [label],
+      [{ state: "approved", scorers: [scorer] }],
+      `2026-11-0${n + 1}`,
+    );
+  }
+  await migrate(client);
+  const { rows } = await client.query<{ name: string }>(
+    "select name from eval_definitions order by name",
+  );
+  assert.deepEqual(
+    rows.map(({ name }) => name),
+    ["X", "X #2", "X #3"],
+  );
+});
+
+/** A database with every migration before 0065, an organization and two projects. */
+async function beforeMigration() {
+  const client = new PGlite();
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  for (const file of files.filter((name) => name < MIGRATION)) {
+    await client.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+  }
+  await client.exec(`
+    create table organizations (id uuid primary key, name text not null, slug text not null unique);
+    insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
+    insert into projects (id, organization_id, name, slug) values
+      ('${PROJECT_ID}', '${ORGANIZATION_ID}', 'Agent', 'agent'),
+      ('${OTHER_PROJECT_ID}', '${ORGANIZATION_ID}', 'Other', 'other');
+  `);
+  return client;
+}
+
+async function insertOldCase(
+  client: PGlite,
+  ...[id, projectId, labels, versions, createdAt]: OldCaseArgs
+) {
+  await client.query(
+    "insert into eval_cases (id, project_id, name, labels, created_by, created_at) values ($1, $2, $3, $4, 'user_1', $5)",
+    [id, projectId, `case ${id.slice(0, 1)}`, labels, createdAt],
+  );
+  for (const [n, { state, scorers }] of versions.entries()) {
+    await client.query(
+      `insert into eval_case_versions (id, case_id, number, state, input, earlier_turns, tool_fixtures, scorers)
+       values ($1, $2, $3, $4, '{"value": {"message": "refund A200"}}', '[]', '[]', $5)`,
+      [`${id.slice(0, 35)}${n}`, id, n + 1, state, JSON.stringify(scorers)],
+    );
+  }
+}
+
+async function migrate(client: PGlite) {
+  await client.exec(readFileSync(join(MIGRATIONS_DIR, MIGRATION), "utf8"));
+}
