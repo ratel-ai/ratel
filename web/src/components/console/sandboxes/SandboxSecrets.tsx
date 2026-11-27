@@ -59,7 +59,7 @@ export function ProjectSecrets({
     <div id="project-secrets" className="scroll-mt-16">
       <SecretsEditor
         title="Project secrets"
-        description="Each sandbox of the project gets these values. A sandbox value of the same name wins."
+        description="Each sandbox of the project gets these values. A sandbox value of the same name wins. A pushed agent gets each secret that its ratel.yaml declares, so anyone who can push a sandbox can use these values."
         endpoint={(name) =>
           `/api/projects/${projectId}/sandboxes/secrets/${encodeURIComponent(name)}`
         }
@@ -104,7 +104,7 @@ export function SandboxSecrets({
           <Link href={projectSecretsHref(projectId)} className="text-fg underline">
             project secrets
           </Link>
-          .
+          . The agent gets each declared value, so anyone who can push this sandbox can use them.
         </>
       }
       endpoint={(name) =>
