@@ -128,16 +128,11 @@ export type EditionUi = {
    */
   ScopeSwitcher?: ComponentType<{ projects: readonly EditionProject[]; collapsed: boolean }>;
   /**
-   * The first-run screen's art (`/onboarding`): the badge heading its naming step. Without it,
-   * the mark. The key-issued step draws the core's own illustration.
+   * The first-run screen's art (`/onboarding`): the full-bleed backdrop and the badge heading its
+   * naming step. Without it, the core's soft light and the mark.
    */
   OnboardingArt?: {
-    /**
-     * No longer drawn (RTL-371): the core's backdrop shows in every edition. Kept optional so an
-     * edition that still supplies one compiles.
-     * @deprecated
-     */
-    Backdrop?: ComponentType;
+    Backdrop: ComponentType;
     Emblem: ComponentType<{ tone?: "coral" | "mint" }>;
   };
   /**

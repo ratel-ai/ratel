@@ -79,12 +79,13 @@ export default async function OnboardingPage({
 
   const ui = await composition.ui?.();
   const ConsoleAccessGate = ui?.ConsoleAccessGate;
-  // The edition's badge on the naming step (upstream's dot-matrix orb), else the mark. The
-  // backdrop is the core's in every edition since RTL-371: the edition's streaks are not drawn.
+  // The edition's backdrop and badge (upstream's Lightfall streaks and dot-matrix orb), else the
+  // core's soft light and the mark.
   const art = ui?.OnboardingArt;
+  const Backdrop = art?.Backdrop ?? OnboardingBackground;
   const page = (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-16">
-      <OnboardingBackground />
+      <Backdrop />
       {/* Each step sizes its own card (see Card): `max-w-lg` to name, `max-w-2xl` for the reveal. */}
       <div className="relative z-10 w-full">
         <CreateProjectForm

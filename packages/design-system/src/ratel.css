@@ -137,9 +137,9 @@
   }
 }
 
-/* A fine dot-matrix texture under a first-run screen (the Cloud edition's /welcome backdrop),
+/* A fine dot-matrix texture under an edition's first-run backdrop (`EditionUi.OnboardingArt`),
  * masked to a top-heavy ellipse so it fades into the canvas toward the edges rather than tiling
- * to a hard rectangle. The core's /onboarding draws its own (OnboardingBackground.tsx). */
+ * to a hard rectangle. */
 .dot-field {
   background-image: radial-gradient(
     circle at center,

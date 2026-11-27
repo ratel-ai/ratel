@@ -27,7 +27,8 @@ import { APP_NAME, BASE_URL } from "@/lib/platform/app-config";
 
 /**
  * Shared card chrome: the plain raised surface every onboarding step sits on,
- * a hairline border and one soft shadow, nothing behind it to blur.
+ * a hairline border and one soft shadow, so the content reads the same over
+ * any backdrop.
  *
  * `size="wide"` is for the key reveal: one column a little wider than the naming
  * step, so the prompt and the snippets read without wrapping every line.
@@ -187,7 +188,8 @@ function KeyReveal({
       router.push(dashboardHref);
       return;
     }
-    // Still announced, for anything on the page that winds down on the way out.
+    // Tell the backdrop we are leaving (upstream's streak field drains on it;
+    // the core's static light has nothing to wind down).
     window.dispatchEvent(new CustomEvent(ONBOARDING_LEAVE_EVENT));
     setLeaving(true);
     // Under a veil that outlives this page, so the dashboard fades in.

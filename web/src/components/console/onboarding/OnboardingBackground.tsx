@@ -1,11 +1,8 @@
 /**
- * Full-bleed backdrop for the first-run screen, in every edition: the canvas with one soft light
- * falling from the top. No texture, no streaks and no motion: the card is what moves (it rises
- * in, and dissolves on the way to the dashboard), and the backdrop only gives it a floor.
- *
- * Until RTL-371 an edition could swap this for its own (`EditionUi.OnboardingArt.Backdrop`, the
- * Cloud edition's WebGL light streaks); the dogfood read the streaks as cheap, so the core now
- * draws this one everywhere and the edition hook is no longer read.
+ * Full-bleed backdrop for the first-run screen when the edition supplies none
+ * (`EditionUi.OnboardingArt.Backdrop`): the canvas with one soft light falling from the top. Kept
+ * quiet so the backdrop never competes with the call to action; the card is what moves (it rises
+ * in, and dissolves on the way to the dashboard).
  *
  * Rendered as a positive-z layer at the bottom of the stack (the page content sits above it via
  * `relative z-10`), so it reliably paints over the opaque body background rather than being
