@@ -107,8 +107,8 @@ export async function drainJobs(
       if (!handler) throw new Error(`no handler for job kind: ${job.kind}`);
       const result = await handler(job);
       const transitioned = await store.markDone(job.id, result ?? null);
+      const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
       if (transitioned) {
-        const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
         await observability?.trackProjectEvent("job_completed", job.projectId, {
           kind: job.kind,
           job_id: job.id,
@@ -116,6 +116,8 @@ export async function drainJobs(
         });
         logJobFinished(job, "done", durationMs, waitMs);
         done++;
+      } else {
+        logLateResult(job, "done", durationMs);
       }
     } catch (err) {
       const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
@@ -139,6 +141,8 @@ export async function drainJobs(
         }
         logJobFinished(job, "error", durationMs, waitMs);
         failed++;
+      } else {
+        logLateResult(job, "error", durationMs);
       }
     }
     opts.onJobFinished?.();
@@ -184,6 +188,28 @@ export function jobFinishedLines(
   ];
 }
 
+/**
+ * The line for a result the store refused because the job had already left `running` (the
+ * reaper moved it to `error`), so a late result leaves a trace instead of vanishing.
+ */
+export function jobLateResultLine(
+  job: Pick<JobRecord, "id" | "projectId" | "kind">,
+  outcome: "done" | "error",
+  durationMs: number,
+): { level: "warn"; fields: Record<string, unknown>; msg: "job_late_result_ignored" } {
+  return {
+    level: "warn",
+    fields: {
+      project_id: job.projectId,
+      kind: job.kind,
+      job_id: job.id,
+      outcome,
+      duration_ms: durationMs,
+    },
+    msg: "job_late_result_ignored",
+  };
+}
+
 function logJobFinished(
   job: JobRecord,
   outcome: "done" | "error",
@@ -193,4 +219,9 @@ function logJobFinished(
   for (const line of jobFinishedLines(job, outcome, durationMs, waitMs)) {
     logger[line.level](line.fields, line.msg);
   }
+}
+
+function logLateResult(job: JobRecord, outcome: "done" | "error", durationMs: number): void {
+  const line = jobLateResultLine(job, outcome, durationMs);
+  logger[line.level](line.fields, line.msg);
 }

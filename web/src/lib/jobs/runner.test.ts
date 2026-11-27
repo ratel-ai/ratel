@@ -7,6 +7,7 @@ import {
   type JobRecord,
   type JobStore,
   jobFinishedLines,
+  jobLateResultLine,
 } from "./runner";
 
 function job(over: Partial<JobRecord> = {}): JobRecord {
@@ -368,6 +369,22 @@ test("a reaped job failing late does not emit failure or increment failed", asyn
   assert.deepEqual(result, { done: 0, failed: 0 });
   assert.deepEqual(observed.events, []);
   assert.deepEqual(observed.captured, []);
+});
+
+test("a late result the store refuses is one warn line with its project, kind, run time and attempted outcome", () => {
+  const late = { id: "a", projectId: "p1", kind: "build_trace_turns" };
+  assert.deepEqual(jobLateResultLine(late, "done", 1_200), {
+    level: "warn",
+    msg: "job_late_result_ignored",
+    fields: {
+      project_id: "p1",
+      kind: "build_trace_turns",
+      job_id: "a",
+      outcome: "done",
+      duration_ms: 1_200,
+    },
+  });
+  assert.equal(jobLateResultLine(late, "error", 0).fields.outcome, "error");
 });
 
 test("an observer failure after completion cannot turn a completed job into a failure", async () => {
