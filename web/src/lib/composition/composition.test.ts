@@ -298,6 +298,7 @@ describe("registry root", () => {
         "before:task_scores_enqueue",
         "before:sandbox_builds",
         "before:sandbox_runs",
+        "before:sandbox_run_tasks",
         "before:sandbox_snapshots",
         "before:alerts_evaluate",
         "before:eval_experiments",
