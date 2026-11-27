@@ -328,4 +328,9 @@ export const MCP_CAPABILITY_GROUPS: ReadonlyArray<{
     blurb: "Edit the catalog, publish, import in bulk",
     examples: ["update_skill", "publish_skill", "import_skills"],
   },
+  {
+    title: "Sandbox and evals",
+    blurb: "Run your agent on a Ratel sandbox, and run its evals",
+    examples: ["sandbox_list", "evals_list_cases"],
+  },
 ];
