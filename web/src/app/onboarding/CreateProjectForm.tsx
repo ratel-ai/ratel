@@ -1,42 +1,45 @@
 "use client";
+import { IconButton } from "@ratel/design-system/button";
+import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
-import { useCopyToClipboard } from "@ratel/design-system/use-copy-to-clipboard";
-import { ArrowLeft } from "lucide-react";
+import { CopyButton } from "@ratel/design-system/code";
+import { maskSecret } from "@ratel/design-system/mask";
+import { Tabs } from "@ratel/design-system/tabs";
+import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useActionState, useEffect, useState } from "react";
 import { type CreateProjectState, createProjectAction } from "@/app/onboarding/actions";
+import { AgentPromptPanel } from "@/components/console/onboarding/AgentPromptPanel";
 import { CaptureConsentPanel } from "@/components/console/onboarding/CaptureConsentPanel";
 import { OnboardingEmblem } from "@/components/console/onboarding/OnboardingEmblem";
 import { SdkQuickstart } from "@/components/console/onboarding/SdkQuickstart";
 import { navigateUnderVeil } from "@/lib/console/onboarding/arrival-veil";
 import { onboardingKeyNote } from "@/lib/console/onboarding/key-note";
+import { QUICKSTART_KEY_ENV } from "@/lib/console/onboarding/quickstart";
 import {
   LEAVE_VEIL_DELAY_MS,
   LEAVE_VEIL_MS,
   NAV_DELAY_MS,
   ONBOARDING_LEAVE_EVENT,
 } from "@/lib/console/onboarding/transition";
-import { APP_NAME } from "@/lib/platform/app-config";
+import { APP_NAME, BASE_URL } from "@/lib/platform/app-config";
 
 /**
- * Shared card chrome: the frosted instrument panel every onboarding step sits in.
+ * Shared card chrome: the plain raised surface every onboarding step sits on,
+ * a hairline border and one soft shadow, so the content reads the same over
+ * any backdrop.
  *
- * The surface is deliberately thin (a low-alpha wash over a heavy blur) so the
- * dot-field behind it stays legible through the panel instead of being
- * boxed out — the blur, the hairline border, and the drop shadow do the
- * separating.
- *
- * `size="wide"` is for the key reveal, which carries the API key *and* the
- * quickstart: at the naming step's width that content ran past the fold and the
- * "Go to dashboard" button needed a scroll to reach.
+ * `size="wide"` is for the key reveal: one column a little wider than the naming
+ * step, so the prompt and the snippets read without wrapping every line.
  */
 function Card({ children, size = "default" }: { children: ReactNode; size?: "default" | "wide" }) {
   return (
     <div
       className={cn(
-        "card-enter w-full rounded-2xl border border-forest-300/70 bg-forest-600/30 p-6 shadow-[0_24px_70px_-30px_rgba(0,0,0,0.85)] backdrop-blur-2xl sm:p-8",
+        "card-enter w-full rounded-xl border border-line bg-raised p-6 shadow-[0_24px_60px_-32px_rgba(0,0,0,0.9)] sm:p-8",
         size === "default" && "mx-auto max-w-lg",
+        size === "wide" && "mx-auto max-w-2xl",
       )}
     >
       {children}
@@ -46,18 +49,12 @@ function Card({ children, size = "default" }: { children: ReactNode; size?: "def
 
 export function CreateProjectForm({
   ingestUrl,
-  keyIssuedCameo,
   emblem,
-  keyIssuedEmblem,
   organization,
 }: {
   ingestUrl: string;
-  /** Rendered by the server because optional badger assets are resolved from disk. */
-  keyIssuedCameo?: ReactNode;
   /** The badge heading the naming step: the edition's (`EditionUi.OnboardingArt`), else the mark. */
   emblem?: ReactNode;
-  /** The success step's badge when there is no cameo, likewise. */
-  keyIssuedEmblem?: ReactNode;
   organization?: {
     id: string;
     name: string;
@@ -79,7 +76,6 @@ export function CreateProjectForm({
         apiKey={state.apiKey}
         keyRevealable={state.keyRevealable}
         ingestUrl={ingestUrl}
-        cameo={keyIssuedCameo ?? keyIssuedEmblem}
         showCaptureConsent={state.showCaptureConsent}
       />
     );
@@ -157,7 +153,6 @@ function KeyReveal({
   apiKey,
   keyRevealable,
   ingestUrl,
-  cameo,
   showCaptureConsent,
 }: {
   id: string;
@@ -166,23 +161,24 @@ function KeyReveal({
   apiKey: string;
   keyRevealable: boolean;
   ingestUrl: string;
-  cameo?: ReactNode;
   showCaptureConsent: boolean;
 }) {
   const router = useRouter();
-  const { copyStatus, copyToClipboard } = useCopyToClipboard();
   const [leaving, setLeaving] = useState(false);
   const [captureContent, setCaptureContent] = useState(false);
+  const capture = showCaptureConsent && captureContent;
 
   const dashboardHref = `/project/${id}`;
+  // Where the prompt tells the agent the first trace shows up.
+  const tracesUrl = `${BASE_URL}/project/${encodeURIComponent(id)}/traces`;
 
   // Warm the dashboard route so the handoff after the exit animation is instant.
   useEffect(() => {
     router.prefetch(dashboardHref);
   }, [router, dashboardHref]);
 
-  // Drain the streaks, settle + dissolve, then navigate, and the dashboard
-  // fades in. Reduced-motion users go straight there, no animation.
+  // Settle + dissolve, then navigate, and the dashboard fades in. Reduced-motion
+  // users go straight there, no animation.
   function goToDashboard() {
     if (leaving) return;
     const reduce =
@@ -192,8 +188,8 @@ function KeyReveal({
       router.push(dashboardHref);
       return;
     }
-    // Tell the background we are leaving (upstream's streak field drains on it;
-    // this edition's static backdrop has nothing to wind down).
+    // Tell the backdrop we are leaving (upstream's streak field drains on it;
+    // the core's static light has nothing to wind down).
     window.dispatchEvent(new CustomEvent(ONBOARDING_LEAVE_EVENT));
     setLeaving(true);
     // Under a veil that outlives this page, so the dashboard fades in.
@@ -207,92 +203,67 @@ function KeyReveal({
     <>
       <div className={leaving ? "onboarding-settle" : undefined}>
         <Card size="wide">
-          {/* Laid out side-by-side from `sm` up: the cameo next to the headline
-          instead of above it keeps the panel short enough that the key, the
-          quickstart, and the dashboard button all sit above the fold. */}
-          <header className="flex flex-col items-center gap-4 text-center sm:flex-row sm:gap-6 sm:text-left">
-            <div className="relative flex h-24 w-36 shrink-0 items-center justify-center">
-              <div
-                className="absolute inset-x-5 bottom-1 h-8 rounded-[50%] bg-coral/[0.08] blur-2xl"
-                aria-hidden
-              />
-              {cameo ?? <OnboardingEmblem tone="mint" />}
-            </div>
-            <div className="min-w-0 space-y-2">
-              <h2 className="font-display text-2xl font-bold tracking-tight text-cream">
-                <span className="text-coral">{name}</span> is ready
-              </h2>
-              <p className="text-pretty text-sm text-warm-muted">
-                {onboardingKeyNote(keyRevealable)}
-              </p>
-            </div>
+          <header className="space-y-1.5">
+            <h2 className="font-display text-xl font-semibold tracking-tight text-fg">
+              {name} is ready
+            </h2>
+            <p className="text-pretty text-sm text-fg-subtle">
+              Give this prompt to your coding agent. It wires Ratel in and checks the first trace.
+            </p>
           </header>
 
+          <ApiKeyRow apiKey={apiKey} keyRevealable={keyRevealable} />
+
+          <Tabs
+            className="mt-6"
+            defaultValue="agent"
+            items={[
+              {
+                value: "agent",
+                label: "Agent",
+                content: (
+                  <AgentPromptPanel
+                    projectName={name}
+                    serviceName={slug}
+                    endpoint={ingestUrl}
+                    tracesUrl={tracesUrl}
+                    captureContent={capture}
+                  />
+                ),
+              },
+              {
+                value: "human",
+                label: "Human",
+                content: (
+                  <SdkQuickstart
+                    endpoint={ingestUrl}
+                    serviceName={slug}
+                    maxHeight={320}
+                    captureContent={capture}
+                  />
+                ),
+              },
+            ]}
+          />
+
           {showCaptureConsent && (
-            <div className="mt-6">
-              <CaptureConsentPanel
-                captureContent={captureContent}
-                onCaptureContentChange={setCaptureContent}
-              />
-            </div>
+            <CaptureConsentPanel
+              className="mt-6 border-t border-line pt-5"
+              captureContent={captureContent}
+              onCaptureContentChange={setCaptureContent}
+            />
           )}
 
-          {/* Key beside quickstart from `md` up rather than stacked: the two together
-          were what pushed the dashboard button past the fold. The key keeps a full
-          column so all 36 characters are visible without scrubbing sideways. */}
-          <div className="mt-6 grid gap-5 md:grid-cols-2">
-            {/* The key is short and the quickstart is tall, so the environment note
-            drops to the bottom of its column — the two columns then close on the
-            same line instead of leaving a ragged hole under the key. */}
-            <div className="flex flex-col gap-2">
-              <div className="font-mono text-xs uppercase tracking-wide text-warm-muted">
-                Secret API key
-              </div>
-              <div className="flex items-center gap-2 rounded-lg border border-coral/40 bg-coral/10 p-3">
-                <code className="flex-1 overflow-x-auto whitespace-nowrap font-mono text-sm text-cream">
-                  {apiKey}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(apiKey)}
-                  className="shrink-0 rounded-md bg-cream px-3 py-1.5 font-mono text-xs font-medium text-base-deep transition-colors hover:bg-cream-dim"
-                >
-                  <span aria-live="polite">
-                    {copyStatus === "copied"
-                      ? "Copied"
-                      : copyStatus === "failed"
-                        ? "Copy failed"
-                        : "Copy"}
-                  </span>
-                </button>
-              </div>
-              <p className="font-mono text-[11px] leading-relaxed text-warm-muted md:mt-auto md:pt-2">
-                Export this key as <code>RATEL_API_KEY</code> — the SDK reads it from the
-                environment so it never lands in your source.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="font-mono text-xs uppercase tracking-wide text-warm-muted">
-                Send your first trace
-              </div>
-              <SdkQuickstart
-                endpoint={ingestUrl}
-                serviceName={slug}
-                maxHeight={180}
-                captureContent={showCaptureConsent && captureContent}
-              />
-            </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={goToDashboard}
+              disabled={leaving}
+              className={cn(buttonVariants({ variant: "ghost" }), "-mr-2 text-sm")}
+            >
+              {leaving ? "Opening dashboard…" : "Go to dashboard →"}
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={goToDashboard}
-            disabled={leaving}
-            className="mt-6 flex w-full items-center justify-center rounded-lg bg-cream px-5 py-2.5 text-sm font-medium text-base-deep shadow-sm transition-colors hover:bg-cream-dim disabled:cursor-default"
-          >
-            {leaving ? "Opening dashboard…" : `Go to ${slug} dashboard →`}
-          </button>
         </Card>
       </div>
 
@@ -300,7 +271,7 @@ function KeyReveal({
         canvas as we leave. Held OUTSIDE the settling wrapper: nested inside it,
         this veil's fade-IN would be cancelled by the panel's own fade-OUT (a
         fixed child still inherits an ancestor's opacity), so the scene never
-        actually dissolved. Out here it fades to base over the dot-field, then
+        actually dissolved. Out here it fades to base over the backdrop, then
         navigation reveals the dashboard behind. */}
       {leaving && (
         <div
@@ -313,5 +284,34 @@ function KeyReveal({
         />
       )}
     </>
+  );
+}
+
+/**
+ * The secret key, one row above both tabs: the person sets it as `RATEL_API_KEY` themselves, so
+ * neither the prompt nor the snippets carry it. Masked until asked, copied in one click.
+ */
+function ApiKeyRow({ apiKey, keyRevealable }: { apiKey: string; keyRevealable: boolean }) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="mt-6">
+      <div className="flex h-10 items-center gap-1 rounded-lg border border-line bg-rail pr-1.5 pl-3">
+        <span className="mr-2 shrink-0 text-xs text-fg-subtle">API key</span>
+        <code translate="no" className="min-w-0 flex-1 truncate font-mono text-xs text-fg">
+          {shown ? apiKey : maskSecret(apiKey)}
+        </code>
+        <IconButton
+          label={shown ? "Hide key" : "Show key"}
+          size="icon-sm"
+          icon={shown ? <EyeOff /> : <Eye />}
+          onClick={() => setShown((current) => !current)}
+        />
+        <CopyButton text={apiKey} label="Copy key" />
+      </div>
+      <p className="mt-2 text-xs text-fg-subtle">
+        Set it as <code className="font-mono text-fg-muted">{QUICKSTART_KEY_ENV}</code> where your
+        agent runs. {onboardingKeyNote(keyRevealable)}
+      </p>
+    </div>
   );
 }

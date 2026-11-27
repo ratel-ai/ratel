@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { CelebrationBadger } from "@/components/console/badgers/honeybadgers";
 import { OnboardingBackground } from "@/components/console/onboarding/OnboardingBackground";
 import { composition } from "@/lib/composition";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
@@ -81,23 +80,18 @@ export default async function OnboardingPage({
   const ui = await composition.ui?.();
   const ConsoleAccessGate = ui?.ConsoleAccessGate;
   // The edition's backdrop and badge (upstream's Lightfall streaks and dot-matrix orb), else the
-  // static dot field and the mark.
+  // core's soft light and the mark.
   const art = ui?.OnboardingArt;
   const Backdrop = art?.Backdrop ?? OnboardingBackground;
   const page = (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-16">
       <Backdrop />
-      {/* The naming step keeps itself to `max-w-lg` (see Card); the key reveal
-          spends the full width so its key + quickstart clear the fold. */}
-      <div className="relative z-10 w-full max-w-4xl">
+      {/* Each step sizes its own card (see Card): `max-w-lg` to name, `max-w-2xl` for the reveal. */}
+      <div className="relative z-10 w-full">
         <CreateProjectForm
           ingestUrl={ingestUrl}
-          keyIssuedCameo={
-            <CelebrationBadger className="relative h-full w-full object-contain text-cream-dim drop-shadow-[0_14px_28px_rgba(0,0,0,0.7)]" />
-          }
           organization={formOrganization}
           emblem={art ? <art.Emblem /> : undefined}
-          keyIssuedEmblem={art ? <art.Emblem tone="mint" /> : undefined}
         />
       </div>
     </main>

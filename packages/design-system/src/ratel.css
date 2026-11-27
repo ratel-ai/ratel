@@ -137,9 +137,9 @@
   }
 }
 
-/* Onboarding / first-run backdrop (components/console/onboarding/OnboardingBackground.tsx).
- * A fine dot-matrix texture under the first-run screen, masked to a top-heavy ellipse so it
- * fades into the canvas toward the edges rather than tiling to a hard rectangle. */
+/* A fine dot-matrix texture under an edition's first-run backdrop (`EditionUi.OnboardingArt`),
+ * masked to a top-heavy ellipse so it fades into the canvas toward the edges rather than tiling
+ * to a hard rectangle. */
 .dot-field {
   background-image: radial-gradient(
     circle at center,
@@ -206,7 +206,7 @@
   .onboarding-settle {
     animation: onboarding-settle 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  /* Then this base veil fades in over the dot-field to reveal the console behind. Delay and
+  /* Then this base veil fades in over the backdrop to reveal the console behind. Delay and
    * duration are set inline from lib/console/onboarding/transition.ts (LEAVE_VEIL_*); these
    * match them. */
   .onboarding-dissolve {

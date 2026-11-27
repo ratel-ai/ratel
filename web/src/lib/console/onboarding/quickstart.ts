@@ -154,6 +154,107 @@ function curlSnippet({ endpoint }: QuickstartTarget): QuickstartSnippet {
   };
 }
 
+/**
+ * The onboarding's Human tab: the two snippets every surface hands out plus one for an app whose
+ * framework already starts the OpenTelemetry provider (Next.js with `@vercel/otel`, Eve, Mastra).
+ * There a second `NodeSDK` would compete with the host's provider, so Ratel joins it as one more
+ * span processor. Kept apart from {@link QUICKSTART_LANGS}, which Settings, the setup guide, the
+ * MCP tool and the edition port read as "a snippet per language".
+ */
+export const QUICKSTART_VARIANTS = ["typescript", "provider", "curl"] as const;
+
+export type QuickstartVariant = (typeof QUICKSTART_VARIANTS)[number];
+
+/** The Human tab's labels: what each variant sets up, not the language it is in. */
+export const QUICKSTART_VARIANT_LABELS: Record<QuickstartVariant, string> = {
+  typescript: "NodeSDK",
+  provider: "Existing OTel provider",
+  curl: "curl",
+};
+
+/** The span processor alone: what a framework that owns the provider needs installed. */
+const PROVIDER_INSTALL =
+  "npm install @ratel-ai/cloud-sdk @opentelemetry/api " +
+  "@opentelemetry/sdk-trace-base @opentelemetry/exporter-trace-otlp-proto";
+
+/**
+ * Content capture where the framework emits the spans: the env var only reaches OTel's GenAI
+ * instrumentations, so the framework's own setting has to agree.
+ */
+const PROVIDER_CAPTURE_LINES: readonly string[] = [
+  "",
+  "// Content capture (opt-in): set the env var below where the app",
+  "// runs, and switch capture on in the framework's own setting if",
+  "// it has one (Eve: tracePolicy). The framework decides what its",
+  "// spans carry.",
+  `//   ${QUICKSTART_CAPTURE_ENV}=`,
+  `//     ${QUICKSTART_CAPTURE_MODE}`,
+];
+
+function providerSnippet({
+  endpoint,
+  serviceName,
+  captureContent = false,
+}: QuickstartTarget): Omit<QuickstartVariantSnippet, "variant"> {
+  return {
+    install: PROVIDER_INSTALL,
+    code: [
+      'import { RatelSpanProcessor } from "@ratel-ai/cloud-sdk/otel";',
+      "",
+      `// Reads ${QUICKSTART_KEY_ENV}. Forwards gen_ai.* / ratel.* spans to`,
+      "// Ratel; any exporter you already run is left untouched.",
+      "export const ratel = new RatelSpanProcessor({",
+      `  endpoint: ${quoted(endpoint)},`,
+      "});",
+      "",
+      "// Your framework already starts the OpenTelemetry provider: add",
+      "// `ratel` to its span processors instead of a second NodeSDK.",
+      "//",
+      "// Next.js with @vercel/otel, in instrumentation.ts (keep",
+      '// "auto" so the exporters you already have stay on):',
+      "//   registerOTel({",
+      `//     serviceName: ${quoted(serviceName)},`,
+      '//     spanProcessors: ["auto", ratel],',
+      "//   });",
+      "//",
+      "// Eve, in agent/instrumentation/ratel.ts:",
+      "//   export default otelIntegration({ spanProcessors: [ratel] });",
+      "//",
+      "// Mastra, or a provider you built: add it wherever the provider",
+      "// takes its span processors.",
+      ...(captureContent ? PROVIDER_CAPTURE_LINES : []),
+    ].join("\n"),
+  };
+}
+
+/** A Human-tab variant's snippet: the install line (null for curl) and the code. */
+export interface QuickstartVariantSnippet {
+  variant: QuickstartVariant;
+  install: string | null;
+  code: string;
+}
+
+/** Build one Human-tab variant's snippet. */
+export function buildQuickstartVariant(
+  variant: QuickstartVariant,
+  target: QuickstartTarget,
+): QuickstartVariantSnippet {
+  const { install, code } =
+    variant === "provider" ? providerSnippet(target) : buildQuickstart(variant, target);
+  return { variant, install, code };
+}
+
+/** Every Human-tab variant, keyed by variant, for the onboarding's client component. */
+export function buildQuickstartVariantSet(
+  target: QuickstartTarget,
+): Record<QuickstartVariant, QuickstartVariantSnippet> {
+  return {
+    typescript: buildQuickstartVariant("typescript", target),
+    provider: buildQuickstartVariant("provider", target),
+    curl: buildQuickstartVariant("curl", target),
+  };
+}
+
 const BUILDERS: Record<QuickstartLang, (target: QuickstartTarget) => QuickstartSnippet> = {
   typescript: typescriptSnippet,
   curl: curlSnippet,

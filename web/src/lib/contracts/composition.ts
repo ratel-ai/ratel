@@ -129,7 +129,7 @@ export type EditionUi = {
   ScopeSwitcher?: ComponentType<{ projects: readonly EditionProject[]; collapsed: boolean }>;
   /**
    * The first-run screen's art (`/onboarding`): the full-bleed backdrop and the badge heading its
-   * cards (`tone` "mint" on the key-issued step). Without it, the static dot field and the mark.
+   * naming step. Without it, the core's soft light and the mark.
    */
   OnboardingArt?: {
     Backdrop: ComponentType;

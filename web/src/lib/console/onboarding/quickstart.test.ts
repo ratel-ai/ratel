@@ -3,10 +3,14 @@ import { test } from "node:test";
 import {
   buildQuickstart,
   buildQuickstartSet,
+  buildQuickstartVariant,
+  buildQuickstartVariantSet,
   QUICKSTART_CAPTURE_ENV,
   QUICKSTART_KEY_ENV,
   QUICKSTART_LANG_LABELS,
   QUICKSTART_LANGS,
+  QUICKSTART_VARIANT_LABELS,
+  QUICKSTART_VARIANTS,
   type QuickstartTarget,
 } from "@/lib/console/onboarding/quickstart";
 
@@ -186,4 +190,50 @@ test("curl has no instrumentation to switch, so capture leaves it alone", () => 
 test("buildQuickstartSet passes the capture choice through", () => {
   const set = buildQuickstartSet({ ...TARGET, captureContent: true });
   assert.ok(set.typescript.code.includes(QUICKSTART_CAPTURE_ENV));
+});
+
+test("the Human tab offers NodeSDK, an existing OTel provider and curl, in that order", () => {
+  assert.deepEqual([...QUICKSTART_VARIANTS], ["typescript", "provider", "curl"]);
+  assert.deepEqual(
+    QUICKSTART_VARIANTS.map((variant) => QUICKSTART_VARIANT_LABELS[variant]),
+    ["NodeSDK", "Existing OTel provider", "curl"],
+  );
+  const set = buildQuickstartVariantSet(TARGET);
+  assert.deepEqual(Object.keys(set), [...QUICKSTART_VARIANTS]);
+  // The two shared snippets are the ones every other surface hands out.
+  assert.equal(set.typescript.code, buildQuickstart("typescript", TARGET).code);
+  assert.equal(set.curl.code, buildQuickstart("curl", TARGET).code);
+});
+
+test("the existing-provider snippet adds the processor instead of starting a NodeSDK", () => {
+  const { code, install } = buildQuickstartVariant("provider", TARGET);
+  assert.ok(!code.includes("new NodeSDK"), "no second provider");
+  assert.ok(install && !install.includes("@opentelemetry/sdk-node"), "sdk-node not needed");
+  assert.ok(install?.includes("@ratel-ai/cloud-sdk"));
+  assert.match(
+    code,
+    /export const ratel = new RatelSpanProcessor\(\{\n {2}endpoint: "https:\/\/app\.ratel\.sh\/api\/v1\/traces",\n\}\);/,
+  );
+  assert.match(code, /@vercel\/otel/);
+  assert.match(code, /spanProcessors: \["auto", ratel\]/);
+  assert.match(code, /serviceName: "support-copilot"/);
+  assert.match(code, /agent\/instrumentation\/ratel\.ts/);
+  assert.match(code, /otelIntegration\(\{ spanProcessors: \[ratel\] \}\)/);
+  assert.match(code, /Mastra/);
+  assert.ok(code.includes(QUICKSTART_KEY_ENV));
+  for (const line of code.split("\n")) {
+    assert.ok(line.length <= 72, `line stays readable without wrapping: ${line}`);
+  }
+});
+
+test("the existing-provider snippet defers capture to the framework when asked", () => {
+  const off = buildQuickstartVariant("provider", TARGET).code;
+  const on = buildQuickstartVariant("provider", { ...TARGET, captureContent: true }).code;
+  assert.ok(!off.includes(QUICKSTART_CAPTURE_ENV));
+  assert.ok(on.includes(QUICKSTART_CAPTURE_ENV));
+  assert.match(on, /tracePolicy/);
+  assert.ok(on.startsWith(off), "capture only appends");
+  for (const line of on.split("\n")) {
+    assert.ok(line.length <= 72, `line stays readable without wrapping: ${line}`);
+  }
 });
