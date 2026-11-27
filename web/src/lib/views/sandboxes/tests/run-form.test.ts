@@ -60,6 +60,8 @@ test("the spec of a version has its example, its params, its tools with modes an
     tools: [],
     runMode: "http",
     timeoutSeconds: null,
+    network: [],
+    secrets: [],
   });
 });
 
