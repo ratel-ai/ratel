@@ -102,6 +102,11 @@ export type LinkPreview = {
   siteName: string;
   title: string;
   description: string;
+  /**
+   * The social card a shared link shows: an absolute URL, or a path on `origin` such as `/og.png`.
+   * Without it the card has no picture.
+   */
+  image?: string;
 };
 
 /**
