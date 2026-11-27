@@ -181,3 +181,7 @@ can happen first and then goes unreported.
 `embedding-provider.ts` is the Playground's vectors. A provider that answered but was refused or
 unreadable sets `reason` on the error it throws; its optional `noteUnavailable` is told when a
 run wanted vectors with no key, so the edition can record the call it skipped.
+
+`ingest-queue.ts` is the queue that a worker reads telemetry from (ADR-0010): `publish` and `consume`,
+with what a handler answers. It is not part of a composition: the core's driver is in
+`lib/ingest/queue/kafka`, and `INGEST_QUEUE=kafka` turns it on.

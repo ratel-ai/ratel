@@ -8,12 +8,14 @@ import {
   ArrowRight,
   ChevronRight,
   CircleCheck,
+  Hourglass,
   Layers,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { fmtCount } from "@/lib/platform/format";
+import { type HealthLock, healthUnlockLine } from "@/lib/views/health/unlock";
 import {
   ATTENTION_TONE_LABEL,
   type Attention,
@@ -36,7 +38,7 @@ export function AttentionSection({
   attention: Attention;
   healthHref: string | null;
 }) {
-  const { items, moreIssues } = attention;
+  const { items, moreIssues, healthLock } = attention;
   return (
     <Section
       title="Needs attention"
@@ -52,7 +54,7 @@ export function AttentionSection({
         ) : null
       }
     >
-      {items.length === 0 ? (
+      {items.length === 0 && !healthLock ? (
         <div className="rounded-lg border border-line">
           <EmptyState
             icon={CircleCheck}
@@ -62,7 +64,16 @@ export function AttentionSection({
           />
         </div>
       ) : (
-        <AttentionList items={items} />
+        <div className="overflow-hidden rounded-lg border border-line">
+          {items.length > 0 ? <AttentionList items={items} bare /> : null}
+          {healthLock ? (
+            <HealthUnlockRow
+              lock={healthLock}
+              href={healthHref}
+              className={items.length > 0 ? "border-t border-line" : undefined}
+            />
+          ) : null}
+        </div>
       )}
     </Section>
   );
@@ -167,5 +178,46 @@ function AttentionLink({ item, children }: { item: AttentionItem; children: Reac
     <Link href={item.target.href} className={ROW}>
       {children}
     </Link>
+  );
+}
+
+/**
+ * Where Agent health's issues would be while it is still locked (`healthUnlock`): how far its
+ * turns are, "Agent health unlocks at 50 turns · 36/50", opening its collecting page.
+ */
+export function HealthUnlockRow({
+  lock,
+  href,
+  className,
+}: {
+  lock: HealthLock;
+  href: string | null;
+  className?: string;
+}) {
+  const body = (
+    <>
+      <Hourglass aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-fg-subtle" />
+      <span className="min-w-0 flex-1 text-ui text-fg-muted tabular-nums">
+        {healthUnlockLine(lock)}
+      </span>
+      {href ? (
+        <ChevronRight
+          aria-hidden
+          className="size-4 shrink-0 text-fg-faint transition-colors duration-120 group-hover:text-fg-muted"
+        />
+      ) : null}
+    </>
+  );
+  return href ? (
+    <Link href={href} className={cn(ROW, className)} data-health-unlock="">
+      {body}
+    </Link>
+  ) : (
+    <p
+      className={cn("flex min-h-11 items-center gap-3 px-4 py-2", className)}
+      data-health-unlock=""
+    >
+      {body}
+    </p>
   );
 }

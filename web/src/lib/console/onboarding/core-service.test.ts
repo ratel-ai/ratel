@@ -29,6 +29,7 @@ function harness({
       keys.push(input);
       return { id: "66666666-6666-4666-8666-666666666666" };
     },
+    keyCreationRefusal: async () => null,
     generateApiKey: () => ({ plaintext: "rtl_plain", hash: "hash", prefix: "rtl_plai" }),
     checkQuota: (organization) => {
       quotaFor.push(organization);

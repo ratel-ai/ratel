@@ -30,7 +30,7 @@ export function formatMoney(usd: number): string {
   return formatTraceMoney(usd);
 }
 
-/** Per 100 runs: one decimal below ten, whole numbers from ten. */
+/** Per 100 turns: one decimal below ten, whole numbers from ten. */
 export function formatPer100(value: number | null): string {
   if (value === null) return MISSING;
   if (value === 0) return "0";

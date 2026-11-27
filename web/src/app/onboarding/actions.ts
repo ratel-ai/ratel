@@ -4,6 +4,7 @@ import {
   createFirstProject,
   type CreateProjectState as FirstProjectState,
 } from "@/lib/console/onboarding/create-first-project";
+import { apiKeyCreationRefusal } from "@/lib/platform/api-key-creation";
 import { keepApiKeySecret } from "@/lib/platform/api-key-secrets";
 import { generateApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -47,6 +48,7 @@ export async function createProjectAction(
       listProjects: (id) => listProjectsForOrganization(id),
       createProject: (input) => createProject(input),
       createApiKey: (input) => createApiKey(input),
+      keyCreationRefusal: (id) => apiKeyCreationRefusal(id),
       generateApiKey,
       keepApiKeySecret,
       checkQuota,

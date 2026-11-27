@@ -48,7 +48,17 @@ export function decodeTraceExport(transport: OtlpTransport, bytes: Uint8Array): 
   return { ok: true, spans };
 }
 
-export interface StoreTracesContext {
+/** What a queue that delivers an envelope again adds to a store (ADR-0010). Absent, the request stores. */
+export interface RedeliveredContext {
+  /** When the request was accepted: the clock for an item without a usable time. Absent, now. */
+  receivedAt?: Date;
+  /** Every failed write fails the store, because the same batch is stored again. */
+  redelivers?: boolean;
+  /** The raw capture's row id, so that a second delivery keeps no second copy. */
+  captureId?: string;
+}
+
+export interface StoreTracesContext extends RedeliveredContext {
   projectId: string;
   organization: Organization | null;
   /** The organization to count stored events against; omitted, nothing is counted. */
@@ -73,7 +83,15 @@ export interface StoreTracesDeps
 }
 
 export type StoreTracesResult =
-  | { ok: true; accepted: number; calls: number; spans: number; refused?: number }
+  | {
+      ok: true;
+      accepted: number;
+      calls: number;
+      spans: number;
+      refused?: number;
+      /** Only of a redelivering store: the spans of dropped traces. */
+      dropped?: number;
+    }
   | { ok: false; stage: "refused" | "storage" };
 
 /**
@@ -96,6 +114,8 @@ export async function storeTraceExport(
       endpoint: "/v1/traces",
       foldIntentGraph: true,
       meterTraces: context.meterTraces,
+      ...(context.receivedAt ? { receivedAt: context.receivedAt } : {}),
+      ...(context.redelivers ? { redelivers: true } : {}),
     },
     { ...deps, logError: observers.logError, captureFailure: observers.captureFailure },
   );
@@ -105,6 +125,7 @@ export async function storeTraceExport(
   if (!persisted.refused)
     await captureOtlpRawExport(
       {
+        ...(context.captureId ? { id: context.captureId } : {}),
         projectId: context.projectId,
         signal: "traces",
         contentType: context.transport === "json" ? "application/json" : "application/x-protobuf",
@@ -129,5 +150,6 @@ export async function storeTraceExport(
     calls: persisted.calls,
     spans: spans.length,
     ...(persisted.refused ? { refused: persisted.refused } : {}),
+    ...(context.redelivers && persisted.dropped ? { dropped: persisted.dropped } : {}),
   };
 }

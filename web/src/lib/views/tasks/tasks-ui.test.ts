@@ -102,6 +102,7 @@ function inputs(over: Partial<TasksInputs> = {}): TasksInputs {
       },
     ],
     recorded: null,
+    projectCorrections: null,
     topics: null,
     price: null,
     ...over,
@@ -147,7 +148,7 @@ test("Tasks: one header, four numbers, then every task over its steps as pins, w
   assert.match(
     html,
     new RegExp(
-      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections`)}Self-corrections per 100 runs</a></dt>`,
+      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections`)}Self-corrections per 100 turns</a></dt>`,
     ),
     "the number opens its page",
   );
@@ -165,7 +166,7 @@ test("Tasks: one header, four numbers, then every task over its steps as pins, w
   }
   assert.match(
     html,
-    /<th[^>]*><span[^>]*>Self-corrections<span[^>]*>per 100 runs<\/span><\/span><\/th>/,
+    /<th[^>]*><span[^>]*>Self-corrections<span[^>]*>per 100 turns<\/span><\/span><\/th>/,
   );
   assert.deepEqual(
     [...html.matchAll(/data-task-row="([^"]+)"/g)].map((m) => m[1]),
@@ -209,6 +210,26 @@ test("Tasks: one header, four numbers, then every task over its steps as pins, w
   );
   assert.match(html, />Not measured</, "intents before they are assigned");
   assert.match(html, /Asks no task handles[^]*Not measured yet/);
+});
+
+test("the self-corrections tile shows the Self-corrections page's number and opens it on the same window", () => {
+  const html = render(
+    createElement(TasksView, {
+      projectId: PROJECT_ID,
+      model: buildTaskList(
+        inputs({ projectCorrections: { windowDays: 30, turns: 400, events: 94 } }),
+      ),
+      now: NOW,
+    }),
+  );
+  assert.match(
+    html,
+    new RegExp(
+      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections?days=30`)}Self-corrections per 100 turns</a></dt><dd[^>]*><span[^>]*>23.5</span>`,
+    ),
+    "one decimal, as the page writes it",
+  );
+  assert.match(visibleText(html), /Every turn, last 30 days/);
 });
 
 test("the intents a task serves are pins that open on Intents: the first, and how many more", () => {
@@ -323,7 +344,7 @@ test("a task's page: a header in its color, its numbers, its steps as a drawing"
   assert.match(
     html,
     new RegExp(
-      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections?task=wf-release`)}Self-corrections per 100 runs</a></dt>`,
+      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections?task=wf-release`)}Self-corrections per 100 turns</a></dt>`,
     ),
   );
   assert.doesNotMatch(html, /Cost per run/, "no cost without model calls, so no stat to say so");

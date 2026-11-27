@@ -1,9 +1,5 @@
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import {
-  type HealthPageModel,
-  healthReadiness,
-  type WindowDays,
-} from "@/lib/readings/trace-signals/view";
+import type { HealthPageModel, WindowDays } from "@/lib/readings/trace-signals/view";
 import type { ImportSummary } from "@/lib/views/health/imports-types";
 import type { LedgerFacts, RunFacts } from "@/lib/views/health/ledger-facts";
 import { loadLedgerFacts, loadRunFacts } from "@/lib/views/health/ledger-facts-query";
@@ -14,6 +10,7 @@ import {
   readingRequestDue,
 } from "@/lib/views/health/page-state";
 import { requestHealthReading } from "@/lib/views/health/reading-request";
+import { isHealthUnlocked } from "@/lib/views/health/unlock";
 
 /**
  * The Agent health route's state, end to end. A page whose reading has
@@ -103,7 +100,8 @@ export async function loadHealthPageState(
   if (input.modelUnavailable) return UNAVAILABLE;
   const now = deps.now();
   const hasReading = input.model.computedAt !== null;
-  const readingReady = hasReading && healthReadiness(input.model) === "ready";
+  // The one rule the Overview's Needs attention reads too (RTL-367).
+  const readingReady = isHealthUnlocked(input.model);
   if (readingReady && !input.model.emptyEarlyReading) return readyState(input, deps, now);
 
   const imports = input.imports;
