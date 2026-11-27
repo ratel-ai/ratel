@@ -203,7 +203,8 @@ jobs:
         run: pnpm --filter @ratel/platform test
 
   # Kafka ingest on real servers (ADR-0010): the driver's conformance, that what it stores is what a
-  # direct send stores, and the two ingest queues at once on one database.
+  # direct send stores, the two ingest queues at once on one database, and a REBUILD racing the
+  # worker (two connections, which PGlite does not have).
   kafka-ingest:
     needs: changes
     if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
@@ -247,6 +248,7 @@ jobs:
         run: >
           pnpm --filter @ratel/platform exec tsx --no-wasm-code-gc --test --test-force-exit
           --test-concurrency=1 "src/lib/ingest/queue/kafka/*.integration.test.ts"
+          src/lib/ingest/queue/ingest-replay-race.test.ts
 
   # The cloud deployer: deploy.sh and the modules under deploy/terraform, checked with both
   # engines (format, init, validate). It logs in to no cloud: nothing is planned or created.
