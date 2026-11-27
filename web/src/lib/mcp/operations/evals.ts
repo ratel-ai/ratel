@@ -44,7 +44,9 @@ import {
   type EvalScorer,
   evalContentSchema,
   MAX_EVAL_NAME_CHARS,
+  matrixSchema,
   runProblem,
+  scorerRefSchema,
 } from "@/lib/views/evals/domain/eval";
 import type { SaveTarget } from "@/lib/views/evals/domain/eval-target";
 import {
@@ -63,7 +65,15 @@ import {
   startEachEvalRun,
   startEvalRun,
 } from "@/lib/views/evals/eval-runs";
-import { advance, experimentDeps } from "@/lib/views/evals/experiment-deps";
+import {
+  type ActionDeps,
+  type Actor,
+  datasetFor,
+  runChanges,
+  withDefinitions,
+} from "@/lib/views/evals/actions";
+import { advance, consoleApiDeps, experimentDeps } from "@/lib/views/evals/experiment-deps";
+import { datasetQuerySchema } from "@/lib/views/evals/domain/dataset";
 import { caseCounts, runFields, trialsByCase } from "@/lib/views/evals/experiment-view";
 import type { StartExperimentResult } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
@@ -125,6 +135,10 @@ export interface EvalsOperationDeps {
   /** The pin of an eval. With no eval: the pin of the suite runs. */
   getBaseline(projectId: string, evalId?: string | null): Promise<Baseline | null>;
   pinBaseline(projectId: string, experimentId: string, pinnedBy: string): Promise<PinResult>;
+  /** Removes the pin of that run. False when it was not pinned. */
+  unpinBaseline(projectId: string, experimentId: string): Promise<boolean>;
+  /** The actions of the Datasets and Evals pages (`views/evals/actions.ts`). */
+  actions(): ActionDeps;
   compareWithBaseline(projectId: string, experimentId: string): Promise<ComparisonResult>;
   getSandboxRun(projectId: string, runId: string): Promise<SandboxRun | null>;
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
@@ -197,6 +211,8 @@ const defaultDeps: EvalsOperationDeps = {
   caseVersion: (id) => createDrizzleExperimentStore(getDb()).caseVersion(id),
   getBaseline: (projectId, evalId) => baselineDeps().baselines.get(projectId, evalId ?? null),
   pinBaseline: (projectId, id, by) => pinBaseline(projectId, id, by, baselineDeps()),
+  unpinBaseline: (projectId, id) => baselineDeps().baselines.unpin(projectId, id),
+  actions: () => consoleApiDeps.actions(),
   compareWithBaseline: (projectId, id) => compareWithBaseline(projectId, id, baselineDeps()),
   getSandboxRun: getRun,
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
@@ -243,6 +259,33 @@ const scorerParam = z.discriminatedUnion("kind", [
       .describe("A yes-or-no question about the answer. Yes is a pass."),
   }),
 ]);
+
+/** A scorer of the library: evals_list_scorers gives the references. */
+const refScorerParam = z.object({
+  name: z.string().trim().min(1).max(100),
+  gating: z.boolean().default(true),
+  ref: scorerRefSchema.describe(
+    'A library reference: {"source":"project","scorerId":...} or {"source":"predefined","key":...,"settings":{...}}.',
+  ),
+});
+const anyScorerParam = z.union([refScorerParam, scorerParam]);
+const datasetQueryParam = z
+  .object({
+    kind: z.enum(["last_traces", "task_traces", "rql", "auto"]),
+    limit: z.number().int().min(1).max(500).optional(),
+    taskId: z.string().trim().min(1).max(200).optional(),
+    text: z.string().trim().min(1).max(20_000).optional(),
+  })
+  .describe("A new query dataset for the eval, named after it. Or give dataset.");
+const datasetNameParam = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .describe("A dataset of the project (name or id). evals_list_datasets gives them.");
+const matrixParam = z
+  .record(z.string(), z.array(z.union([z.string(), z.number(), z.boolean()])).min(1))
+  .describe("For each param, the values to try. A run has one variant for each combination, at most 12.");
 
 export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOperation[] {
   return [
@@ -341,7 +384,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Create an eval",
       description:
-        "Use this tool to create an eval: a name, an optional task id, a sandbox, default params, trials and scorers. This tool changes data: it adds an eval with an empty dataset. It returns the eval id and the version number. Add cases with evals_create_case.",
+        "Use this tool to create an eval: a name, a task, a runtime (a sandbox, pinned or not), a dataset or a new query, params, a matrix, trials and scorers. This tool changes data. With no dataset the eval gets an empty one. It returns the eval id and the version number.",
       keywords: ["evals", "new eval", "scorers"],
       scope: "project",
       mutates: true,
@@ -374,19 +417,37 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .max(MAX_TRIALS)
           .optional()
           .describe("The runs of each case."),
+        sandboxVersionId: uuidParam()
+          .optional()
+          .describe("A pinned version of the sandbox. Omit it for its newest ready version."),
+        dataset: datasetNameParam.optional(),
+        datasetQuery: datasetQueryParam.optional(),
+        matrix: matrixParam.optional(),
         scorers: z
-          .array(scorerParam)
+          .array(anyScorerParam)
           .max(20)
-          .describe("The scorers. A trial passes when every gating scorer passes."),
+          .describe(
+            "The scorers: library references, or checks and judges of this eval. A trial passes when every gating scorer passes.",
+          ),
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
+        if (params.dataset !== undefined && params.datasetQuery !== undefined) {
+          throw invalidParams("Give dataset or datasetQuery, not both.", [
+            { path: "datasetQuery", message: "Give dataset or datasetQuery, not both." },
+          ]);
+        }
+        const scorers = await scorersOf(deps, ctx.projectId, params.scorers);
+        const datasetId = await datasetIdOf(deps, ctx, params.name, params);
         const content = evalContentSchema.safeParse(
           storable({
+            datasetId,
             sandboxName: params.sandboxName ?? null,
+            sandboxVersionId: params.sandboxVersionId ?? null,
             params: params.params ?? {},
+            ...(params.matrix ? { matrix: params.matrix } : {}),
             ...(params.trials ? { trials: params.trials } : {}),
-            scorers: params.scorers.map(evalScorer),
+            scorers,
           }),
         );
         if (!content.success) throw contentRefusal(content.error);
@@ -409,6 +470,92 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           hint: problem
             ? `${problem} The eval is saved.`
             : `Call evals_create_case with eval "${created.name}" to add cases.`,
+        };
+      },
+    }),
+    defineOperation({
+      id: "evals_edit",
+      domain: "evals",
+      title: "Edit an eval",
+      description:
+        "Use this tool to change an eval: its name, task, runtime, dataset, params, matrix, trials or scorers. This tool changes data: a change of content adds a version, and a started run keeps its own. A field that you omit keeps its value. It returns the eval id and the version number.",
+      keywords: ["evals", "edit eval", "scorers", "matrix"],
+      scope: "project",
+      mutates: true,
+      apiKeyScope: "evals:write",
+      params: z.object({
+        ...projectScoped,
+        eval: evalParam,
+        name: z.string().trim().min(1).max(MAX_EVAL_NAME_CHARS).optional(),
+        taskId: z.string().trim().min(1).max(200).nullable().optional(),
+        sandboxName: z.string().trim().min(1).max(200).optional(),
+        sandboxVersionId: uuidParam()
+          .nullable()
+          .optional()
+          .describe("A pinned version, or null for the newest ready version."),
+        dataset: datasetNameParam.optional(),
+        datasetQuery: datasetQueryParam.optional(),
+        params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+        matrix: matrixParam.optional(),
+        trials: z.number().int().min(1).max(MAX_TRIALS).optional(),
+        scorers: z.array(anyScorerParam).min(1).max(20).optional(),
+      }),
+      async execute(ctx, params) {
+        await requireEvals(deps, ctx.projectId);
+        const found = await findEvalOf(deps, ctx.projectId, params.eval);
+        if (!found) throw notFound("eval");
+        const version = currentVersion(found);
+        const name = params.name ?? found.name;
+        const datasetId =
+          params.dataset !== undefined || params.datasetQuery !== undefined
+            ? await datasetIdOf(deps, ctx, name, params)
+            : version.datasetId;
+        const content = evalContentSchema.safeParse(
+          storable({
+            datasetId,
+            sandboxName: params.sandboxName ?? version.sandboxName,
+            sandboxVersionId:
+              params.sandboxVersionId === undefined
+                ? version.sandboxVersionId
+                : params.sandboxVersionId,
+            params: params.params ?? version.params,
+            matrix: params.matrix ?? version.matrix,
+            trials: params.trials ?? version.trials,
+            scorers: params.scorers
+              ? await scorersOf(deps, ctx.projectId, params.scorers)
+              : version.scorers,
+          }),
+        );
+        if (!content.success) throw contentRefusal(content.error);
+        const saved = await deps.actions().evals.update(
+          ctx.projectId,
+          found.id,
+          {
+            name,
+            taskId: params.taskId === undefined ? found.taskId : params.taskId,
+            content: content.data,
+          },
+          version.id,
+          { userId: requester(ctx.auth), now: deps.now() },
+        );
+        if (saved === "not_found") throw notFound("eval");
+        if (saved === "dataset_not_found") throw notFound("dataset");
+        if (saved === "changed" || saved === "name_taken") {
+          throw new McpOperationError(
+            "conflict",
+            saved === "changed"
+              ? "Another change came first. Read the eval again."
+              : "Another eval of the project has this name.",
+            { reason: saved },
+          );
+        }
+        const now = currentVersion(saved);
+        return {
+          data: { evalId: saved.id, name: saved.name, version: now.number },
+          hint:
+            now.id === version.id
+              ? "Nothing changed: the content is the same."
+              : `Version ${now.number} is saved. The next run uses it.`,
         };
       },
     }),
@@ -586,7 +733,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Start eval runs",
       description:
-        "Use this tool to start a run of one eval (eval), or one run for each eval. This tool changes data: it starts VM runs. A run can change, for itself only, the dataset, the runtime version, the params, a matrix and the trials. It returns each run id and its state. Call evals_get_run until the state is completed.",
+        "Use this tool to start a run of one eval (eval), or one run for each eval. This tool changes data: it starts VM runs. A run can change, for itself only, the dataset, added rows, the scorers, the runtime version, the params, a matrix and the trials. It returns each run id and its state.",
       keywords: ["evals", "start eval run", "matrix"],
       scope: "project",
       mutates: true,
@@ -626,18 +773,36 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .describe(
             "Values for the params of the runtime. They go over the defaults of each eval.",
           ),
-        matrix: z
-          .record(z.string(), z.array(z.union([z.string(), z.number(), z.boolean()])).min(1))
+        matrix: matrixParam.optional(),
+        rows: z
+          .discriminatedUnion("kind", [
+            z.object({ kind: z.literal("turns"), turnIds: z.array(uuidParam()).min(1).max(100) }),
+            z.object({
+              kind: z.enum(["last_traces", "auto"]),
+              limit: z.number().int().min(1).max(500),
+            }),
+          ])
           .optional()
           .describe(
-            "For each param, the values to try. A run has one variant for each combination, at most 12.",
+            "Rows for this run only (one eval): chosen trace turns, the last N traces, or Ratel's choice. They copy captured text.",
           ),
+        scorers: z
+          .array(refScorerParam)
+          .min(1)
+          .max(20)
+          .optional()
+          .describe("Library scorers for this run only (one eval), in place of the eval's."),
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
         if (params.eval !== undefined && params.evals !== undefined) {
           throw invalidParams("Give eval or evals, not both.", [
             { path: "evals", message: "Give eval or evals, not both." },
+          ]);
+        }
+        if ((params.rows || params.scorers) && params.eval === undefined) {
+          throw invalidParams("rows and scorers change one run: give eval.", [
+            { path: "eval", message: "rows and scorers change one run: give eval." },
           ]);
         }
         const organizationId = ctx.organizationId ?? (await deps.organizationIdOf(ctx.projectId));
@@ -649,13 +814,39 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           ...(params.matrix === undefined ? {} : { matrix: params.matrix }),
           ...(Object.keys(params.params).length === 0 ? {} : { params: params.params }),
         };
+        const extra =
+          params.rows || params.scorers
+            ? await runChanges(
+                ctx.projectId,
+                await actorOf(deps, ctx),
+                {
+                  ...(params.rows ? { rows: params.rows } : {}),
+                  ...(params.scorers
+                    ? {
+                        scorers: params.scorers.map((scorer, index) => ({
+                          ...scorer,
+                          id: `run-${index + 1}`,
+                        })),
+                      }
+                    : {}),
+                },
+                deps.actions(),
+              )
+            : null;
+        if (extra && !extra.ok) {
+          throw new McpOperationError(
+            extra.reason === "no_content_access" ? "forbidden" : "invalid_params",
+            extra.message,
+            { reason: extra.reason },
+          );
+        }
         const result = await deps.startRuns(
           { projectId: ctx.projectId, organizationId },
           {
             ...(params.eval ? { eval: params.eval } : {}),
             ...(params.evals ? { evals: params.evals } : {}),
             startedBy: requester(ctx.auth),
-            changes,
+            changes: { ...changes, ...(extra?.changes ?? {}) },
           },
         );
         if (!result.ok) throw startRefusal(result);
@@ -861,7 +1052,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       domain: "evals",
       title: "Pin the eval baseline",
       description:
-        "Use this tool to make a completed eval run the baseline of the project. This tool changes data: it replaces the pinned baseline. It returns the baseline run id and the time of the pin. evals_compare uses this baseline when you give no baselineRunId.",
+        "Use this tool to make a completed eval run the baseline of its eval. This tool changes data: it replaces the pinned baseline of that eval. It returns the baseline run id and the time of the pin. evals_compare uses this baseline when you give no baselineRunId.",
       keywords: ["evals", "pin baseline"],
       scope: "project",
       mutates: true,
@@ -880,6 +1071,28 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             pinnedAt: result.baseline.pinnedAt.toISOString(),
           },
           hint: "Call evals_compare with the runId of a later eval run to compare it with this baseline.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "evals_unpin_baseline",
+      domain: "evals",
+      title: "Unpin the eval baseline",
+      description:
+        "Use this tool to remove the pin of a baseline run. This tool changes data: the eval of the run has no baseline until another run is pinned, and its runs show no delta. It returns the run id that was the baseline.",
+      keywords: ["evals", "unpin baseline"],
+      scope: "project",
+      mutates: true,
+      apiKeyScope: "evals:write",
+      params: z.object({ ...projectScoped, runId: runIdParam }),
+      async execute(ctx, params) {
+        await requireEvals(deps, ctx.projectId);
+        if (!(await deps.unpinBaseline(ctx.projectId, params.runId))) {
+          throw notFound("pinned baseline run");
+        }
+        return {
+          data: { unpinnedRunId: params.runId },
+          hint: "Call evals_pin_baseline with a completed runId to pin another baseline.",
         };
       },
     }),
@@ -1422,4 +1635,75 @@ async function comparisonView(
       .map(({ caseId, name, candidate }) => ({ caseId, name, status: candidate?.status ?? null })),
     ...(readable ? {} : { contentWithheld: true }),
   };
+}
+
+/** The scorers of a request: a library reference gets the definition that the library has now. */
+async function scorersOf(
+  deps: EvalsOperationDeps,
+  projectId: string,
+  scorers: ReadonlyArray<z.output<typeof anyScorerParam>>,
+): Promise<EvalScorer[]> {
+  const inline = scorers.flatMap((scorer) => ("ref" in scorer ? [] : [evalScorer(scorer)]));
+  const refs = scorers.flatMap((scorer) =>
+    "ref" in scorer ? [{ ...scorer, id: randomUUID() }] : [],
+  );
+  if (refs.length === 0) return inline;
+  const resolved = await withDefinitions(projectId, refs, deps.actions());
+  if (!resolved.ok) {
+    throw new McpOperationError("invalid_params", resolved.message, { reason: resolved.reason });
+  }
+  // In the order of the request.
+  let next = 0;
+  let own = 0;
+  return scorers.map((scorer) =>
+    "ref" in scorer ? (resolved.scorers[next++] as EvalScorer) : (inline[own++] as EvalScorer),
+  );
+}
+
+/** The dataset of an eval: one named, a new query dataset, or none (null: its own fixed one). */
+async function datasetIdOf(
+  deps: EvalsOperationDeps,
+  ctx: Pick<OperationContext, "auth" | "projectId">,
+  evalName: string,
+  params: { dataset?: string | undefined; datasetQuery?: z.output<typeof datasetQueryParam> | undefined },
+): Promise<string | null> {
+  if (params.dataset === undefined && params.datasetQuery === undefined) return null;
+  const actions = deps.actions();
+  let choice: { datasetId: string } | { query: z.output<typeof datasetQuerySchema> };
+  if (params.dataset !== undefined) {
+    const byName = await actions.datasets.getByName(ctx.projectId, params.dataset);
+    const id = byName?.id ?? (z.uuid().safeParse(params.dataset).success ? params.dataset : null);
+    if (!id) throw notFound("dataset");
+    choice = { datasetId: id };
+  } else {
+    const query = datasetQuerySchema.safeParse(params.datasetQuery);
+    if (!query.success) {
+      const message = query.error.issues[0]?.message ?? "The query is not valid.";
+      throw invalidParams(message, [{ path: "datasetQuery", message }]);
+    }
+    choice = { query: query.data };
+  }
+  const found = await datasetFor(ctx.projectId, await actorOf(deps, ctx), choice, evalName, actions);
+  if (!found.ok) {
+    if (found.reason === "not_found") throw notFound("dataset");
+    throw new McpOperationError("invalid_params", found.message, { reason: found.reason });
+  }
+  return found.datasetId;
+}
+
+async function findEvalOf(
+  deps: EvalsOperationDeps,
+  projectId: string,
+  wanted: string,
+): Promise<EvalDefinition | null> {
+  const byName = await deps.getEvalByName(projectId, wanted);
+  if (byName) return byName;
+  return z.uuid().safeParse(wanted).success ? deps.getEval(projectId, wanted) : null;
+}
+
+async function actorOf(
+  deps: EvalsOperationDeps,
+  ctx: Pick<OperationContext, "auth" | "projectId">,
+): Promise<Actor> {
+  return { by: requester(ctx.auth), mayReadContent: await deps.mayReadContent(ctx) };
 }

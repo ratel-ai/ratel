@@ -282,6 +282,10 @@ function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDe
       ok: true,
       baseline: { evalId: null, experimentId, pinnedBy, pinnedAt: T0 },
     }),
+    unpinBaseline: async (_projectId, experimentId) => experimentId === BASE_RUN,
+    actions: () => {
+      throw new Error("these tests use no action of the pages");
+    },
     compareWithBaseline: async () => ({
       ok: true,
       pin: { evalId: null, experimentId: BASE_RUN, pinnedBy: "x", pinnedAt: T0 },
@@ -358,6 +362,8 @@ const PARAMS: Record<string, Record<string, unknown>> = {
   evals_get_trial: { runId: RUN, trialId: TRIAL },
   evals_compare: { runId: RUN },
   evals_pin_baseline: { runId: RUN },
+  evals_unpin_baseline: { runId: RUN },
+  evals_edit: { eval: "Refunds" },
 };
 const IDS = Object.keys(PARAMS);
 
@@ -372,15 +378,17 @@ test("evals: the tools are listed only when the flag is on for the caller", () =
   }
 });
 
-test("evals: create, create case, start and pin mutate; the rest only read; no approve tool", () => {
+test("evals: create, edit, create case, start, pin and unpin mutate; the rest only read; no approve tool", () => {
   const mutating = evalsOperations(fakeDeps())
     .filter((operation) => operation.mutates)
     .map((operation) => operation.id);
   assert.deepEqual(mutating, [
     "evals_create",
+    "evals_edit",
     "evals_create_case",
     "evals_start_run",
     "evals_pin_baseline",
+    "evals_unpin_baseline",
   ]);
   const ids = assembleOperations({ evals: true }).map((operation) => operation.id);
   assert.ok(!ids.some((id) => id.includes("approve")));
@@ -1163,4 +1171,17 @@ test("evals_get_run: a run of one eval compares with the baseline of its eval an
 test("evals_start_run: eval and evals together are refused", async () => {
   const refused = failure(await call("evals_start_run", { eval: "Refunds", evals: ["Status"] }));
   assert.equal(refused.error, "invalid_params");
+});
+
+test("evals: unpin removes the pin of a baseline run, and says when that run is not pinned", async () => {
+  const done = ok<{ unpinnedRunId: string }>(await call("evals_unpin_baseline", { runId: BASE_RUN }));
+  assert.equal(done.data.unpinnedRunId, BASE_RUN);
+  assert.equal(failure(await call("evals_unpin_baseline", { runId: RUN })).error, "not_found");
+});
+
+test("evals: rows and scorers of one run need one eval", async () => {
+  const result = failure(
+    await call("evals_start_run", { rows: { kind: "last_traces", limit: 5 } }),
+  );
+  assert.equal(result.error, "invalid_params");
 });

@@ -18,6 +18,8 @@ export const ACTION_FILES = {
   ],
   slack: ["lib/views/slack/*actions.ts", "lib/views/slack/install.ts"],
   locations: ["lib/ingest/geo/actions.ts"],
+  // The Datasets and Evals pages call session routes; these are their handlers.
+  evals: ["lib/views/evals/console-api.ts", "lib/views/evals/baseline-api.ts"],
   console: [
     "app/(console)/project/[projectId]/scorers/*actions.ts",
     "app/(console)/project/[projectId]/alerts/*actions.ts",
@@ -38,6 +40,20 @@ const CONSENT: Covered = {
 };
 
 export const PARITY: Readonly<Record<string, Covered>> = {
+  "lib/views/evals/console-api.ts#handleCreateDatasetByMember": "evals_create_dataset",
+  "lib/views/evals/console-api.ts#handleAddDatasetRowsByMember": "evals_add_dataset_row",
+  "lib/views/evals/console-api.ts#handleRemoveDatasetRowByMember": "evals_remove_dataset_row",
+  "lib/views/evals/console-api.ts#handlePreviewDatasetByMember": "evals_preview_dataset",
+  "lib/views/evals/console-api.ts#handleCreateEvalByMember": "evals_create",
+  "lib/views/evals/console-api.ts#handleEditEvalByMember": "evals_edit",
+  "lib/views/evals/console-api.ts#handleStartRunByMember": "evals_start_run",
+  "lib/views/evals/baseline-api.ts#handlePinByKey": "evals_pin_baseline",
+  "lib/views/evals/baseline-api.ts#handleUnpinByKey": "evals_unpin_baseline",
+  "lib/views/evals/baseline-api.ts#handleGetBaselineByKey": "evals_list_runs",
+  "lib/views/evals/baseline-api.ts#handleCompareByKey": "evals_compare",
+  "lib/views/evals/baseline-api.ts#handlePinByMember": "evals_pin_baseline",
+  "lib/views/evals/baseline-api.ts#handleUnpinByMember": "evals_unpin_baseline",
+  "lib/views/evals/baseline-api.ts#handleCompareByMember": "evals_compare",
   "lib/views/scorers/actions.ts#changeScorer": "change_scorer",
   "lib/views/scorers/actions.ts#testScorer": "test_scorer",
   "lib/views/scorers/actions.ts#authorizeScorers": CHECK,

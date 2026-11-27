@@ -21,7 +21,7 @@ import {
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const operations = new Map(
-  assembleOperations({ focusedConsole: true, customMonitoring: true }).map((operation) => [
+  assembleOperations({ focusedConsole: true, customMonitoring: true, evals: true }).map((operation) => [
     operation.id,
     operation,
   ]),

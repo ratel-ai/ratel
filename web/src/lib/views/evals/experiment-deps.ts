@@ -3,6 +3,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import { publicUrl } from "@/lib/platform/public-url";
 import { trackServerEvent } from "@/lib/platform/telemetry";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import {
   getRun,
   getSandboxVersion,
@@ -22,7 +23,10 @@ import { evalsAccess, readOnlyTools } from "./console-deps";
 import type { Experiment } from "./domain/experiment";
 import { advanceExperiment, type ExperimentDeps } from "./experiments";
 import type { ConsoleDeps, ExperimentsApiDeps } from "./experiments-api";
+import type { ConsoleApiDeps } from "./console-api";
+import { caseFromTurn } from "./domain/from-turn";
 import { judgeDeps } from "./judge-deps";
+import { loadTurnContent } from "./turn-content";
 
 /** Experiments over the real database, sandboxes and judge. */
 export function experimentDeps(): ExperimentDeps {
@@ -89,3 +93,29 @@ export const experimentsApiDeps: ExperimentsApiDeps = {
 };
 
 export const consoleExperimentDeps: ConsoleDeps = { ...experimentsApiDeps, ...evalsAccess };
+
+/** The session routes of the Datasets and Evals pages, over the real stores and session. */
+export const consoleApiDeps: ConsoleApiDeps = {
+  ...evalsAccess,
+  actions: () => ({
+    ...experimentDeps(),
+    datasets: createDrizzleDatasetStore(getDb()),
+    evals: createDrizzleEvalStore(getDb()),
+    turnRow,
+  }),
+  readContent: (projectId) => contentOptIn(projectId),
+  advance: experimentsApiDeps.advance,
+  track: (event, { externalId, projectId, organizationId }, fields) =>
+    trackServerEvent(
+      event,
+      { externalId, projectId, orgId: organizationId },
+      { object_action: event, surface: "console", ...fields },
+    ),
+  now: () => new Date(),
+};
+
+/** A row from a trace turn of the project: its frozen input, earlier messages and fixtures. */
+export async function turnRow(projectId: string, turnId: string) {
+  const turn = await loadTurnContent(projectId, turnId);
+  return turn ? caseFromTurn(turn, await readOnlyTools(projectId)) : null;
+}
