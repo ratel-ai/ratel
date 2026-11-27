@@ -93,7 +93,7 @@ function SeeAll({ href, children }: { href: string; children: ReactNode }) {
 
 /* - Self-corrections ---------------------------------------------------------- */
 
-/** One strip: how often per 100 runs, then each kind that happened as an icon and a count; the strip opens the Self-corrections page on this task. */
+/** One strip: how often per 100 turns, then each kind that happened as an icon and a count; the strip opens the Self-corrections page on this task. */
 export function CorrectionsStrip({
   projectId,
   taskId,
@@ -125,7 +125,7 @@ export function CorrectionsStrip({
               <span className="font-semibold text-fg tabular-nums">
                 {formatPer100(corrections.per100)}
               </span>{" "}
-              per 100 runs
+              per 100 turns
             </span>
             {happened.length === 0 ? (
               <span className={cn(QUIET, "inline-flex items-center gap-1.5")}>

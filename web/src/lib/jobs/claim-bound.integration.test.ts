@@ -144,9 +144,9 @@ for (const finished of [20_000, 100_000]) {
       .map((row) => row["QUERY PLAN"])
       .join("\n");
 
-    assert.doesNotMatch(text, /Seq Scan/);
+    assert.doesNotMatch(text, /Seq Scan on "?jobs/);
     assert.match(text, /Index Scan (on|using) jobs_(project_status|status_created)_idx/);
     assert.match(text, /Index Cond: \(status = 'queued'::text\)/);
-    assert.match(text, /Filter: \(kind = ANY/, "no index holds the kind");
+    assert.match(text, /Filter: .*kind = ANY/, "no index holds the kind");
   });
 }

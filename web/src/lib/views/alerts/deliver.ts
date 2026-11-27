@@ -2,6 +2,7 @@ import { and, eq, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import type { AlertNotice, AlertNotifier, NoticeOutcome } from "@/lib/views/alerts/notifier";
 import { storedQuery } from "@/lib/views/alerts/parse-rule";
@@ -105,6 +106,7 @@ async function pendingEvents(
     .where(
       and(
         claimable(now),
+        notOnHold(alertRules.projectId),
         off.length > 0 ? notInArray(alertRules.projectId, [...off]) : undefined,
         seen.length > 0 ? notInArray(alertEvents.id, [...seen]) : undefined,
       ),

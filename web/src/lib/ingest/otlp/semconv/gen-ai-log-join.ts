@@ -41,6 +41,8 @@ export interface GenAiLogJoinDeps {
   modelPricing?: ModelPricingIngestDeps;
   /** Reports a failed price read, as span ingest reports its own. */
   captureFailure?: (error: unknown) => void;
+  /** When the queued export was accepted (ADR-0010), for a call without a usable time. Absent, now. */
+  receivedAt?: Date;
 }
 
 /** Returns how many stored calls were restated. */
@@ -66,7 +68,7 @@ export async function rejoinStoredModelCalls(
       ? await restatePrices(projectId, deps.modelPricing, deps.captureFailure)
       : BUILT_IN_RESTATE;
   // As span ingest: the payload keeps the call's reply (RC-280).
-  const rows = toRows(projectId, calls, { captureReply: true }, prices).filter(
+  const rows = toRows(projectId, calls, { captureReply: true }, prices, deps.receivedAt).filter(
     (row) =>
       row.event.traceId &&
       row.event.spanId &&

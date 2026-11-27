@@ -43,7 +43,10 @@ export type EventWithMetric = {
   metric: Omit<NewEventMetric, "id" | "eventId" | "projectId">;
 };
 
-export type EventsDb = Pick<ReturnType<typeof getDb>, "insert">;
+export type EventsDb = Pick<ReturnType<typeof getDb>, "insert" | "select" | "transaction">;
+
+/** A statement takes 65,535 parameters, and an export up to 5,000 calls of 15 columns. */
+const EVENT_INSERT_CHUNK_SIZE = 500;
 
 /** A per-source token map for one aggregate bucket. */
 export type SourceSums = Record<ContextSource, number>;
@@ -64,9 +67,9 @@ export type DailyAggregateRow = {
 /**
  * Store a batch of agent events and their derived metrics. Raw events go into
  * `events` with `ON CONFLICT (project_id, dedupe_hash) DO NOTHING` so SDK retries are
- * idempotent; one `event_metrics` row per freshly inserted event. Not one transaction, so a
- * crash between the two inserts leaves an event with no metrics row. Returns the number of
- * newly stored events.
+ * idempotent; one `event_metrics` row per freshly inserted event, in one transaction. An event of
+ * the batch that is already stored without its metrics (a crash between the two inserts, before they
+ * were one transaction) gets them now. Returns the number of newly stored events.
  */
 export async function insertEventsWithMetrics(
   projectId: string,
@@ -85,21 +88,58 @@ export async function insertEventsWithMetrics(
   }
   const unique = [...byHash.values()];
 
-  const inserted = await db
-    .insert(events)
-    .values(unique.map((r) => r.event))
-    .onConflictDoNothing({ target: [events.projectId, events.dedupeHash] })
-    .returning({ id: events.id, dedupeHash: events.dedupeHash });
-  if (inserted.length === 0) return 0;
+  return db.transaction(async (tx) => {
+    let count = 0;
+    for (let offset = 0; offset < unique.length; offset += EVENT_INSERT_CHUNK_SIZE) {
+      const part = unique.slice(offset, offset + EVENT_INSERT_CHUNK_SIZE);
+      const inserted = await tx
+        .insert(events)
+        .values(part.map((r) => r.event))
+        .onConflictDoNothing({ target: [events.projectId, events.dedupeHash] })
+        .returning({ id: events.id, dedupeHash: events.dedupeHash });
+      const stored = new Set(inserted.map((e) => e.dedupeHash));
+      const bare = await eventsWithoutMetrics(
+        projectId,
+        part.flatMap(({ event: { dedupeHash } }) =>
+          dedupeHash != null && !stored.has(dedupeHash) ? [dedupeHash] : [],
+        ),
+        tx,
+      );
 
-  const metricRows: NewEventMetric[] = [];
-  for (const e of inserted) {
-    const r = e.dedupeHash != null ? byHash.get(e.dedupeHash) : undefined;
-    if (r) metricRows.push({ ...r.metric, eventId: e.id, projectId });
-  }
-  if (metricRows.length > 0) await db.insert(eventMetrics).values(metricRows);
+      const metricRows: NewEventMetric[] = [];
+      for (const e of [...inserted, ...bare]) {
+        const r = e.dedupeHash != null ? byHash.get(e.dedupeHash) : undefined;
+        if (r) metricRows.push({ ...r.metric, eventId: e.id, projectId });
+      }
+      if (metricRows.length > 0) {
+        await tx
+          .insert(eventMetrics)
+          .values(metricRows)
+          .onConflictDoNothing({ target: eventMetrics.eventId });
+      }
+      count += inserted.length;
+    }
+    return count;
+  });
+}
 
-  return inserted.length;
+async function eventsWithoutMetrics(
+  projectId: string,
+  hashes: string[],
+  db: Pick<EventsDb, "select">,
+): Promise<{ id: string; dedupeHash: string | null }[]> {
+  if (hashes.length === 0) return [];
+  return db
+    .select({ id: events.id, dedupeHash: events.dedupeHash })
+    .from(events)
+    .leftJoin(eventMetrics, eq(eventMetrics.eventId, events.id))
+    .where(
+      and(
+        eq(events.projectId, projectId),
+        inArray(events.dedupeHash, hashes),
+        isNull(eventMetrics.id),
+      ),
+    );
 }
 
 export type EventPresenceDb = Pick<ReturnType<typeof getDb>, "select">;
@@ -363,12 +403,14 @@ const otelLogsLogger = getLogger("db/otel-logs");
 /**
  * Idempotently persist a bounded batch of mapped OTLP log events, and the runtime catalog
  * definitions they carry. Duplicate deterministic ids are collapsed before writing, and each
- * statement stays below the PostgreSQL parameter ceiling.
+ * statement stays below the PostgreSQL parameter ceiling. A failed catalog upsert is logged and
+ * reported, or with `redelivers` (the caller stores the same batch again) thrown.
  */
 export async function insertOtelLogs(
   projectId: string,
   rows: Array<NewOtelLog & { catalogDefinition?: Omit<NewRuntimeCatalogEntry, "projectId"> }>,
   db: OtelLogsDb = getDb(),
+  { redelivers = false }: { redelivers?: boolean } = {},
 ): Promise<{ accepted: number }> {
   if (rows.length === 0) return { accepted: 0 };
 
@@ -406,6 +448,7 @@ export async function insertOtelLogs(
     try {
       await upsertRuntimeCatalogEntries([...definitions.values()], "events", db);
     } catch (error) {
+      if (redelivers) throw error;
       otelLogsLogger.error(
         { err: error, project_id: projectId, definition_count: definitions.size },
         "runtime catalog upsert failed",

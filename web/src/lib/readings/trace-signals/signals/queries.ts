@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from 
 import { jobs } from "@/lib/jobs/schema";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import {
   type NewTraceSignalRow,
@@ -290,7 +291,7 @@ export async function listSweepCandidates(
   const rows = await db
     .select({ id: projects.id, lastEnd, builtThrough: projects.traceTurnsBuiltThrough })
     .from(projects)
-    .where(isNotNull(projects.traceTurnsBuiltThrough));
+    .where(and(isNotNull(projects.traceTurnsBuiltThrough), notOnHold(projects.id)));
   return rows.flatMap((r) =>
     r.lastEnd !== null && r.builtThrough !== null && r.lastEnd.getTime() >= since.getTime()
       ? [{ projectId: r.id, lastTurnEndedAt: r.lastEnd, builtThrough: r.builtThrough }]

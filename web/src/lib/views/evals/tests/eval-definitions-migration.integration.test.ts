@@ -13,11 +13,11 @@ import { experimentPageModel } from "../page-model";
 import { NO_REFUND, ORGANIZATION_ID, OTHER_PROJECT_ID, PROJECT_ID } from "./support";
 
 /**
- * Migration 0065 puts each existing case into an eval made from its `task:` label and its scorer
+ * Migration 0066 puts each existing case into an eval made from its `task:` label and its scorer
  * set, and moves the scorers from the case version to the eval version. An experiment from before
  * it still reads.
  */
-const MIGRATION = "0065_eval_definitions.sql";
+const MIGRATION = "0066_eval_definitions.sql";
 const JUDGE = {
   id: "polite",
   name: "Polite",
@@ -256,7 +256,7 @@ test("a numbered name never takes the name of another label", async () => {
   );
 });
 
-/** A database with every migration before 0065, an organization and two projects. */
+/** A database with every migration before 0066, an organization and two projects. */
 async function beforeMigration() {
   const client = new PGlite();
   const files = readdirSync(MIGRATIONS_DIR)

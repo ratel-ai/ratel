@@ -76,6 +76,7 @@ import {
 } from "@/lib/views/health/self-corrections/page-load";
 import type { SelfCorrectionsPageModel } from "@/lib/views/health/self-corrections/page-model";
 import { selfCorrectionsHref } from "@/lib/views/health/self-corrections/paths";
+import { isHealthUnlocked } from "@/lib/views/health/unlock";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 
 /**
@@ -526,7 +527,7 @@ function healthHint(
   ) {
     return "Runs no reading has read yet are waiting. Call request_analysis with what: health to start one, then get_analysis_freshness with section health.";
   }
-  if (healthReadiness(model) !== "ready")
+  if (!isHealthUnlocked(model))
     return "Too early to call: a reading needs more turns. Check get_analysis_freshness, or try a wider windowDays.";
   return openIssues > 0
     ? "list_issue_examples with issue ids shows the turns behind an issue; list_insights and get_fix turn an issue into a change. get_self_corrections reads the agent's self-corrections."

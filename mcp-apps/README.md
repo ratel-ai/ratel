@@ -157,7 +157,8 @@ A view shows what its console page shows. Three rules keep it so:
 
 - **Numbers go through the page's formatter.** Where a page rounds its own way,
   the binding names a format that calls that page's function: `share` and
-  `per100` (the task pages, `lib/tasks/format.ts`), `whole` and `meter` (the
+  `per100` (the task pages' self-corrections per 100 turns,
+  `lib/tasks/format.ts`), `whole` and `meter` (the
   intent pages' whole percent), `taskCost` (a task's cost per run) and `points`
   (Agent health's "If fixed"). Do not reach for `percent` on a page that does
   not print the Traces page's percent.

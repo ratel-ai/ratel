@@ -33,6 +33,7 @@ import {
 import type { JobsDb } from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
 import type { ShadowTurn } from "@/lib/readings/intent-graph/fold";
 import {
@@ -1353,6 +1354,7 @@ export async function listProjectsWithUnfoldedEvents(
     .from(projects)
     .where(
       and(
+        notOnHold(projects.id),
         exists(
           db
             .select({ one: sql`1` })

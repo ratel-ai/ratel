@@ -77,20 +77,31 @@ const CONTENT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
 const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set(["error.type", "server.address"]);
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
 
-/** Filter and map normalized OTLP log records into standalone persistence rows. */
-export function toOtelLogRows(projectId: string, records: DecodedLogRecord[]): OtelLogRowsResult {
+/**
+ * Filter and map normalized OTLP log records into standalone persistence rows. `receivedAt` is the
+ * time of a record without a usable one (a queued export, ADR-0010); absent, now.
+ */
+export function toOtelLogRows(
+  projectId: string,
+  records: DecodedLogRecord[],
+  receivedAt?: Date,
+): OtelLogRowsResult {
   const accepted = records.filter(
     (record) =>
       record.eventName.startsWith("ratel.") || GEN_AI_LOG_EVENT_NAMES.has(record.eventName),
   );
 
   return {
-    rows: accepted.map((record) => toOtelLogRow(projectId, record)),
+    rows: accepted.map((record) => toOtelLogRow(projectId, record, receivedAt)),
     dropped: records.length - accepted.length,
   };
 }
 
-function toOtelLogRow(projectId: string, record: DecodedLogRecord): OtelLogRow {
+function toOtelLogRow(
+  projectId: string,
+  record: DecodedLogRecord,
+  receivedAt: Date | undefined,
+): OtelLogRow {
   const genAiEvent = GEN_AI_LOG_EVENT_NAMES.has(record.eventName);
   let scalarTruncated = false;
   const text = (value: string | null | undefined): string | null => {
@@ -109,7 +120,7 @@ function toOtelLogRow(projectId: string, record: DecodedLogRecord): OtelLogRow {
   );
   const eventId = text(attrString(record.attributes, RATEL.eventId));
   const serviceName = text(attrString(record.resourceAttributes, "service.name"));
-  const recordOccurredAt = occurredAt(record);
+  const recordOccurredAt = occurredAt(record, receivedAt);
   const catalogDefinition = record.catalogDefinition
     ? toCatalogDefinition(record.catalogDefinition, recordOccurredAt)
     : undefined;
@@ -181,8 +192,12 @@ function toCatalogDefinition(
   };
 }
 
-function occurredAt(record: DecodedLogRecord): Date {
-  const unixMs = validTime(record.timeUnixMs) ?? validTime(record.observedTimeUnixMs) ?? Date.now();
+function occurredAt(record: DecodedLogRecord, receivedAt: Date | undefined): Date {
+  const unixMs =
+    validTime(record.timeUnixMs) ??
+    validTime(record.observedTimeUnixMs) ??
+    receivedAt?.getTime() ??
+    Date.now();
   return new Date(unixMs);
 }
 

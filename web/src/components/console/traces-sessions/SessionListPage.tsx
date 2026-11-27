@@ -1,5 +1,6 @@
 import { ExploreLink } from "@/components/console/explore/ExploreLink";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
+import { hasUsableApiKey } from "@/lib/console/has-api-key";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import {
@@ -99,6 +100,9 @@ export async function SessionListPage({
       hasSpans: diagnostics.hasSpans,
     });
   }
+  // Nothing sent yet: the empty state points at the key onboarding made, or asks for one.
+  const hasApiKey = empty === "no-telemetry" && (await hasUsableApiKey(project.id));
+
   return (
     <SessionListView
       projectId={project.id}
@@ -108,6 +112,7 @@ export async function SessionListPage({
       nextCursor={page.nextCursor}
       now={now.toISOString()}
       empty={empty}
+      hasApiKey={hasApiKey}
       filterFacets={filterFacets}
       entities={filterOptions.entities}
     />

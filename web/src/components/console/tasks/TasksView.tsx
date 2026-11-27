@@ -10,12 +10,14 @@ import { TasksTable } from "@/components/console/tasks/TasksTable";
 import { TopLevelTasksTable } from "@/components/console/tasks/TopLevelTasksTable";
 import { DEFAULT_WORKFLOW_CONFIG } from "@/lib/readings/trace-signals/workflows/types";
 import { analysisPending, type SectionProgress } from "@/lib/views/freshness/model";
+import { formatRate } from "@/lib/views/health/self-corrections/page-model";
+import { selfCorrectionsHref as selfCorrectionsPageHref } from "@/lib/views/health/self-corrections/paths";
 import { absoluteTime, timeAgo } from "@/lib/views/intents/map/labels";
 import { compactNumber } from "@/lib/views/intents/map/map-model";
-import { formatPer100, formatShare } from "@/lib/views/tasks/format";
+import { formatShare, MISSING } from "@/lib/views/tasks/format";
 import type { TaskLiveScore } from "@/lib/views/tasks/live-scores";
 import type { TaskListModel } from "@/lib/views/tasks/model";
-import { agentHealthHref, selfCorrectionsHref } from "@/lib/views/tasks/paths";
+import { agentHealthHref } from "@/lib/views/tasks/paths";
 
 export const TASKS_TITLE = "Tasks";
 
@@ -128,9 +130,15 @@ function TasksStats({
           hint: "Ended without a failed call",
         },
         {
-          label: "Self-corrections per 100 runs",
-          value: formatPer100(stats.correctionsPer100),
-          href: selfCorrectionsHref(projectId),
+          // The Self-corrections page's headline, counted and written as it is there.
+          label: "Self-corrections per 100 turns",
+          value: stats.correctionsPer100 === null ? MISSING : formatRate(stats.correctionsPer100),
+          hint: stats.correctionsWindowDays
+            ? `Every turn, last ${stats.correctionsWindowDays} days`
+            : undefined,
+          href: selfCorrectionsPageHref(projectId, {
+            ...(stats.correctionsWindowDays ? { days: stats.correctionsWindowDays } : {}),
+          }),
         },
       ]}
     />

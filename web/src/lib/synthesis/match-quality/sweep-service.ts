@@ -1,8 +1,9 @@
-import { inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { getDb } from "@/lib/platform/db/client";
 import { checkMeteredFeature } from "@/lib/platform/entitlements";
 import { getLogger } from "@/lib/platform/logger";
+import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { getOrganizationById } from "@/lib/platform/organizations";
 import { projects } from "@/lib/platform/projects/schema";
 import {
@@ -96,7 +97,7 @@ export async function sweepMatchQuality(deps: SweepDeps = {}): Promise<SweepResu
       organizationId: projects.organizationId,
     })
     .from(projects)
-    .where(inArray(projects.id, due));
+    .where(and(inArray(projects.id, due), notOnHold(projects.id)));
   // The edition owns organizations: a project whose organization it does not know is skipped.
   const rows = [];
   for (const { organizationId, ...row } of projectRows) {
