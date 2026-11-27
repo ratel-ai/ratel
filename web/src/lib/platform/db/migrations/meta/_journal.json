@@ -327,22 +327,99 @@
     {
       "idx": 46,
       "version": "7",
-      "when": 1795591270136,
-      "tag": "0046_sandboxes",
+      "when": 1795610859298,
+      "tag": "0046_ingest_batches",
       "breakpoints": true
     },
     {
       "idx": 47,
       "version": "7",
-      "when": 1795592388883,
-      "tag": "0047_sandbox_secrets",
+      "when": 1795620000000,
+      "tag": "0047_dashboards",
       "breakpoints": true
     },
     {
       "idx": 48,
       "version": "7",
-      "when": 1795592618320,
-      "tag": "0048_sandbox_runs",
+      "when": 1795620001000,
+      "tag": "0048_trace_scorers",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795620002000,
+      "tag": "0049_trace_scorer_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795620003000,
+      "tag": "0050_trace_geography",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1795620004000,
+      "tag": "0051_alert_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1795620005000,
+      "tag": "0052_alert_destinations",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1795620006000,
+      "tag": "0053_slack_app",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795659636500,
+      "tag": "0054_alert_events_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795669202494,
+      "tag": "0055_task_scorers_to_presets",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795669202495,
+      "tag": "0056_session_user_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1795669202496,
+      "tag": "0057_rql_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1795678589859,
+      "tag": "0058_alert_rule_last_error",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795740457347,
+      "tag": "0059_sandboxes",
       "breakpoints": true
     }
   ]

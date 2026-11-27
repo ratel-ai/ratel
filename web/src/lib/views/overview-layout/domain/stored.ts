@@ -2,12 +2,15 @@ import { z } from "zod";
 import { bottomOf, GRID_COLUMNS, MAX_GRID_HEIGHT, overlaps } from "@/lib/console/grid/layout";
 import {
   changeLayout,
+  type DashboardItemId,
   defaultLayout,
+  isDashboardItem,
   type OfferedWidgets,
+  type OverviewItemId,
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewPlacement,
-  type OverviewWidgetId,
+  parseDashboardItem,
   settled,
 } from "./layout";
 
@@ -30,6 +33,8 @@ interface StoredWidget {
   w: number;
   h: number;
   hidden: boolean;
+  /** A dashboard widget's name as it was added. */
+  title?: string;
 }
 
 /** A person's layout, and their entries of widgets that are not offered now: never drawn, only kept. */
@@ -39,6 +44,7 @@ export interface OverviewArrangement {
 }
 
 const MAX_WIDGETS = 100;
+const MAX_ID = 200;
 const cells = (low: number, high: number) => z.int().min(low).max(high);
 const place = {
   x: cells(0, GRID_COLUMNS - 1),
@@ -49,16 +55,28 @@ const place = {
 
 const storedSchema = z.object({
   version: z.literal(LAYOUT_VERSION),
-  widgets: z.array(z.object({ id: z.string(), ...place, hidden: z.boolean() })).max(MAX_WIDGETS),
+  widgets: z
+    .array(
+      z.object({ id: z.string(), ...place, hidden: z.boolean(), title: z.string().optional() }),
+    )
+    .max(MAX_WIDGETS),
 });
 
 /** A change as it arrives over a boundary: a server action or an MCP call. */
 export function layoutChangeSchema(offered: OfferedWidgets): z.ZodType<OverviewLayoutChange> {
-  const widget = z.enum(offered.map(({ id }) => id));
+  const item = z
+    .string()
+    .max(MAX_ID)
+    .refine((id): id is DashboardItemId => parseDashboardItem(id) !== null);
+  // One that is there with a reference that cannot be read can be removed.
+  const there = z.string().max(MAX_ID).refine(isDashboardItem);
+  const own = z.enum(offered.map(({ id }) => id));
+  const widget = own.or(there);
   return z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("move"), widget, x: place.x, y: place.y }),
     z.object({ kind: z.literal("resize"), widget, w: place.w, h: place.h }),
-    z.object({ kind: z.enum(["add", "remove"]), widget }),
+    z.object({ kind: z.literal("add"), widget: own.or(item) }),
+    z.object({ kind: z.literal("remove"), widget }),
     z.object({
       kind: z.literal("arrange"),
       // Any id: a page that is open while the list changes still draws the old one.
@@ -72,19 +90,25 @@ export function layoutChangeSchema(offered: OfferedWidgets): z.ZodType<OverviewL
 /**
  * The arrangement in a stored value, for the widgets that are offered now. One that is not in it
  * is added at the end and visible. One that is in it but not offered is kept. A value that does
- * not parse, or that names a widget twice, reads as the default.
+ * not parse, or that names a widget twice, reads as the default. The dashboard widgets are kept
+ * like one that is not offered, unless `dashboardItems`: they are never added here.
  */
-export function readArrangement(stored: unknown, offered: OfferedWidgets): OverviewArrangement {
+export function readArrangement(
+  stored: unknown,
+  offered: OfferedWidgets,
+  dashboardItems = false,
+): OverviewArrangement {
   const entries = storedWidgets(stored);
   if (!entries) return { layout: defaultLayout(offered), kept: [] };
   const named = new Set(entries.map(({ id }) => id));
   const ids = new Set<string>(offered.map(({ id }) => id));
+  const isKnown = (id: string) => ids.has(id) || (dashboardItems && isDashboardItem(id));
   const known = entries
-    .filter(({ id }) => ids.has(id))
+    .filter(({ id }) => isKnown(id))
     .map(
       ({ hidden, ...entry }): OverviewPlacement => ({
         ...entry,
-        id: entry.id as OverviewWidgetId,
+        id: entry.id as OverviewItemId,
         removed: hidden,
       }),
     );
@@ -102,7 +126,7 @@ export function readArrangement(stored: unknown, offered: OfferedWidgets): Overv
     );
   return {
     layout: settled([...known, ...added], offered, returning(known)),
-    kept: entries.filter(({ id }) => !ids.has(id)),
+    kept: entries.filter(({ id }) => !isKnown(id)),
   };
 }
 
@@ -127,10 +151,7 @@ export function changeArrangement(
 export function storeArrangement({ layout, kept }: OverviewArrangement): StoredOverviewLayout {
   return {
     version: LAYOUT_VERSION,
-    widgets: [
-      ...kept,
-      ...layout.map(({ id, x, y, w, h, removed }) => ({ id, x, y, w, h, hidden: removed })),
-    ],
+    widgets: [...kept, ...layout.map(({ removed, ...entry }) => ({ ...entry, hidden: removed }))],
   };
 }
 
@@ -145,7 +166,7 @@ function storedWidgets(stored: unknown): readonly StoredWidget[] | null {
  * The widgets that are offered again after a save without them. The rest closed up over their
  * place, and only they are stored before what they overlap: they get the place back.
  */
-function returning(known: readonly OverviewPlacement[]): OverviewWidgetId[] {
+function returning(known: readonly OverviewPlacement[]): OverviewItemId[] {
   const visible = known.filter(({ removed }) => !removed);
   return visible
     .filter((widget, index) => visible.slice(index + 1).some((other) => overlaps(widget, other)))

@@ -12,7 +12,7 @@ import { SegmentedControl } from "@ratel/design-system/tabs";
 import { useCopyToClipboard } from "@ratel/design-system/use-copy-to-clipboard";
 import { ArrowRight, Check, Copy } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { SessionChatTranscript } from "@/components/console/session-chat/SessionChatView";
 import { RelativeTime, TruncatedText } from "@/components/console/traces/cells";
 import { useTraceNavigation } from "@/components/console/traces/navigation";
@@ -67,6 +67,8 @@ export type LoadSessionPanelChat = (
 
 export interface SessionListViewProps {
   projectId: string;
+  /** More actions for the page header. */
+  actions?: ReactNode;
   filter: SessionsFilter;
   rows: readonly SessionListRow[];
   nextCursor: string | null;
@@ -92,7 +94,13 @@ export function SessionListView(props: SessionListViewProps) {
   const { search, pending, go } = useTraceNavigation();
   return (
     <Page>
-      <TracesHeader projectId={projectId} search={search} timeWindow={null} onSearchChange={go} />
+      <TracesHeader
+        projectId={projectId}
+        search={search}
+        timeWindow={null}
+        onSearchChange={go}
+        actions={props.actions}
+      />
       <PageBody wide className="gap-4">
         <TabSummary projectId={projectId} tab="sessions" />
         <div className="flex flex-wrap items-center gap-2" data-sessions-filters>

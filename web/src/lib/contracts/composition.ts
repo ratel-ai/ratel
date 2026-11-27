@@ -14,6 +14,7 @@ import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
 import type { OnboardingPort } from "@/lib/contracts/onboarding";
 import type { RegistryPort } from "@/lib/contracts/registry";
 import type { Organization, SessionPort } from "@/lib/contracts/session";
+import type { SlackAppPort } from "@/lib/contracts/slack-app";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
 import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
@@ -244,6 +245,13 @@ export type CoreServices = {
    * edition built against an older core still type-checks; the core always lends it.
    */
   forcedFlag?: (flag: CoreFlag) => boolean | undefined;
+  /**
+   * Removes what the core keeps of an organization outside its projects: its Slack workspace, whose
+   * token Slack is asked to end, and its Slack app. Call it before the organization is deleted; it
+   * may run again. Optional so an edition built against an older core still type-checks; the core
+   * always lends it.
+   */
+  forgetOrganization?: (organizationId: string) => Promise<void>;
 };
 
 export type CompositionPorts = {
@@ -319,6 +327,11 @@ export type CompositionPorts = {
    * (`sandboxes.bundleDir`), which the web and the worker process must share.
    */
   sandboxBundles?: BundleStore;
+  /**
+   * Absent in the open-source edition, where an organization saves its own Slack app in its
+   * settings. With it, the edition supplies the app and the settings show no app fields.
+   */
+  slackApp?: SlackAppPort;
 };
 
 export const PORT_NAMES = [

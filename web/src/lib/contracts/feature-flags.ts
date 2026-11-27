@@ -18,6 +18,9 @@ export const CORE_FLAGS = [
   "focusedConsole",
   // Ratel sandboxes. Owner: rstagi. Remove once `sandboxes` is on for every organization.
   "sandboxes",
+  // Owner: rstagi. Scorers, dashboards, alerts, Slack delivery and RQL. Remove with the stacked
+  // flag-removal PR, once on for all users.
+  "customMonitoring",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

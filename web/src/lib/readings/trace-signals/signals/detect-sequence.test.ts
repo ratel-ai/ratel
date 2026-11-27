@@ -54,6 +54,21 @@ test("sequence_chain: a pair run in both orders is co-occurrence, and without a 
   assert.equal(signal?.route, "none");
 });
 
+test("sequence_chain stays quiet when the pair is not nearly always together", () => {
+  // gate follows read in 60% of read turns, and 17% of gate turns follow a read:
+  // enough for lift and the old floor, not "always".
+  const sometimes = () => fresh().search(["read", "gate"]).invoke("read").invoke("gate");
+  const readOnly = () => fresh().search(["read"]).invoke("read");
+  const gateOnly = () => fresh().search(["gate"]).invoke("gate");
+  const turns = signalTurns([
+    ...times(12, sometimes),
+    ...times(8, readOnly),
+    ...times(60, gateOnly),
+    ...times(400, other),
+  ]);
+  assert.equal(detect(turns).signals.filter((s) => s.kind === "sequence_chain").length, 0);
+});
+
 test("sequence_chain needs the pair floor, the lift floor and eligible tools", () => {
   const few = signalTurns([...times(9, chain), ...times(40, other)]);
   assert.equal(
@@ -129,6 +144,16 @@ test("repeat_invoke fires at its floors and not below", () => {
   assert.equal(signal?.severity, round4(wilsonLow(3, 10)));
   const below = detect(signalTurns([...times(2, thrice), ...times(8, once)]), 20, floors);
   assert.equal(below.signals.filter((s) => s.kind === "repeat_invoke").length, 0);
+});
+
+test("repeat_invoke does not count one batch of parallel calls as repeats", () => {
+  // One call per item in a single model step (per-worker upserts) is a fan-out, not the agent going back.
+  const batch = () =>
+    fresh({ stepMs: 50 }).search(["note"]).invoke("note").invoke("note").invoke("note");
+  const once = () => fresh().search(["note"]).invoke("note");
+  const floors = withFloors("repeat_invoke", { minLow: wilsonLow(3, 10) });
+  const found = detect(signalTurns([...times(5, batch), ...times(5, once)]), 20, floors);
+  assert.equal(found.signals.filter((s) => s.kind === "repeat_invoke").length, 0);
 });
 
 test("with pass two skipped sequence_chain is not measured, the pass-one kinds still are", () => {

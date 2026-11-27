@@ -41,20 +41,34 @@ export interface ScoreTasksJobDeps extends TaskJudgeDeps, ReportDeps {
   db?: ReturnType<typeof getDb>;
   flagDeps?: OrganizationFlagDeps;
   now?: () => Date;
+  /** Whether the top-level scorers (`views/scorers`) do a project's live scoring instead. */
+  scorersOn?: (projectId: string) => Promise<boolean>;
 }
 
+/** The database of the queue: it may also create scorers (`seedPresets`), in a transaction. */
+type QueueDb = EvalDb & Pick<ReturnType<typeof getDb>, "transaction">;
+
 export interface EnqueueScoreTasksDeps extends ReportDeps {
-  db?: EvalDb;
+  db?: QueueDb;
   flagDeps?: OrganizationFlagDeps;
   now?: () => Date;
+  /** Whether the top-level scorers (`views/scorers`) do a project's live scoring instead. */
+  scorersOn?: (projectId: string) => Promise<boolean>;
+  /** With the top-level scorers on: give the project's new tasks their default presets. */
+  seedPresets?: (projectId: string, now: Date, db: QueueDb) => Promise<unknown>;
 }
 
 /** Score closed task runs by UTC day. Repeated jobs replace the current day's counts. */
 export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps = {}) {
   const db = deps.db ?? getDb();
   if (!(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))) {
-    await reportGateRefusal(projectId, "job", deps);
+    await reportSkip(projectId, "gate_off", "job", deps);
     return { scored: false, reason: "gate_off" };
+  }
+  // A job queued before the flag turned on writes nothing: the scorers' sweep scores the project.
+  if (await deps.scorersOn?.(projectId)) {
+    await reportSkip(projectId, "trace_scorers", "job", deps);
+    return { scored: false, reason: "trace_scorers" };
   }
   const startedAt = Date.now();
   const now = deps.now?.() ?? new Date();
@@ -182,7 +196,9 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
 /**
  * Queue live scoring for one project. The signal run calls it when it completes, and the daily sweep
  * calls it for each project with task runs. A gate refusal is logged, tracked and recorded as a
- * finished job, so the sweep refuses a project at most once a UTC day.
+ * finished job, so the sweep refuses a project at most once a UTC day. A project whose top-level
+ * scorers do its live scoring is skipped the same way; its due eval sets are queued here, because
+ * the job that queues them does not run.
  */
 export async function enqueueScoreTasksJob(
   projectId: string,
@@ -191,16 +207,25 @@ export async function enqueueScoreTasksJob(
 ): Promise<{ id: string } | null> {
   const db = deps.db ?? getDb();
   const now = deps.now?.() ?? new Date();
-  if (!(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))) {
+  const skipped = !(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))
+    ? "gate_off"
+    : (await deps.scorersOn?.(projectId))
+      ? "trace_scorers"
+      : null;
+  if (skipped) {
     await db.insert(jobs).values({
       projectId,
       kind: "score_tasks",
       status: "done",
-      result: { scored: false, reason: "gate_off", trigger },
+      result: { scored: false, reason: skipped, trigger },
       createdAt: now,
       finishedAt: now,
     });
-    await reportGateRefusal(projectId, trigger, deps);
+    await reportSkip(projectId, skipped, trigger, deps);
+    if (skipped === "trace_scorers") {
+      await deps.seedPresets?.(projectId, now, db);
+      await enqueueDueTaskEvalSets(projectId, { db, flagDeps: deps.flagDeps, now: () => now });
+    }
     return null;
   }
   const [job] = await db
@@ -293,12 +318,13 @@ function dailyScores(runs: readonly RunRecord[], scorers: readonly Scorer[]): Da
   return scores;
 }
 
-async function reportGateRefusal(
+async function reportSkip(
   projectId: string,
+  reason: "gate_off" | "trace_scorers",
   trigger: ScoreTrigger,
   deps: ReportDeps,
 ): Promise<void> {
-  const fields = { project_id: projectId, reason: "gate_off", trigger };
+  const fields = { project_id: projectId, reason, trigger };
   (deps.logger ?? logger).info(fields, "skipped task scoring");
   await (deps.observability ?? createBackgroundObservability()).trackSystemEvent(
     "task_scores_skipped",

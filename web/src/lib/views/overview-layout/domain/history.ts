@@ -3,7 +3,7 @@ import {
   type OverviewLayout,
   type OverviewLayoutChange,
   type OverviewPlacement,
-  WIDGET_TITLES,
+  placementTitle,
 } from "./layout";
 import {
   isUnreadable,
@@ -77,13 +77,15 @@ export function nextChange(
   record: LayoutRecord,
   next: OverviewArrangement,
   offered: OfferedWidgets,
+  dashboardItems: boolean,
   what: Pick<LayoutChangeEntry, "kind" | "source" | "summary"> & { undoes?: number | null },
 ): LayoutWrite | null {
   const layout = storeArrangement(next);
   if (
     what.kind !== "undo" &&
     !isUnreadable(record.layout) &&
-    canonical(layout) === canonical(storeArrangement(readArrangement(record.layout, offered)))
+    canonical(layout) ===
+      canonical(storeArrangement(readArrangement(record.layout, offered, dashboardItems)))
   )
     return null;
   return {
@@ -120,10 +122,11 @@ export function describeChange(
   after: OverviewLayout,
 ): string {
   if (change.kind === "reset") return "Reset to the default layout";
-  if (change.kind === "add") return `Added ${titleOf(change.widget)}`;
-  if (change.kind === "remove") return `Removed ${titleOf(change.widget)}`;
-  if (change.kind === "resize") return `Resized ${titleOf(change.widget)}`;
-  if (change.kind === "move") return `Moved ${titleOf(change.widget)}`;
+  if (change.kind !== "arrange") {
+    const { widget: id } = change;
+    const named = [...after, ...before].find((entry) => entry.id === id) ?? { id };
+    return clipped(`${VERBS[change.kind]} ${placementTitle(named)}`);
+  }
   const changed = changedWidgets(before, after);
   // Others made room for the one the person took.
   const taken = changed.filter(({ widget }) => widget.id === change.widget);
@@ -131,7 +134,7 @@ export function describeChange(
   const verb = named.some(({ resized }) => resized) ? "Resized" : "Moved";
   return named.length === 0
     ? "Arranged the widgets"
-    : `${verb} ${listed(named.map(({ widget }) => titleOf(widget.id)))}`;
+    : clipped(`${verb} ${listed(named.map(({ widget }) => placementTitle(widget)))}`);
 }
 
 export const describeUndo = ({ summary }: Pick<UndoTarget, "summary">) =>
@@ -145,6 +148,7 @@ export const describeRestore = ({ kind, summary }: Pick<LayoutChangeEntry, "kind
 
 const UNRECORDED = "A change that has no entry";
 const MAX_SUMMARY = 200;
+const VERBS = { add: "Added", remove: "Removed", resize: "Resized", move: "Moved" } as const;
 
 function changedWidgets(before: OverviewLayout, after: OverviewLayout) {
   const was = new Map(before.map((widget) => [widget.id, widget]));
@@ -156,10 +160,6 @@ function changedWidgets(before: OverviewLayout, after: OverviewLayout) {
       const resized = old.w !== widget.w || old.h !== widget.h;
       return resized || old.x !== widget.x || old.y !== widget.y ? [{ widget, resized }] : [];
     });
-}
-
-function titleOf(id: OverviewPlacement["id"]): string {
-  return WIDGET_TITLES[id];
 }
 
 function listed(names: readonly string[]): string {

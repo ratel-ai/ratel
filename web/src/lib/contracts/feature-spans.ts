@@ -18,6 +18,10 @@ export type FeatureName =
   | "agents_pages"
   | "tool_run_insights"
   | "hosted_apis"
+  | "scorers"
+  | "alerts"
+  | "explore"
+  | "rql"
   | "sandboxes";
 
 export type FeatureSpanOptions = {

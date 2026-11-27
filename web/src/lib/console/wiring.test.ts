@@ -147,7 +147,7 @@ test("every job that works on one project runs in the project log context", () =
 });
 
 test("startup lends the edition the onboarding service with the other core services", () => {
-  assert.match(source("instrumentation.node.ts"), /\bonboarding: createOnboardingService\(\)/);
+  assert.match(source("instrumentation-node.ts"), /\bonboarding: createOnboardingService\(\)/);
 });
 
 test('the playground page is headed "Test a search", under Catalog', () => {
@@ -173,6 +173,17 @@ test("the shell decides focusedConsole per organization and the rail reads it", 
   assert.match(
     source("components/console/shell/AppFrame.tsx"),
     /focusedConsoleOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*focusedConsole,/,
+  );
+});
+
+test("the shell decides customMonitoring per organization and the rail reads them", () => {
+  assert.match(
+    source("components/console/shell/ConsoleShell.tsx"),
+    /customMonitoringOrganizationIds\(organizations\)/,
+  );
+  assert.match(
+    source("components/console/shell/AppFrame.tsx"),
+    /customMonitoringOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*customMonitoring,/,
   );
 });
 

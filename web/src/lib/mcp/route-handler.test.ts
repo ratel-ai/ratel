@@ -38,6 +38,8 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     globalLimiter: createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 }),
     trackServerEvent: (async () => undefined) as never,
     launchAccess: async () => true,
+    // The pinned surface is without the RQL tools: route-handler.rql.test.ts has them.
+    customMonitoring: async () => false,
     ...overrides,
   };
 }
@@ -337,6 +339,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
   // Owned: the deployment's configured switches, not upstream's flag service.
   assert.deepEqual(keys, [
     "agentsPages",
+    "customMonitoring",
     "evalGate",
     "focusedConsole",
     "mcpApps",

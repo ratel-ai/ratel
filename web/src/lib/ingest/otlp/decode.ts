@@ -98,6 +98,22 @@ export function decodeOtlpRequest(
   return request;
 }
 
+/** An export with its spans edited in place, in the order they decode, in the format it came in. */
+export function editOtlpExport(
+  transport: "json" | "protobuf",
+  bytes: Uint8Array,
+  edit: (request: IExportTraceServiceRequest) => void,
+): Uint8Array {
+  if (transport === "json") {
+    const request = JSON.parse(Buffer.from(bytes).toString("utf8")) as IExportTraceServiceRequest;
+    edit(request);
+    return new TextEncoder().encode(JSON.stringify(request));
+  }
+  const message = RequestType.decode(bytes);
+  edit(message as unknown as IExportTraceServiceRequest);
+  return RequestType.encode(message).finish();
+}
+
 /** Ids as lowercase hex: protobufjs gives base64 (`bytes: String`), and OTLP/JSON may send either. */
 function hexIds(item: Pick<RawSpan, "traceId" | "spanId" | "parentSpanId">): void {
   for (const key of ["traceId", "spanId", "parentSpanId"] as const) {
