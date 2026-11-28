@@ -66,7 +66,7 @@ test("after FROM the editor offers the tables only", () => {
   assert.equal(at("select count(*) from tr|")?.from, 21);
 });
 
-test("the columns are those of the table in FROM, with the functions, keywords and operators", () => {
+test("the columns are those of the table in FROM, then the functions", () => {
   const options = labels("select | from scores") ?? [];
   const scores = RQL_TABLES.find((t) => t.name === "scores");
   assert.ok(scores);
@@ -74,12 +74,7 @@ test("the columns are those of the table in FROM, with the functions, keywords a
   assert.ok(
     !options.includes("duration_ms") || scores.columns.some((c) => c.name === "duration_ms"),
   );
-  for (const word of ["count", "rate", "each", "select", "group by", "like"])
-    assert.ok(options.includes(word), word);
-  // No FROM yet: every column of every table, once.
-  const all = labels("select |") ?? [];
-  assert.equal(all.filter((name) => name === "trace_id").length, 1);
-  assert.ok(all.includes("duration_ms") && all.includes("scorer"));
+  for (const word of ["count", "rate", "each"]) assert.ok(options.includes(word), word);
 });
 
 test("a function has its signature and description; a column its type and description", () => {
@@ -137,4 +132,177 @@ test("the editor offers tasks on traces and scores (RTL-397)", () => {
   for (const table of ["traces", "scores"])
     assert.ok((labels(`select | from ${table}`) ?? []).includes("tasks"), table);
   assert.ok(!(labels("select | from events") ?? []).includes("tasks"));
+});
+
+const types = (text: string) => [...new Set(at(text)?.options.map((option) => option.type))];
+const TRACES = RQL_TABLES.find((t) => t.name === "traces")?.columns.map((c) => c.name) ?? [];
+const FUNCTIONS = RQL_FUNCTIONS.map((fn) => fn.name);
+
+test("where an operand is expected the editor offers the columns, then the functions, no operator", () => {
+  for (const text of [
+    "select count(*) from traces where |",
+    "select count(*) from traces where has_error and |",
+    "select count(*) from traces where has_error or |",
+    "select count(*) from traces where not |",
+    "select count(*) from traces where duration_ms > |",
+    "select count(*) from traces where duration_ms + |",
+    "select count(*) from traces where (|",
+    "select count(|) from traces",
+    "select service_name, count(*) from traces group by |",
+    "select service_name, count(*) from traces group by service_name, |",
+    "select service_name, count(*) from traces group by service_name having |",
+    "select service_name from traces order by |",
+    "select service_name from traces order by service_name, |",
+    "select count(*) from traces on |",
+  ])
+    assert.deepEqual(labels(text), [...TRACES, ...FUNCTIONS], text);
+  // Typing a word keeps the place: the list starts at the word.
+  assert.deepEqual(labels("select count(*) from traces where dur|"), [...TRACES, ...FUNCTIONS]);
+  assert.equal(at("select count(*) from traces where dur|")?.from, 34);
+});
+
+test("in a select list the editor also offers *, and no operator", () => {
+  assert.deepEqual(labels("select | from traces"), ["*", "distinct", ...TRACES, ...FUNCTIONS]);
+  assert.deepEqual(labels("select distinct | from traces"), ["*", ...TRACES, ...FUNCTIONS]);
+  assert.deepEqual(labels("select service_name, | from traces"), ["*", ...TRACES, ...FUNCTIONS]);
+  // A comma between the arguments of a function is not a select item.
+  assert.deepEqual(labels("select coalesce(cost_usd, |) from traces"), [...TRACES, ...FUNCTIONS]);
+  assert.deepEqual(types("select | from traces"), ["keyword", "property", "function"]);
+  assert.ok(compileRql("select * from traces", { now: NOW }).ok);
+});
+
+test("before there is a table in FROM the editor offers the columns of every table, each once, with its tables", () => {
+  const options = at("select |")?.options ?? [];
+  const columns = options.filter((option) => option.type === "property");
+  assert.deepEqual(
+    columns.map((column) => column.label),
+    [...new Set(RQL_TABLES.flatMap((table) => table.columns.map((c) => c.name)))],
+  );
+  for (const column of columns) {
+    const tables = RQL_TABLES.filter((t) => t.columns.some((c) => c.name === column.label));
+    assert.ok(column.detail?.endsWith(` · ${tables.map((t) => t.name).join(", ")}`), column.label);
+  }
+  assert.match(columns.find((c) => c.label === "scorer")?.detail ?? "", /^text · scores$/);
+  assert.deepEqual(types("select |"), ["keyword", "property", "function"]);
+  assert.deepEqual(types("select count(*) where |"), ["property", "function"]);
+});
+
+test("after a whole operand the editor offers the keywords that can follow, then the operators", () => {
+  const operators = describeRqlSchema().operators.map((operator) => operator.toLowerCase());
+  const symbols = ["=", "!=", "<", "<=", ">", ">=", "+", "-", "*", "/", "<>"];
+  const between = ["and", "or", "like", "ilike", "in", "between"];
+  const follows = (text: string, words: string[]) => {
+    const found = labels(text) ?? [];
+    assert.deepEqual(found.slice(0, words.length), words, text);
+    const rest = found.slice(words.length);
+    assert.deepEqual(rest.slice(0, between.length), between, text);
+    for (const symbol of symbols) assert.ok(rest.includes(symbol), `${text} ${symbol}`);
+    // Every operator is one of the schema description; no column, no function.
+    for (const label of rest) assert.ok(operators.includes(label), `${text} ${label}`);
+  };
+  follows("select service_name | from traces", ["as", "from"]);
+  follows("select count(*) |", ["as", "from"]);
+  follows("select count(*) from traces where has_error |", ["group by", "order by", "limit"]);
+  follows("select count(*) from traces where service_name = 'a' |", [
+    "group by",
+    "order by",
+    "limit",
+  ]);
+  follows("select count(*) from traces where (duration_ms > 5) |", [
+    "group by",
+    "order by",
+    "limit",
+  ]);
+  follows("select service_name from traces group by service_name |", [
+    "having",
+    "order by",
+    "limit",
+  ]);
+  follows("select service_name from traces group by 1 having count(*) > 1 |", [
+    "order by",
+    "limit",
+  ]);
+  follows("select service_name from traces order by service_name |", [
+    "asc",
+    "desc",
+    "nulls first",
+    "nulls last",
+    "limit",
+  ]);
+  // Inside parentheses no clause can start.
+  follows("select count(*) from traces where (has_error |", []);
+  // A word being typed keeps the place.
+  assert.deepEqual(labels("select service_name fr|")?.slice(0, 2), ["as", "from"]);
+});
+
+test("where no operator fits the editor offers the keywords that can follow only", () => {
+  assert.deepEqual(labels("|"), ["select"]);
+  assert.deepEqual(labels("select * |"), ["from"]);
+  assert.deepEqual(labels("select count(*) as n |"), ["from"]);
+  assert.deepEqual(labels("select count(*) from traces |"), [
+    "where",
+    "group by",
+    "order by",
+    "limit",
+  ]);
+  assert.deepEqual(labels("select service_name from traces order by service_name desc |"), [
+    "nulls first",
+    "nulls last",
+    "limit",
+  ]);
+  assert.deepEqual(labels("select count(*) from traces where session_id is |"), [
+    "not",
+    "null",
+    "true",
+    "false",
+  ]);
+  assert.deepEqual(labels("select count(*) from traces where session_id is not |"), [
+    "null",
+    "true",
+    "false",
+  ]);
+  // The second word of GROUP BY: the list starts at the first.
+  const by = at("select count(*) from traces group b|");
+  assert.deepEqual([by?.from, by?.options.map((o) => o.label)], [28, ["group by"]]);
+  const nulls = at("select service_name from traces order by service_name nulls |");
+  assert.deepEqual(
+    [nulls?.from, nulls?.options.map((o) => o.label)],
+    [54, ["nulls first", "nulls last"]],
+  );
+  // An alias, a row count and an attribute key are the person's own: nothing to offer.
+  for (const text of [
+    "select count(*) as |",
+    "select count(*) from traces limit |",
+    "select count(*) from traces limit 5 |",
+    "select attributes[|",
+  ])
+    assert.equal(at(text), null, text);
+});
+
+test("a list the person asked for with no word typed follows the same places", () => {
+  const explicit = (text: string) =>
+    rqlCompletions(text, text.length, true)?.options.map((option) => option.type);
+  assert.deepEqual([...new Set(explicit("select "))], ["keyword", "property", "function"]);
+  assert.deepEqual(
+    [...new Set(explicit("select count(*) from traces where "))],
+    ["property", "function"],
+  );
+  assert.deepEqual([...new Set(explicit("select count(*) from "))], ["class"]);
+  assert.deepEqual(
+    [...new Set(explicit("select count(*) from traces where has_error "))],
+    ["keyword", "operator"],
+  );
+  // Not asked for, and no word: no list.
+  assert.equal(rqlCompletions("select ", 7, false), null);
+});
+
+test("a comment and a string do not change the place", () => {
+  assert.deepEqual(labels("select count(*) -- from\n from traces where |"), [
+    ...TRACES,
+    ...FUNCTIONS,
+  ]);
+  assert.deepEqual(labels("select count(*) from traces where service_name = 'a, b' and |"), [
+    ...TRACES,
+    ...FUNCTIONS,
+  ]);
 });

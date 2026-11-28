@@ -2,11 +2,11 @@ import { RQL_FUNCTIONS, RQL_TABLES, type RqlTableName, type RqlType } from "./ca
 import { describeRqlSchema } from "./describe";
 
 /**
- * What the RQL field of the console offers as a person writes: the tables, the columns of the
- * table in FROM, the functions with their signatures, the keywords and the operators. It reads the
- * same catalog as the compiler and `describe_rql_schema`, so it offers nothing the compiler
- * refuses. The project's trace properties are an input, not part of the catalog: inside
- * `properties['` it offers them, a detected one off. Pure and safe for the browser.
+ * What the RQL field of the console offers as a person writes, by the place of the cursor: the
+ * tables, the columns of the table in FROM, the functions with their signatures, the keywords and
+ * the operators. It reads the same catalog as the compiler and `describe_rql_schema`, so it offers
+ * nothing the compiler refuses. The project's trace properties are an input, not part of the
+ * catalog: inside `properties['` it offers them, a detected one off. Pure and safe for the browser.
  */
 
 /** The trace properties of the project, as the page read them. */
@@ -37,6 +37,13 @@ export interface RqlCompletion {
   disabled?: true;
 }
 
+/** A word, a value or a symbol of the text, outside the comments. A word is in lower case. */
+interface Token {
+  kind: "word" | "value" | "symbol";
+  text: string;
+  start: number;
+}
+
 /** The keywords of a SELECT that RQL accepts, in the order a query reads them. */
 export const RQL_KEYWORDS = [
   "select",
@@ -64,6 +71,7 @@ export const RQL_KEYWORDS = [
   "nulls last",
   "limit",
 ] as const;
+type RqlKeyword = (typeof RQL_KEYWORDS)[number];
 
 /** The editor data of the catalog and of the project's properties. Pure. */
 export function rqlEditorData(
@@ -90,9 +98,15 @@ export function rqlEditorData(
 
 /**
  * The completions at `pos` of `text`, or null when there are none: inside a string or a comment,
- * or, unless the person asked (`explicit`), where no word is being typed. After FROM: the tables.
- * Else the columns of the table in FROM (of every table before there is one), the functions, the
- * keywords and the operators.
+ * or, unless the person asked (`explicit`), where no word is being typed. What it offers follows
+ * the place of the cursor, in the order a person reads the list:
+ * - after FROM: the tables;
+ * - where an operand starts (after SELECT, WHERE, AND, OR, NOT, HAVING, GROUP BY, ORDER BY, ON, a
+ *   comma, an opening parenthesis or a binary operator): the columns of the table in FROM, then
+ *   the functions, and no operator. Before there is a table in FROM: the columns of every table,
+ *   each once, with its tables in the detail. At the start of a select item, also `*`;
+ * - after a whole operand (a column, a literal, a closing parenthesis): the keywords that can
+ *   follow in that clause, then the operators.
  */
 export function rqlCompletions(
   text: string,
@@ -107,11 +121,15 @@ export function rqlCompletions(
   const word = /[A-Za-z_][\w]*$/.exec(before);
   if (!word && !explicit) return null;
   const from = word ? pos - word[0].length : pos;
-  const previous = /([A-Za-z_]\w*)\s+$/.exec(before.slice(0, from))?.[1]?.toLowerCase();
-  if (previous === "from") return { from, options: TABLES };
-  const table = /\bfrom\s+([A-Za-z_]\w*)/i.exec(text)?.[1]?.toLowerCase();
-  const columns = COLUMNS.get(table ?? "") ?? ALL_COLUMNS;
-  return { from, options: [...columns, ...FUNCTIONS, ...KEYWORDS, ...OPERATORS] };
+  const tokens = tokensOf(before.slice(0, from));
+  const last = tokens.at(-1);
+  // The second word of GROUP BY, ORDER BY and NULLS FIRST: the list starts at the first one.
+  if (last?.text === "group" || last?.text === "order")
+    return { from: last.start, options: keywords(`${last.text} by`) };
+  if (last?.text === "nulls")
+    return { from: last.start, options: keywords("nulls first", "nulls last") };
+  const options = optionsAfter(tokens, COLUMNS.get(tableOf(text) ?? "") ?? ALL_COLUMNS);
+  return options.length > 0 ? { from, options } : null;
 }
 
 const DATA = rqlEditorData();
@@ -138,8 +156,24 @@ const COLUMNS = new Map(
     ),
   ]),
 );
+/** Every column of every table, once: its type, then the tables that have it. */
 const ALL_COLUMNS: RqlCompletion[] = [
-  ...new Map([...COLUMNS.values()].flat().map((column) => [column.label, column])).values(),
+  ...new Map(
+    DATA.tables.flatMap(({ columns }) =>
+      columns.map(({ name: column, type, description }): [string, RqlCompletion] => [
+        column,
+        {
+          label: column,
+          type: "property",
+          detail: `${type} · ${DATA.tables
+            .filter((table) => table.columns.some((other) => other.name === column))
+            .map((table) => table.name)
+            .join(", ")}`,
+          info: description,
+        },
+      ]),
+    ),
+  ).values(),
 ];
 const FUNCTIONS: RqlCompletion[] = DATA.functions.map(({ name, signature, description }) => ({
   label: name,
@@ -147,12 +181,105 @@ const FUNCTIONS: RqlCompletion[] = DATA.functions.map(({ name, signature, descri
   detail: signature,
   info: description,
 }));
-const KEYWORDS: RqlCompletion[] = RQL_KEYWORDS.map((label) => ({ label, type: "keyword" }));
-const OPERATORS: RqlCompletion[] = [
-  ...new Set(DATA.operators.map((operator) => operator.toLowerCase())),
-]
-  .filter((operator) => !RQL_KEYWORDS.includes(operator as (typeof RQL_KEYWORDS)[number]))
-  .map((label) => ({ label, type: "operator" }));
+const LOWER_OPERATORS = [...new Set(DATA.operators.map((operator) => operator.toLowerCase()))];
+const isKeyword = (word: string): word is RqlKeyword =>
+  (RQL_KEYWORDS as readonly string[]).includes(word);
+/** The operators that are not keywords: the symbols, and the ones of two words (`not in`). */
+const OPERATORS: RqlCompletion[] = LOWER_OPERATORS.filter((operator) => !isKeyword(operator)).map(
+  (label) => ({ label, type: "operator" }),
+);
+/** The operators that are one keyword and stand between two operands: `and`, `or`, `like`, `in`. */
+const WORD_OPERATORS = keywords(
+  ...LOWER_OPERATORS.filter(isKeyword).filter((operator) => operator !== "not"),
+);
+/** The symbols after which an operand starts: `=`, `<`, `+`. */
+const SYMBOL_OPERATORS = new Set(LOWER_OPERATORS.filter((operator) => /^\W+$/.test(operator)));
+/** The words after which an operand starts. */
+const OPERAND_WORDS = new Set([
+  ...["select", "distinct", "where", "having", "by", "on"],
+  ...["and", "or", "not", "in", "between", "like", "ilike"],
+]);
+const CLAUSES = new Set(["select", "from", "where", "group", "having", "order", "limit"]);
+const STAR: RqlCompletion = { label: "*", type: "keyword", detail: "every column" };
+
+/** The keywords that can follow a whole operand, by the clause it is in. */
+const FOLLOWING: Record<string, RqlCompletion[]> = {
+  select: keywords("as", "from"),
+  where: keywords("group by", "order by", "limit"),
+  group: keywords("having", "order by", "limit"),
+  having: keywords("order by", "limit"),
+  order: keywords("asc", "desc", "nulls first", "nulls last", "limit"),
+};
+/** After the table in FROM no operator fits: the clauses only. */
+const AFTER_TABLE = keywords("where", "group by", "order by", "limit");
+
+/** What the place after `tokens` offers; `columns` are the ones of the table in FROM. */
+function optionsAfter(tokens: Token[], columns: RqlCompletion[]): RqlCompletion[] {
+  const last = tokens.at(-1);
+  if (!last) return keywords("select");
+  const previous = tokens.at(-2)?.text;
+  const clause = tokens.findLast(({ kind, text }) => kind === "word" && CLAUSES.has(text))?.text;
+  const depth = tokens.reduce(
+    (open, { text }) => open + (text === "(" ? 1 : text === ")" ? -1 : 0),
+    0,
+  );
+  // `*` is every column after SELECT, a comma or a parenthesis, and a product elsewhere.
+  const star = last.text === "*" && ["select", "distinct", ",", "("].includes(previous ?? "");
+  if (last.kind === "word" && last.text === "from") return TABLES;
+  if (last.text === "is") return keywords("not", "null", "true", "false");
+  if (last.text === "not" && previous === "is") return keywords("null", "true", "false");
+  // An alias, a row count and the key of `attributes[` are the person's own.
+  if (["as", "limit", "["].includes(last.text)) return [];
+  if (!star && startsOperand(last)) {
+    const item = clause === "select" && depth === 0;
+    if (item && last.text === "select")
+      return [STAR, ...keywords("distinct"), ...columns, ...FUNCTIONS];
+    if (item && (last.text === "distinct" || last.text === ","))
+      return [STAR, ...columns, ...FUNCTIONS];
+    return [...columns, ...FUNCTIONS];
+  }
+  // After a whole operand.
+  if (depth > 0) return [...WORD_OPERATORS, ...OPERATORS];
+  if (clause === "from") return AFTER_TABLE;
+  if (clause === "select" && (star || previous === "as")) return keywords("from");
+  if (clause === "order" && (last.text === "asc" || last.text === "desc"))
+    return keywords("nulls first", "nulls last", "limit");
+  const following = FOLLOWING[clause ?? ""];
+  return following ? [...following, ...WORD_OPERATORS, ...OPERATORS] : [];
+}
+
+/** The table in FROM, anywhere in `text`: the word after it. */
+function tableOf(text: string): string | undefined {
+  const tokens = tokensOf(text);
+  const from = tokens.findIndex(({ kind, text: word }) => kind === "word" && word === "from");
+  const table = from === -1 ? undefined : tokens[from + 1];
+  return table?.kind === "word" ? table.text : undefined;
+}
+
+/** Whether an operand starts after `token`: a keyword, a comma, a parenthesis or an operator. */
+function startsOperand({ kind, text }: Token): boolean {
+  if (kind === "word") return OPERAND_WORDS.has(text);
+  return kind === "symbol" && (text === "," || text === "(" || SYMBOL_OPERATORS.has(text));
+}
+
+/** The tokens of `text`, without its comments. */
+function tokensOf(text: string): Token[] {
+  const tokens: Token[] = [];
+  for (const match of text.matchAll(TOKEN)) {
+    const [found] = match;
+    if (found.startsWith("--")) continue;
+    const kind = /^[A-Za-z_]/.test(found) ? "word" : /^['"\d]/.test(found) ? "value" : "symbol";
+    tokens.push({ kind, text: kind === "word" ? found.toLowerCase() : found, start: match.index });
+  }
+  return tokens;
+}
+
+const TOKEN = /--[^\n]*|'(?:[^']|'')*'|"[^"]*"|[A-Za-z_]\w*|\d+(?:\.\d+)?|<=|>=|<>|!=|[^\s\w]/g;
+
+/** The completions of these keywords: only words of `RQL_KEYWORDS`. */
+function keywords(...labels: RqlKeyword[]): RqlCompletion[] {
+  return labels.map((label) => ({ label, type: "keyword" }));
+}
 
 /** The project's property names at `from`: the indexed ones, then the detected ones, off. */
 function propertyCompletions(

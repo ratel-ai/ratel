@@ -116,7 +116,11 @@ const errorMark = StateField.define({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-/** The completions at the cursor; a property that is not indexed calls `blocked` instead of writing. */
+/**
+ * The completions at the cursor, in the order of the domain: the list sorts by score, so each kind
+ * (columns, functions, keywords, operators) gets a boost by its place in that order. A property
+ * that is not indexed calls `blocked` instead of writing.
+ */
 function completer(data: () => Pick<RqlEditorData, "properties">, blocked: (name: string) => void) {
   return (context: CompletionContext) => {
     const found = rqlCompletions(
@@ -126,13 +130,17 @@ function completer(data: () => Pick<RqlEditorData, "properties">, blocked: (name
       data(),
     );
     if (!found) return null;
+    const kinds = [...new Set(found.options.map((option) => option.type))];
     const options = found.options.map(
       ({ disabled, ...option }): Completion =>
-        disabled ? { ...option, boost: -1, apply: () => blocked(option.label) } : option,
+        disabled
+          ? { ...option, boost: -1, apply: () => blocked(option.label) }
+          : { ...option, boost: kinds.length - 1 - kinds.indexOf(option.type) },
     );
-    // A property name can hold any character but a quote; a word of the query, letters and spaces.
+    // A property name can hold any character but a quote. A word of the query ends at a space:
+    // the next place has its own list.
     const inName = context.state.sliceDoc(found.from - 1, found.from) === "'";
-    return { ...found, options, validFor: inName ? /^[^'\n]*$/ : /^[\w ]*$/ };
+    return { ...found, options, validFor: inName ? /^[^'\n]*$/ : /^\w*$/ };
   };
 }
 
