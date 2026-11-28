@@ -130,20 +130,12 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    * Where each span comes from: marks the spans with country and region codes, before any row is
    * built, and says whether one carried an IP address. Absent, no span is located.
    */
-  locate?: (
-    projectId: string,
-    organization: PersistSpansContext["organization"],
-    spans: readonly DecodedSpan[],
-  ) => Promise<{ addressed: boolean }>;
+  locate?: (projectId: string, spans: readonly DecodedSpan[]) => Promise<{ addressed: boolean }>;
   /**
    * The trace properties (`lib/ingest/properties`): records the key names of the batch, and
    * returns the values of the project's indexed properties for each span. Absent, none.
    */
-  properties?: (
-    projectId: string,
-    organization: PersistSpansContext["organization"],
-    spans: readonly DecodedSpan[],
-  ) => Promise<SpanPropertyValues>;
+  properties?: (projectId: string, spans: readonly DecodedSpan[]) => Promise<SpanPropertyValues>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -250,7 +242,7 @@ async function storeDecodedSpans(
   // Fail open for the batch, and closed for the address.
   let addressed = false;
   try {
-    addressed = (await deps.locate?.(projectId, organization, spans))?.addressed ?? false;
+    addressed = (await deps.locate?.(projectId, spans))?.addressed ?? false;
   } catch (err) {
     addressed = true;
     logError("span location failed", err, { project_id: projectId });
@@ -474,7 +466,7 @@ async function storeDecodedSpans(
 
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
-  const properties = await spanProperties(spans, projectId, organization, deps);
+  const properties = await spanProperties(spans, projectId, deps);
   try {
     const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices, dimensions, properties });
     if (spanRows.length > 0) {
@@ -551,12 +543,11 @@ function spansByTrace(spans: readonly DecodedSpan[]): Map<string, number> {
 async function spanProperties(
   spans: DecodedSpan[],
   projectId: string,
-  organization: Organization | null,
   deps: PersistSpansDeps,
 ): Promise<SpanPropertyValues | undefined> {
   if (!deps.properties) return undefined;
   try {
-    return await deps.properties(projectId, organization, spans);
+    return await deps.properties(projectId, spans);
   } catch (err) {
     deps.logError("trace property capture failed", err, { project_id: projectId });
     deps.captureFailure(err);

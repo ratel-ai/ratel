@@ -3688,7 +3688,7 @@
   {
     "name": "get_task",
     "title": "Get task",
-    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. With custom monitoring on, scorers are the ones attached to the task, each with its 7-day result and 14-day trend, and scoreSeries is empty. Use list_fixes for the task's fixes.",
+    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, its scorers (the ones attached to the task, each with its 7-day result and 14-day trend), and with the evalGate flag on its eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4481,6 +4481,221 @@
     },
     "annotations": {
       "title": "Get a dashboard",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "describe_rql_schema",
+    "title": "Describe the RQL schema",
+    "description": "Gives RQL (Ratel Query Language), the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users, prompts), their columns, the functions, the operators, the limits, the rules, example queries, and the trace properties of the project: the indexed ones, which properties['name'] reads, and apart the detected ones. Call it before run_rql.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Describe the RQL schema",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "run_rql",
+    "title": "Run an RQL query",
+    "description": "Runs one RQL (Ratel Query Language) SELECT over the trace data of the project and gives a table: the columns, the rows and a cut mark. describe_rql_schema gives the tables and the rules. An error gives a code, a message and a fix.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "One RQL SELECT statement, at most 4000 characters. Example: select model, sum(cost_usd) as cost from events where type = 'llm_call' group by model order by cost desc limit 10"
+        },
+        "rqlVersion": {
+          "description": "The RQL version of the text. Default: 1, the current version.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "since": {
+          "description": "ISO 8601 start of the window. Default: 24 hours before until. The most: 30 days. A longer window is refused.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "annotations": {
+      "title": "Run an RQL query",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "draft_widgets",
+    "title": "Draft widgets from words",
+    "description": "Drafts RQL widgets from a sentence: each a title, RQL that compiles for the project and a chart. refused names each failed widget with the reason. range: the dashboard range the words name, or null. Give it to import_dashboard. target dashboard: up to 8 widgets for a new dashboard. target widget: one for dashboardId. Saves nothing: keep them with change_dashboard or import_dashboard.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "words": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "What the widgets should show, at most 500 characters."
+        },
+        "target": {
+          "default": "dashboard",
+          "description": "dashboard: the widgets of a new dashboard. widget: one widget for dashboardId.",
+          "type": "string",
+          "enum": [
+            "dashboard",
+            "widget"
+          ]
+        },
+        "dashboardId": {
+          "description": "The dashboard a widget is for: the draft avoids its widgets.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO 8601 start of the page range. Default: 7 days before until.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": [
+        "words"
+      ]
+    },
+    "annotations": {
+      "title": "Draft widgets from words",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "suggest_prompts",
+    "title": "Suggest prompts for widgets",
+    "description": "Gives up to 4 prompts for draft_widgets that fit the project: what its dashboards do not show yet, what the dashboard in dashboardId lacks next to what it has, indexed properties no widget reads, and the earlier asks that were kept. source is model when the decision model picked them, else fixed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "target": {
+          "default": "dashboard",
+          "description": "dashboard: prompts for a new dashboard. widget: prompts for one widget of dashboardId.",
+          "type": "string",
+          "enum": [
+            "dashboard",
+            "widget"
+          ]
+        },
+        "dashboardId": {
+          "description": "The dashboard a widget is for.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "title": {
+          "description": "The title of the new dashboard, when it has one.",
+          "type": "string",
+          "maxLength": 80
+        }
+      }
+    },
+    "annotations": {
+      "title": "Suggest prompts for widgets",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_dashboard_templates",
+    "title": "List dashboard templates",
+    "description": "The dashboard templates: id, name, what each one shows, the data it needs, and whether this project has that data (with what is missing). import_dashboard with template makes a normal dashboard from one.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "List dashboard templates",
       "readOnlyHint": true
     },
     "execution": {

@@ -1,6 +1,6 @@
 # Geography
 
-The map widget of a dashboard shows a measure by country, or by region of one country. It needs `customMonitoring`.
+The map widget of a dashboard shows a measure by country, or by region of one country.
 
 ## Where a location comes from
 

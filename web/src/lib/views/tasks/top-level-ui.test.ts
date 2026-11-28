@@ -45,39 +45,9 @@ const MODEL: TaskListModel = {
   excludedRuns: 0,
 };
 
-test("top-level Tasks shows one row per task, its status and today's live score with a 14-day trend", () => {
+test("top-level Tasks shows one row per task and its status", () => {
   const html = render(
-    createElement(TasksView, {
-      projectId: PROJECT_ID,
-      model: MODEL,
-      now: NOW,
-      topLevel: true,
-      scores: new Map([
-        [
-          "task-a",
-          {
-            rate: 0.75,
-            runs: 20,
-            history: [
-              0,
-              0.5,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              null,
-              0.75,
-            ],
-          },
-        ],
-      ]),
-    }),
+    createElement(TasksView, { projectId: PROJECT_ID, model: MODEL, now: NOW, topLevel: true }),
   );
   assert.deepEqual(
     [...html.matchAll(/data-task-row="([^"]+)"/g)].map((match) => match[1]),
@@ -86,21 +56,11 @@ test("top-level Tasks shows one row per task, its status and today's live score 
   assert.match(html, new RegExp(`href="${ROOT}/task-a"`));
   assert.match(html, /data-task-status="watch"/);
   assert.match(html, /data-task-status="healthy"/);
-  assert.match(
-    visibleText(html),
-    /Live score.*14 days.*75%.*20 runs today \(UTC\).*Not scored today/,
-  );
-  assert.match(html, /role="img" aria-label="Daily score, oldest first, UTC: 0%, 50%, not scored/);
   assert.doesNotMatch(html, /Agent health<\/a>|data-task-row="unserved"/);
 });
 
-test("top-level Tasks hides scores when the eval gate is off and preserves tasks when scores fail", () => {
+test("top-level Tasks shows no table before there is a reading", () => {
   const base = { projectId: PROJECT_ID, model: MODEL, now: NOW, topLevel: true };
-  const disabled = render(createElement(TasksView, base));
-  assert.doesNotMatch(visibleText(disabled), /Live score|14 days|Not scored/);
-  const failed = render(createElement(TasksView, { ...base, scores: null }));
-  assert.match(visibleText(failed), /Live scores did not load/);
-  assert.match(visibleText(failed), /Ship a release.*Unavailable/);
   const empty = render(
     createElement(TasksView, { ...base, model: { ...MODEL, state: "no_reading", rows: [] } }),
   );

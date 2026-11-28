@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
@@ -38,7 +37,6 @@ const WEEK_MS = 7 * 86_400_000;
 const access: ScorerAccessDeps = {
   getSession: getSessionContext,
   findProjectScope: (projectId) => findProjectScope(projectId),
-  enabled: (subject) => featureEnabled("customMonitoring", subject),
   isRestricted: isRestrictedBySupportSession,
 };
 

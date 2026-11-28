@@ -83,11 +83,11 @@ async function handlePost(req: Request) {
     genAiLogs: createGenAiLogStore(),
     // Raw request bodies, within the daily byte cap.
     otlpRawCapture: { store: createOtlpRawStore() },
-    // The country and region of each trace (customMonitoring).
+    // The country and region of each trace.
     locate: geoIngest.locate,
     // The same before a batch is queued, so that no address waits in the queue.
     redact: geoIngest.redact,
-    // The trace property keys of the batch, and the values of the indexed ones (customMonitoring).
+    // The trace property keys of the batch, and the values of the indexed ones.
     properties: propertyIngest.capture,
     // The project's own prices, read once per batch (RC-482).
     modelPricing: {

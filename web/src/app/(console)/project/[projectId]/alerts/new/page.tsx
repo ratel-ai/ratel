@@ -31,13 +31,12 @@ export default async function NewAlertPage({
         Alerts need a database. Set DATABASE_URL to connect one.
       </DatabaseUnavailable>
     );
-  const { features, scorers, properties, usage, form } = await loadAlertForm(page);
+  const { scorers, properties, usage, form } = await loadAlertForm(page);
   const search = await searchParams;
   const value = search[NEW_ALERT_PARAM];
   const inFragment = value === IN_FRAGMENT;
   const start = parseAlertQuery(
     typeof value === "string" && !inFragment ? alertQueryOf(value) : null,
-    features,
   );
   return (
     <NewAlertFrame projectId={page.projectId}>

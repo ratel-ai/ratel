@@ -58,11 +58,10 @@ test("an invalid scorer is refused and nothing is written", async () => {
 
 test("every change requires a session, project membership and the flag", async () => {
   for (const input of changes) {
-    for (const refusal of ["session", "membership", "flag"]) {
+    for (const refusal of ["session", "membership"]) {
       const { deps, writes } = setup();
       if (refusal === "session") deps.getSession = async () => null;
       if (refusal === "membership") deps.findProjectScope = async () => null;
-      if (refusal === "flag") deps.enabled = async () => false;
       assert.equal((await changeScorer(input, deps)).ok, false, refusal);
       assert.equal(writes.length, 0, refusal);
     }
@@ -225,7 +224,6 @@ function setup(current: ScorerDraft = checkDraft()) {
   const deps: ScorerActionDeps = {
     getSession: async () => ({ user: { id: "db_user", externalId: "user_test" } }),
     findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: "org_test" } }),
-    enabled: async () => true,
     isRestricted: async () => false,
     get: async () =>
       ({

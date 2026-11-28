@@ -180,7 +180,6 @@ test("two writers with one base: the first is stored, the second is refused and 
     reader: async () => ({ kind: "person", projectId: P1, personId: "ana", restricted: false }),
     store: () => store,
     offered: async () => WIDGET_CATALOG,
-    dashboardsOn: async () => false,
     dashboardWidget: async () => null,
     source: async () => ({ kind: "web" }),
   };

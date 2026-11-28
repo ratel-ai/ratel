@@ -178,13 +178,9 @@ test("alerts and scorers of a held project wait, and go on after the hold", asyn
   await client.exec(`
     insert into trace_scorers (project_id, name, kind, config, created_by, updated_by)
     values ('${PROJECT_ID}', 'Fast', 'check', '{"path":"duration_ms","op":"lt","value":10}', 'u', 'u')`);
-  const on = async () => true;
   const taken = async () => {
     await client.exec("update alert_rules set last_evaluated_at = null");
-    return [
-      (await evaluateAlerts({ flagOn: on }, db)).evaluated,
-      (await sweepScorers({ flagOn: on }, db)).scorers,
-    ];
+    return [(await evaluateAlerts({}, db)).evaluated, (await sweepScorers({}, db)).scorers];
   };
   assert.deepEqual(await taken(), [1, 1]);
   await setHold(HOLD, db);

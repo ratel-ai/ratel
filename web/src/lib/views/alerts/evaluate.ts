@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { notOnHold } from "@/lib/platform/org-hold/sql";
 import {
@@ -23,7 +22,6 @@ export interface EvaluateOptions {
   now?: () => Date;
   /** Wall-clock the evaluation may spend before it yields to the next tick. */
   timeBudgetMs?: number;
-  flagOn?: (projectId: string) => Promise<boolean>;
   /** Wall-clock one project's rules may spend in one tick; the rest wait for the next tick. */
   projectBudgetMs?: number;
 }
@@ -60,7 +58,7 @@ const ALERTS_ADVISORY_LOCK_KEY = 823_100_132;
 const logger = getLogger("alerts/evaluate");
 
 /**
- * Evaluate the due rules of the projects with the flag on, the one that waited longest first, one
+ * Evaluate the due rules, the one that waited longest first, one
  * rule of each project in turn, so no project waits behind another's rules. A project stops for the
  * tick once its rules spent `projectBudgetMs`. Each rule is one transaction under an advisory lock
  * and its row lock: the state, its history row and
@@ -84,7 +82,7 @@ export async function evaluateAlerts(
 
   const projectBudgetMs = options.projectBudgetMs ?? PROJECT_TIME_BUDGET_MS;
   const spent = new Map<string, number>();
-  const due = inTurns(await dueRules(db, now(), options.flagOn ?? flagOn));
+  const due = inTurns(await dueRules(db, now()));
   for (const rule of due) {
     if (Date.now() - startedAt >= timeBudgetMs) return result;
     if ((spent.get(rule.projectId) ?? 0) >= projectBudgetMs) continue;
@@ -133,20 +131,12 @@ function inTurns<Rule extends { projectId: string }>(rules: readonly Rule[]): Ru
   return turns;
 }
 
-async function dueRules(
-  db: Db,
-  now: Date,
-  on: (projectId: string) => Promise<boolean>,
-): Promise<{ id: string; projectId: string }[]> {
-  const rows = await db
+async function dueRules(db: Db, now: Date): Promise<{ id: string; projectId: string }[]> {
+  return db
     .select({ id: alertRules.id, projectId: alertRules.projectId })
     .from(alertRules)
     .where(and(dueAt(now), notOnHold(alertRules.projectId)))
     .orderBy(sql`${alertRules.lastEvaluatedAt} asc nulls first`, asc(alertRules.id));
-  const flags = new Map<string, boolean>();
-  for (const { projectId } of rows)
-    if (!flags.has(projectId)) flags.set(projectId, await on(projectId));
-  return rows.filter(({ projectId }) => flags.get(projectId));
 }
 
 /** The value of an RQL rule, read before its transaction, with the query it was read for. */
@@ -270,10 +260,6 @@ function dueAt(now: Date) {
       ),
     ),
   );
-}
-
-function flagOn(projectId: string): Promise<boolean> {
-  return featureEnabled("customMonitoring", { projectId });
 }
 
 function firstRow<T>(result: unknown): T | undefined {

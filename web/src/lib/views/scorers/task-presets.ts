@@ -118,7 +118,7 @@ export async function seedTaskPresets(
   return created;
 }
 
-/** A change refused because its scorer of the one model would pass the limit (flag on only). */
+/** A change refused because its scorer of the one model would pass the limit. */
 export class ScorerLimitError extends Error {
   constructor(count: number) {
     super(limitText(count, MAX_SCORERS).text);
@@ -129,21 +129,16 @@ export class ScorerLimitError extends Error {
 /**
  * Save a task scorer (`task_scorers`, what the eval gate grades with) and move its scorer of the one
  * model with it: the task page and MCP `change_task_scorer` save through here, so the scorers that
- * migration 0055 converted never go stale. `live` is the `customMonitoring` flag of the project.
- * Off, the save is the result, as before the one model: the sync runs when it can, and one the limit
- * refuses is logged, not an error. On, a change whose scorer would have to be created past the limit
- * is refused before any write (`ScorerLimitError`).
+ * migration 0055 converted never go stale. A change whose scorer would have to be created past the
+ * limit is refused before any write (`ScorerLimitError`).
  */
 export async function saveTaskScorer(
   input: ScorerInput,
-  live: boolean,
   db: ScorerDb & EvalDb = getDb(),
 ): Promise<void> {
   const { projectId, taskId, scorer, updatedBy } = input;
-  await withSync(
-    { projectId, taskId, kind: scorer.kind, next: scorer, actor: updatedBy, live },
-    db,
-    () => upsertScorer(input, db),
+  await withSync({ projectId, taskId, kind: scorer.kind, next: scorer, actor: updatedBy }, db, () =>
+    upsertScorer(input, db),
   );
 }
 
@@ -153,10 +148,9 @@ export async function resetTaskScorer(
   taskId: string,
   kind: TaskKind,
   actor: string,
-  live: boolean,
   db: ScorerDb & EvalDb = getDb(),
 ): Promise<void> {
-  await withSync({ projectId, taskId, kind, actor, live }, db, () =>
+  await withSync({ projectId, taskId, kind, actor }, db, () =>
     resetScorer(projectId, taskId, kind, db),
   );
 }
@@ -170,9 +164,9 @@ export async function resetTaskScorer(
  * one for the task, under the limit. Without `after` (a reset to no default), the own scorer is
  * detached from the task. False when the limit stops a create.
  *
- * A judge calls a model, so a save never turns one on: its switch can only go off here, and its
- * sample is at most `TASK_JUDGE_SAMPLE_RATE`. With `live` off (`customMonitoring`), a new judge is
- * created off. A person turns a judge on with its own switch, and it starts at that time.
+ * A judge calls a model, so a save never turns an existing judge on: its switch can only go off
+ * here, and its sample is at most `TASK_JUDGE_SAMPLE_RATE`. A judge that the save creates starts on,
+ * with that sample. A person turns an existing judge on with its own switch.
  */
 export async function syncTaskPreset(
   projectId: string,
@@ -181,7 +175,6 @@ export async function syncTaskPreset(
   after: (TaskScorer & { enabled: boolean }) | undefined,
   actor: string,
   db: ScorerDb & EvalDb = getDb(),
-  live = true,
 ): Promise<boolean> {
   const wanted = before ?? after;
   if (!wanted) return true;
@@ -210,7 +203,7 @@ export async function syncTaskPreset(
     return true;
   }
   if ((await countScorers(projectId, db)) >= MAX_SCORERS) return false;
-  await createScorer(projectId, draftOf(after, taskId, { judgeOn: live }), TASK_SCORERS_ACTOR, db);
+  await createScorer(projectId, draftOf(after, taskId, { judgeOn: true }), TASK_SCORERS_ACTOR, db);
   return true;
 }
 
@@ -252,8 +245,8 @@ export async function updateScorerWithTask(
 
 /**
  * Run a write of one task scorer, then sync its scorer of the one model from the effective scorer
- * before and after. With `live`, a write whose scorer is not attached yet, in a project at or over
- * the limit, is refused first.
+ * before and after. A write whose scorer is not attached yet, in a project at or over the limit, is
+ * refused first.
  */
 async function withSync(
   change: {
@@ -263,16 +256,15 @@ async function withSync(
     /** What a save stores; none for a reset. */
     next?: TaskScorer;
     actor: string;
-    live: boolean;
   },
   db: ScorerDb & EvalDb,
   write: () => Promise<unknown>,
 ): Promise<void> {
-  const { projectId, taskId, kind, next, actor, live } = change;
+  const { projectId, taskId, kind, next, actor } = change;
   const effective = async () =>
     (await scorersFor(projectId, taskId, db)).find((scorer) => scorer.kind === kind);
   const before = await effective();
-  if (live && (before || next)) {
+  if (before || next) {
     const attached = await listTaskScorers(projectId, taskId, db);
     const covered = attached.some(
       (scorer) => (before && standsFor(scorer, before)) || (next && standsFor(scorer, next)),
@@ -281,7 +273,7 @@ async function withSync(
     if (count >= MAX_SCORERS) throw new ScorerLimitError(count);
   }
   await write();
-  if (!(await syncTaskPreset(projectId, taskId, before, await effective(), actor, db, live)))
+  if (!(await syncTaskPreset(projectId, taskId, before, await effective(), actor, db)))
     logger.warn(
       { project_id: projectId, task_id: taskId, kind },
       "task scorer saved; its scorer waits for room under the scorer limit",

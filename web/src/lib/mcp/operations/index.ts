@@ -63,8 +63,6 @@ export interface AssembleOptions {
   includeWrites?: boolean;
   /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
   focusedConsole?: boolean;
-  /** List the RQL tools too (`customMonitoring`). Off, they do not exist. */
-  customMonitoring?: boolean;
 }
 
 /**
@@ -109,9 +107,9 @@ export function assembleOperations(
     ...scorerReadOperations(),
     ...alertReadOperations(),
     ...dashboardReadOperations(),
-    ...(options.customMonitoring ? rqlOperations() : []),
-    ...(options.customMonitoring ? askOperations() : []),
-    ...(options.customMonitoring ? dashboardTemplateOperations() : []),
+    ...rqlOperations(),
+    ...askOperations(),
+    ...dashboardTemplateOperations(),
     ...locationReadOperations(),
     ...propertyReadOperations(),
     ...writeOperations(),

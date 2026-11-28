@@ -15,6 +15,7 @@ test("project settings tabs are URLs, with General matching its path exactly", (
     [
       ["General", "/project/p%201/settings", true],
       ["API keys", "/project/p%201/settings/api-keys", false],
+      ["Notifications", "/project/p%201/settings/notifications", false],
       ["Developer", "/project/p%201/settings/developer", false],
       ["Danger zone", "/project/p%201/settings/danger", false],
     ],

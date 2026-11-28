@@ -13,7 +13,6 @@ import {
 import { WidgetBody } from "@/components/console/dashboards/WidgetBody";
 import { WidgetFields } from "@/components/console/dashboards/WidgetFields";
 import { WidgetLinkItems } from "@/components/console/dashboards/WidgetLinkItems";
-import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import type { DashboardRange } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
@@ -57,7 +56,7 @@ export function ExplorePanel({
 }) {
   const { preview, pending } = useWidgetPreview(projectId, widget, range, filters, served);
   const name = widgetName(widget);
-  const complete = parseWidget(widget, { customMonitoring: useScorers() !== null }).ok;
+  const complete = parseWidget(widget).ok;
 
   async function copyQuery() {
     try {

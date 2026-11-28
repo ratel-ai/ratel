@@ -83,12 +83,8 @@ test("a page filter of a property that is not indexed is refused on each widget,
 
 async function load(search: string) {
   const filter = shownFilters(search, {});
-  return loadWidgets(
-    PROJECT,
-    WIDGETS,
-    { ...SCOPE, filter },
-    { customMonitoring: true },
-    (projectId, widget, scope) => loadWidget(projectId, widget, scope, database.db as never),
+  return loadWidgets(PROJECT, WIDGETS, { ...SCOPE, filter }, (projectId, widget, scope) =>
+    loadWidget(projectId, widget, scope, database.db as never),
   );
 }
 

@@ -121,10 +121,7 @@ test("major 1: project B's rule evaluates in the same tick while project A has 2
       new Date(NOW.getTime() + 1),
       victim,
     ]);
-    await evaluateAlerts(
-      { now: () => tick, flagOn: async () => true, timeBudgetMs: 400, projectBudgetMs: 200 },
-      store,
-    );
+    await evaluateAlerts({ now: () => tick, timeBudgetMs: 400, projectBudgetMs: 200 }, store);
     const [row] = (
       await database.client.query<{ last_evaluated_at: Date }>(
         "select last_evaluated_at from alert_rules where id = $1",
@@ -144,7 +141,7 @@ test("major 2: two readers load a dashboard of 6 sql widgets with no refused wid
   try {
     const widgets = Array.from({ length: 6 }, () => sqlWidget("select count(*) from traces"));
     const load = () =>
-      loadWidgets(PROJECT, widgets, SCOPE, { customMonitoring: true }, (project, widget, scope) =>
+      loadWidgets(PROJECT, widgets, SCOPE, (project, widget, scope) =>
         loadWidget(project, widget, scope, db()),
       );
     const first = load();
@@ -222,7 +219,6 @@ test("major 6: a dashboard of wide sql widgets stays under the result cap of eac
     PROJECT,
     Array.from({ length: 6 }, () => wide),
     { since: new Date(NOW.getTime() - 30 * DAY_MS), until: NOW },
-    { customMonitoring: true },
     (project, widget, scope) => loadWidget(project, widget, scope, db()),
   );
   for (const result of results) {

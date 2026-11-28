@@ -13,7 +13,7 @@ import { countMatchingTraces } from "./traces";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
-const on: SweepOptions = { flagOn: async () => true };
+const on: SweepOptions = {};
 
 test("a trace is scored once, only after its summary settled", async () => {
   const { client, db, add, scored } = await setup();
@@ -196,20 +196,20 @@ test("a sweep stops at its time budget and the next one continues from the curso
   }
 });
 
-test("with the flag off, or the scorer disabled, nothing is written and no cursor moves", async () => {
+test("with the scorer disabled, nothing is written and no cursor moves", async () => {
   const { client, db, add, scored } = await setup();
   try {
     const id = await scorer(client, db);
     const disabled = await scorer(client, db, { enabled: false });
     await add("t", { ageS: 60 });
-    const before = await client.query("select id, cursor_at from trace_scorers order by id");
-    const result = await sweepScorers({ flagOn: async () => false }, db);
-    assert.deepEqual([result.scorers, result.tracesScanned], [0, 0]);
+    const before = await client.query("select cursor_at from trace_scorers where id = $1", [
+      disabled,
+    ]);
+    await sweepScorers(on, db);
     assert.deepEqual(
-      (await client.query("select id, cursor_at from trace_scorers order by id")).rows,
+      (await client.query("select cursor_at from trace_scorers where id = $1", [disabled])).rows,
       before.rows,
     );
-    await sweepScorers(on, db);
     assert.equal((await scored(id)).length, 1);
     assert.equal((await scored(disabled)).length, 0);
   } finally {

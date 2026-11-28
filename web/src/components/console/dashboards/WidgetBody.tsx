@@ -73,7 +73,6 @@ export function WidgetBody({
   result,
   range,
   filters: dashboardFilters,
-  available = true,
   missingScorer,
   fill = false,
   expanded = false,
@@ -85,8 +84,6 @@ export function WidgetBody({
   range: DashboardRange;
   /** The dashboard's, for the links to what a widget shows. */
   filters: DashboardFilters;
-  /** False while the switch of the metric is off. */
-  available?: boolean;
   /** The scorer of an imported widget, when the project does not have it. */
   missingScorer?: string;
   /** The chart takes the height of the place it is in. */
@@ -98,14 +95,6 @@ export function WidgetBody({
 }) {
   const { query } = widget;
   const taskNames = useTaskNames();
-  if (!available)
-    return (
-      <EmptyState
-        icon={CircleAlert}
-        title="Scorers are off for this project"
-        description="The widget shows its numbers again when they are on."
-      />
-    );
   if (missingScorer)
     return (
       <EmptyState

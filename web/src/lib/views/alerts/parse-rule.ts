@@ -1,6 +1,5 @@
 import { z } from "zod";
-import type { MetricForm } from "@/lib/contracts/query";
-import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
+import { type MetricForm, parseQuery } from "@/lib/contracts/query";
 import { compileRql } from "@/lib/synthesis/rql/compile";
 import {
   ALERT_OPERATORS,
@@ -10,7 +9,6 @@ import {
   MAX_ALERT_NAME,
 } from "@/lib/views/alerts/types";
 import { formQuery, isFormText } from "@/lib/views/dashboards/metric-rql";
-import { parseOfferedQuery } from "@/lib/views/dashboards/parse-widget";
 import { formOf } from "@/lib/views/dashboards/widget";
 
 const draftShape = z
@@ -32,11 +30,7 @@ const NUMERIC_TYPES: readonly string[] = ["number", "integer"];
  * A rule from outside: its shape, then the query under the same rules as a widget's. RQL text is
  * compiled here too: it must give one row with one number. `now` is when the text is compiled.
  */
-export function parseRule(
-  raw: unknown,
-  features: MetricFeatures,
-  now: Date = new Date(),
-): ParsedRule {
+export function parseRule(raw: unknown, now: Date = new Date()): ParsedRule {
   const parsed = draftShape.safeParse(raw);
   if (!parsed.success) {
     const field = parsed.error.issues[0]?.path[0];
@@ -48,7 +42,7 @@ export function parseRule(
   if (!name) return { ok: false, error: "Give the alert a name." };
   if (name.length > MAX_ALERT_NAME)
     return { ok: false, error: `An alert name can have ${MAX_ALERT_NAME} characters.` };
-  const parsedQuery = parseAlertQuery(rawQuery, features);
+  const parsedQuery = parseAlertQuery(rawQuery);
   if (!parsedQuery.ok) return parsedQuery;
   const problem = sqlAlertProblem(parsedQuery.query.text, now);
   if (problem) return { ok: false, error: problem };
@@ -62,9 +56,8 @@ export function parseRule(
  */
 export function parseAlertQuery(
   raw: unknown,
-  features: MetricFeatures,
 ): { ok: true; query: AlertQuery } | { ok: false; error: string } {
-  const parsed = parseOfferedQuery(raw, features);
+  const parsed = parseQuery(raw);
   if (!parsed.ok) return parsed;
   const { query } = parsed;
   if (query.kind !== "sql" && query.kind !== "metric")
@@ -90,8 +83,7 @@ export function alertFormQuery(form: MetricForm): AlertQuery {
 export function storedQuery(
   raw: unknown,
 ): { query: AlertQuery; problem: null } | { query: null; problem: string } {
-  // Every switch on: a rule whose switch is off is not broken.
-  const parsed = parseAlertQuery(raw, { customMonitoring: true });
+  const parsed = parseAlertQuery(raw);
   return parsed.ok
     ? { query: parsed.query, problem: null }
     : { query: null, problem: parsed.error };

@@ -35,7 +35,7 @@ test("the kept widgets make a document that import takes, each at the first free
       { x: 0, y: 6, w: 6, h: 6 },
     ],
   );
-  const read = importDashboard(document, { scorers: [], features: { customMonitoring: true } });
+  const read = importDashboard(document, { scorers: [] });
   assert.ok(read.ok, read.ok ? "" : read.error);
   if (!read.ok) return;
   assert.deepEqual(

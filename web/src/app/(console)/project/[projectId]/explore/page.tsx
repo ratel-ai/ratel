@@ -14,7 +14,6 @@ import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { rangeProblem, resolveWidgetRange } from "@/lib/views/dashboards/range";
 import { listDashboards } from "@/lib/views/dashboards/store";
 import { panelsOfAddress } from "@/lib/views/explore/state";
-import { metricFeatures } from "../dashboards/context";
 import { loadWidgetForm } from "../dashboards/form-data";
 import { resolveExplorePage } from "./context";
 
@@ -52,11 +51,10 @@ export default async function ScopedExplorePage({
       ? decoded.error
       : filtersProblem(decoded?.panels.map(({ query }) => query) ?? [], filters));
   const panels = decoded?.ok && !problem ? decoded.panels : [];
-  const features = await metricFeatures(page);
   const [results, { facets, scorers, properties, usage, taskNames }, dashboards] =
     await Promise.all([
-      loadWidgets(projectId, panels, { ...range, filter: filters }, features),
-      loadWidgetForm(projectId, range, features),
+      loadWidgets(projectId, panels, { ...range, filter: filters }),
+      loadWidgetForm(projectId, range),
       loadOrFallback({
         operation: "explore_dashboards",
         distinctId: `project:${projectId}`,
@@ -73,7 +71,7 @@ export default async function ScopedExplorePage({
             served={panels.map((widget, index) => ({
               widget,
               // One that is not complete has not been read.
-              result: parseWidget(widget, features).ok ? results[index] : undefined,
+              result: parseWidget(widget).ok ? results[index] : undefined,
             }))}
             problem={problem}
             filters={filters}

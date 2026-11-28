@@ -1,6 +1,5 @@
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { notOnHold } from "@/lib/platform/org-hold/sql";
 import { projects } from "@/lib/platform/projects/schema";
@@ -12,7 +11,6 @@ type Db = ReturnType<typeof getDb>;
 
 export interface DeliverOptions {
   now?: () => Date;
-  flagOn?: (projectId: string) => Promise<boolean>;
   timeBudgetMs?: number;
 }
 
@@ -29,7 +27,7 @@ export interface DeliveryResult {
 export const MAX_ATTEMPTS = 4;
 /** A send that did not report back for this long was lost with its process. */
 const CLAIM_MS = 120_000;
-/** A message that waited this long says nothing of now any more, for example while its flag was off. */
+/** A message that waited this long says nothing of now any more. */
 export const EXPIRE_MS = 24 * 3_600_000;
 const EXPIRED = "The message expired unsent.";
 const BATCH = 100;
@@ -40,9 +38,8 @@ const logger = getLogger("alerts/deliver");
 /**
  * Send the pending messages, oldest first. A message is claimed, with its attempt counted, before
  * it is sent: no transaction is open during a send and two ticks never send the same one. A failed
- * one stays pending for the next tick, up to `MAX_ATTEMPTS`. The messages of a project whose flag is
- * off stay pending and are left out of this tick's next reads, so they never hold up the other
- * projects. A message pending for `EXPIRE_MS` is given up.
+ * one stays pending for the next tick, up to `MAX_ATTEMPTS`. A message pending for `EXPIRE_MS` is
+ * given up.
  */
 export async function deliverAlerts(
   notifier: AlertNotifier,
@@ -50,8 +47,6 @@ export async function deliverAlerts(
   db: Db = getDb(),
 ): Promise<DeliveryResult> {
   const now = options.now ?? (() => new Date());
-  const on =
-    options.flagOn ?? ((projectId: string) => featureEnabled("customMonitoring", { projectId }));
   const startedAt = Date.now();
   const overBudget = () => Date.now() - startedAt >= (options.timeBudgetMs ?? TIME_BUDGET_MS);
   const result: DeliveryResult = {
@@ -60,20 +55,13 @@ export async function deliverAlerts(
     expired: await expire(db, now()),
     failures: [],
   };
-  const off = new Set<string>();
   // Each message once per tick: a failed one is claimable again at once.
   const seen = new Set<string>();
   while (seen.size < BATCH && !overBudget()) {
-    const batch = await pendingEvents(db, now(), { off: [...off], seen: [...seen] });
+    const batch = await pendingEvents(db, now(), seen);
     if (batch.length === 0) break;
     for (const { notice } of batch) {
       if (seen.size >= BATCH || overBudget()) break;
-      if (off.has(notice.projectId)) continue;
-      if (!(await on(notice.projectId))) {
-        off.add(notice.projectId);
-        logger.info({ project_id: notice.projectId }, "alert messages held: the flag is off");
-        continue;
-      }
       seen.add(notice.eventId);
       const attempts = await claim(db, notice.eventId, now());
       if (attempts === null) continue;
@@ -92,11 +80,11 @@ export async function deliverAlerts(
   return result;
 }
 
-/** The oldest claimable messages, without those of the projects in `off` and the ones `seen`. */
+/** The oldest claimable messages, without the ones `seen`. */
 async function pendingEvents(
   db: Db,
   now: Date,
-  { off, seen }: { off: readonly string[]; seen: readonly string[] },
+  seen: ReadonlySet<string>,
 ): Promise<{ notice: AlertNotice }[]> {
   const rows = await db
     .select({ event: alertEvents, rule: alertRules, projectName: projects.name })
@@ -107,8 +95,7 @@ async function pendingEvents(
       and(
         claimable(now),
         notOnHold(alertRules.projectId),
-        off.length > 0 ? notInArray(alertRules.projectId, [...off]) : undefined,
-        seen.length > 0 ? notInArray(alertEvents.id, [...seen]) : undefined,
+        seen.size > 0 ? notInArray(alertEvents.id, [...seen]) : undefined,
       ),
     )
     .orderBy(alertEvents.at, alertEvents.id)
@@ -136,7 +123,7 @@ async function pendingEvents(
   );
 }
 
-/** Gives up the messages pending for `EXPIRE_MS`, whatever their project's flag. */
+/** Gives up the messages pending for `EXPIRE_MS`. */
 async function expire(db: Db, now: Date): Promise<number> {
   const before = new Date(now.getTime() - EXPIRE_MS);
   const rows = await db

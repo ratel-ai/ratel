@@ -7,7 +7,6 @@ export interface GeoActionDeps {
     organization: { id: string };
     role: string | null;
   } | null>;
-  enabled(subject: { organizationId: string }): Promise<boolean>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
   save(projectId: string, attributes: GeoAttributes): Promise<void>;
@@ -27,8 +26,6 @@ export async function changeGeoAttributes(
   const scope = await deps.findProjectScope(projectId);
   if (!scope || scope.role !== "admin")
     return { ok: false, error: "Only organization admins can change the location attributes." };
-  if (!(await deps.enabled({ organizationId: scope.organization.id })))
-    return { ok: false, error: "Locations are off for this project." };
   if (await deps.isRestricted())
     return { ok: false, error: "A support session cannot change settings." };
   const parsed = parseGeoAttributes(raw);

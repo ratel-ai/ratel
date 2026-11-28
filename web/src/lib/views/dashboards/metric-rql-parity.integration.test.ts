@@ -10,9 +10,9 @@ import {
   type SqlQuery,
 } from "@/lib/contracts/query";
 import {
+  METRICS,
   type MetricDefinition,
   nothingIsZero,
-  offeredMetrics,
   type QueryScope,
 } from "@/lib/synthesis/metrics/catalog";
 import {
@@ -55,8 +55,6 @@ interface Cell {
   shape: Shape;
   page: TraceFilter;
 }
-
-const METRICS = offeredMetrics({ customMonitoring: true });
 
 /** Each filter part of the form, alone, and a clause. A scorer limit for the scorer metrics. */
 const FILTERS: [string, MetricQuery["filters"]][] = [

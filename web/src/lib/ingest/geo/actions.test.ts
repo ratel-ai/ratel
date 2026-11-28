@@ -5,12 +5,11 @@ import { DEFAULT_GEO_ATTRIBUTES } from "@/lib/ingest/geo/attributes";
 
 const CHANGED = { ...DEFAULT_GEO_ATTRIBUTES, address: "app.ip" };
 
-test("F452-1: a member, a stranger, the flag off and a support session change nothing; an admin does", async () => {
+test("F452-1: a member, a stranger and a support session change nothing; an admin does", async () => {
   const refused: [Partial<GeoActionDeps>, RegExp][] = [
     [scope("member"), /^Only organization admins/],
     [scope(null), /^Only organization admins/],
     [{ findProjectScope: async () => null }, /^Only organization admins/],
-    [{ enabled: async () => false }, /are off/],
     [{ isRestricted: async () => true }, /^A support session/],
   ];
   for (const [over, error] of refused) {
@@ -41,7 +40,6 @@ function setup(over: Partial<GeoActionDeps> = {}) {
   const saved: unknown[] = [];
   const deps = {
     ...scope("admin"),
-    enabled: async () => true,
     isRestricted: async () => false,
     save: async (...args: unknown[]) => {
       saved.push(args);

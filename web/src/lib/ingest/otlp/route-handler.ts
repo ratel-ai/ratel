@@ -45,7 +45,7 @@ import {
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
-import type { PersistSpansContext, PersistSpansDeps } from "./ingest-spans";
+import type { PersistSpansDeps } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
@@ -138,7 +138,6 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   /** The same for an export that is queued: what must not be stored, taken out of its body. */
   redact?: (
     projectId: string,
-    organization: PersistSpansContext["organization"],
     transport: OtlpTransport,
     body: Uint8Array,
   ) => Promise<RedactedExport | null>;
@@ -318,7 +317,7 @@ export async function handleTracesRequest(
   let redacted: RedactedExport | null = null;
   if (queueable && deps.redact) {
     try {
-      redacted = await deps.redact(apiKey.projectId, organization, transport, bytes);
+      redacted = await deps.redact(apiKey.projectId, transport, bytes);
     } catch (err) {
       queueable = false;
       if (!(err instanceof OtlpDecodeError)) {

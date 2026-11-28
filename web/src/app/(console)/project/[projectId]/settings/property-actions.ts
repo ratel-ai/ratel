@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { changeTraceProperty, type TracePropertyResult } from "@/lib/ingest/properties/actions";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackProductEvent } from "@/lib/platform/telemetry";
@@ -23,7 +22,6 @@ export async function changeTracePropertyAction(
     return await changeTraceProperty(projectId, raw, {
       ...tracePropertyStorage(),
       findProjectScope: (id) => findProjectScope(id),
-      enabled: (subject) => featureEnabled("customMonitoring", subject),
       isRestricted: isRestrictedBySupportSession,
       observe: async ({ project_id, organization_id, field, action }) => {
         const scope = await findProjectScope(project_id);

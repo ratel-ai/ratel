@@ -4,10 +4,10 @@ import {
   callerAccess,
   defaultMonitoringDeps,
   type MonitoringDeps,
+  monitoringCaller,
   observeChange,
   refusal,
   required,
-  requireMonitoring,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { countOf } from "@/lib/mcp/operations/monitoring/results";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
@@ -138,7 +138,7 @@ export function scorerReadOperations(deps: MonitoringDeps = defaultMonitoringDep
       mutates: false,
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const [scorers, week, usage] = await Promise.all([
           listScorers(projectId, deps.db()),
           scorerSummaries(projectId, daysAgo(deps, WEEK_DAYS), deps.db()),
@@ -177,7 +177,7 @@ export function scorerReadOperations(deps: MonitoringDeps = defaultMonitoringDep
       mutates: false,
       params: z.object({ ...projectScoped, scorerId: scorerIdParam, limit: limitParam }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const db = deps.db();
         const scorer = await getScorer(projectId, params.scorerId, db);
         if (!scorer) throw notFound("scorer");
@@ -237,7 +237,7 @@ export function scorerWriteOperations(
         scorer: scorerDraft.optional().describe(`A draft, instead of scorerId. ${EXAMPLE}`),
       }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const stored = params.scorerId
           ? await getScorer(projectId, params.scorerId, deps.db())
           : null;
@@ -302,7 +302,7 @@ export function scorerWriteOperations(
           ),
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const db = deps.db();
         const { projectId } = caller;
         const result = await changeScorer(

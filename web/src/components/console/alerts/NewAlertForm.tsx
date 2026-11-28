@@ -24,9 +24,7 @@ export function NewAlertForm({
   );
   useEffect(() => {
     if (!inFragment) return;
-    const parsed = parseAlertQuery(alertQueryOf(window.location.hash.slice(1)), {
-      customMonitoring: true,
-    });
+    const parsed = parseAlertQuery(alertQueryOf(window.location.hash.slice(1)));
     setRead({ query: parsed.ok ? parsed.query : null });
   }, [inFragment]);
   if (!read) return <Skeleton className="h-96 w-full" />;

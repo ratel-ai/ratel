@@ -100,7 +100,6 @@ test("each of the 7 task kinds scores a trace of its task as engine.ts grades th
       },
     };
     const options: SweepOptions = {
-      flagOn: async () => true,
       judge: {
         engine,
         loadConversation: async (_projectId, traceId) => ({
@@ -155,7 +154,7 @@ test("a trace of an open run is held for later, and a trace of no run gets no pr
         has_error, input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at)
       values ('${PROJECT}', 'loose', now(), 5, false, 0, 0, 0, now(), now() - interval '60 seconds')`);
     const id = await scorer(client, db, { kind: "ends_well" });
-    const result = await sweepScorers({ flagOn: async () => true }, db);
+    const result = await sweepScorers({}, db);
     assert.deepEqual((await scored(id)).size, 0);
     // The open run's trace is held, not passed (the cursor waits before it); the loose one is not
     // of the task. `review-findings.integration.test.ts` scores the held trace once its run closes.
@@ -240,7 +239,6 @@ test("the task criteria judge spends from the daily judge budget, and stops when
     let asked = 0;
     const result = await sweepScorers(
       {
-        flagOn: async () => true,
         judge: {
           engine: {
             model: "fake",
@@ -295,7 +293,6 @@ function actionDeps(db: ReturnType<typeof getDb>): ScorerActionDeps {
       project: { id: projectId },
       organization: { id: ORG },
     }),
-    enabled: async () => true,
     isRestricted: async () => false,
     get: (projectId, id) => getScorer(projectId, id, db),
     count: (projectId) => countScorers(projectId, db),

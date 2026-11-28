@@ -124,8 +124,6 @@ function actionDeps(db: DashboardsDb): DashboardActionDeps {
       project: { id: projectId },
       organization: { id: projectId },
     }),
-    enabled: async () => true,
-    features: async () => ({ customMonitoring: false }),
     scorers: async () => [],
     isRestricted: async () => false,
     templates: { indexedProperties: async () => [], recordPick: async () => {} },

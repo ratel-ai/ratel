@@ -29,7 +29,7 @@ const DOCUMENT = {
   range: null,
   widgets: [WIDGET],
 };
-const CONTEXT = { scorers: [], features: { customMonitoring: true } };
+const CONTEXT = { scorers: [] };
 
 test("a document is refused by what it is, then by the widget that is wrong", () => {
   const widgets = (change: object) => ({
@@ -192,7 +192,6 @@ test("a missing scorer is named once, does not stop the import and reads no numb
     "p",
     read.dashboard.widgets,
     { since: new Date(0), until: new Date(1) },
-    CONTEXT.features,
     async () => {
       reads += 1;
       return null;

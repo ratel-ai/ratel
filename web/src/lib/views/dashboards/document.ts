@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { hasNoNul, NUL_PROBLEM, shownValue } from "@/lib/contracts/json-text";
 import { type PortableQuery, parseQuery, portableQuerySchema } from "@/lib/contracts/query";
-import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 import { defaultsSchema, filtersProblem } from "@/lib/views/dashboards/filters";
 import { compacted, gridPositionSchema } from "@/lib/views/dashboards/layout";
 import { sqlChartOfText } from "@/lib/views/dashboards/legacy-chart";
@@ -156,13 +155,7 @@ function portable(
 /** A document from outside, under the rules of the widget editor. A missing scorer is no refusal. */
 export function importDashboard(
   raw: unknown,
-  {
-    scorers,
-    features,
-  }: {
-    scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[];
-    features: MetricFeatures;
-  },
+  { scorers }: { scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[] },
 ): { ok: true; dashboard: ImportedDashboard } | { ok: false; error: string } {
   const parsed = importSchema.safeParse(raw, {
     error: ({ code, path, keys }) => {
@@ -179,7 +172,7 @@ export function importDashboard(
   const { name, filters, range } = parsed.data;
   const widgets: Widget[] = [];
   for (const [index, rawWidget] of parsed.data.widgets.entries()) {
-    const read = importWidget(rawWidget, scorers, features);
+    const read = importWidget(rawWidget, scorers);
     const error = read.ok ? filtersProblem([read.widget.query], filters) : read.error;
     if (!read.ok || error) return { ok: false, error: `${placeName(rawWidget, index)}: ${error}` };
     widgets.push({ ...read.widget, id: String(index) });
@@ -208,7 +201,6 @@ function refusalOf({ issues }: z.ZodError, raw: unknown): string {
 function importWidget(
   raw: unknown,
   scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
-  features: MetricFeatures,
 ): { ok: true; widget: Omit<Widget, "id"> } | { ok: false; error: string } {
   const { layout: rawLayout, ...rest } = record(raw);
   const layout = gridPositionSchema.safeParse(rawLayout);
@@ -216,7 +208,7 @@ function importWidget(
     return { ok: false, error: "The layout must be x, y, w and h on 12 columns." };
   const named = withScorersAs(rest, ANY_SCORER);
   if (named === null) return { ok: false, error: 'A scorer is given by its name: {"name": "…"}.' };
-  const parsed = parseWidget(named.widget, features, { sqlChart: sqlChartOfText });
+  const parsed = parseWidget(named.widget, { sqlChart: sqlChartOfText });
   if (!parsed.ok) return parsed;
   return {
     ok: true,

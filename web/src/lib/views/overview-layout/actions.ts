@@ -49,10 +49,8 @@ export interface LayoutDeps {
   /** Null for somebody who is signed out or has no access to the project. */
   reader: (projectId: string) => Promise<LayoutReader | null>;
   store: () => OverviewLayoutStore;
-  /** The widgets the project offers now, such as behind a flag. */
+  /** The widgets the project offers now. */
   offered: (projectId: string) => Promise<OfferedWidgets>;
-  /** Whether the project has dashboards, so that their widgets can be on the Overview. */
-  dashboardsOn: (projectId: string) => Promise<boolean>;
   /** A widget of a dashboard of this project; null when there is none. */
   dashboardWidget: (
     projectId: string,
@@ -93,7 +91,6 @@ export type LayoutRefusal =
   | "api_key"
   | "support_session"
   | "invalid"
-  | "dashboards_off"
   | "no_source"
   | "too_many"
   | "unreadable"
@@ -121,7 +118,6 @@ export const LAYOUT_REFUSALS: Readonly<Record<LayoutRefusal, string>> = {
     "An API key has no Overview layout. Sign in to the MCP server as a person to use the layout.",
   support_session: "A support session cannot change the Overview or read its history.",
   invalid: "That is not a change the Overview can make.",
-  dashboards_off: "Dashboards are off for this project.",
   no_source: "This project has no such dashboard widget.",
   too_many: `An Overview can have ${MAX_DASHBOARD_ITEMS} dashboard widgets. Remove one first.`,
   unreadable:
@@ -155,7 +151,7 @@ export function changeOverviewLayout(
   return write(projectId, deps, base, async (offer) => {
     const parsed = layoutChangeSchema(offer.widgets).safeParse(change);
     if (!parsed.success) return "invalid";
-    const wanted = await withSource(projectId, parsed.data, offer, deps);
+    const wanted = await withSource(projectId, parsed.data, deps);
     if (typeof wanted === "string") return wanted;
     return (record) => {
       // Only a reset, which asks for it, replaces what cannot be read.
@@ -275,7 +271,7 @@ async function write(
       return null;
     }
     const { next, ...what } = planned;
-    const entry = nextChange(current, next, offer.widgets, offer.dashboardItems, {
+    const entry = nextChange(current, next, offer.widgets, true, {
       ...what,
       source,
     });
@@ -309,34 +305,27 @@ function keptArrangement(stored: unknown, offer: Offer): OverviewArrangement | n
   return isUnreadable(stored) ? null : arrangementOf(stored, offer);
 }
 
-/** What the project's Overview can hold now. */
+/** What the project's Overview can hold now: these widgets, and the dashboard widgets. */
 interface Offer {
   widgets: OfferedWidgets;
-  dashboardItems: boolean;
 }
 
 async function offerOf(projectId: string, deps: LayoutDeps): Promise<Offer> {
-  const [widgets, dashboardItems] = await Promise.all([
-    deps.offered(projectId),
-    deps.dashboardsOn(projectId),
-  ]);
-  return { widgets, dashboardItems };
+  return { widgets: await deps.offered(projectId) };
 }
 
-function arrangementOf(stored: unknown, { widgets, dashboardItems }: Offer): OverviewArrangement {
-  return readArrangement(stored, widgets, dashboardItems);
+function arrangementOf(stored: unknown, { widgets }: Offer): OverviewArrangement {
+  return readArrangement(stored, widgets, true);
 }
 
 /** An added dashboard widget gets its name and size from the dashboard, never from who asks. */
 async function withSource(
   projectId: string,
   change: OverviewLayoutChange,
-  offer: Offer,
   deps: LayoutDeps,
 ): Promise<OverviewLayoutChange | LayoutRefusal> {
   if (!("widget" in change) || change.widget === undefined) return change;
   if (change.kind === "arrange" || !isDashboardItem(change.widget)) return change;
-  if (!offer.dashboardItems) return "dashboards_off";
   if (change.kind !== "add") return change;
   const ref = parseDashboardItem(change.widget);
   const source = ref && (await deps.dashboardWidget(projectId, ref));

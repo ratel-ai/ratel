@@ -5,7 +5,6 @@ import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { changeGeoAttributes } from "@/lib/ingest/geo/actions";
 import { saveGeoAttributes } from "@/lib/ingest/geo/store";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackProductEvent } from "@/lib/platform/telemetry";
@@ -21,7 +20,6 @@ export async function saveGeoAttributesAction(
   try {
     const result = await changeGeoAttributes(projectId, raw, {
       findProjectScope: (id) => findProjectScope(id),
-      enabled: (subject) => featureEnabled("customMonitoring", subject),
       isRestricted: isRestrictedBySupportSession,
       save: (id, attributes) => saveGeoAttributes(id, attributes),
       observe: async ({ project_id, organization_id, field }) => {

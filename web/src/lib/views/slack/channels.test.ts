@@ -169,7 +169,6 @@ test("only an admin disconnects", async () => {
     disconnectSlack(PROJECT, {
       getSession: async () => ({ user: { id: "u", externalId: "ext" } }),
       findProjectScope: async (id) => ({ project: { id }, organization: { id: ORG } }),
-      enabled: async () => true,
       isRestricted: async () => false,
       role: async () => role,
       revoke: async (id) => calls.push(`revoke ${id}`),

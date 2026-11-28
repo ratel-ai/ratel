@@ -2,7 +2,6 @@
 
 import { findProjectScope, type ProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
@@ -19,7 +18,7 @@ import { MAX_DASHBOARD_NAME } from "@/lib/views/dashboards/types";
 import { consoleDashboardDeps } from "./dashboard-deps";
 
 /**
- * Ask in words in the console's dialogs (`customMonitoring`): a draft from words, the suggested
+ * Ask in words in the console's dialogs: a draft from words, the suggested
  * prompts, the outcome of a draft, and a dashboard built from words. A widget draft saves nothing:
  * the dialog saves through `changeDashboardAction`. A dashboard build makes the dashboard at once,
  * with no confirm step (decision `ask-no-confirm`). A support session reads only: it may not ask.
@@ -166,19 +165,11 @@ export async function setAskOutcomeAction(
   }
 }
 
-/** The caller's project with the flag on, or why not. `asks`: a support session may not. */
+/** The caller's project, or why not. `asks`: a support session may not. */
 async function askScope(projectId: string, asks: boolean): Promise<ProjectScope | string> {
   if (!isDbConfigured()) return "No database is connected.";
   const scope = await findProjectScope(projectId);
   if (!scope) return "You cannot read this project.";
-  if (
-    !(await featureEnabled("customMonitoring", {
-      projectId: scope.project.id,
-      organizationId: scope.organization.id,
-      actor: scope.user.externalId,
-    }))
-  )
-    return "Dashboards are off for this project.";
   if (asks && (await isRestrictedBySupportSession()))
     return "A support session cannot ask for a draft.";
   return scope;

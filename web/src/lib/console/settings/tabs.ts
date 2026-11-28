@@ -14,13 +14,14 @@ export function organizationSettingsRoot(slug: string): string {
   return `${organizationRoot(slug)}/settings`;
 }
 
-/** General, API keys, Developer (SDK events) and Danger zone. */
+/** General, API keys, Notifications (the alert destinations), Developer (SDK events) and Danger zone. */
 export function projectSettingsTabs(projectId: string): TabLink[] {
   const root = projectSettingsRoot(projectId);
   return [
     // `exact`: every other tab lives under this path.
     { href: root, label: "General", exact: true },
     { href: `${root}/api-keys`, label: "API keys" },
+    { href: `${root}/notifications`, label: "Notifications" },
     { href: `${root}/developer`, label: "Developer" },
     { href: `${root}/danger`, label: "Danger zone" },
   ];

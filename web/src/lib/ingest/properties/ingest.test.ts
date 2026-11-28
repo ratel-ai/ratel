@@ -35,7 +35,6 @@ function fakes(overrides: Partial<PropertyIngestDeps> = {}) {
   let now = 1_000;
   let reads = 0;
   const deps: PropertyIngestDeps = {
-    enabled: async () => true,
     record: async (_projectId, sightings) => {
       writes.push(sightings);
       return sightings.map(({ name, source }) => {
@@ -73,7 +72,7 @@ const EXPORT = [
 
 test("an unknown key is recorded with no value; a standard key is indexed at first sight with its value", async () => {
   const { deps, writes, fills } = fakes();
-  const values = await createPropertyIngest(deps).capture("p1", { id: "o1" }, EXPORT);
+  const values = await createPropertyIngest(deps).capture("p1", EXPORT);
   // The stored traces get the standard property that has no column, once.
   assert.deepEqual(fills, [["p1", ["organization"]]]);
   assert.deepEqual(writes, [
@@ -93,41 +92,33 @@ test("an unknown key is recorded with no value; a standard key is indexed at fir
 test("an indexed key of the user's own gets its value", async () => {
   const { deps, indexed } = fakes();
   indexed.add("app.plan");
-  const values = await createPropertyIngest(deps).capture("p1", null, EXPORT);
+  const values = await createPropertyIngest(deps).capture("p1", EXPORT);
   assert.deepEqual(values.get(CHILD), { organization: "acme", "app.plan": "free" });
 });
 
 test("keys seen in the last hour are not written again, and their sightings are counted later", async () => {
   const { deps, writes, advance } = fakes();
   const ingest = createPropertyIngest(deps);
-  await ingest.capture("p1", null, EXPORT);
-  await ingest.capture("p1", null, EXPORT);
+  await ingest.capture("p1", EXPORT);
+  await ingest.capture("p1", EXPORT);
   assert.equal(writes.length, 1, "the second export writes nothing");
-  await ingest.capture("p1", null, [span(ROOT, { "app.region": "eu", "app.plan": "x" })]);
+  await ingest.capture("p1", [span(ROOT, { "app.region": "eu", "app.plan": "x" })]);
   assert.deepEqual(writes[1], [{ name: "app.region", source: "user", count: 1 }]);
   advance(SEEN_MS);
-  await ingest.capture("p1", null, [span(ROOT, { "app.plan": "x" })]);
+  await ingest.capture("p1", [span(ROOT, { "app.plan": "x" })]);
   assert.deepEqual(writes[2], [{ name: "app.plan", source: "user", count: 4 }]);
   // Another project has its own cache.
-  await ingest.capture("p2", null, [span(ROOT, { "app.plan": "x" })]);
+  await ingest.capture("p2", [span(ROOT, { "app.plan": "x" })]);
   assert.deepEqual(writes[3], [{ name: "app.plan", source: "user", count: 1 }]);
 });
 
 test("the indexed names are read once a minute per project", async () => {
   const { deps, reads, advance } = fakes();
   const ingest = createPropertyIngest(deps);
-  await ingest.capture("p1", null, EXPORT);
-  await ingest.capture("p1", null, EXPORT);
+  await ingest.capture("p1", EXPORT);
+  await ingest.capture("p1", EXPORT);
   assert.equal(reads(), 1);
   advance(60_000);
-  await ingest.capture("p1", null, EXPORT);
+  await ingest.capture("p1", EXPORT);
   assert.equal(reads(), 2);
-});
-
-test("with customMonitoring off, ingest records nothing and stores no value", async () => {
-  const { deps, writes, reads } = fakes({ enabled: async () => false });
-  const values = await createPropertyIngest(deps).capture("p1", { id: "o1" }, EXPORT);
-  assert.equal(values.size, 0);
-  assert.equal(writes.length, 0);
-  assert.equal(reads(), 0);
 });

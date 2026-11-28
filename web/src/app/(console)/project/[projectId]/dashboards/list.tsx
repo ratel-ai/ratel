@@ -8,7 +8,7 @@ import { loadTemplateFacts, templateCards } from "@/lib/views/dashboards/templat
 import { ensureDefaultDashboards } from "@/lib/views/dashboards/templates/store";
 import { dashboardsScope } from "./context";
 
-/** The project's dashboards: what `page.tsx` shows with `customMonitoring` on. */
+/** The project's dashboards: what `page.tsx` shows. */
 export async function DashboardsList({ projectId }: { projectId: string }) {
   const scope = await dashboardsScope(projectId);
   if (!scope)

@@ -183,7 +183,6 @@ function deps(events: Tracked[], over: Partial<TaskOperationDeps> = {}): TaskOpe
     ],
     taskSimulationDetailFor: async () => detail(),
     taskEvalCases: async () => [],
-    scorersOn: async () => false,
     saveScorer: unexpected,
     resetScorer: unexpected,
     enqueueTaskEvalRefresh: unexpected,
@@ -355,60 +354,49 @@ test("change_task_scorer saves through the console's action as the caller, and e
   assert.equal(events[0]!.properties.organization_id, "org-1");
 });
 
-test("change_task_scorer with the real sync: flag off at or over the limit succeeds, flag on refuses before any write", async () => {
-  for (const [live, scorers, ok] of [
-    [false, MAX_SCORERS, true],
-    [false, MAX_SCORERS + 30, true],
-    [true, MAX_SCORERS, false],
-  ] as const) {
-    const client = await createMigratedPGlite();
-    const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
-    try {
-      await client.exec(`
-        insert into organizations (id, name, slug) values ('22222222-2222-4222-8222-222222222222', 'T', 't');
-        insert into projects (id, organization_id, name, slug) values ('${PROJECT}', '22222222-2222-4222-8222-222222222222', 'A', 'a');
-        insert into task_scorers (project_id, task_id, kind, config, enabled, source, updated_by)
-          values ('${PROJECT}', '${TASK}', 'max_tool_calls', '{"max": 5}', true, 'user', 'u1');
-        insert into trace_scorers (project_id, name, kind, config, created_by, updated_by)
-          select '${PROJECT}', 'S' || n, 'check', '{"path":"duration_ms","op":"exists"}', 'u', 'u'
-          from generate_series(1, ${scorers}) n;`);
-      const legacy = async () => {
-        const scorer = (await scorersFor(PROJECT, TASK, db)).find(
-          (candidate) => candidate.kind === "max_tool_calls",
-        );
-        return scorer?.kind === "max_tool_calls" ? scorer.max : null;
-      };
-      const result = await run(
-        "change_task_scorer",
-        { taskId: TASK, kind: "max_tool_calls", max: 3, enabled: true },
-        [],
-        {
-          changeTaskScorer,
-          scorersOn: async () => live,
-          saveScorer: (input, on) => saveTaskScorer(input, on, db),
-          resetScorer: (projectId, taskId, kind, actor, on) =>
-            resetTaskScorer(projectId, taskId, kind, actor, on, db),
-        },
+test("change_task_scorer with the real sync: at the limit it refuses before any write", async () => {
+  const scorers = MAX_SCORERS;
+  const client = await createMigratedPGlite();
+  const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
+  try {
+    await client.exec(`
+      insert into organizations (id, name, slug) values ('22222222-2222-4222-8222-222222222222', 'T', 't');
+      insert into projects (id, organization_id, name, slug) values ('${PROJECT}', '22222222-2222-4222-8222-222222222222', 'A', 'a');
+      insert into task_scorers (project_id, task_id, kind, config, enabled, source, updated_by)
+        values ('${PROJECT}', '${TASK}', 'max_tool_calls', '{"max": 5}', true, 'user', 'u1');
+      insert into trace_scorers (project_id, name, kind, config, created_by, updated_by)
+        select '${PROJECT}', 'S' || n, 'check', '{"path":"duration_ms","op":"exists"}', 'u', 'u'
+        from generate_series(1, ${scorers}) n;`);
+    const legacy = async () => {
+      const scorer = (await scorersFor(PROJECT, TASK, db)).find(
+        (candidate) => candidate.kind === "max_tool_calls",
       );
-      const label = `live ${live}, ${scorers} scorers`;
-      if (ok) {
-        data(result);
-        assert.equal(await legacy(), 3, label);
-      } else {
-        const refused = error(result);
-        assert.equal(refused.error, "conflict", label);
-        assert.match(refused.message, /limit is 100/, label);
-        assert.equal(await legacy(), 5, label);
-      }
-      // The refused sync creates nothing either way.
-      assert.equal(await countScorers(PROJECT, db), scorers, label);
-    } finally {
-      await client.close();
-    }
+      return scorer?.kind === "max_tool_calls" ? scorer.max : null;
+    };
+    const result = await run(
+      "change_task_scorer",
+      { taskId: TASK, kind: "max_tool_calls", max: 3, enabled: true },
+      [],
+      {
+        changeTaskScorer,
+        saveScorer: (input) => saveTaskScorer(input, db),
+        resetScorer: (projectId, taskId, kind, actor) =>
+          resetTaskScorer(projectId, taskId, kind, actor, db),
+      },
+    );
+    const label = `${scorers} scorers`;
+    const refused = error(result);
+    assert.equal(refused.error, "conflict", label);
+    assert.match(refused.message, /limit is 100/, label);
+    assert.equal(await legacy(), 5, label);
+    // The refused change creates nothing.
+    assert.equal(await countScorers(PROJECT, db), scorers, label);
+  } finally {
+    await client.close();
   }
 });
 
-test("change_task_scorer with the real sync, flag off under the limit: the converted scorer follows", async () => {
+test("change_task_scorer with the real sync under the limit: the converted scorer follows", async () => {
   const client = await createMigratedPGlite();
   const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
   try {
@@ -422,8 +410,7 @@ test("change_task_scorer with the real sync, flag off under the limit: the conve
         [],
         {
           changeTaskScorer,
-          scorersOn: async () => false,
-          saveScorer: (input, on) => saveTaskScorer(input, on, db),
+          saveScorer: (input) => saveTaskScorer(input, db),
         },
       ),
     );
@@ -445,7 +432,7 @@ test("change_task_scorer resets, and refuses a scorer without its setting or a s
       },
     }),
   );
-  assert.deepEqual(reset, [[PROJECT, TASK, "judge_criteria", ACTOR, false]]);
+  assert.deepEqual(reset, [[PROJECT, TASK, "judge_criteria", ACTOR]]);
   const noMax = error(
     await run("change_task_scorer", { taskId: TASK, kind: "max_cost_usd", enabled: true }),
   );

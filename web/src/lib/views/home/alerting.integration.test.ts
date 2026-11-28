@@ -17,7 +17,7 @@ import {
   changeLayout,
   defaultLayout,
   type OverviewLayout,
-  offeredWidgets,
+  WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -54,7 +54,7 @@ after(() => client.close());
 
 test("one alerting rule is one row, with its value, condition, age and link", async () => {
   const id = await rule({ minutesAgo: 12 });
-  const { alerts } = await load(true);
+  const { alerts } = await load();
   assert.deepEqual(alerts, {
     items: [
       {
@@ -84,7 +84,7 @@ test("a recovered rule gives none; nor does one in no data, paused, malformed or
   await rule({ enabled: false });
   await rule({ query: { bad: true } });
   await rule({ projectId: OTHER });
-  const { alerts } = await load(true);
+  const { alerts } = await load();
   assert.deepEqual(alerts, {
     items: [],
     href: `/project/${PROJECT}/alerts`,
@@ -98,7 +98,7 @@ test("a recovered rule gives none; nor does one in no data, paused, malformed or
 test("every alerting rule, the newest change first", async () => {
   for (let minutesAgo = 7; minutesAgo > 0; minutesAgo--)
     await rule({ name: `r${minutesAgo}`, minutesAgo });
-  const { alerts } = await load(true);
+  const { alerts } = await load();
   assert.ok(alerts && alerts !== "failed");
   assert.deepEqual(
     alerts.items.map(({ name }) => name),
@@ -107,23 +107,19 @@ test("every alerting rule, the newest change first", async () => {
   assert.equal((await listAlertingRules(PROJECT, db, 2)).length, 2);
 });
 
-test("not offered: no read, and no data; a removed widget reads nothing either", async () => {
+test("a removed widget reads nothing", async () => {
   await rule({});
-  const off = await load(false);
+  const removed = changeLayout(defaultLayout(WIDGET_CATALOG), { kind: "remove", widget: "alerts" });
+  const off = await load(removed);
   assert.equal(off.alerts, null);
   assert.equal(off.reads, 0);
-  const removed = changeLayout(defaultLayout(offeredWidgets({ customMonitoring: true })), {
-    kind: "remove",
-    widget: "alerts",
-  });
-  assert.equal((await load(true, removed)).reads, 0);
-  assert.equal((await load(true)).reads, 1);
+  assert.equal((await load()).reads, 1);
 });
 
 test("a read that fails says so, on the page and to an agent", async () => {
   const data = await loadFocusedOverview({
     ...INPUT,
-    layout: defaultLayout(offeredWidgets({ customMonitoring: true })),
+    layout: defaultLayout(WIDGET_CATALOG),
     db: db as ReturnType<typeof getDb>,
     reads: { ...FOCUSED_READS, alerting: () => Promise.reject(new Error("statement timeout")) },
   });
@@ -135,7 +131,7 @@ test("a read that fails says so, on the page and to an agent", async () => {
 
 test("an agent reads the rows that the page shows", async () => {
   await rule({});
-  const data = await load(true);
+  const data = await load();
   assert.ok(data.alerts && data.alerts !== "failed");
   assert.deepEqual(WIDGET_DATA.alerts(data), {
     count: 1,
@@ -145,10 +141,7 @@ test("an agent reads the rows that the page shows", async () => {
   });
 });
 
-async function load(
-  customMonitoring: boolean,
-  layout: OverviewLayout = defaultLayout(offeredWidgets({ customMonitoring })),
-) {
+async function load(layout: OverviewLayout = defaultLayout(WIDGET_CATALOG)) {
   queries = [];
   const data = await loadFocusedOverview({
     ...INPUT,

@@ -1,6 +1,6 @@
 # Alerts
 
-A project's alert rules, behind the `customMonitoring` flag. A rule is one query object (a widget's,
+A project's alert rules. A rule is one query object (a widget's,
 without dimensions), an operator, a threshold and a window. Core-owned.
 
 | Table | Holds |
@@ -20,7 +20,7 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 | `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each, one rule of each project in turn, and at most `PROJECT_TIME_BUDGET_MS` (5 s) of a tick for one project's rules. Every rule reads its RQL value before its transaction, on the alert path; a refusal sets `last_error` (failing: no state change, no message) and the next read clears it |
 | `deliver.ts` | `deliverAlerts`: claims and sends the pending messages |
 | `notifier.ts` | the `AlertNotifier` port, with `memoryNotifier` for tests |
-| `actions.ts` | `changeAlert`: one change by a person, after membership, the flag and a support-session check |
+| `actions.ts` | `changeAlert`: one change by a person, after membership and a support-session check |
 | `destinations.ts` | the reads and writes of destinations; only `webhookOf` opens a URL |
 | `destination-actions.ts` | `changeDestination`: add a channel or a webhook, test and remove, after the same checks as `changeAlert` |
 | `slack-url.ts` | `parseSlackWebhook`: the one address check, on save and again before each send |
@@ -45,9 +45,7 @@ Rules:
 - A fire and a recovery are one message each. `no_data` sends nothing and keeps `firing`, so an
   alert that loses its data neither fires twice nor loses its recovery.
 - A rule is evaluated each tick (60 seconds), about every 5 minutes for a window of a day.
-- The messages of a project whose flag is off stay pending, with a log, and a tick leaves them out
-  of its next reads: they never hold up another project's. A message still pending after a day
-  expires unsent (`failed`, with a log): a message that late says nothing of now.
+- A message still pending after a day expires unsent (`failed`, with a log): a message that late says nothing of now.
 - A message is tried 4 times at most (the first and 3 more), one per tick. `sent_to` keeps a retry
   from repeating it where it arrived. A process that dies between a send and its record can repeat
   that message: the claim ends after 2 minutes.

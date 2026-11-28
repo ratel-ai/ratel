@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
@@ -23,7 +22,6 @@ const logger = getLogger("slack/connection");
 const access: AlertAccessDeps = {
   getSession: getSessionContext,
   findProjectScope: (projectId) => findProjectScope(projectId),
-  enabled: (subject) => featureEnabled("customMonitoring", subject),
   isRestricted: isRestrictedBySupportSession,
 };
 

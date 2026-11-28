@@ -7,10 +7,10 @@ import {
   defaultMonitoringDeps,
   type MonitoringCaller,
   type MonitoringDeps,
+  monitoringCaller,
   observeChange,
   refusal,
   required,
-  requireMonitoring,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { countOf } from "@/lib/mcp/operations/monitoring/results";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
@@ -84,7 +84,7 @@ export function alertReadOperations(deps: MonitoringDeps = defaultMonitoringDeps
       mutates: false,
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const rules = await store.listAlertRules(projectId, deps.db());
         const tracker = new TruncationTracker();
         return {
@@ -114,7 +114,7 @@ export function alertReadOperations(deps: MonitoringDeps = defaultMonitoringDeps
       mutates: false,
       params: z.object({ ...projectScoped, alertId: alertIdParam, limit: limitParam }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const db = deps.db();
         const rule = await store.getAlertRule(projectId, params.alertId, db);
         if (!rule) throw notFound("alert");
@@ -162,7 +162,7 @@ export function alertReadOperations(deps: MonitoringDeps = defaultMonitoringDeps
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const [destinations, slack] = await Promise.all([
           listDestinations(caller.projectId, deps.db()),
           slackStatus(deps, ctx, caller),
@@ -204,7 +204,7 @@ export function alertReadOperations(deps: MonitoringDeps = defaultMonitoringDeps
         limit: limitParam,
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const slack = await slackStatus(deps, ctx, caller);
         if (!slack.connected)
           return {
@@ -262,14 +262,13 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
           ),
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const db = deps.db();
         const { projectId } = caller;
         const result = await changeAlert(
           { projectId, ...(await changeOf(params, projectId, deps)) },
           {
             ...callerAccess(ctx, caller),
-            features: async () => ({ customMonitoring: true }),
             store: {
               createAlertRule: (project, draft, actor) =>
                 store.createAlertRule(project, draft, actor, db),
@@ -328,7 +327,7 @@ export function alertWriteOperations(deps: MonitoringDeps = defaultMonitoringDep
         destinationId: destinationIdParam.optional().describe("For send_test and delete."),
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const { action } = params;
         if (action === "disconnect_slack") return disconnect(deps, ctx, caller);
         const db = deps.db();

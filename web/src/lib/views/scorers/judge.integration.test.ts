@@ -144,7 +144,7 @@ test("a sweep judges each trace once, in small batches", async () => {
   const { client, db, judgeId, checkId } = await setupSweep(25);
   try {
     const { engine, questions } = fakeEngine("pass");
-    const options = { flagOn: async () => true, judge: { engine, loadConversation } };
+    const options = { judge: { engine, loadConversation } };
     await sweepScorers(options, db);
     const rows = await latestScores(PROJECT, judgeId, 100, db);
     assert.equal(rows.length, 25);
@@ -161,15 +161,14 @@ test("a sweep judges each trace once, in small batches", async () => {
 test("without an engine, checks still score; with no budget, the skip is reported", async () => {
   const { client, db, judgeId, checkId } = await setupSweep(12);
   try {
-    const flagOn = async () => true;
-    await sweepScorers({ flagOn, judge: { engine: null, loadConversation } }, db);
+    await sweepScorers({ judge: { engine: null, loadConversation } }, db);
     assert.equal((await latestScores(PROJECT, checkId, 100, db)).length, 12);
     assert.equal((await latestScores(PROJECT, judgeId, 100, db)).length, 0);
 
     await client.exec("update trace_scorers set cursor_at = now() - interval '1 hour'");
     const { engine, questions } = fakeEngine("pass");
     const result = await sweepScorers(
-      { flagOn, judge: { engine, loadConversation, dailyBudgetUsd: 0 } },
+      { judge: { engine, loadConversation, dailyBudgetUsd: 0 } },
       db,
     );
     assert.deepEqual(result.budgetSkips, [{ projectId: PROJECT, scorerId: judgeId, traces: 12 }]);
@@ -195,10 +194,7 @@ test("F445-3: an engine that is down for five ticks loses no trace, and the atte
     const tick = async () => {
       clock += 60_000;
       const now = clock;
-      await sweepScorers(
-        { flagOn: async () => true, now: () => now, judge: { engine, loadConversation } },
-        db,
-      );
+      await sweepScorers({ now: () => now, judge: { engine, loadConversation } }, db);
       return (await latestScores(PROJECT, judgeId, 100, db)).length;
     };
     for (let n = 0; n < 5; n++) assert.equal(await tick(), 0);
@@ -226,10 +222,7 @@ test("F445-3: a batch that never gets an answer is given up after its last attem
     for (let n = 1; n <= MAX_JUDGE_ATTEMPTS + 1; n++) {
       const at = Date.now() + n * 2 * 3_600_000;
       calls = 0;
-      await sweepScorers(
-        { flagOn: async () => true, now: () => at, judge: { engine, loadConversation } },
-        db,
-      );
+      await sweepScorers({ now: () => at, judge: { engine, loadConversation } }, db);
       asked.push(calls);
     }
     assert.deepEqual(asked, [...Array(MAX_JUDGE_ATTEMPTS).fill(10), 5]);
@@ -244,7 +237,7 @@ test("F445-3: traces that arrive without an engine are scored when there is one;
   try {
     const sweep = (judge: JudgeDeps, hours: number) => {
       const at = Date.now() + hours * 3_600_000;
-      return sweepScorers({ flagOn: async () => true, now: () => at, judge }, db);
+      return sweepScorers({ now: () => at, judge }, db);
     };
     const { engine } = fakeEngine("pass");
     const count = async () => (await latestScores(PROJECT, judgeId, 100, db)).length;
@@ -266,8 +259,7 @@ test("a model that refuses every trace of a batch has answered: they are not ask
   const { client, db } = await setupSweep(25);
   try {
     const { engine, questions } = fakeEngine("refused");
-    for (let n = 0; n < 2; n++)
-      await sweepScorers({ flagOn: async () => true, judge: { engine, loadConversation } }, db);
+    for (let n = 0; n < 2; n++) await sweepScorers({ judge: { engine, loadConversation } }, db);
     assert.equal(questions.length, 25);
   } finally {
     await client.close();
@@ -283,7 +275,7 @@ test("an engine that is down is not asked for the whole backlog in one sweep", a
       calls += 1;
       throw new Error("down");
     };
-    await sweepScorers({ flagOn: async () => true, judge: { engine, loadConversation } }, db);
+    await sweepScorers({ judge: { engine, loadConversation } }, db);
     assert.equal(calls, 10);
   } finally {
     await client.close();

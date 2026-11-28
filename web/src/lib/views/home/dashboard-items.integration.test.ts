@@ -31,9 +31,9 @@ import {
 } from "@/lib/views/overview-layout/dashboard-widgets";
 import {
   changeLayout,
+  DEFAULT_LAYOUT,
   dashboardItemId,
   type OverviewLayout,
-  UNFLAGGED_LAYOUT,
 } from "@/lib/views/overview-layout/domain/layout";
 
 /** A dashboard widget on the Overview shows what its dashboard shows, as it is now. */
@@ -122,7 +122,7 @@ async function overview(layout: OverviewLayout, window: 7 | 30 = 7) {
 
 /** Only the item: the others would read the pool. */
 function withItem(id: ReturnType<typeof dashboardItemId>): OverviewLayout {
-  const without = UNFLAGGED_LAYOUT.map((widget) => ({ ...widget, removed: true }));
+  const without = DEFAULT_LAYOUT.map((widget) => ({ ...widget, removed: true }));
   return changeLayout(without, {
     kind: "add",
     widget: id,
@@ -145,7 +145,6 @@ test("the same rows as on the dashboard, for the same range and filters", async 
       PROJECT,
       dashboard.widgets,
       { ...range, filter: dashboard.filters },
-      { customMonitoring: true },
       (project, widget, at) => loadWidget(project, widget, at, db),
     );
     assert.deepEqual(item.result, result);
@@ -217,7 +216,7 @@ test("a source that is gone, another project's, or a reference that cannot be re
 
 test("nothing is read without an entry, and a failed read is not an empty one", async () => {
   assert.equal(
-    await overview(UNFLAGGED_LAYOUT.map((widget) => ({ ...widget, removed: true }))),
+    await overview(DEFAULT_LAYOUT.map((widget) => ({ ...widget, removed: true }))),
     null,
   );
   const failed = await loadFocusedOverview({

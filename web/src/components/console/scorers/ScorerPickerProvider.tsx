@@ -13,35 +13,35 @@ export interface ScorerPickerState {
 
 const ScorerPickerContext = createContext<ScorerPickerState | null>(null);
 
-/** The one scorer list of a surface. `data` null: scorers are off, so no picker shows. */
+/** The one scorer list of a surface. */
 export function ScorerPickerProvider({
   projectId,
   data,
   children,
 }: {
   projectId: string;
-  data: ScorerPickerData | null;
+  data: ScorerPickerData;
   children: ReactNode;
 }) {
   const [kept, setKept] = useState<readonly PickerScorer[]>([]);
-  const state = useMemo<ScorerPickerState | null>(() => {
-    if (!data) return null;
-    return {
+  const state = useMemo<ScorerPickerState>(
+    () => ({
       projectId,
       data: withKept(data, kept),
       keep: (scorer) =>
         setKept((current) => [...current.filter(({ id }) => id !== scorer.id), scorer]),
-    };
-  }, [projectId, data, kept]);
+    }),
+    [projectId, data, kept],
+  );
   return <ScorerPickerContext value={state}>{children}</ScorerPickerContext>;
 }
 
-/** The surface's picker state; null while scorers are off. */
+/** The surface's picker state; null outside a `ScorerPickerProvider`. */
 export function useScorerPicker(): ScorerPickerState | null {
   return useContext(ScorerPickerContext);
 }
 
-/** The surface's scorers, the ones saved here included; null while scorers are off. */
+/** The surface's scorers, the ones saved here included; null outside a `ScorerPickerProvider`. */
 export function useScorers(): readonly PickerScorer[] | null {
   return useScorerPicker()?.data.scorers ?? null;
 }

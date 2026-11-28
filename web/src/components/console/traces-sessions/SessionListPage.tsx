@@ -7,7 +7,6 @@ import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { getTracesIngestDiagnostics } from "@/lib/synthesis/traces/queries";
 import {
@@ -46,7 +45,7 @@ export async function SessionListPage({
 }) {
   if (!isDbConfigured()) return <TracesUnavailable />;
   // Checked here too, as upstream does: the list shows each session's ask.
-  const { project, organization, user } = await requireProjectScope(projectId);
+  const { project } = await requireProjectScope(projectId);
 
   const filter = parseSessionsFilter(searchParams[SESSIONS_FILTER_PARAM]);
   const now = new Date();
@@ -56,7 +55,7 @@ export async function SessionListPage({
   // `cloud-project-entities` flag.
   const filterOptions = { entities: true };
   const traces = traceFilterFromSearch(search, filterOptions);
-  const [page, filterFacets, explore] = await Promise.all([
+  const [page, filterFacets] = await Promise.all([
     loadSessionListPage(project.id, { filter, now, traces }),
     loadOrFallback({
       operation: "trace_filter_facets",
@@ -78,11 +77,6 @@ export async function SessionListPage({
             timeoutMs: supplementaryReadTimeoutMs(),
           },
         ),
-    }),
-    featureEnabled("customMonitoring", {
-      projectId: project.id,
-      organizationId: organization.id,
-      actor: user.externalId,
     }),
   ]);
   // RC-752: turns with no session read "No sessions yet", not "No turns yet".
@@ -106,7 +100,7 @@ export async function SessionListPage({
   return (
     <SessionListView
       projectId={project.id}
-      actions={explore ? <ExploreLink href={exploreTracesHref(project.id, search, null)} /> : null}
+      actions={<ExploreLink href={exploreTracesHref(project.id, search, null)} />}
       filter={filter}
       rows={page.items}
       nextCursor={page.nextCursor}

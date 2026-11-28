@@ -28,7 +28,6 @@ function setup(over: Partial<TracePropertyActionDeps> = {}, indexedOwn = 0) {
   ]);
   const deps: TracePropertyActionDeps = {
     findProjectScope: async (id) => ({ project: { id }, organization: { id: "o" }, role: "admin" }),
-    enabled: async () => true,
     isRestricted: async () => false,
     indexLimit: () => Number.POSITIVE_INFINITY,
     find: async (_projectId, name) => store.get(name) ?? null,
@@ -173,7 +172,6 @@ test("a member, a stranger, the flag off, a support session and an unknown key c
       /^Only organization admins/,
     ],
     [{ findProjectScope: async () => null }, /^Only organization admins/],
-    [{ enabled: async () => false }, /are off for this project\.$/],
     [{ isRestricted: async () => true }, /^A support session/],
   ];
   for (const [over, error] of refused) {

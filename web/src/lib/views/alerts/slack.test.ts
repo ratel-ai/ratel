@@ -172,7 +172,6 @@ test("add, test and remove never repeat the URL, whoever asks", async () => {
     await run({ action: "add", name: "Ops", url: "http://hooks.slack.com/services/s3cretABCD" }),
     await run({ action: "add", name: "Ops", url: "https://u:p@hooks.slack.com/s3cretABCD" }),
     await run({ action: "add", name: "Ops", url: URL_TEXT }, { canSeal: () => false }),
-    await run({ action: "add", name: "Ops", url: URL_TEXT }, { enabled: async () => false }),
     await run({ action: "add", name: "Ops", url: URL_TEXT }, { isRestricted: async () => true }),
     await run(
       { action: "add", name: "Ops", url: URL_TEXT },
@@ -187,10 +186,10 @@ test("add, test and remove never repeat the URL, whoever asks", async () => {
   ];
   assert.deepEqual(
     results.map((result) => result.ok),
-    [true, ...Array(9).fill(false)],
+    [true, ...Array(8).fill(false)],
   );
   assert.equal(created.length, 1);
-  assert.deepEqual(results[7], { ok: false, error: "Slack answered 404." });
+  assert.deepEqual(results[6], { ok: false, error: "Slack answered 404." });
   assert.ok((await run({ action: "test", destinationId: ID })).ok);
   assert.ok((await run({ action: "remove", destinationId: ID })).ok);
   assert.doesNotMatch(JSON.stringify([results, seen]), /s3cret|\/services/);
@@ -340,7 +339,6 @@ function actionDeps(
   return {
     getSession: async () => ({ user: { id: "u", externalId: "ext" } }),
     findProjectScope: async (id) => ({ project: { id }, organization: { id: "org" } }),
-    enabled: async () => true,
     isRestricted: async () => false,
     canSeal: () => true,
     create: async (input) => {

@@ -179,7 +179,7 @@ A view shows what its console page shows. Three rules keep it so:
 
 - `table`: `run_rql` as a table of the RQL query's own columns, each with its RQL type, from the
   tool's `columns` and `rows`. The columns change with each query, so the list view's fixed columns
-  do not fit. A cut table and an empty one say so. It is published only when the tool exists (`customMonitoring`).
+  do not fit. A cut table and an empty one say so.
 
 - `trace`: `get_trace` as the console's own TraceView (embedded, as the
   session replay's Trace view shows it), from the trace page's props in the
