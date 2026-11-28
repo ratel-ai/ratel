@@ -22,6 +22,7 @@ import {
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
 import { mcpServersOperations } from "@/lib/mcp/operations/mcp-servers";
 import { alertReadOperations, alertWriteOperations } from "@/lib/mcp/operations/monitoring/alerts";
+import { askOperations } from "@/lib/mcp/operations/monitoring/ask";
 import {
   dashboardReadOperations,
   dashboardWriteOperations,
@@ -108,6 +109,7 @@ export function assembleOperations(
     ...alertReadOperations(),
     ...dashboardReadOperations(),
     ...(options.customMonitoring ? rqlOperations() : []),
+    ...(options.customMonitoring ? askOperations() : []),
     ...locationReadOperations(),
     ...propertyReadOperations(),
     ...writeOperations(),
