@@ -247,7 +247,7 @@ test("a query dataset that cannot resolve refuses the run with its reason", asyn
 });
 
 function start() {
-  return { sandboxVersion: "latest", params: {}, startedBy: "user_1" };
+  return { sandboxVersion: "latest", params: {}, startedBy: "user_1", mayCopyContent: true };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: the drizzle database of `createEvalsDb`

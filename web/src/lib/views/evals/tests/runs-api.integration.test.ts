@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { SandboxRun, SandboxVersionSummary } from "@/lib/views/sandboxes";
@@ -10,7 +11,8 @@ import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import type { ExperimentDeps } from "../experiments";
-import { handleGetByKey } from "../experiments-api";
+import { handleGetByKey, handleStartByKey } from "../experiments-api";
+import type { TraceSource } from "../ports/trace-source";
 import {
   handleAddRowsByKey,
   handleCreateDatasetByKey,
@@ -55,7 +57,7 @@ const BILLING: SandboxVersionSummary = {
 };
 const SANDBOX_RUN = "88888888-8888-4888-8888-888888888888";
 
-async function setup() {
+async function setup(traces: TraceSource = fakeTraceSource()) {
   const { db, client } = await createEvalsDb();
   const evals = createDrizzleEvalStore(db);
   const datasets = createDrizzleDatasetStore(db);
@@ -66,7 +68,7 @@ async function setup() {
     cases: createDrizzleCaseStore(db),
     evals,
     datasets,
-    traces: fakeTraceSource(),
+    traces,
     library: fakeLibrary(),
     experiments,
     sandboxes: {
@@ -95,7 +97,7 @@ async function setup() {
     baseline: async () => null,
     offForAll: () => false,
     authenticate: async () =>
-      ({ ok: true, projectId: PROJECT_ID, apiKeyId: "k1" }) as Awaited<
+      ({ ok: true, projectId: PROJECT_ID, apiKeyId: "k1", policy: apiKeyPolicy(["*"]) }) as Awaited<
         ReturnType<RunsApiDeps["authenticate"]>
       >,
     enabled: async () => true,
@@ -208,7 +210,7 @@ test("a key starts a run of one eval with a matrix, and reads it with its eval, 
     [{ model: "small" }, { model: "large" }],
   );
   assert.equal(read.body.run.variants.length, 2);
-  assert.match(read.body.run.rule, /mean of the scores of its variants/);
+  assert.match(read.body.run.rule, /over all the valid trials of the run/);
   const one = await json(handleEvalByKey("Refunds", deps()));
   assert.equal(one.body.runs[0].experimentId, started.body.experimentId);
   assert.deepEqual(one.body.runs[0].params, { depth: 2 });
@@ -291,6 +293,78 @@ test("refusals: a wrong body, an unknown eval or dataset, a matrix over 12, a qu
   );
   assert.deepEqual([added.status, added.body.error], [409, "dataset_not_fixed"]);
   assert.equal((await handleCreateDatasetByKey(post({ name: "Last" }), deps())).status, 409);
+});
+
+test("a key without content:read cannot start a run that copies trace text: one eval, each eval, the suite", async () => {
+  let read = 0;
+  const { deps, experiments } = await setup(
+    fakeTraceSource({
+      lastTurns: async () => ["a1111111-1111-4111-8111-111111111111"],
+      loadTurn: async () => {
+        read += 1;
+        return { ask: "refund A1", messages: [], toolCalls: [], conversation: null };
+      },
+    }),
+  );
+  await json(
+    handleCreateDatasetByKey(
+      post({ name: "Last", query: { kind: "last_traces", limit: 5 } }),
+      deps(),
+    ),
+  );
+  await json(
+    handleCreateEvalByKey(
+      post({ name: "Live", dataset: "Last", sandboxName: "support-demo", scorers: [NO_REFUND] }),
+      deps(),
+    ),
+  );
+  await json(
+    handleCreateEvalByKey(
+      post({ name: "Typed", sandboxName: "billing", scorers: [NO_REFUND] }),
+      deps(),
+    ),
+  );
+  await json(
+    handleAddRowsByKey(
+      post({ rows: [{ kind: "values", name: "a", values: { message: "hi" } }] }),
+      "Typed",
+      deps(),
+    ),
+  );
+  const as = (route: keyof typeof BEARER_ROUTE_SCOPES, scopes: string[]) =>
+    deps({
+      authenticate: authenticate(BEARER_ROUTE_SCOPES[route], { projectId: PROJECT_ID, scopes }),
+    });
+  const one = (scopes: string[], name: string) =>
+    json(handleStartEvalRunByKey(post({}), name, as("POST /api/v1/evals/[eval]/runs", scopes)));
+  const each = (scopes: string[]) =>
+    json(handleStartEachByKey(post({}), as("POST /api/v1/evals/runs", scopes)));
+  const suite = (scopes: string[]) =>
+    json(
+      handleStartByKey(
+        post({ sandboxVersion: "latest", evals: ["Live"] }),
+        as("POST /api/v1/evals/experiments", scopes),
+      ),
+    );
+  const WRITE = ["evals:write"];
+
+  const closed = await one(WRITE, "Live");
+  assert.deepEqual([closed.status, closed.body.error], [403, "no_content_access"]);
+  const parts = await each(WRITE);
+  const byName = new Map<string, { error?: string; experimentId?: string }>(
+    parts.body.runs.map((part: { eval: string }) => [part.eval, part]),
+  );
+  assert.equal(byName.get("Live")?.error, "no_content_access");
+  // A fixed dataset copies no trace text: the same key runs it.
+  assert.ok(byName.get("Typed")?.experimentId);
+  const ofSuite = await suite(WRITE);
+  assert.deepEqual([ofSuite.status, ofSuite.body.error], [403, "no_content_access"]);
+  assert.equal(read, 0, "no turn is read for this key");
+  assert.equal((await experiments.list(PROJECT_ID, 10)).length, 1);
+
+  const CONTENT = ["evals:write", "content:read"];
+  assert.equal((await one(CONTENT, "Live")).status, 201);
+  assert.equal((await suite(CONTENT)).status, 201);
 });
 
 test("each route needs its scope, answers 404 with the flag off, and shows no data of another project", async () => {

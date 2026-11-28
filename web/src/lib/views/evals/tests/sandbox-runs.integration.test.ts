@@ -130,7 +130,13 @@ async function setup(agent: AgentScript = {}) {
     assert.ok(made.versions[0]);
     const started = await startExperiment(
       SUBJECT,
-      { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "user_1" },
+      {
+        mayCopyContent: true,
+        sandboxVersion: "latest",
+        trialsPerCase: 1,
+        params: {},
+        startedBy: "user_1",
+      },
       deps(more),
     );
     assert.ok(started.ok, JSON.stringify(started));

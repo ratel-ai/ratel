@@ -325,6 +325,20 @@ test("a run records what it changed: rows from turns, scorers, params, a matrix"
   assert.equal(elsewhere.ok ? null : elsewhere.reason, "not_found");
 });
 
+test("a run of an eval on a query dataset copies trace text: it needs an actor that may read it", async () => {
+  const { deps } = await setup();
+  const made = await createEval(PROJECT_ID, ACTOR, EVAL, deps);
+  assert.ok(made.ok);
+  // The actor of an MCP key with no content scope, or of a project that keeps its text closed.
+  const closed = await startRun(SUBJECT, made.eval.id, NO_TEXT, {}, deps);
+  assert.equal(closed.ok ? null : closed.reason, "no_content_access");
+  assert.equal((await deps.experiments.list(PROJECT_ID, 10)).length, 0);
+  // A signed-in member of a project that lets Ratel read captured text runs it as before.
+  const open = await startRun(SUBJECT, made.eval.id, ACTOR, {}, deps);
+  assert.ok(open.ok, open.ok ? "" : open.message);
+  assert.equal(open.experiment.caseVersions.length, 2);
+});
+
 test("the scorers of one run follow the rules of an eval: at most five judges, unique ids", async () => {
   const { deps } = await setup();
   const fixed = await createDataset(

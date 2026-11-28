@@ -85,8 +85,12 @@ async function setup(readable = true) {
     organizationIdOf: async () => ORGANIZATION_ID,
     advance: () => {},
     now: () => new Date(),
-    startRuns: async (subject, { eval: one, startedBy, changes }) => {
-      const result = await startEvalRun(subject, { eval: one ?? "", startedBy, changes }, actions);
+    startRuns: async (subject, { eval: one, startedBy, mayCopyContent, changes }) => {
+      const result = await startEvalRun(
+        subject,
+        { eval: one ?? "", startedBy, mayCopyContent, changes },
+        actions,
+      );
       if (!result.ok) return result;
       return {
         ok: true,

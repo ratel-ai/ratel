@@ -22,7 +22,7 @@ import {
 import type { Experiment } from "./domain/experiment";
 import { type EachRunPart, type EvalRunChanges, startEachEvalRun, startEvalRun } from "./eval-runs";
 import type { StartRefusal } from "./experiments";
-import { forKey, type KeyDeps, notFound, readJson, urlOf } from "./experiments-api";
+import { forKey, type KeyDeps, mayCopyContent, notFound, readJson, urlOf } from "./experiments-api";
 import { datasetsView, evalHistory, evalsOverview, withPinnedRuns } from "./history-view";
 import type { BaselineStore } from "./ports/baseline-store";
 import type { DatasetStore, NewRow } from "./ports/dataset-store";
@@ -195,7 +195,7 @@ export function handleStartEvalRunByKey(
   wanted: string,
   deps: RunsApiDeps,
 ): Promise<Response> {
-  return forKey(deps, "start_eval_run", async (subject, apiKeyId) => {
+  return forKey(deps, "start_eval_run", async (subject, apiKeyId, policy) => {
     const body = oneRunSchema.safeParse(await readJson(request));
     if (!body.success) return invalid(body.error);
     const { name, rows: askedRows, scorers: askedScorers, ...changes } = body.data;
@@ -212,7 +212,13 @@ export function handleStartEvalRunByKey(
     };
     const result = await startEvalRun(
       subject,
-      { eval: wanted, startedBy: `key:${apiKeyId}`, ...(name ? { name } : {}), changes: run },
+      {
+        eval: wanted,
+        startedBy: `key:${apiKeyId}`,
+        mayCopyContent: mayCopyContent(policy),
+        ...(name ? { name } : {}),
+        changes: run,
+      },
       deps.experiments(),
     );
     if (!result.ok) return refuse(STATUS[result.reason], result.reason, result.message);
@@ -223,7 +229,7 @@ export function handleStartEvalRunByKey(
 
 /** POST /api/v1/evals/runs: one run for each eval (or for the evals named), with the same changes. */
 export function handleStartEachByKey(request: Request, deps: RunsApiDeps): Promise<Response> {
-  return forKey(deps, "start_eval_runs", async (subject, apiKeyId) => {
+  return forKey(deps, "start_eval_runs", async (subject, apiKeyId, policy) => {
     const body = eachRunSchema.safeParse(await readJson(request));
     if (!body.success) return invalid(body.error);
     const { name, evals, ...changes } = body.data;
@@ -231,6 +237,7 @@ export function handleStartEachByKey(request: Request, deps: RunsApiDeps): Promi
       subject,
       {
         startedBy: `key:${apiKeyId}`,
+        mayCopyContent: mayCopyContent(policy),
         ...(evals ? { evals } : {}),
         ...(name ? { name } : {}),
         changes,

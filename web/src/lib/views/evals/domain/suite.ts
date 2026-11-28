@@ -63,9 +63,9 @@ export type EvalDelta =
 export type VariantScore = { variant: Variant | null; score: EvalScore };
 export type RunScore = { score: number | null; rule: string; variants: VariantScore[] };
 
-/** How the score of a run of one eval comes from its variants. */
+/** How the score of a run of one eval comes from its trials. */
 export const RUN_SCORE_RULE =
-  "The score of a run is the mean of the scores of its variants. A variant scores as an eval: the mean of its scorer pass rates. A run with no matrix has one variant.";
+  "The score of a run is the mean of its scorer pass rates over all the valid trials of the run. A matrix run pools the trials of its variants. Each variant also has its own score, from its own trials.";
 
 export const LEGACY_GROUP = "All cases";
 /** The key of the group of a run from before evals had definitions. */
@@ -77,8 +77,10 @@ export function evalScores(run: ScoredRun): EvalScore[] {
 }
 
 /**
- * The score of a run of one eval: the score of each variant (its own trials), and their mean
- * (`RUN_SCORE_RULE`).
+ * The score of a run of one eval (`RUN_SCORE_RULE`): the mean of the scorer pass rates over all
+ * the valid trials of the run, the same value as its entry of `evalScores`. Each variant keeps the
+ * score of its own trials. The score of the run is not their mean: a variant with few valid trials
+ * would count as much as one with many.
  */
 export function runScore(run: ScoredRun): RunScore {
   const variants = run.experiment.variants ?? [];
@@ -92,7 +94,7 @@ export function runScore(run: ScoredRun): RunScore {
           }).map((score) => ({ variant, score })),
         );
   return {
-    score: mean(scores.map(({ score }) => score.score)),
+    score: mean(evalScores(run).map(({ score }) => score)),
     rule: RUN_SCORE_RULE,
     variants: scores,
   };
@@ -100,7 +102,8 @@ export function runScore(run: ScoredRun): RunScore {
 
 /**
  * The delta of a run of one eval against its baseline run: the run score minus the baseline run
- * score. No value, with the reason, when the eval is not in the baseline or its scorers differ.
+ * score, the same value as its entry of `evalDeltas`. No value, with the reason, when the eval is
+ * not in the baseline or its scorers differ.
  */
 export function runDelta(baseline: ScoredRun, candidate: ScoredRun): EvalDelta {
   const [key] = evalGroups(candidate.experiment).map((group) => group.key);
@@ -241,14 +244,17 @@ function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
   };
 }
 
-/** The score delta is the mean delta of the scorers rated on both sides. */
+/**
+ * The score delta is the score of the candidate minus the score of the baseline: the one rule of
+ * each delta (`runDelta` too). Each scorer has its own delta, when both sides rated it.
+ */
 function deltaOf(baseline: EvalScore, candidate: EvalScore): EvalDelta {
   const before = new Map(baseline.scorers.map((scorer) => [pairKey(scorer), scorer]));
   const scorers = candidate.scorers.map((scorer) => ({
     scorerId: scorer.scorerId,
     delta: minus(scorer.passRate, before.get(pairKey(scorer))?.passRate ?? null),
   }));
-  return { ok: true, score: mean(scorers.map(({ delta }) => delta)), scorers };
+  return { ok: true, score: minus(candidate.score, baseline.score), scorers };
 }
 
 function sideOf(group: Group, run: ScoredRun) {
