@@ -81,6 +81,12 @@ export const PARITY: Readonly<Record<string, Covered>> = {
     "change_dashboard",
   "app/(console)/project/[projectId]/dashboards/actions.ts#exportDashboardAction": "get_dashboard",
   "app/(console)/project/[projectId]/dashboards/actions.ts#previewWidgetAction": "query_monitoring",
+  "app/(console)/project/[projectId]/dashboards/ask-actions.ts#draftWidgetsAction": "draft_widgets",
+  "app/(console)/project/[projectId]/dashboards/ask-actions.ts#askSuggestionsAction":
+    "suggest_prompts",
+  "app/(console)/project/[projectId]/dashboards/ask-actions.ts#setAskOutcomeAction": {
+    none: "the outcome is what a person did with a draft in a dialog of the console",
+  },
   "app/(console)/project/[projectId]/settings/notifications/actions.ts#slackChannelsAction":
     "list_slack_channels",
   "app/(console)/project/[projectId]/settings/notifications/actions.ts#disconnectSlackAction":
@@ -108,8 +114,6 @@ export const PARITY: Readonly<Record<string, Covered>> = {
 export const MCP_ONLY: Readonly<Record<string, string>> = {
   describe_rql_schema: "the console has no RQL page yet",
   run_rql: "the console has no RQL page yet",
-  draft_widgets: "the console's ask field comes with the widget and dashboard dialogs",
-  suggest_prompts: "the console's suggested prompts come with the widget and dashboard dialogs",
 };
 
 /** Each change a module's action takes (its `action: "…"`), and the operation's own `action`, or the operation it is alone. */

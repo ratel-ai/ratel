@@ -3,7 +3,7 @@ import { type Config, getConfig } from "@/config";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
-import { anthropicClient } from "@/lib/readings/anthropic/client";
+import { anthropicClient, anthropicConfigured } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import {
   estimateTokens,
@@ -76,6 +76,14 @@ export function askModelFromEnv(
       };
     },
   };
+}
+
+/** Whether this deployment can draft: the local stand-in, or a Claude backend. The dialogs hide the ask field without it. */
+export function askConfigured(
+  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
+  environment: string = deploymentEnvironment(),
+): boolean {
+  return mockModelsEnabled(config, environment) || anthropicConfigured(config);
 }
 
 /** What a call of the model costs in USD: priced as the eval gate prices it. */

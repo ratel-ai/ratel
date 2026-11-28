@@ -54,10 +54,10 @@ test("the stored places are drawn in both modes, in the one card frame", () => {
 test("quiet by default: the handles, the menus and Remove come with edit mode", () => {
   const controls = /data-grid-handle|data-grid-surface|id="card-\w+-toolbar"|aria-label="Arrange /;
   assert.doesNotMatch(html(), controls);
-  assert.doesNotMatch(html(), /data-edit-bar|>Add widget</);
+  assert.doesNotMatch(html(), /data-edit-bar|id="dashboard-add-widget"/);
   const edit = html({ startEditing: true });
   assert.match(edit, /data-edit-bar/);
-  assert.match(edit, />Add widget</);
+  assert.match(edit, /id="dashboard-add-widget"/);
   for (const title of ["Cost", "Speed", "Old"])
     for (const control of [
       `role="toolbar" aria-label="${title}"`,
@@ -76,9 +76,20 @@ test("the widget in the address opens in place of the grid, with its properties,
   assert.match(open, />Save</);
   assert.match(open, /aria-label="Close widget"/);
   assert.doesNotMatch(open, /role="dialog"/, "no modal dialog");
-  // A new widget opens the same way; a broken or unknown one leaves the grid.
-  assert.match(html({}, "?widget=new"), />Add widget</);
-  for (const id of ["old", "gone"]) assert.match(html({}, `?widget=${id}`), /data-grid-card=/);
+  // A new widget opens in a dialog, not in place; a broken or unknown one leaves the grid.
+  for (const id of ["new", "old", "gone"])
+    assert.match(html({}, `?widget=${id}`), /data-grid-card=/);
+});
+
+test("+ Widget shows outside edit mode for a person who may edit, and never in a support session", () => {
+  const button =
+    /<button[^>]*data-add-widget=""[^>]*aria-label="Add widget"[^>]*>.*?Widget<\/button>/;
+  assert.match(html(), button);
+  assert.doesNotMatch(html({ readOnly: true }), /aria-label="Add widget"/);
+  assert.doesNotMatch(html({ readOnly: true, startEditing: true }), /id="dashboard-add-widget"/);
+  // The empty dashboard offers a widget to an editor only.
+  assert.match(html({ widgets: [] }), />Add widget</);
+  assert.doesNotMatch(html({ widgets: [], readOnly: true }), /Add widget/);
 });
 
 test("a support session sees the properties of an open widget and cannot save them", () => {

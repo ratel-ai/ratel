@@ -7,6 +7,7 @@ import {
   stepped,
 } from "@/lib/console/grid/layout";
 import {
+  cardHeightPx,
   cardOf,
   compacted,
   freePosition,
@@ -116,3 +117,8 @@ test("a place is whole cells inside the 12 columns", () => {
 function at(id: string, x: number, y: number, w = 6, h = 6) {
   return { id, layout: { x, y, w, h } };
 }
+
+test("a card of h rows is as tall in pixels as the grid draws it", () => {
+  assert.equal(cardHeightPx(1), 40);
+  assert.equal(cardHeightPx(6), 6 * 40 + 5 * 16);
+});
