@@ -269,6 +269,8 @@ export async function startRun(
     {
       eval: definition.id,
       startedBy: actor.by,
+      // The dataset of the eval can be a query: its rows are captured text too.
+      mayCopyContent: actor.mayReadContent,
       ...(body.name ? { name: body.name } : {}),
       changes: changes.changes,
     },
@@ -437,7 +439,9 @@ async function queryRows(
     );
   }
   const query = kind === "auto" ? { kind, limit, taskId: null } : { kind, limit };
-  const resolved = await resolveDataset(projectId, query, deps.traces);
+  const resolved = await resolveDataset(projectId, query, deps.traces, {
+    mayCopyContent: actor.mayReadContent,
+  });
   if (!resolved.ok) {
     const reason =
       resolved.reason === "no_rows"

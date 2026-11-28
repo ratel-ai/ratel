@@ -38,6 +38,8 @@ export type StartEvalRun = {
   /** The name or the id of the eval. */
   eval: string;
   startedBy: string;
+  /** May the caller copy captured text into the run? A query dataset needs it. */
+  mayCopyContent: boolean;
   name?: string;
   changes?: EvalRunChanges;
 };
@@ -71,7 +73,7 @@ const logger = getLogger("evals/eval-runs");
 
 export async function startEvalRun(
   subject: UsageSubject,
-  { eval: wanted, startedBy, name, changes = {} }: StartEvalRun,
+  { eval: wanted, startedBy, mayCopyContent, name, changes = {} }: StartEvalRun,
   deps: ExperimentDeps,
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
@@ -106,7 +108,7 @@ export async function startEvalRun(
       ? version.datasetId
       : await findDatasetId(projectId, changes.dataset, deps);
   if (datasetId === null) return refused("not_found", `There is no dataset "${changes.dataset}".`);
-  const rows = await datasetRows(projectId, datasetId, startedBy, deps);
+  const rows = await datasetRows(projectId, datasetId, { startedBy, mayCopyContent }, deps);
   if (!rows.ok) return rows;
   const added = changes.rows ?? [];
   const trials = changes.trials ?? version.trials;
@@ -159,6 +161,8 @@ export type StartEachEvalRun = {
   /** The names or the ids of the evals. Absent: each eval (of `changes.sandbox`, when given). */
   evals?: string[];
   startedBy: string;
+  /** May the caller copy captured text into the runs? A query dataset needs it. */
+  mayCopyContent: boolean;
   name?: string;
   changes?: Omit<EvalRunChanges, "rows" | "scorers">;
 };
@@ -176,7 +180,7 @@ export type EachRunPart = { eval: string; evalId: string } & (
  */
 export async function startEachEvalRun(
   subject: UsageSubject,
-  { evals: names, startedBy, name, changes = {} }: StartEachEvalRun,
+  { evals: names, startedBy, mayCopyContent, name, changes = {} }: StartEachEvalRun,
   deps: ExperimentDeps,
 ): Promise<{ ok: true; runs: EachRunPart[] } | Refusal> {
   const { projectId } = subject;
@@ -204,6 +208,7 @@ export async function startEachEvalRun(
       {
         eval: definition.id,
         startedBy,
+        mayCopyContent,
         ...(name ? { name } : {}),
         changes: other ? withoutVersion(changes) : changes,
       },
@@ -309,11 +314,14 @@ function variantsOf(
   return { ok: true, variants };
 }
 
-/** The rows of a fixed dataset, or the rows that a query dataset resolves now, kept for the run. */
+/**
+ * The rows of a fixed dataset, or the rows that a query dataset resolves now, kept for the run. A
+ * query dataset copies captured text, so it needs a caller that may copy it.
+ */
 async function datasetRows(
   projectId: string,
   datasetId: string,
-  startedBy: string,
+  { startedBy, mayCopyContent }: Pick<StartEvalRun, "startedBy" | "mayCopyContent">,
   { datasets, traces }: ExperimentDeps,
 ): Promise<{ ok: true; rows: EvalCase[] } | Refusal> {
   const dataset = await datasets.get(projectId, datasetId);
@@ -321,7 +329,7 @@ async function datasetRows(
   if (!isQueryKind(dataset.query)) {
     return { ok: true, rows: await datasets.rows(projectId, datasetId) };
   }
-  const resolved = await resolveDataset(projectId, dataset.query, traces);
+  const resolved = await resolveDataset(projectId, dataset.query, traces, { mayCopyContent });
   if (!resolved.ok) {
     const reason: StartRefusal =
       resolved.reason === "no_rows" || resolved.reason === "not_a_query"

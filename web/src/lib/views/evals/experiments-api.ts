@@ -9,6 +9,7 @@ import {
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
+import type { ApiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { storable } from "@/lib/platform/storable";
 import type { Compared } from "./baseline";
 import { MAX_SANDBOX_NAME_CHARS } from "./domain/eval";
@@ -80,8 +81,13 @@ const STATUS: Record<StartRefusal, number> = {
 };
 
 export function handleStartByKey(request: Request, deps: KeyDeps): Promise<Response> {
-  return forKey(deps, "start_experiment", async (subject, apiKeyId) =>
-    start(request, subject, { startedBy: `key:${apiKeyId}`, surface: "api" }, deps),
+  return forKey(deps, "start_experiment", async (subject, apiKeyId, policy) =>
+    start(
+      request,
+      subject,
+      { startedBy: `key:${apiKeyId}`, surface: "api", mayCopyContent: mayCopyContent(policy) },
+      deps,
+    ),
   );
 }
 
@@ -118,7 +124,12 @@ export function handleStartByMember(
       start(
         request,
         member,
-        { startedBy: member.externalId, externalId: member.externalId, surface: "console" },
+        {
+          startedBy: member.externalId,
+          externalId: member.externalId,
+          surface: "console",
+          mayCopyContent: true,
+        },
         deps,
       ),
     { write: true },
@@ -152,7 +163,15 @@ export function handleTrialEvidence(
 async function start(
   request: Request,
   { projectId, organizationId }: UsageSubject,
-  by: { startedBy: string; externalId?: string; surface: string },
+  {
+    mayCopyContent: mayCopy,
+    ...by
+  }: {
+    startedBy: string;
+    externalId?: string;
+    surface: string;
+    mayCopyContent: boolean;
+  },
   deps: ExperimentsApiDeps,
 ): Promise<Response> {
   const body = startSchema.safeParse(await readJson(request));
@@ -171,6 +190,7 @@ async function start(
       ...(evals ? { evals } : {}),
       params,
       startedBy: by.startedBy,
+      mayCopyContent: mayCopy,
       ...(label ? { label } : {}),
       ...(name ? { name } : {}),
     },
@@ -207,18 +227,30 @@ async function get(
 export async function forKey(
   deps: KeyAccess,
   operation: string,
-  work: (subject: UsageSubject, apiKeyId: string) => Promise<Response>,
+  work: (subject: UsageSubject, apiKeyId: string, policy: ApiKeyPolicy) => Promise<Response>,
 ): Promise<Response> {
   if (deps.offForAll()) return notFound();
   const resolved = await deps.authenticate();
   if (!resolved.ok) return resolved.response;
-  const { projectId, apiKeyId } = resolved;
+  const { projectId, apiKeyId, policy } = resolved;
   if (!(await deps.enabled(projectId))) return notFound();
   const organizationId = await deps.organizationIdOf(projectId);
   if (!organizationId) return notFound();
-  return withFeatureSpan("evals", operation, () => work({ projectId, organizationId }, apiKeyId), {
-    attributes: { "project.id": projectId },
-  });
+  return withFeatureSpan(
+    "evals",
+    operation,
+    () => work({ projectId, organizationId }, apiKeyId, policy),
+    { attributes: { "project.id": projectId } },
+  );
+}
+
+/**
+ * May this key copy captured text into a run? It needs its `content:read` scope, as each copy of
+ * captured text does (`lib/mcp/operations/content-access.ts`). The opt-in of the project is read
+ * where the rows are built.
+ */
+export function mayCopyContent(policy: ApiKeyPolicy): boolean {
+  return policy.allows("content:read");
 }
 
 /**

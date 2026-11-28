@@ -73,6 +73,8 @@ export type StartExperiment = {
   /** The names of the evals to run. Absent: the suite, each eval of the sandbox. */
   evals?: string[];
   startedBy: string;
+  /** May the caller copy captured text into the run? A query dataset needs it. */
+  mayCopyContent: boolean;
   /** Only the cases with this label. All of them when it is not there. */
   label?: string;
   name?: string;
@@ -122,6 +124,7 @@ export async function startExperiment(
     trialsPerCase,
     params,
     startedBy,
+    mayCopyContent,
     label,
     name,
     evals,
@@ -148,7 +151,8 @@ export async function startExperiment(
   if (!chosen.ok) return chosen;
   const shared = sharedDataset(chosen.evals);
   if (shared) return refused("shared_dataset", shared);
-  const resolved = await resolveQueryDatasets(projectId, chosen.evals, startedBy, deps);
+  const by = { startedBy, mayCopyContent };
+  const resolved = await resolveQueryDatasets(projectId, chosen.evals, by, deps);
   if (!resolved.ok) return resolved;
   const frozen = freezeSuite(chosen.evals, [...allCases, ...resolved.cases], label ?? null, {
     params,
@@ -414,14 +418,14 @@ async function finishTrial(
 async function resolveQueryDatasets(
   projectId: string,
   evals: readonly EvalDefinition[],
-  startedBy: string,
+  { startedBy, mayCopyContent }: Pick<StartExperiment, "startedBy" | "mayCopyContent">,
   deps: ExperimentDeps,
 ): Promise<{ ok: true; cases: EvalCase[] } | Extract<StartExperimentResult, { ok: false }>> {
   const cases: EvalCase[] = [];
   for (const datasetId of new Set(evals.map(datasetOf))) {
     const dataset = await deps.datasets.get(projectId, datasetId);
     if (!dataset || !isQueryKind(dataset.query)) continue;
-    const result = await resolveDataset(projectId, dataset.query, deps.traces);
+    const result = await resolveDataset(projectId, dataset.query, deps.traces, { mayCopyContent });
     if (!result.ok) {
       const reason =
         result.reason === "no_rows" || result.reason === "not_a_query" ? "no_cases" : result.reason;

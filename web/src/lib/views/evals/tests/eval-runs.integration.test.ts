@@ -8,6 +8,7 @@ import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { compareWithBaseline, pinBaseline } from "../baseline";
+import { datasetQuerySchema } from "../domain/dataset";
 import { datasetOf, type EvalScorer } from "../domain/eval";
 import { paramsOfTrial } from "../domain/experiment";
 import { startEachEvalRun, startEvalRun } from "../eval-runs";
@@ -114,7 +115,11 @@ async function setup() {
     });
   }
   const start = (changes: Parameters<typeof startEvalRun>[1]["changes"] = {}) =>
-    startEvalRun(SUBJECT, { eval: "Refunds", startedBy: "user_1", changes }, deps);
+    startEvalRun(
+      SUBJECT,
+      { mayCopyContent: true, eval: "Refunds", startedBy: "user_1", changes },
+      deps,
+    );
   return { db, client, deps, datasets, cases, refunds, start };
 }
 
@@ -270,7 +275,11 @@ test("the baseline is pinned for each eval, and the suite pin stays for the runs
   });
   const first = await start();
   const second = await start();
-  const ofStatus = await startEvalRun(SUBJECT, { eval: "Status", startedBy: "user_1" }, deps);
+  const ofStatus = await startEvalRun(
+    SUBJECT,
+    { mayCopyContent: true, eval: "Status", startedBy: "user_1" },
+    deps,
+  );
   assert.ok(first.ok && second.ok && ofStatus.ok);
   await client.query("update eval_experiments set state = 'completed'");
   const baselines = createDrizzleBaselineStore(db);
@@ -310,7 +319,11 @@ test("a start of each eval makes one run for each eval, and a version of another
   await seedEval(db, { name: "No gate", content: { scorers: [] } });
   const result = await startEachEvalRun(
     SUBJECT,
-    { startedBy: "user_1", changes: { sandboxVersion: OLDER.id, params: { model: "m" } } },
+    {
+      mayCopyContent: true,
+      startedBy: "user_1",
+      changes: { sandboxVersion: OLDER.id, params: { model: "m" } },
+    },
     deps,
   );
   assert.ok(result.ok, result.ok ? "" : result.message);
@@ -324,10 +337,72 @@ test("a start of each eval makes one run for each eval, and a version of another
   // A refusal of one eval does not stop the others.
   assert.equal(noGate?.ok, false);
   assert.equal(noGate && !noGate.ok && noGate.reason, "invalid_scorers");
-  const named = await startEachEvalRun(SUBJECT, { evals: ["Billing"], startedBy: "user_1" }, deps);
+  const named = await startEachEvalRun(
+    SUBJECT,
+    { mayCopyContent: true, evals: ["Billing"], startedBy: "user_1" },
+    deps,
+  );
   assert.deepEqual(named.ok && named.runs.map(({ eval: one }) => one), ["Billing"]);
-  const unknown = await startEachEvalRun(SUBJECT, { evals: ["Nope"], startedBy: "u" }, deps);
+  const unknown = await startEachEvalRun(
+    SUBJECT,
+    { mayCopyContent: true, evals: ["Nope"], startedBy: "u" },
+    deps,
+  );
   assert.equal(unknown.ok ? null : unknown.reason, "not_found");
+});
+
+test("a run on a query dataset needs a caller that may copy captured text, and a fixed dataset does not", async () => {
+  const { client, deps, datasets, refunds } = await setup();
+  const TURN = "a1111111-1111-4111-8111-111111111111";
+  let read = 0;
+  const traces = fakeTraceSource({
+    lastTurns: async () => [TURN],
+    loadTurn: async () => {
+      read += 1;
+      return { ask: "refund A1", messages: [], toolCalls: [], conversation: null };
+    },
+  });
+  const run = (mayCopyContent: boolean) =>
+    startEvalRun(
+      SUBJECT,
+      { eval: "Refunds", startedBy: "key:k1", mayCopyContent },
+      { ...deps, traces },
+    );
+  // A fixed dataset holds its rows: no captured text is copied at the start.
+  const fixed = await run(false);
+  assert.ok(fixed.ok, fixed.ok ? "" : fixed.message);
+
+  const query = await datasets.create({
+    projectId: PROJECT_ID,
+    name: "Last traces",
+    description: null,
+    query: datasetQuerySchema.parse({ kind: "last_traces", limit: 5 }),
+    createdBy: "user_1",
+  });
+  if (query === "name_taken") throw new Error("taken");
+  await client.query("update eval_definition_versions set dataset_id = $1 where eval_id = $2", [
+    query.id,
+    refunds.id,
+  ]);
+  const closed = await run(false);
+  assert.equal(closed.ok ? null : closed.reason, "no_content_access");
+  assert.equal(read, 0, "no turn is read for a caller that may not copy");
+  const each = await startEachEvalRun(
+    SUBJECT,
+    { evals: ["Refunds"], startedBy: "key:k1", mayCopyContent: false },
+    { ...deps, traces },
+  );
+  assert.ok(each.ok);
+  const [part] = each.runs;
+  assert.equal(part && !part.ok && part.reason, "no_content_access");
+  const started = await client.query<{ n: number }>(
+    "select count(*)::int as n from eval_experiments",
+  );
+  assert.equal(started.rows[0]?.n, 1, "only the run on the fixed dataset started");
+
+  const open = await run(true);
+  assert.ok(open.ok, open.ok ? "" : open.message);
+  assert.equal(open.experiment.caseVersions.length, 1);
 });
 
 test("review fixes: a suite of two evals on one dataset is refused, an edit keeps the pin and the matrix, and runs of one eval pass the suite limit", async () => {
@@ -374,7 +449,7 @@ test("review fixes: a suite of two evals on one dataset is refused, an edit keep
   ]);
   const suite = await startExperiment(
     SUBJECT,
-    { sandboxVersion: "latest", params: {}, startedBy: "u" },
+    { mayCopyContent: true, sandboxVersion: "latest", params: {}, startedBy: "u" },
     deps,
   );
   assert.equal(suite.ok ? null : suite.reason, "shared_dataset");

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { combinations, evalContentSchema, MAX_COMBINATIONS } from "../domain/eval";
 import type { Experiment, Trial } from "../domain/experiment";
 import { snapshotOf } from "../domain/score";
-import { RUN_SCORE_RULE, runDelta, runScore } from "../domain/suite";
+import { evalDeltas, evalScores, RUN_SCORE_RULE, runDelta, runScore } from "../domain/suite";
 import { NO_REFUND } from "./support";
 
 const POLITE = { ...NO_REFUND, id: "polite", name: "Polite", gating: false };
@@ -11,7 +11,7 @@ const POLITE = { ...NO_REFUND, id: "polite", name: "Polite", gating: false };
 /** A completed run of the eval `e1` with one case, and these results of NO_REFUND for each variant. */
 function run(
   id: string,
-  results: Array<Array<"pass" | "fail">>,
+  results: Array<Array<"pass" | "fail" | "invalid">>,
   scorers = [NO_REFUND],
 ): { experiment: Experiment; trials: Trial[] } {
   const versionId = `${id}-c1`;
@@ -50,7 +50,7 @@ function run(
   return { experiment, trials };
 }
 
-test("the score of a run is the mean of the scores of its variants, and says so", () => {
+test("the score of a run pools the valid trials of its variants, and each variant keeps its own score", () => {
   const score = runScore(
     run("r1", [
       ["pass", "pass"],
@@ -67,6 +67,44 @@ test("the score of a run is the mean of the scores of its variants, and says so"
   assert.equal(score.score, 0.75);
   assert.equal(score.rule, RUN_SCORE_RULE);
   assert.equal(runScore(run("r2", [["pass", "fail"]])).variants[0]?.variant, null);
+});
+
+test("a matrix run has one score: the scorer pass rates over all its valid trials", () => {
+  // Variant 0: 1 pass, 3 invalid. Variant 1: 4 fails. 1 pass of 5 valid trials.
+  const matrix = run("r1", [
+    ["pass", "invalid", "invalid", "invalid"],
+    ["fail", "fail", "fail", "fail"],
+  ]);
+  const score = runScore(matrix);
+  assert.equal(score.score, 0.2);
+  assert.equal(evalScores(matrix)[0]?.score, 0.2);
+  // Each variant keeps the score of its own trials.
+  assert.deepEqual(
+    score.variants.map(({ score: one }) => one.score),
+    [1, 0],
+  );
+  assert.match(score.rule, /all the valid trials/);
+});
+
+test("a run has one delta: its score minus the baseline score, also when a scorer is not rated on one side", () => {
+  // Baseline: A pass, B not scored (score 1). Candidate: A pass, B fail (score 0.5).
+  const baseline = run("base", [["pass"]], [NO_REFUND, POLITE]);
+  const [trial] = baseline.trials;
+  if (trial) trial.scorers = trial.scorers.filter(({ scorerId }) => scorerId !== POLITE.id);
+  const candidate = run("next", [["pass"]], [NO_REFUND, POLITE]);
+  const polite = candidate.trials[0]?.scorers.find(({ scorerId }) => scorerId === POLITE.id);
+  if (polite) polite.status = "fail";
+
+  const ofRun = runDelta(baseline, candidate);
+  const ofEval = evalDeltas(baseline, candidate).get("e1");
+  assert.ok(ofRun.ok && ofEval?.ok);
+  assert.equal(ofRun.score, -0.5);
+  assert.equal(ofEval.score, -0.5);
+  // Each scorer keeps its own delta: none for a scorer that one side did not rate.
+  assert.deepEqual(ofEval.scorers, [
+    { scorerId: NO_REFUND.id, delta: 0 },
+    { scorerId: POLITE.id, delta: null },
+  ]);
 });
 
 test("the delta of a run is its score minus the baseline score", () => {

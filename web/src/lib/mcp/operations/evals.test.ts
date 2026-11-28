@@ -798,6 +798,40 @@ test("evals_start_run: a key with mcp:write but without evals:write is refused",
   assert.match(result.message, /evals:write/);
 });
 
+test("evals_start_run: tells the run start if the key may copy captured text, and a refused copy is forbidden", async () => {
+  const seen: boolean[] = [];
+  const startRuns: EvalsOperationDeps["startRuns"] = async (_subject, start) => {
+    seen.push(start.mayCopyContent);
+    return start.mayCopyContent
+      ? {
+          ok: true,
+          runs: [
+            {
+              eval: "Refunds",
+              evalId: EVAL,
+              ok: true,
+              experiment: experiment({ state: "running", finishedAt: null }),
+              note: null,
+            },
+          ],
+        }
+      : { ok: false, reason: "no_content_access", message: "This caller may not copy it." };
+  };
+  const as = (scopes: string[]) =>
+    dispatchOperation(
+      "evals_start_run",
+      { eval: "Refunds" },
+      {
+        registry: buildRegistry(evalsOperations(fakeDeps({ startRuns }))),
+        auth: { ...auth, scopes } as McpAuthContext,
+      },
+    );
+  const refused = failure(await as(["mcp:write", "evals:write"]));
+  assert.deepEqual([refused.error, refused.reason], ["forbidden", "no_content_access"]);
+  ok(await as(["mcp:write", "evals:write", "content:read"]));
+  assert.deepEqual(seen, [false, true]);
+});
+
 test("evals_get_run: withholds inputs and outputs without content access, and still says to call again", async () => {
   const result = ok<{
     cases: Array<{ input: unknown; trials: Array<{ output: unknown }> }>;
@@ -829,6 +863,27 @@ test("evals_get_trial: withholds the output and the scorer reasons without conte
   );
   assert.equal(result.data.output, null);
   assert.equal(result.data.scorers[0]?.reason, null);
+});
+
+test("evals_get_trial: withholds the agent error text without content access, keeps the reason of an invalid trial", async () => {
+  const read = async (one: Trial, readable: boolean) =>
+    ok<{ reason: unknown }>(
+      await call(
+        "evals_get_trial",
+        { runId: RUN, trialId: TRIAL },
+        { trials: async () => [one], mayReadContent: async () => readable },
+      ),
+    ).data.reason;
+  const failed = trial({
+    result: "fail",
+    reason: "agent_error: the customer wrote 4111",
+    scorers: [],
+  });
+  const invalid = trial({ result: "invalid", reason: "The run timed out.", scorers: [] });
+
+  assert.equal(await read(failed, false), null);
+  assert.equal(await read(failed, true), "agent_error: the customer wrote 4111");
+  assert.equal(await read(invalid, false), "The run timed out.");
 });
 
 test("evals_compare: withholds the outputs without content access", async () => {

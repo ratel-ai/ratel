@@ -16,6 +16,12 @@ export type ResolveRefusal =
   | "too_many_rows"
   | "no_rows";
 
+/**
+ * What the caller may do with captured text. A signed-in member may copy it. An API key may copy
+ * it only with its `content:read` scope.
+ */
+export type ContentCaller = { mayCopyContent: boolean };
+
 export type ResolveResult =
   | { ok: true; rows: ResolvedRow[] }
   | { ok: false; reason: ResolveRefusal; message: string };
@@ -40,13 +46,22 @@ const PARALLEL = 5;
  * Resolves the rows of a query dataset when a run starts. Each row is a turn with a frozen copy of
  * its input, its earlier messages and the fixtures of its tools, as a row saved from a turn has. A
  * turn with no captured input is left out. Turn content rules apply: a project that does not let
- * Ratel read captured text gets no row.
+ * Ratel read captured text gets no row, and neither does a caller that may not copy captured text
+ * (`mayCopyContent`, the rule of `lib/mcp/operations/content-access.ts`): the rows go to the sandbox
+ * and to the judge.
  */
 export async function resolveDataset(
   projectId: string,
   query: DatasetQuery,
   source: TraceSource,
+  caller: ContentCaller,
 ): Promise<ResolveResult> {
+  if (isQueryKind(query) && !caller.mayCopyContent) {
+    return refused(
+      "no_content_access",
+      "The rows come from captured text, and this caller may not copy it. An API key needs the content permission, and the project must let Ratel read captured text (Settings).",
+    );
+  }
   const found = await findTurns(projectId, query, source);
   if (!found.ok) return found;
   const { turnIds } = found;
