@@ -254,7 +254,7 @@ test("a SQL query carries its RQL text and the language version it was written i
   const refused: [object, RegExp][] = [
     [{ text: undefined }, /Write the RQL text of the query/],
     [{ text: "  " }, /Write the RQL text of the query/],
-    [{ text: "x".repeat(MAX_SQL_TEXT + 1) }, /at most 20,000 characters/],
+    [{ text: "x".repeat(MAX_SQL_TEXT + 1) }, /at most 4,000 characters/],
     [{ text: "select\0" }, /invalid at "text"|NUL/],
     [{ rqlVersion: undefined }, /Give the RQL version the query was written in/],
     [{ rqlVersion: 0 }, /Give the RQL version the query was written in/],

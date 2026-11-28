@@ -82,6 +82,36 @@ test("run_rql gives the table: a summary first, then the columns, the rows and t
   });
 });
 
+test("query_monitoring gives kind sql the default window of RQL, as run_rql", async () => {
+  const sql = (await m.call("query_monitoring", { query: SQL_QUERY })) as DispatchSuccess;
+  const rql = (await m.call("run_rql", { text: TRACES })) as DispatchSuccess;
+  assert.ok(sql.ok && rql.ok);
+  assert.deepEqual(sql.window, rql.window);
+  assert.deepEqual(sql.window, {
+    since: new Date(NOW.getTime() - RQL_LIMITS.defaultWindowHours * 3_600_000).toISOString(),
+    until: NOW.toISOString(),
+  });
+});
+
+test("run_rql refuses the hostile queries of the review with a code and a fix", async () => {
+  const columns = Array.from({ length: RQL_LIMITS.maxSelectItems + 1 }, () => "attributes");
+  const cases: [string, RegExp][] = [
+    [`select ${columns.join(", ")} from events limit 1000`, /too_many_columns/],
+    [`select 1 from traces${";".repeat(3000)}`, /multiple_statements/],
+    [`select trace_id from traces group by 1${",1".repeat(500)}`, /too_many_items/],
+    [`select count(*) from traces where ${"not ".repeat(900)}true`, /syntax_error/],
+  ];
+  for (const [text, reason] of cases) {
+    const result = await m.call("run_rql", { text });
+    assert.ok(!result.ok, text.slice(0, 60));
+    assert.match(result.reason ?? "", reason);
+    assert.ok(result.fix);
+  }
+  const long = await m.call("run_rql", { text: `select '${"a".repeat(RQL_LIMITS.maxTextChars)}'` });
+  assert.ok(!long.ok);
+  assert.match(JSON.stringify(long), /4000|4,000/);
+});
+
 test("run_rql reads the window it is given, and refuses a window over the most RQL reads", async () => {
   const before = await m.data<Table>("run_rql", {
     text: TRACES,

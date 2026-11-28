@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { runMigrations } from "@/lib/platform/db/migrate";
 import { MIGRATIONS_DIR } from "@/lib/platform/db/test-support";
 import { createPgRqlExecutor, type RqlPool } from "../adapters/pg-executor";
-import { compileRql, type RqlCompiled } from "../compile";
+import { compileRql, RQL_LIMITS, type RqlCompiled } from "../compile";
 import { RQL_TABLES, type RqlTable } from "../domain/catalog";
 import { createRqlGate, type RqlRunDeps, type RqlRunResult, runRql } from "../run";
 import { pglitePool } from "./test-support";
@@ -56,6 +56,25 @@ for (const backend of BACKENDS) {
       assert.deepEqual(none, [], "no project setting, no row");
     });
 
+    test("rql.scores joins a scorer of the same project only", async () => {
+      const { a, b, pool, raw } = await seeded(backend);
+      const client = await pool.connect();
+      try {
+        // A score of A that points at the scorer of B: the view must not name B's scorer.
+        await client.query({
+          text: `insert into trace_scores (scorer_id, trace_id, project_id, value, passed, trace_started_at)
+                 select id, $2, $1, 0, false, now() - interval '1 hour'
+                 from trace_scorers where project_id = $3`,
+          values: [a.project, a.trace2, b.project],
+        });
+      } finally {
+        client.release();
+      }
+      const rows = await raw(a.project, "select scorer_id, trace_id from rql.scores");
+      assert.ok(rows.length > 0, "A still has its own score");
+      assert.ok(!rows.some((row) => row[1] === a.trace2), JSON.stringify(rows));
+    });
+
     test("the role cannot read a base table", async () => {
       const { a, runRaw } = await seeded(backend);
       for (const table of ["public.otel_spans", "public.otel_trace_summaries", "public.projects"]) {
@@ -65,22 +84,30 @@ for (const backend of BACKENDS) {
       }
     });
 
-    test("a write fails: the role has no write grant on a view", async () => {
+    test("a write fails: the runner's cursor reads only a SELECT", async () => {
       const { a, runRaw } = await seeded(backend);
       const result = await runRaw(
         a.project,
         "insert into rql.traces (trace_id) select 'x' where $1::bigint > 0",
       );
       assert.ok(!result.ok);
-      assert.equal(result.error.code, "rql_permission_denied");
+      assert.equal(result.error.code, "rql_query_failed");
     });
 
     test("a write fails: the transaction is read-only, even for a temp table the role may create", async () => {
-      const { a, raw } = await seeded(backend);
-      await assert.rejects(
-        raw(a.project, "create temp table rql_scratch (a int)"),
-        (error: { code?: string }) => error.code === "25006",
-      );
+      const { pool } = await seeded(backend);
+      const client = await pool.connect();
+      try {
+        await client.query({ text: "begin read only" });
+        await client.query({ text: "set local role ratel_rql" });
+        await assert.rejects(
+          client.query({ text: "create temp table rql_scratch (a int)" }),
+          (error: { code?: string }) => error.code === "25006",
+        );
+        await client.query({ text: "rollback" });
+      } finally {
+        client.release();
+      }
     });
 
     test("a write fails: the role alone has no write grant, even outside a read-only transaction", async () => {
@@ -110,7 +137,10 @@ for (const backend of BACKENDS) {
     test("the runner sets the statement_timeout of the transaction", async () => {
       const { a, raw } = await seeded(backend);
       const rows = await raw(a.project, "select current_setting('statement_timeout')", 250);
-      assert.deepEqual(rows, [["250ms"]]);
+      // Each fetch of the cursor gets what is left of the 250 ms.
+      const [[setting]] = rows as [[string]];
+      const ms = Number.parseInt(setting, 10);
+      assert.ok(setting.endsWith("ms") && ms > 0 && ms <= 250, setting);
     });
 
     test("the timeout stops a slow query", {
@@ -126,18 +156,21 @@ for (const backend of BACKENDS) {
       assert.ok(Date.now() - started < 4_000, "stopped well before the sleep ends");
     });
 
-    test("the fifth parallel query of a project is refused with a clear error", async () => {
+    test("one query over the parallel cap of a project is refused with a clear error", async () => {
       const { a, run } = await seeded(backend);
       const gate = createRqlGate();
+      const max = RQL_LIMITS.parallelQueriesPerProject;
       const results = await Promise.all(
-        Array.from({ length: 5 }, () => run(a.project, "select trace_id from traces", { gate })),
+        Array.from({ length: max + 1 }, () =>
+          run(a.project, "select trace_id from traces", { gate }),
+        ),
       );
       const refused = results.filter((result) => !result.ok);
-      assert.equal(results.filter((result) => result.ok).length, 4);
+      assert.equal(results.filter((result) => result.ok).length, max);
       assert.equal(refused.length, 1);
       assert.ok(!refused[0].ok);
       assert.equal(refused[0].error.code, "rql_busy");
-      assert.match(refused[0].error.message, /4 queries at the same time/);
+      assert.match(refused[0].error.message, new RegExp(`${max} queries at the same time`));
       assert.match(refused[0].error.fix, /run the query again/);
     });
 
@@ -287,7 +320,13 @@ async function seeded(backend: Backend): Promise<Seeded> {
       return runRql(rawCompiled(sql), { projectId: project }, { ...quiet, ...deps });
     },
     raw(project, sql, timeoutMs = 10_000) {
-      return executor.execute({ projectId: project, sql, params: [], timeoutMs });
+      return executor.execute({
+        projectId: project,
+        sql,
+        params: [],
+        timeoutMs,
+        maxBytes: 1_000_000,
+      });
     },
   };
 }

@@ -26,7 +26,7 @@ import { describeRqlSchema, RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/
  */
 
 /** The window of RQL: its default of 24 hours, and its longest window. */
-const RQL_WINDOW = {
+export const RQL_WINDOW = {
   defaultDays: RQL_LIMITS.defaultWindowHours / 24,
   maxDays: RQL_LIMITS.maxWindowDays,
 } as const;
@@ -69,8 +69,13 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
           .string()
           .trim()
           .min(1)
-          .max(MAX_SQL_TEXT)
-          .describe(`One RQL SELECT statement. Example: ${EXAMPLE_RQL}`),
+          .max(
+            MAX_SQL_TEXT,
+            `The RQL text has at most ${MAX_SQL_TEXT} characters. Write a shorter query.`,
+          )
+          .describe(
+            `One RQL SELECT statement, at most ${MAX_SQL_TEXT} characters. Example: ${EXAMPLE_RQL}`,
+          ),
         rqlVersion: z
           .int()
           .min(1)

@@ -22,6 +22,7 @@ import {
   requireMonitoring,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { cappedResult, countOf, headline } from "@/lib/mcp/operations/monitoring/results";
+import { RQL_WINDOW } from "@/lib/mcp/operations/monitoring/rql";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
@@ -32,7 +33,7 @@ import {
   metricBucket,
   offeredMetrics,
 } from "@/lib/synthesis/metrics/catalog";
-import { RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/compile";
+import { RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { loadWidgets } from "@/lib/views/dashboards/data";
@@ -66,8 +67,8 @@ import { scorerNames } from "@/lib/views/scorers/picker";
 
 const FEATURES = { customMonitoring: true } as const;
 const QUERY_WINDOW = { defaultDays: 7, maxDays: MAX_METRIC_WINDOW_DAYS } as const;
-/** Kind sql reads at most the longest window of RQL. */
-const SQL_WINDOW = { defaultDays: 7, maxDays: RQL_LIMITS.maxWindowDays } as const;
+/** Kind sql reads the window of RQL: its default and its longest window, as `run_rql`. */
+const SQL_WINDOW = RQL_WINDOW;
 const SQL_CHART_PROBLEM = "A query of kind sql has no chart: it gives a table.";
 /** How a change made through MCP is signed: the core has no table of people. */
 const EDITOR_NAME = "An agent (MCP)";

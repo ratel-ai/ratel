@@ -1705,7 +1705,7 @@
         "text": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 20000,
+          "maxLength": 4000,
           "description": "One RQL SELECT statement."
         },
         "rqlVersion": {

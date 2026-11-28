@@ -65,8 +65,8 @@ export type ClustersView = (typeof CLUSTERS_VIEWS)[number];
 export const GEOGRAPHY_LEVELS = ["world", "country"] as const;
 export type GeographyLevel = (typeof GEOGRAPHY_LEVELS)[number];
 
-/** The longest RQL text of a `sql` query, in characters. */
-export const MAX_SQL_TEXT = 20_000;
+/** The longest RQL text of a `sql` query, in characters: `RQL_LIMITS.maxTextChars` of the compiler. */
+export const MAX_SQL_TEXT = 4_000;
 
 export const MAX_STEP_NAME = 80;
 export const AGGREGATIONS = ["count", "rate", "sum", "avg", "p50", "p95"] as const;

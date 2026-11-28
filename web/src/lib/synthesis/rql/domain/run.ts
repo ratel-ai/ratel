@@ -1,15 +1,17 @@
 import type { RqlExecutor } from "../ports/executor";
-import { RqlSetupError } from "../ports/executor";
+import { RqlBusyError, RqlSetupError } from "../ports/executor";
 import type { RqlType } from "./catalog";
 import type { RqlCompileResult } from "./compile";
 import type { RqlGate } from "./gate";
 import { RQL_LIMITS } from "./limits";
+import { shapeRows } from "./result";
 
 /**
  * Runs a compiled query on the executor: the gate of the project first, then one row more than
  * the limit (only the parameter at `limitParam` changes), so a result the cap cut is marked
- * `truncated`. Database errors become RQL errors with a code, a message and a fix, as the
- * compiler's errors.
+ * `truncated`. The rows are cut to the cell and byte caps of `RQL_LIMITS` (`result.ts`), and a
+ * cut marks the result `truncated` too. Database errors become RQL errors with a code, a message
+ * and a fix, as the compiler's errors.
  */
 
 export type RqlCompiled = Extract<RqlCompileResult, { ok: true }>;
@@ -37,7 +39,10 @@ export type RqlRunResult =
       ok: true;
       columns: { name: string; type: RqlType }[];
       rows: unknown[][];
-      /** The query had more rows than its limit: `rows` holds the first `limit`. */
+      /**
+       * The result is not whole: the query had more rows than its limit, a cell was cut to
+       * `maxCellChars`, or the rows stopped at `maxResultBytes`.
+       */
       truncated: boolean;
     }
   | { ok: false; error: RqlRunError };
@@ -68,13 +73,14 @@ export async function executeCompiled(
         i === compiled.limitParam ? compiled.limit + 1 : value,
       ),
       timeoutMs: context.timeoutMs,
+      maxBytes: RQL_LIMITS.maxResultBytes,
     });
-    return {
-      ok: true,
-      columns: compiled.columns,
-      rows: rows.slice(0, compiled.limit).map((row) => normalizeRow(row, compiled.columns)),
-      truncated: rows.length > compiled.limit,
-    };
+    const shaped = shapeRows(
+      rows,
+      compiled.columns.map(({ type }) => type),
+      compiled.limit,
+    );
+    return { ok: true, columns: compiled.columns, ...shaped };
   } catch (error) {
     const mapped = runError(error, context.timeoutMs);
     if (!mapped) throw error;
@@ -84,7 +90,8 @@ export async function executeCompiled(
   }
 }
 
-function busyError(): RqlRunError {
+/** The error of a project that runs `parallelQueriesPerProject` queries already. */
+export function busyError(): RqlRunError {
   const max = RQL_LIMITS.parallelQueriesPerProject;
   return {
     code: "rql_busy",
@@ -93,27 +100,20 @@ function busyError(): RqlRunError {
   };
 }
 
-/** The pg driver gives numeric and bigint values as strings, and timestamps as Dates. */
-function normalizeRow(row: unknown[], columns: RqlCompiled["columns"]): unknown[] {
-  return row.map((value, i) => normalizeValue(value, columns[i]?.type));
-}
-
-function normalizeValue(value: unknown, type: RqlType | undefined): unknown {
-  if (value === null || value === undefined) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (type === "integer" || type === "number") {
-    if (typeof value === "string" || typeof value === "bigint") return Number(value);
-  }
-  return value;
-}
-
 /** The RQL error of a database error, or `undefined` for an error that is not one (a bug). */
 function runError(error: unknown, timeoutMs: number): RqlRunError | undefined {
+  if (error instanceof RqlBusyError) {
+    return {
+      code: "rql_busy",
+      message: "Every RQL connection of this server is in use.",
+      fix: "Wait a few seconds, then run the query again.",
+    };
+  }
   if (error instanceof RqlSetupError) {
     return {
       code: "rql_unavailable",
       message: "RQL is not set up on this database: the read-only role or its connection failed.",
-      fix: "Ask the operator to run the migrations as a user that can CREATE ROLE, and to grant ratel_rql to the user of RQL_DATABASE_URL.",
+      fix: "Ask the operator to create the role ratel_rql as a superuser and to run GRANT ratel_rql TO <the user of RQL_DATABASE_URL, else DATABASE_URL> (the RQL README, Setup of the role).",
     };
   }
   const code = (error as { code?: unknown } | null)?.code;

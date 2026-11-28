@@ -18,8 +18,8 @@ export interface RewrittenSql {
 }
 
 export const RQL_SCHEMA = "rql";
-/** The origin of `time_bucket`: buckets of a day start at midnight UTC. */
-const BUCKET_ORIGIN = "timestamptz '2000-01-01 00:00:00+00'";
+/** The origin of `time_bucket`: a Monday at midnight UTC, so a day starts at midnight and a week on Monday. */
+const BUCKET_ORIGIN = "timestamptz '2000-01-03 00:00:00+00'";
 
 const BINARY_SQL: Readonly<Record<BinaryOp, string>> = {
   AND: "and",

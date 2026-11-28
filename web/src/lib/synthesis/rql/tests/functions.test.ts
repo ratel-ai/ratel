@@ -74,7 +74,7 @@ test("time_bucket is date_bin with a canonical interval parameter", () => {
   assert.ok(result.ok);
   assert.equal(
     result.sql,
-    `select date_bin($3::interval, "started_at", timestamptz '2000-01-01 00:00:00+00') as "c1", count(*) as "c2" from "rql"."traces" where "started_at" >= $1::timestamptz and "started_at" < $2::timestamptz group by "c1" order by "c1" limit $4::bigint`,
+    `select date_bin($3::interval, "started_at", timestamptz '2000-01-03 00:00:00+00') as "c1", count(*) as "c2" from "rql"."traces" where "started_at" >= $1::timestamptz and "started_at" < $2::timestamptz group by "c1" order by "c1" limit $4::bigint`,
   );
   assert.deepEqual(result.params, [FROM, TO, "15 minutes", 100]);
   assert.deepEqual(result.columns[0], { name: "at", type: "timestamp" });

@@ -10,8 +10,12 @@ import { getLogger } from "@/lib/platform/logger";
  * The url is `database.rqlUrl` (RQL_DATABASE_URL), else `database.url` (DATABASE_URL).
  */
 
-/** The connections of the RQL pool, for all projects together. */
-export const RQL_POOL_MAX = 4;
+/**
+ * The connections of the RQL pool, for all projects together: more than the queries one project
+ * may run at the same time (`RQL_LIMITS.parallelQueriesPerProject`, 2), so one project never holds
+ * every connection. A run that waits past the connect timeout gets `rql_busy`.
+ */
+export const RQL_POOL_MAX = 8;
 
 /** Makes the pool; `new Pool` in production, a fake in tests. */
 export type RqlPoolFactory<P extends Pick<Pool, "on">> = (config: PoolConfig) => P;

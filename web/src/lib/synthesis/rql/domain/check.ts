@@ -10,6 +10,7 @@ import type {
 } from "./ast";
 import { RQL_FUNCTIONS, RQL_TABLES, type RqlTable, type RqlType, rqlTable } from "./catalog";
 import { fail, nearestName } from "./errors";
+import { RQL_LIMITS } from "./limits";
 
 /**
  * The check: the parsed tree of one query to a typed tree that holds only catalog names and
@@ -295,6 +296,14 @@ function checkItems(select: ParsedSelect, scope: Scope): CheckedItem[] {
       name: column.alias ?? defaultName(column.expr, position),
       type: expr.type as RqlType,
     });
+  }
+  if (items.length > RQL_LIMITS.maxSelectItems) {
+    fail(
+      "too_many_columns",
+      `The query selects ${items.length} columns. RQL gives at most ${RQL_LIMITS.maxSelectItems}${select.columns.some(({ expr }) => expr.kind === "star") ? " (each column of * counts)" : ""}.`,
+      `Select at most ${RQL_LIMITS.maxSelectItems} columns: name the columns you need.`,
+      select.at,
+    );
   }
   return uniqueNames(items);
 }
@@ -618,7 +627,9 @@ function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope):
   const name = parsed.name.toLowerCase();
   const fn = RQL_FUNCTIONS.find((candidate) => candidate.name === name && name !== "attributes");
   if (!fn) {
-    const hint = POSTGRES_FUNCTIONS[name] ?? postgresFamilyHint(name);
+    const hint =
+      (Object.hasOwn(POSTGRES_FUNCTIONS, name) ? POSTGRES_FUNCTIONS[name] : undefined) ??
+      postgresFamilyHint(name);
     const near = nearestName(name, RQL_FUNCTIONS);
     fail(
       "unknown_function",
@@ -668,8 +679,18 @@ function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope):
     }
     return parsed.args;
   };
-  const aggregate = (fnName: AggregateFn, arg: CheckedExpr, distinct: boolean, type: ValueType) =>
-    ({ kind: "aggregate", fn: fnName, distinct, arg, type, aggregate: true }) as CheckedExpr;
+  const aggregate = (fnName: AggregateFn, arg: CheckedExpr, distinct: boolean, type: ValueType) => {
+    // An alias in HAVING stands for its expression, so an aggregate can reach here inside another.
+    if (arg.aggregate) {
+      fail(
+        "aggregate_misuse",
+        `${name} is applied to an aggregate.`,
+        "Aggregate a column, not an aggregate. Run a second query for a total of totals.",
+        parsed.at,
+      );
+    }
+    return { kind: "aggregate", fn: fnName, distinct, arg, type, aggregate: true } as CheckedExpr;
+  };
 
   switch (name) {
     case "count": {
@@ -919,7 +940,7 @@ function asTimestamp(literal: CheckedExpr, place: Span | undefined): CheckedExpr
   const match = TIMESTAMP.exec(text);
   const iso =
     text.length === 10 ? `${text}T00:00:00Z` : `${text.replace(" ", "T")}${match?.[1] ? "" : "Z"}`;
-  const time = match ? Date.parse(iso) : Number.NaN;
+  const time = match && isCalendarTime(text) ? Date.parse(iso) : Number.NaN;
   if (Number.isNaN(time)) {
     fail(
       "invalid_literal",
@@ -935,6 +956,24 @@ function asTimestamp(literal: CheckedExpr, place: Span | undefined): CheckedExpr
     type: "timestamp",
     aggregate: false,
   };
+}
+
+/** Whether each part of the timestamp exists: no 30 February, no hour 24. Date.parse moves them. */
+function isCalendarTime(text: string): boolean {
+  const [, y, mo, d, h = "0", mi = "0", sec = "0"] =
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(text) ?? [];
+  if (y === undefined) return false;
+  const [year, month, day] = [Number(y), Number(mo), Number(d)];
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth &&
+    Number(h) < 24 &&
+    Number(mi) < 60 &&
+    Number(sec) < 60
+  );
 }
 
 function expectType(
@@ -1119,12 +1158,18 @@ function defaultName(parsed: ParsedExpr, position: number): string {
   return `column_${position + 1}`;
 }
 
+/** Gives each output column a name no other column has: a repeated name gets `_2`, `_3`... */
 function uniqueNames(items: CheckedItem[]): CheckedItem[] {
-  const seen = new Map<string, number>();
-  return items.map((item) => {
-    const count = (seen.get(item.name) ?? 0) + 1;
-    seen.set(item.name, count);
-    return count === 1 ? item : { ...item, name: `${item.name}_${count}` };
+  const taken = new Set<string>();
+  const given = items.map((item) => item.name);
+  return items.map((item, i) => {
+    let name = item.name;
+    // The first column of a name keeps it, unless an earlier column took it already.
+    for (let n = 2; taken.has(name) || (name !== item.name && given.includes(name)); n++) {
+      name = `${item.name}_${n}`;
+    }
+    taken.add(name);
+    return name === given[i] ? item : { ...item, name };
   });
 }
 

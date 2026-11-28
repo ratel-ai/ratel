@@ -21,7 +21,9 @@ runRql(compiled, { projectId }, deps?):
 |---|---|
 | `compile.ts` | the entry point: `compileRql` with the `pgsql-ast-parser` adapter, `describeRqlSchema`, the public types |
 | `domain/catalog.ts` | pure: `RQL_VERSION`, the five tables (columns, types, descriptions, hints, the totals of `sessions` and `users`) and the functions |
-| `domain/limits.ts` | `RQL_LIMITS`: the default and the longest window, the default and the most rows |
+| `domain/limits.ts` | `RQL_LIMITS`: the window (24 hours by default, 30 days at most), the rows (100 by default, 1000 at most), the text (4000 characters), the output columns (50, each column of `*` counts), a list (100 items), the depth of an expression (200), a cell (2000 characters), a result (1 MB of JSON), the timeout (10 s) and the parallel queries of one project (2) |
+| `domain/guard.ts` | pure: the checks before the parse, in one linear pass: the text length, a second statement after `;`, a list over 100 items, parentheses over 200 deep |
+| `domain/result.ts` | pure: the cell cut and the byte cap of a result, and the row size the executor counts |
 | `domain/ast.ts` | the parsed tree the parser port gives, with a `foreign` node for each refused construct |
 | `domain/check.ts` | pure: the parsed tree to a typed tree of catalog names and literal values, or the error |
 | `domain/rewrite.ts` | pure: prints the SQL from the typed tree; names are quoted catalog names, outputs are `c1`, `c2`..., values are `$n::type`; adds the window and the page filter |
@@ -32,8 +34,8 @@ runRql(compiled, { projectId }, deps?):
 | `ports/parser.ts`, `adapters/pgsql-ast-parser.ts` | the `RqlParser` port and its one adapter |
 | `query.ts` | kind `sql` of the query object: fills `metricSeams.sql` on import (`sqlQueryRunner`), with the version check, the scope window, and every error as a `QueryError` with its code and fix |
 | `run.ts` | the entry point of a run: `runRql` with the defaults (the RQL pool, the process gate, the timeout of `RQL_LIMITS`), the `feature.rql.run` span and the `feature.rql.query_run` event |
-| `domain/run.ts`, `domain/gate.ts` | the gate first, then limit + 1 rows, the `truncated` mark, the values as JSON, and the run errors; the in-process cap of parallel queries per project |
-| `ports/executor.ts`, `adapters/pg-executor.ts` | the `RqlExecutor` port (and `RqlSetupError`) and its node-postgres adapter: one transaction per run |
+| `domain/run.ts`, `domain/gate.ts` | the gate first, then limit + 1 rows, the cell and byte caps, the `truncated` mark, the values as JSON, and the run errors; the in-process cap of parallel queries per project |
+| `ports/executor.ts`, `adapters/pg-executor.ts` | the `RqlExecutor` port (`RqlSetupError`, `RqlBusyError`) and its node-postgres adapter: one transaction and one cursor per run |
 
 ## The SQL
 
@@ -51,6 +53,8 @@ runRql(compiled, { projectId }, deps?):
 
 Each view filters on the project of the transaction and exposes these columns, with these names.
 The storage column `end_user_id` is `user_id` in each view: RQL has one name for the end user.
+`user_id` is the raw end-user id, as `trace_events` stores it: no hash, and no map to a person of
+the console.
 An RQL query that names `end_user_id` is refused, and the fix suggests `user_id`.
 `rql.events`, `rql.traces` and `rql.scores` have the catalog columns in the catalog order.
 `rql.sessions` and `rql.users` have the trace columns that the totals of the catalog read.
@@ -68,8 +72,12 @@ An RQL query that names `end_user_id` is refused, and the fix suggests `user_id`
 `adapters/pg-executor.ts` takes a connection of the RQL pool (`platform/db/rql-pool.ts`:
 `RQL_DATABASE_URL`, else `DATABASE_URL`, never the primary pool), then:
 `BEGIN READ ONLY`, `SET LOCAL ROLE ratel_rql`, `set_config('rql.project_id', $1, true)` and
-`set_config('statement_timeout', $2, true)` with bound values, the compiled SQL with its params
-and the one at `limitParam` (the `LIMIT`) replaced by `limit + 1`, then `ROLLBACK`. So the four walls are:
+`set_config('statement_timeout', $2, true)` with bound values, `DECLARE rql_rows NO SCROLL CURSOR FOR`
+the compiled SQL with its params and the one at `limitParam` (the `LIMIT`) replaced by
+`limit + 1`, `FETCH 100` until the cursor ends or the rows pass `RQL_LIMITS.maxResultBytes`
+(the runner then marks the result truncated), each FETCH with what is left of the timeout as its
+`statement_timeout`, so the whole read stops at the timeout, then
+`ROLLBACK`. A cursor reads only a SELECT, so a write is a syntax error before it runs. So the four walls are:
 
 - The views of migration `0057_rql_views` keep only the rows of `rql.project_id`; unset, no row.
   They are `security_barrier` views: the project filter runs before any condition of the query, so
@@ -78,16 +86,22 @@ and the one at `limitParam` (the `LIMIT`) replaced by `limit + 1`, then `ROLLBAC
   grant on a base table: a read of `public.*` is `rql_permission_denied`.
 - The transaction is read-only and the role has no write grant: a write is refused.
 - `statement_timeout` is `RQL_LIMITS.timeoutMs`: a slow query is `rql_timeout`.
-- The gate: `RQL_LIMITS.parallelQueriesPerProject` queries of one project at a time, in one
-  process. One more is `rql_busy` at once and never reaches the database.
+- The gate: `RQL_LIMITS.parallelQueriesPerProject` (2) queries of one project at a time, in one
+  process. One more is `rql_busy` at once and never reaches the database. Kind `sql` takes the place
+  before the compile, so a busy project costs no parse. The pool has `RQL_POOL_MAX` (8)
+  connections for all projects, more than one project may hold, so another project still gets
+  its answer. A run that waits past the connect timeout of the pool is `rql_busy` too.
 
 `rows` are arrays in the order of `columns` (not records: the RQL names can repeat). An integer
 or a number is a JS number (pg gives `bigint` and `numeric` as strings), a timestamp is an ISO
-string. `truncated` is true when the query had more than `limit` rows.
+string. A cell over `RQL_LIMITS.maxCellChars` (2000) is cut to that length: a text keeps its
+start, and a list or `attributes` becomes the start of its JSON, a text. The rows stop before
+their JSON passes `RQL_LIMITS.maxResultBytes` (1 MB). `truncated` is true when the query had more
+than `limit` rows, a cell was cut, or the rows stopped at the byte cap.
 
 | Code | When |
 |---|---|
-| `rql_busy` | the project already runs its parallel maximum |
+| `rql_busy` | the project already runs its parallel maximum, or no connection of the pool came free in its connect timeout |
 | `rql_timeout` | Postgres stopped the query (`57014`) |
 | `rql_permission_denied` | the query read or wrote outside what `ratel_rql` may (`42501`) |
 | `rql_read_only` | the query tried to write in the read-only transaction (`25006`) |
@@ -102,6 +116,23 @@ ONLY but not `statement_timeout`. With `RQL_TEST_DATABASE_URL` (a superuser of a
 it also runs every test, the timeout too, on Postgres:
 `docker run --rm -d -e POSTGRES_PASSWORD=ratel -p 127.0.0.1:55923:5432 postgres:16-alpine`, then
 `RQL_TEST_DATABASE_URL=postgres://postgres:ratel@127.0.0.1:55923/postgres`.
+
+## Setup of the role
+
+Migration `0057_rql_views` creates `ratel_rql` and grants it to the user that runs the migrations.
+When that user cannot `CREATE ROLE`, the migration gives a WARNING and RQL is `rql_unavailable`.
+Its comment and its WARNING say to run the DO block again as a superuser: that grants the role to
+the superuser, not to the app, so it does not fix RQL. The fix is, as a superuser:
+`CREATE ROLE ratel_rql NOLOGIN;`, then run migration 0057's grants (`GRANT USAGE ON SCHEMA rql TO
+ratel_rql; GRANT SELECT ON ALL TABLES IN SCHEMA rql TO ratel_rql;`), then
+`GRANT ratel_rql TO <app user>;`, where `<app user>` is the user of `RQL_DATABASE_URL` (else of
+`DATABASE_URL`).
+
+Migration `0056_session_user_ids` adds columns and builds three indexes. The migrator runs every
+pending migration in one transaction, so the `ACCESS EXCLUSIVE` lock of its `ALTER TABLE` stays
+through the three index scans, and reads of `otel_spans` and `otel_trace_summaries` wait too. On a
+large database run the statements in the comment of the migration first, outside a transaction
+(`CREATE INDEX CONCURRENTLY`). The migration then changes nothing.
 
 ## Kind `sql` of the query object
 

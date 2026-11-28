@@ -28,7 +28,10 @@ export type RqlErrorCode =
   | "ungrouped_column"
   | "invalid_literal"
   | "invalid_limit"
-  | "invalid_window";
+  | "invalid_window"
+  | "query_too_long"
+  | "too_many_columns"
+  | "too_many_items";
 
 export interface RqlError {
   code: RqlErrorCode;
