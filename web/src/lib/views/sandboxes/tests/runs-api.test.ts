@@ -13,10 +13,10 @@ function run(id: string, requestedBy: string): SandboxRun {
     id,
     projectId: PROJECT,
     versionId: "v1",
-    status: "completed",
-    reason: null,
-    errorCode: null,
-    request: { v: 1, runId: id, input: { message: "captured ask" }, params: {} },
+    status: "failed",
+    reason: "agent_error: could not answer captured ask",
+    errorCode: "agent_error",
+    request: { v: 1, runId: id, input: { message: "captured ask" }, params: { tone: "captured" } },
     result: { output: "captured answer" },
     logs: "agent log",
     traceId: null,
@@ -56,10 +56,16 @@ test("a member reads a run that an eval started without its text when the projec
   assert.equal(closed.input, null);
   assert.equal(closed.result, null);
   assert.equal(closed.logs, null);
-  assert.equal(closed.status, "completed");
+  // The agent writes the reason, and can repeat its input there. The params are of the eval.
+  assert.equal(closed.reason, null);
+  assert.equal(closed.params, null);
+  assert.equal(closed.status, "failed");
+  assert.equal(closed.errorCode, "agent_error");
   const open = await (await handleGetRun(PROJECT, EVAL_RUN, deps(true))).json();
   assert.deepEqual(open.input, { message: "captured ask" });
   assert.equal(open.logs, "agent log");
+  assert.equal(open.reason, "agent_error: could not answer captured ask");
+  assert.deepEqual(open.params, { tone: "captured" });
   assert.equal(open.contentWithheld, undefined);
   // A Playground run is typed by the member: it shows.
   const own = await (await handleGetRun(PROJECT, PLAYGROUND_RUN, deps(false))).json();

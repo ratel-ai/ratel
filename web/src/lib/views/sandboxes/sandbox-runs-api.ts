@@ -35,6 +35,8 @@ export type SandboxRunsApiDeps = {
 type Refusal = Exclude<StartRunResult, { ok: true }>;
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
+/** The error message of a withheld run. `sandbox-run.schema.json` needs a text there, not null. */
+const ERROR_TEXT_WITHHELD = "The error text is withheld.";
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const STATUS: Record<Refusal["reason"], number> = {
   not_found: 404,
@@ -89,15 +91,29 @@ export function handleGetSandboxRun(
     const version = await deps.versions().get(projectId, run.versionId);
     const shown = view(req, run, version?.name ?? null, deps);
     if (await mayReadRun(run, { projectId, apiKeyId, policy }, deps)) return json(200, shown);
-    const { input: _input, output: _output, toolCalls: _calls, logs: _logs, ...rest } = shown;
-    return json(200, { ...rest, contentWithheld: true });
+    const {
+      input: _input,
+      params: _params,
+      output: _output,
+      toolCalls: _calls,
+      logs: _logs,
+      error,
+      ...rest
+    } = shown;
+    return json(200, {
+      ...rest,
+      ...(error ? { error: { ...error, message: ERROR_TEXT_WITHHELD } } : {}),
+      contentWithheld: true,
+    });
   });
 }
 
 /**
  * The input, output, tool calls and logs of a run that a trial of an eval started are captured
- * text (a dataset row from a trace). A key reads them with `content:read` and the project's
- * opt-in, as the MCP tools do. Any other run (`ratel run`, the Playground) shows them.
+ * text (a dataset row from a trace). So are its error message (the agent writes it and can repeat
+ * its input there) and its params (they are of the eval). A key reads them with `content:read` and
+ * the project's opt-in, as the MCP tools do. Any other run (`ratel run`, the Playground) shows
+ * them.
  */
 async function mayReadRun(
   run: SandboxRun,

@@ -303,12 +303,13 @@ test("a run that an eval started keeps its captured text from a key without cont
       projectId: PROJECT_ID,
       organizationId: ORGANIZATION_ID,
       requestedBy: `${EVAL_TRIAL_PREFIX}t-1`,
+      params: { model: "large" },
     },
     t.runDeps(),
   );
   assert.ok(started.ok);
   await t.settle();
-  const withheld = ["input", "output", "toolCalls", "logs"];
+  const withheld = ["input", "output", "toolCalls", "logs", "params"];
   const noScope = await t.get(started.run.id, { key: "read" });
   assert.equal(noScope.status, 200);
   assert.ok(sandboxRunSchema.safeParse(noScope.body).success);
@@ -326,6 +327,7 @@ test("a run that an eval started keeps its captured text from a key without cont
   const allowed = await t.get(started.run.id, { key: "full", optIn: true });
   assert.deepEqual(allowed.body.input, { message: "captured ask" });
   assert.deepEqual(allowed.body.output, { reply: "refunded" });
+  assert.deepEqual(allowed.body.params, { model: "large" });
   assert.equal(allowed.body.contentWithheld, undefined);
   // A run a key started itself (ratel run) keeps its output for that key.
   const own = await t.start({ versionId, input: { message: "mine" } }, { key: "runner" });
@@ -333,4 +335,31 @@ test("a run that an eval started keeps its captured text from a key without cont
   const mine = await t.get(own.body.runId, { key: "runner", optIn: false });
   assert.deepEqual(mine.body.input, { message: "mine" });
   assert.deepEqual(mine.body.output, { reply: "refunded" });
+});
+
+test("a failed run that an eval started keeps its error text from a key without content:read", async () => {
+  const t = await setup();
+  const versionId = await t.push();
+  scriptAgent(t.provider, { health: "never" });
+  const started = await startRun(
+    versionId,
+    { message: "captured ask" },
+    {
+      projectId: PROJECT_ID,
+      organizationId: ORGANIZATION_ID,
+      requestedBy: `${EVAL_TRIAL_PREFIX}t-2`,
+    },
+    t.runDeps(),
+  );
+  assert.ok(started.ok);
+  await t.settle();
+  const allowed = await t.get(started.run.id, { key: "full", optIn: true });
+  assert.equal(allowed.body.status, "failed");
+  // The agent writes the error message, and can repeat its input there.
+  const noScope = await t.get(started.run.id, { key: "read" });
+  assert.ok(sandboxRunSchema.safeParse(noScope.body).success);
+  assert.equal(noScope.body.contentWithheld, true);
+  assert.equal(noScope.body.error.code, allowed.body.error.code);
+  assert.notEqual(noScope.body.error.message, allowed.body.error.message);
+  assert.equal(noScope.body.error.message, "The error text is withheld.");
 });

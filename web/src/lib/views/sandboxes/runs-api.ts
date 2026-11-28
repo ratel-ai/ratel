@@ -81,10 +81,11 @@ export function handleGetRun(
     const run = known ? await getRun(member.projectId, runId, deps.runDeps()) : null;
     if (!run) return refuse(404, "not_found", "There is no such run.");
     // The input of a run that an eval started can be a row copied from a trace: captured text.
+    // The agent writes the reason and can repeat its input there, and the params are of the eval.
     const fromEval = run.requestedBy.startsWith(EVAL_TRIAL_PREFIX);
     if (fromEval && !(await deps.contentOptIn(member.projectId))) {
-      const view = runView(run);
-      return reply(200, { ...view, input: null, result: null, logs: null, contentWithheld: true });
+      const withheld = { input: null, params: null, result: null, logs: null, reason: null };
+      return reply(200, { ...runView(run), ...withheld, contentWithheld: true });
     }
     return reply(200, runView(run));
   });
