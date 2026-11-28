@@ -6,6 +6,7 @@ import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { projectRoot } from "@/lib/console/navigation";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { resolveTraceRange, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
 import { loadWidgets } from "@/lib/views/dashboards/data";
@@ -59,7 +60,7 @@ export default async function ScopedDashboardPage({
     organizationId: scope.organization.id,
     actor: scope.user.externalId,
   });
-  const [results, { facets, scorers }, alerts] = await Promise.all([
+  const [results, { facets, scorers }, alerts, readOnly] = await Promise.all([
     loadWidgets(
       scope.project.id,
       problem ? [] : dashboard.widgets,
@@ -72,6 +73,7 @@ export default async function ScopedDashboardPage({
       organizationId: scope.organization.id,
       actor: scope.user.externalId,
     }),
+    isRestrictedBySupportSession(),
   ]);
   const overview = await focusedConsoleEnabled(scope.organization);
   const added = scorers?.scorers.find(({ id }) => id === search[ADD_SCORER_PARAM]);
@@ -80,6 +82,7 @@ export default async function ScopedDashboardPage({
       <DashboardView
         alerts={alerts}
         overview={overview}
+        readOnly={readOnly}
         draft={added ? scorerWidget(added) : null}
         projectId={scope.project.id}
         dashboard={{
