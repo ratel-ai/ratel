@@ -131,6 +131,16 @@ test("a broken widget is repaired once, then refused with its reason; the good o
   assert.equal(stored?.outcome, null);
   assert.deepEqual(stored?.draft, { widgets: result.widgets, refused: result.refused });
   assert.ok((stored?.usd ?? 0) > 0);
+  // What the two calls used, the one repair round and the model are stored with the ask.
+  assert.deepEqual(
+    {
+      model: stored?.model,
+      inputTokens: stored?.inputTokens,
+      outputTokens: stored?.outputTokens,
+      repairRounds: stored?.repairRounds,
+    },
+    { model: ASK_MODEL, inputTokens: 2_000, outputTokens: 400, repairRounds: 1 },
+  );
 });
 
 test("the repair round's fixed widget joins the draft", async () => {
@@ -143,6 +153,16 @@ test("the repair round's fixed widget joins the draft", async () => {
     [GOOD.title, FIXED.title],
   );
   assert.deepEqual(result.refused, []);
+});
+
+test("a draft with no refused widget stores its one call and no repair round", async () => {
+  const result = await draftWidgets(ask(), deps(fakeModel({ widgets: [GOOD] })));
+  assert.equal(result.status, "drafted");
+  const [stored] = await asks();
+  assert.deepEqual(
+    [stored?.inputTokens, stored?.outputTokens, stored?.repairRounds],
+    [1_000, 200, 0],
+  );
 });
 
 test("a widget ask gives one widget at most", async () => {

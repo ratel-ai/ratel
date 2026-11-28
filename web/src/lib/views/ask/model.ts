@@ -161,7 +161,7 @@ export function standInAskModel(): AskModel {
       };
       const count = ASK_MAX_WIDGETS[target === "widget" ? "widget" : "dashboard"];
       return {
-        text: JSON.stringify({ widgets: STAND_IN_WIDGETS.slice(0, count) }),
+        text: JSON.stringify({ widgets: STAND_IN_WIDGETS.slice(0, count), range: "" }),
         usage: { inputTokens: 0, outputTokens: 0 },
       };
     },

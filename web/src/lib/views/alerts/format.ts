@@ -56,7 +56,15 @@ export function thresholdFrom(text: string, unit: MetricUnit): number | null {
 }
 
 export function thresholdUnit(unit: MetricUnit): string {
-  return { count: "", ratio: "%", ms: "ms", tokens: "tokens", usd: "USD", score: "of 5" }[unit];
+  return {
+    count: "",
+    ratio: "%",
+    ms: "ms",
+    tokens: "tokens",
+    usd: "USD",
+    score: "of 5",
+    number: "",
+  }[unit];
 }
 
 /** What the window of an alert reads, for the form. */

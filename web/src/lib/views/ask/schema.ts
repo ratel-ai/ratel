@@ -1,4 +1,13 @@
-import { index, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 import type { AskOutcome, AskTarget, DraftedWidget, RefusedWidget } from "./domain";
 
@@ -11,7 +20,8 @@ export interface StoredDraft {
 /**
  * Each ask of Ask in words: who asked, for what, in which words, the draft the model gave and
  * what the person did with it. The limits of `ask-limits` count these rows, and their `usd`
- * holds what the draft cost (its reservation until the calls are settled).
+ * holds what the draft cost (its reservation until the calls are settled). The tokens and the
+ * repair rounds of its calls are kept with the model, so a cost can be checked against the bill.
  */
 export const askRequests = pgTable(
   "ask_requests",
@@ -34,6 +44,11 @@ export const askRequests = pgTable(
     draft: jsonb("draft").$type<StoredDraft>(),
     model: text("model").notNull(),
     usd: numeric("usd", { precision: 12, scale: 6, mode: "number" }).notNull().default(0),
+    // The tokens the model reported for the calls of the draft; 0 until they are settled.
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    // The repair rounds the draft took: 0 or 1.
+    repairRounds: integer("repair_rounds").notNull().default(0),
     // Null until the person kept, edited or discarded the draft.
     outcome: text("outcome").$type<AskOutcome>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { metricQuery } from "@/lib/contracts/query";
 import type { SqlResult } from "@/lib/synthesis/metrics/query";
-import { drawnChart, formAsMetric, sqlAsMetric } from "@/lib/views/dashboards/sql-chart";
+import {
+  drawnChart,
+  formAsMetric,
+  scrollsInCard,
+  sqlAsMetric,
+} from "@/lib/views/dashboards/sql-chart";
 import { formOf } from "@/lib/views/dashboards/widget";
 
 const H1 = "2026-11-02T09:00:00.000Z";
@@ -233,4 +238,30 @@ test("a text of the form cut at the row cap leaves the buckets it dropped empty,
     whole.series.find(({ groups }) => groups[0]?.value === "a")?.values,
     [0, 0, 0, 2, 2, 2],
   );
+});
+
+test("a card scrolls a list of bars and a table inside it; a time chart keeps its readout free", () => {
+  const bars = table(
+    [
+      ["tool", "text"],
+      ["error_rate", "number"],
+    ],
+    Array.from({ length: 18 }, (_, index) => [`tool_${index}`, index / 100]),
+  );
+  assert.equal(scrollsInCard("bar", bars), true);
+  assert.equal(scrollsInCard("table", bars), true);
+  const timed = table(
+    [
+      ["hour", "timestamp"],
+      ["traces", "integer"],
+    ],
+    [[H1, 2]],
+  );
+  assert.equal(scrollsInCard("bar", timed), false);
+  assert.equal(scrollsInCard("line", timed), false);
+  // A line its rows cannot fill is drawn as a table, which scrolls.
+  assert.equal(scrollsInCard("line", bars), true);
+  // A metric's own line and bar draw over time.
+  assert.equal(scrollsInCard("bar", { kind: "metric" }), false);
+  assert.equal(scrollsInCard("number", null), true);
 });

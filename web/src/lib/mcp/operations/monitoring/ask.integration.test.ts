@@ -24,7 +24,10 @@ const model: AskModel = {
   async complete() {
     calls += 1;
     return {
-      text: JSON.stringify({ widgets: calls % 2 === 1 ? [GOOD, BROKEN] : [BROKEN] }),
+      text: JSON.stringify({
+        widgets: calls % 2 === 1 ? [GOOD, BROKEN] : [BROKEN],
+        range: calls % 2 === 1 ? "14d" : "",
+      }),
       usage: { inputTokens: 500, outputTokens: 100 },
     };
   },
@@ -48,7 +51,10 @@ test("draft_widgets drafts checked widgets, names the broken one and saves no da
     askId: string;
     widgets: { title: string; chart: string; query: { kind: string; text: string } }[];
     refused: { title: string; reason: string }[];
-  }>("draft_widgets", { words: "How busy are my agents?" });
+    range: string | null;
+  }>("draft_widgets", { words: "How busy are my agents over the last 14 days?" });
+  // The range the words name, for import_dashboard; the repair round does not change it.
+  assert.equal(data.range, "14d");
   assert.deepEqual(
     data.widgets.map(({ title, chart, query }) => [title, chart, query.kind]),
     [[GOOD.title, "line", "sql"]],

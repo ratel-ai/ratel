@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  ASK_ANSWER_SCHEMA,
   buildAskRequest,
   checkCandidate,
   checkCandidates,
   mergeRepair,
   parseAskAnswer,
 } from "./domain";
-import { standInAskModel } from "./model";
+import { ASK_MODEL } from "./limits";
+import { askCallUsd, standInAskModel } from "./model";
 
 const NOW = new Date("2026-11-24T12:00:00Z");
 const OPTIONS = {
@@ -47,9 +49,10 @@ test("a property that is not indexed is refused, an indexed one compiles", () =>
 test("an answer that is not the schema's JSON gives null", () => {
   assert.equal(parseAskAnswer("not json"), null);
   assert.equal(parseAskAnswer('{"widget": []}'), null);
-  assert.deepEqual(parseAskAnswer('{"widgets": [{"title": 3}]}'), [
-    { title: "", rql: "", chart: "" },
-  ]);
+  assert.deepEqual(parseAskAnswer('{"widgets": [{"title": 3}]}'), {
+    widgets: [{ title: "", rql: "", chart: "" }],
+    range: null,
+  });
 });
 
 test("the local stand-in gives widgets that all compile", async () => {
@@ -59,7 +62,7 @@ test("the local stand-in gives widgets that all compile", async () => {
     context,
   );
   const answer = await standInAskModel().complete(request);
-  const checked = checkCandidates(parseAskAnswer(answer.text) ?? [], "dashboard", OPTIONS);
+  const checked = checkCandidates(parseAskAnswer(answer.text)?.widgets ?? [], "dashboard", OPTIONS);
   assert.deepEqual(checked.refused, []);
   assert.equal(checked.widgets.length, 4);
 });
@@ -100,4 +103,76 @@ test("the repair round matches the refused widgets by order, not by title", () =
 test("a draft never holds two widgets of the same RQL", () => {
   const checked = checkCandidates([GOOD, { ...GOOD, title: "Again" }], "dashboard", OPTIONS);
   assert.equal(checked.widgets.length, 1);
+});
+
+const RATE_AND_COUNT = {
+  title: "Tool error rate by tool",
+  rql: "select attributes['gen_ai.tool.name'] as tool, rate(status = 'error') as error_rate, count(*) as calls from events where type = 'tool_call' group by tool order by error_rate desc limit 20",
+  chart: "bar",
+};
+const RATE_ONLY = {
+  ...RATE_AND_COUNT,
+  rql: "select attributes['gen_ai.tool.name'] as tool, rate(status = 'error') as error_rate from events where type = 'tool_call' group by tool order by error_rate desc limit 20",
+};
+
+test("a line or a bar with two measures goes to the repair round, a table may have them", () => {
+  assert.match(reasonOf(RATE_AND_COUNT.rql, "bar") ?? "", /one number column/);
+  assert.match(
+    reasonOf(
+      "select time_bucket('1 day', started_at) as day, rate(has_error) as error_rate, count(*) as traces from traces group by day order by day",
+      "line",
+    ) ?? "",
+    /one number column/,
+  );
+  assert.equal(reasonOf(RATE_AND_COUNT.rql, "table"), null);
+  assert.equal(reasonOf(RATE_ONLY.rql, "bar"), null);
+});
+
+test("a rate and a count for a bar end as one measure, or as a table: never two measures on one scale", () => {
+  const first = checkCandidates([RATE_AND_COUNT], "widget", OPTIONS);
+  assert.deepEqual(first.widgets, []);
+  assert.equal(first.refused.length, 1);
+  // The repair round drops the count: the bar has one measure.
+  const fixed = mergeRepair(first, [RATE_ONLY], "widget", OPTIONS);
+  assert.deepEqual(
+    fixed.widgets.map(({ chart, query }) => [chart, query.text]),
+    [["bar", RATE_ONLY.rql]],
+  );
+  // The repair round keeps both: the widget becomes a table of the same RQL.
+  const kept = mergeRepair(first, [RATE_AND_COUNT], "widget", OPTIONS);
+  assert.deepEqual(
+    kept.widgets.map(({ chart, query }) => [chart, query.text]),
+    [["table", RATE_AND_COUNT.rql]],
+  );
+  assert.deepEqual(kept.refused, []);
+});
+
+test("the answer's range is kept when it is a range of the page, else none", () => {
+  const answer = (range: unknown) => JSON.stringify({ widgets: [], range });
+  assert.equal(parseAskAnswer(answer("14d"))?.range, "14d");
+  assert.equal(parseAskAnswer(answer("30d"))?.range, "30d");
+  for (const outside of ["2d", "", "last 14 days", 14, null, undefined])
+    assert.equal(parseAskAnswer(answer(outside))?.range, null, String(outside));
+});
+
+test("the request asks for one number column in a line or a bar, and offers the page's ranges", () => {
+  const request = buildAskRequest(
+    { target: "dashboard", words: "w", range: OPTIONS.range },
+    { properties: [], widgets: [], otherWidgets: [], earlierAsks: [] },
+  );
+  assert.match(request.system, /one number column/);
+  assert.match(request.system, /rate/);
+  assert.deepEqual(ASK_ANSWER_SCHEMA.properties.range.enum, ["", "7d", "14d", "30d", "3m", "12m"]);
+});
+
+test("a call of the ask model is priced at the published price of Claude Haiku 5.5", () => {
+  // https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-28): prompts up to
+  // 100,000 tokens pay 0.10 USD per million input tokens and 0.50 USD per million output tokens.
+  assert.equal(ASK_MODEL, "claude-haiku-5-5");
+  const usd = (inputTokens: number, outputTokens: number) =>
+    Math.round(askCallUsd(ASK_MODEL, { inputTokens, outputTokens }) * 1e9) / 1e9;
+  assert.equal(usd(10_000, 0), 0.001);
+  assert.equal(usd(0, 10_000), 0.005);
+  // Over 100,000 prompt tokens the whole call pays 0.50 and 2.50 USD per million.
+  assert.equal(usd(200_000, 10_000), 0.125);
 });

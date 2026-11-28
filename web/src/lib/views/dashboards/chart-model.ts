@@ -103,7 +103,15 @@ export function formatMetric(value: number | null, unit: MetricUnit): string {
   if (unit === "ms") return formatDuration(value);
   if (unit === "ratio") return formatPercent(value);
   if (unit === "score") return value === null ? MISSING : trimmedScore(value);
+  if (unit === "number") return plainNumber(value);
   return formatCompact(value);
+}
+
+/** A number of any scale: 4 decimals under 1, 2 under 10,000, then compact. */
+function plainNumber(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || Math.abs(value) >= 10_000)
+    return formatCompact(value);
+  return value.toLocaleString("en-US", { maximumFractionDigits: Math.abs(value) < 1 ? 4 : 2 });
 }
 
 /** A 1 to 5 average, with two decimals at most. */

@@ -255,7 +255,7 @@ for (const backend of BACKENDS) {
       }
     });
 
-    test("the result has typed columns and a truncated mark when the row cap cuts it", async () => {
+    test("the result has typed columns, and no truncated mark when only its own LIMIT cuts it", async () => {
       const { a, run } = await seeded(backend);
       const cut = await run(
         a.project,
@@ -269,7 +269,7 @@ for (const backend of BACKENDS) {
       assert.equal(cut.rows.length, 1);
       assert.equal(cut.rows[0][0], a.trace);
       assert.match(String(cut.rows[0][1]), /^\d{4}-\d{2}-\d{2}T.*Z$/);
-      assert.equal(cut.truncated, true);
+      assert.equal(cut.truncated, false);
       const whole = await run(a.project, "select trace_id from traces limit 2");
       assert.ok(whole.ok);
       assert.equal(whole.truncated, false);
@@ -342,6 +342,7 @@ function rawCompiled(sql: string): RqlCompiled {
     table: "traces",
     window: { from: NOW.toISOString(), to: NOW.toISOString() },
     limit: 10,
+    ownLimit: false,
     oneRow: false,
   };
 }

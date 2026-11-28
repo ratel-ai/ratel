@@ -107,7 +107,7 @@ export async function buildDashboardAction(
       {
         projectId: scope.project.id,
         action: "import",
-        document: draftedDashboard(title, draft.widgets),
+        document: draftedDashboard(title, draft.widgets, draft.range),
       },
       consoleDashboardDeps(),
     );

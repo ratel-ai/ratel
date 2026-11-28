@@ -121,7 +121,7 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
           truncated: tracker.value,
           window: window.toJSON(),
           hint: result.truncated
-            ? `The query had more rows than its limit. Add a LIMIT of at most ${RQL_LIMITS.maxLimit}, or narrow the WHERE.`
+            ? `A cap of Ratel cut the result: the rows of a query with no LIMIT, the most rows (${RQL_LIMITS.maxLimit}), or the size of a cell or of the rows. Add a LIMIT under ${RQL_LIMITS.maxLimit}, a GROUP BY or a shorter window.`
             : "A row is an array in the order of columns.",
         };
       },

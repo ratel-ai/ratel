@@ -135,8 +135,8 @@ describe("runQuery of kind sql", () => {
     assert.deepEqual(result.rows, [[traces[0]]]);
   });
 
-  test("more rows than the limit are cut and marked", async () => {
-    use();
+  test("more rows than the query's own limit are cut, and the result is whole: no cap of Ratel cut it", async () => {
+    const read = useCounted();
     const result = await runQuery(
       project,
       sql("select trace_id from traces order by trace_id limit 1"),
@@ -144,7 +144,9 @@ describe("runQuery of kind sql", () => {
       NO_DB,
     );
     assert.deepEqual(result.rows, [[traces[0]]]);
-    assert.equal(result.truncated, true);
+    assert.equal(result.truncated, false);
+    // The runner read one row more than the limit: the second trace was there.
+    assert.deepEqual(read, [2]);
   });
 
   test("the other kinds are every kind but sql", () => {
@@ -214,8 +216,8 @@ describe("a literal of the value of the limit", () => {
     assert.equal(result.truncated, false);
   });
 
-  test("equal to an explicit limit, it filters with its own value, and the cut is marked", async () => {
-    use();
+  test("equal to an explicit limit, it filters with its own value, and the limit reads one row more", async () => {
+    const read = useCounted();
     const result = await runQuery(
       project,
       sql("select trace_id from traces where duration_ms / 100 = 1 order by trace_id limit 1"),
@@ -223,11 +225,13 @@ describe("a literal of the value of the limit", () => {
       NO_DB,
     );
     assert.deepEqual(result.rows, [[traces[0]]]);
-    assert.equal(result.truncated, true);
+    // The literal 1 filtered with its own value; the LIMIT alone became 2, so both traces were read.
+    assert.deepEqual(read, [2]);
+    assert.equal(result.truncated, false);
   });
 
   test("a literal after the LIMIT in the order of the parameters keeps its value", async () => {
-    use();
+    const read = useCounted();
     // The parameters are the window, 100, 1 (the LIMIT) and 5: the last one is not the LIMIT.
     const result = await runQuery(
       project,
@@ -238,7 +242,9 @@ describe("a literal of the value of the limit", () => {
       NO_DB,
     );
     assert.deepEqual(result.rows, [[traces[0]]]);
-    assert.equal(result.truncated, true);
+    // Both traces have 5 output tokens: the 5 kept its value, and the LIMIT alone became 2.
+    assert.deepEqual(read, [2]);
+    assert.equal(result.truncated, false);
   });
 });
 
@@ -296,6 +302,24 @@ function use(deps: { run?: Partial<RqlRunDeps>; rqlVersion?: number } = {}) {
       ...deps.run,
     },
   });
+}
+
+/** As `use`, and the count of rows the database gave each run: the LIMIT the runner sent shows in it. */
+function useCounted(): number[] {
+  const read: number[] = [];
+  const pg = createPgRqlExecutor(pool);
+  use({
+    run: {
+      executor: {
+        execute: async (run) => {
+          const rows = await pg.execute(run);
+          read.push(rows.length);
+          return rows;
+        },
+      },
+    },
+  });
+  return read;
 }
 
 async function seed(): Promise<void> {

@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
+import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { DashboardsDb } from "@/lib/views/dashboards/store";
 import { loadAskContext } from "./context";
 import {
@@ -53,6 +54,8 @@ export type DraftResult =
       model: string;
       widgets: DraftedWidget[];
       refused: RefusedWidget[];
+      /** The range the words name, when the dashboard page offers it; null: the page's range. */
+      range: RangePreset | null;
     }
   | { status: "not_set_up"; message: string }
   | { status: "invalid"; message: string }
@@ -123,11 +126,14 @@ export async function draftWidgets(ask: DraftAsk, deps: DraftDeps = {}): Promise
 
   const check: CheckOptions = { now, properties: context.properties, range };
   let usd = 0;
+  const tokens = { inputTokens: 0, outputTokens: 0, repairRounds: 0 };
   let failed = false;
   const call = async (sent: typeof request) => {
     try {
       const answer = await model.complete(sent);
       usd += askCallUsd(model.model, answer.usage);
+      tokens.inputTokens += answer.usage.inputTokens;
+      tokens.outputTokens += answer.usage.outputTokens;
       return parseAskAnswer(answer.text);
     } catch (err) {
       // A failed call may still be charged: it keeps its share of the reservation.
@@ -142,22 +148,30 @@ export async function draftWidgets(ask: DraftAsk, deps: DraftDeps = {}): Promise
 
   const first = await call(request);
   if (!first) {
-    await settleAsk(hold.askId, failed ? reserveUsd : usd, null, db);
+    await settleAsk(hold.askId, { usd: failed ? reserveUsd : usd, ...tokens }, null, db);
     return { status: "failed", askId: hold.askId, message: FAILED };
   }
-  const checked = checkCandidates(first, ask.target, check);
+  const checked = checkCandidates(first.widgets, ask.target, check);
   let widgets = checked.widgets;
   let refused = checked.refused;
   if (refused.length > 0 && widgets.length < ASK_MAX_WIDGETS[ask.target]) {
+    tokens.repairRounds += 1;
     const repair = await call(buildRepairRequest(request, refused));
     if (repair)
-      ({ widgets, refused } = mergeRepair({ widgets, refused }, repair, ask.target, check));
+      ({ widgets, refused } = mergeRepair({ widgets, refused }, repair.widgets, ask.target, check));
   }
   await settleAsk(
     hold.askId,
-    failed ? Math.max(usd, reserveUsd / 2) : usd,
+    { usd: failed ? Math.max(usd, reserveUsd / 2) : usd, ...tokens },
     { widgets, refused },
     db,
   );
-  return { status: "drafted", askId: hold.askId, model: model.model, widgets, refused };
+  return {
+    status: "drafted",
+    askId: hold.askId,
+    model: model.model,
+    widgets,
+    refused,
+    range: first.range,
+  };
 }

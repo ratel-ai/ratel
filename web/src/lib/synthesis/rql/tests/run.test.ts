@@ -81,13 +81,38 @@ test("the result has the typed columns, the rows and no truncated mark under the
   });
 });
 
-test("a result cut by the row cap is marked truncated and keeps limit rows", async () => {
+test("a result cut by the row cap of Ratel is marked truncated and keeps limit rows", async () => {
+  // No LIMIT: the default cap cuts.
+  const none = compiled("select trace_id from traces");
+  const many = Array.from({ length: RQL_LIMITS.defaultLimit + 1 }, (_, i) => [`t${i}`]);
+  const { executor } = fakeExecutor(async () => many);
+  const cut = await runRql(none, { projectId: PROJECT }, deps(executor).deps);
+  assert.ok(cut.ok);
+  assert.equal(cut.rows.length, RQL_LIMITS.defaultLimit);
+  assert.equal(cut.truncated, true);
+  // A LIMIT over the most rows is lowered to it: the cap cuts.
+  const over = compiled(`select trace_id from traces limit ${RQL_LIMITS.maxLimit + 5}`);
+  const { executor: overExecutor } = fakeExecutor(async () =>
+    Array.from({ length: RQL_LIMITS.maxLimit + 1 }, (_, i) => [`t${i}`]),
+  );
+  const lowered = await runRql(over, { projectId: PROJECT }, deps(overExecutor).deps);
+  assert.ok(lowered.ok);
+  assert.equal(lowered.rows.length, RQL_LIMITS.maxLimit);
+  assert.equal(lowered.truncated, true);
+  // A LIMIT of the most rows is the cap itself (the metric form writes it): a cut there is marked.
+  const atCap = compiled(`select trace_id from traces limit ${RQL_LIMITS.maxLimit}`);
+  const full = await runRql(atCap, { projectId: PROJECT }, deps(overExecutor).deps);
+  assert.ok(full.ok);
+  assert.equal(full.truncated, true);
+});
+
+test("a query's own LIMIT that is reached is no cut: the result is whole", async () => {
   const query = compiled("select trace_id from traces limit 2");
   const { executor } = fakeExecutor(async () => [["a"], ["b"], ["c"]]);
   const result = await runRql(query, { projectId: PROJECT }, deps(executor).deps);
   assert.ok(result.ok);
   assert.deepEqual(result.rows, [["a"], ["b"]]);
-  assert.equal(result.truncated, true);
+  assert.equal(result.truncated, false);
 });
 
 test("a timestamp is an ISO string", async () => {
@@ -200,8 +225,10 @@ test("an error that is not a database error is thrown again", async () => {
 });
 
 test("each run is observed with numbers and an outcome code, never the query or a literal", async () => {
-  const query = compiled("select trace_id from traces where service_name = 'secret-svc' limit 1");
-  const { executor } = fakeExecutor(async () => [["a"], ["b"]]);
+  const query = compiled("select trace_id from traces where service_name = 'secret-svc'");
+  const { executor } = fakeExecutor(async () =>
+    Array.from({ length: RQL_LIMITS.defaultLimit + 1 }, () => ["a"]),
+  );
   const { deps: run, observed } = deps(executor);
   await runRql(query, { projectId: PROJECT }, run);
   assert.equal(observed.length, 1);
@@ -217,7 +244,7 @@ test("each run is observed with numbers and an outcome code, never the query or 
   ]);
   assert.equal(observation.table, "traces");
   assert.equal(observation.columnCount, 1);
-  assert.equal(observation.rowCount, 1);
+  assert.equal(observation.rowCount, RQL_LIMITS.defaultLimit);
   assert.equal(observation.outcome, "ok");
   assert.equal(observation.truncated, true);
   assert.ok(!JSON.stringify(observation).includes("secret-svc"));
