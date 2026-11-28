@@ -8,7 +8,7 @@ import { settledBefore } from "@/lib/synthesis/traces/summary-refresh";
 import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import { runCheck } from "./check";
 import { JUDGE_BATCH_SIZE, type JudgeDeps, judgeTraces, resolveJudgeEngine } from "./judge";
-import { scorePresetTraces } from "./preset";
+import { openRunTraces, scorePresetTraces } from "./preset";
 import { inSample } from "./sample";
 import { traceScorers } from "./schema";
 import {
@@ -77,6 +77,12 @@ export const SWEEP_SETTLE_MS = 45_000;
  * The wait between two attempts doubles from a minute to an hour, so this is about 19 hours.
  */
 export const MAX_JUDGE_ATTEMPTS = 24;
+/**
+ * How long a preset waits at a trace whose run is still open: its cursor stays before the trace, so
+ * the trace is scored once the run closes. After this the trace is passed with the reason
+ * `run_still_open` in the log, and the scorer goes on.
+ */
+export const OPEN_RUN_HOLD_MS = 3_600_000;
 const FIRST_RETRY_MS = 60_000;
 const LAST_RETRY_MS = 3_600_000;
 /** Arbitrary but stable; only this sweep takes it. */
@@ -183,9 +189,11 @@ async function sweepOneBatch(
     cursor_at: string;
     cursor_trace_id: string;
     judge_attempts: number;
+    recent: boolean;
   }>(
     await tx.execute(sql`
       select s.trace_id, s.updated_at::text as updated_at,
+        s.updated_at > now() - ${sql.raw(String(OPEN_RUN_HOLD_MS))} * interval '1 millisecond' as recent,
         c.cursor_at::text as cursor_at, c.cursor_trace_id, c.judge_attempts,
         (s.spans_max_received_at >= c.created_at and ${targetCondition(scorer.projectId, scorer)}) as matches
       from otel_trace_summaries s
@@ -202,11 +210,14 @@ async function sweepOneBatch(
   );
   // A judge takes a few traces at a time: the cursor stops at the last one it takes.
   const overflow = scorer.kind === "judge" ? sampled.at(JUDGE_BATCH_SIZE) : undefined;
-  const taken = overflow ? slice.slice(0, slice.indexOf(overflow)) : slice;
+  // A preset stops before the first trace whose run is still open, for `OPEN_RUN_HOLD_MS`.
+  const held = scorer.kind === "preset" ? await heldAt(scorer, sampled, tx) : undefined;
+  const stop = overflow ?? held;
+  const taken = stop ? slice.slice(0, slice.indexOf(stop)) : slice;
   const last = taken.at(-1);
   if (!last) return EMPTY_BATCH;
 
-  const chosen = sampled.slice(0, overflow ? JUDGE_BATCH_SIZE : undefined);
+  const chosen = stop ? sampled.slice(0, sampled.indexOf(stop)) : sampled;
   const traces = await loadScorerTraces(
     scorer.projectId,
     chosen.map((row) => row.trace_id),
@@ -223,7 +234,7 @@ async function sweepOneBatch(
       attempts: last.judge_attempts,
     },
     scanned: taken.length,
-    more: overflow !== undefined || slice.length === batchSize,
+    more: overflow !== undefined || (held === undefined && slice.length === batchSize),
   };
   if (scorer.kind === "judge") {
     const done = await scoredTraceIds(
@@ -241,6 +252,35 @@ async function sweepOneBatch(
   const scores = scoresOf(scorer, traces, outcomes);
   const written = await insertTraceScores(scores, tx);
   return { ...batch, written, skipped: traces.length - scores.length, toJudge: [] };
+}
+
+/**
+ * The first sampled trace whose run of the scorer's tasks is still open, while it is recent: the
+ * cursor waits before it. An older one is passed, and the log says so (`run_still_open`).
+ */
+async function heldAt<Row extends { trace_id: string; recent: boolean }>(
+  scorer: Scorer,
+  sampled: readonly Row[],
+  db: EvalDb,
+): Promise<Row | undefined> {
+  const open = await openRunTraces(
+    scorer.projectId,
+    sampled.map((row) => row.trace_id),
+    scorer.tasks ?? [],
+    db,
+  );
+  if (open.size === 0) return undefined;
+  const passed = sampled.filter((row) => open.has(row.trace_id) && !row.recent);
+  const held = sampled.find((row) => open.has(row.trace_id) && row.recent);
+  const counted = held
+    ? passed.filter((row) => sampled.indexOf(row) < sampled.indexOf(held))
+    : passed;
+  if (counted.length > 0)
+    logger.info(
+      { project_id: scorer.projectId, scorer_id: scorer.id, traces: counted.length },
+      "run_still_open: preset passed traces whose run stayed open",
+    );
+  return held;
 }
 
 /**

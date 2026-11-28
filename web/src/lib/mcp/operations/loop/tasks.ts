@@ -533,6 +533,8 @@ export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDep
           result = await deps.changeTaskScorer(input, {
             ...mcpSessionDeps(ctx, actor),
             enabled: decided,
+            // A support session exists only in the console; an MCP caller acts as itself.
+            isRestricted: async () => false,
             save: (scorer) => deps.saveScorer(scorer, live),
             reset: (projectId, taskId, kind) =>
               deps.resetScorer(projectId, taskId, kind, actor, live),

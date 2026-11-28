@@ -23,6 +23,12 @@ export const MAX_PROMPT_CHARS = 5_000;
 export const MAX_SCORERS = 100;
 /** Who creates the scorers that stand for a task's scorers (the migration names them the same). */
 export const TASK_SCORERS_ACTOR = "system:task-scorers";
+/**
+ * The percent of a task's traces its judge reads (`judge_criteria` as a judge). The task job judged
+ * a daily sample of 20 runs under $0.50 a task; a sweep judge has no daily count, so the sample
+ * keeps its spend near that cap. A person may change it on the scorer.
+ */
+export const TASK_JUDGE_SAMPLE_RATE = 10;
 export const MAX_TASKS = 50;
 /** The task kind a preset draft may name besides `PRESET_KINDS`: it becomes a pass-or-fail judge. */
 export const CRITERIA_PRESET = "judge_criteria";

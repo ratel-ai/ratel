@@ -84,6 +84,29 @@ export async function getScorer(
   return row ? ((await scorersOf([row], db))[0] ?? null) : null;
 }
 
+/**
+ * Of these scorers, the ids the system made (`TASK_SCORERS_ACTOR`): the seed, the conversion of
+ * migration 0055 and the sync of a task scorer.
+ */
+export async function systemScorerIds(
+  projectId: string,
+  scorerIds: readonly string[],
+  db: Pick<ScorerDb, "select"> = getDb(),
+): Promise<Set<string>> {
+  if (scorerIds.length === 0) return new Set();
+  const rows = await db
+    .select({ id: traceScorers.id })
+    .from(traceScorers)
+    .where(
+      and(
+        eq(traceScorers.projectId, projectId),
+        inArray(traceScorers.id, [...scorerIds]),
+        eq(traceScorers.createdBy, TASK_SCORERS_ACTOR),
+      ),
+    );
+  return new Set(rows.map((row) => row.id));
+}
+
 /** The scorers that count against `MAX_SCORERS`: all but the ones the system made for tasks. */
 export async function countScorers(projectId: string, db: ScorerDb = getDb()): Promise<number> {
   const [row] = await db

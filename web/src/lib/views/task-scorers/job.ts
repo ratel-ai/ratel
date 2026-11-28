@@ -194,6 +194,20 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
   return { scored: true, ...counts, orphaned: orphans.length };
 }
 
+/** Seed the presets of new tasks; a failure is logged, so the eval sets are still queued. */
+async function seedPresetsSafely(
+  projectId: string,
+  now: Date,
+  db: QueueDb,
+  deps: EnqueueScoreTasksDeps,
+): Promise<void> {
+  try {
+    await deps.seedPresets?.(projectId, now, db);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "task presets seed failed");
+  }
+}
+
 /**
  * Queue live scoring for one project. The signal run calls it when it completes, and the daily sweep
  * calls it for each project with task runs. A gate refusal is logged, tracked and recorded as a
@@ -223,10 +237,11 @@ export async function enqueueScoreTasksJob(
       finishedAt: now,
     });
     await reportSkip(projectId, skipped, trigger, deps);
-    if (skipped === "trace_scorers") {
-      await deps.seedPresets?.(projectId, now, db);
+    // The tasks get their presets whenever the top-level scorers are on, the eval gate on or off.
+    const live = skipped === "trace_scorers" || (await deps.scorersOn?.(projectId)) === true;
+    if (live) await seedPresetsSafely(projectId, now, db, deps);
+    if (skipped === "trace_scorers")
       await enqueueDueTaskEvalSets(projectId, { db, flagDeps: deps.flagDeps, now: () => now });
-    }
     return null;
   }
   const [job] = await db

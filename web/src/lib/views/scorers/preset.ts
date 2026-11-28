@@ -106,3 +106,44 @@ async function closedTurnsOf(
   );
   return new Map(rows.map((row) => [row.trace_id, row.turn_id]));
 }
+
+/**
+ * The traces that belong to a run of these tasks that is still open, and to no closed one: a preset
+ * cannot score them yet (`no_run`), and will once the run closes.
+ */
+export async function openRunTraces(
+  projectId: string,
+  traceIds: readonly string[],
+  taskIds: readonly string[],
+  db: Pick<EvalDb, "execute">,
+): Promise<Set<string>> {
+  if (traceIds.length === 0 || taskIds.length === 0) return new Set();
+  const list = (values: readonly string[]) =>
+    sql.join(
+      values.map((value) => sql`${value}`),
+      sql`, `,
+    );
+  const keys = traceIds.map((id) => `${OTLP_KEY}${id}`);
+  const rows = rowsOf<{ trace_id: string }>(
+    await db.execute(sql`
+      select substr(t.turn_key, ${OTLP_KEY.length + 1}) as trace_id
+      from trace_turns t
+      where t.project_id = ${projectId} and t.status <> 'closed'
+        and t.workflow_id in (${list(taskIds)}) and t.turn_key in (${list(keys)})
+      union
+      select e.trace_id
+      from trace_turns t
+      join trace_turn_steps st on st.project_id = t.project_id and st.turn_id = t.id
+      join trace_events e on e.project_id = st.project_id and e.id = st.trace_event_id
+      where t.project_id = ${projectId} and t.status <> 'closed'
+        and t.workflow_id in (${list(taskIds)}) and e.trace_id in (${list(traceIds)})`),
+  );
+  if (rows.length === 0) return new Set();
+  const closed = await closedTurnsOf(
+    projectId,
+    rows.map((row) => row.trace_id),
+    taskIds,
+    db,
+  );
+  return new Set(rows.map((row) => row.trace_id).filter((id) => !closed.has(id)));
+}

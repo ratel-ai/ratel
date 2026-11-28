@@ -147,7 +147,7 @@ test("each of the 7 task kinds scores a trace of its task as engine.ts grades th
   }
 });
 
-test("a trace of an open run, or of no run, gets no preset result", async () => {
+test("a trace of an open run is held for later, and a trace of no run gets no preset result", async () => {
   const { client, db, addRun, scored } = await setup();
   try {
     await addRun({ ...RUNS[0]!, status: "open" });
@@ -157,8 +157,9 @@ test("a trace of an open run, or of no run, gets no preset result", async () => 
     const id = await scorer(client, db, { kind: "ends_well" });
     const result = await sweepScorers({ flagOn: async () => true }, db);
     assert.deepEqual((await scored(id)).size, 0);
-    // The open run's trace is taken and gets no result; the loose one is not of the task.
-    assert.deepEqual([result.tracesScanned, result.skipped], [2, 1]);
+    // The open run's trace is held, not passed (the cursor waits before it); the loose one is not
+    // of the task. `review-findings.integration.test.ts` scores the held trace once its run closes.
+    assert.equal(result.skipped, 0);
   } finally {
     await client.close();
   }

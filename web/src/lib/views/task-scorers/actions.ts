@@ -16,6 +16,8 @@ export interface ScorerActionDeps {
     userId: string,
   ): Promise<{ project: { id: string }; organization: { id: string } } | null>;
   enabled(projectId: string, actor: string): Promise<boolean>;
+  /** An admin support session may look but not change, as with the other scorer actions. */
+  isRestricted(): Promise<boolean>;
   save(input: ScorerInput): Promise<unknown>;
   reset(projectId: string, taskId: string, kind: ScorerKind): Promise<unknown>;
   observe(fields: {
@@ -42,6 +44,8 @@ export async function changeTaskScorer(
   const actor = session.user.externalId;
   if (!(await deps.enabled(scope.project.id, actor)))
     return { ok: false, error: "Scorers are off for this project." };
+  if (await deps.isRestricted())
+    return { ok: false, error: "A support session cannot change scorers." };
   if (input.action === "save") {
     await deps.save({
       projectId: scope.project.id,

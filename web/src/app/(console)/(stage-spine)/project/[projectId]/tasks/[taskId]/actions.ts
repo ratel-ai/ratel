@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import {
@@ -31,6 +32,7 @@ export async function changeTaskScorerAction(input: unknown): Promise<ScorerActi
       getSession: getSessionContext,
       findProjectScope,
       enabled: evalGateEnabledForActor,
+      isRestricted: isRestrictedBySupportSession,
       // The scorers that migration 0055 converted follow each change. Flag off, the save is the
       // result, as before; flag on, a change past the scorer limit is refused before any write.
       save: async (scorer) => saveTaskScorer(scorer, await scorersOn(scorer.projectId)),
