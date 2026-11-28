@@ -36,6 +36,7 @@ test("each operation without a console action exists, says why, and is no action
     "describe_rql_schema",
     "draft_widgets",
     "run_rql",
+    "suggest_prompts",
   ]);
   const covering = new Set(Object.values(PARITY).filter((covered) => typeof covered === "string"));
   for (const [id, why] of Object.entries(MCP_ONLY)) {

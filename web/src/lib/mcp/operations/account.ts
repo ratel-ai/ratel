@@ -71,7 +71,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "customMonitoring",
-    note: "the Scorers, Dashboards and Alerts items and pages, alert delivery to Slack, RQL: describe_rql_schema, run_rql and the query kind sql, and Ask in words: draft_widgets",
+    note: "the Scorers, Dashboards and Alerts items and pages, alert delivery to Slack, RQL: describe_rql_schema, run_rql and the query kind sql, and Ask in words: draft_widgets and suggest_prompts",
   },
 ];
 
