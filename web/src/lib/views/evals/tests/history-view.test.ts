@@ -136,6 +136,29 @@ test("one eval has its runs, the newest first, with the delta against its baseli
   );
 });
 
+test("a matrix run has one score in its row and in the chart: the pass rate over all its valid trials", () => {
+  // Variant 0: 1 pass, 3 invalid. Variant 1: 4 fails.
+  const results: TrialResult[] = ["pass", "invalid", "invalid", "invalid"];
+  const matrix = evalRun("m1", "refunds", 10, [...results, "fail", "fail", "fail", "fail"]);
+  matrix.experiment.variants = [
+    { index: 0, params: { model: "small" } },
+    { index: 1, params: { model: "large" } },
+  ];
+  matrix.trials.forEach((trial, index) => {
+    trial.variant = index < results.length ? 0 : 1;
+  });
+  const history = evalHistory({
+    definition: definition("refunds"),
+    runs: [matrix],
+    baseline: null,
+  });
+  assert.equal(history.runs[0]?.score, 0.2);
+  assert.deepEqual(
+    history.scorerSeries.map(({ points }) => points.map(({ passRate }) => passRate)),
+    [[0.2]],
+  );
+});
+
 test("the datasets list has the kind, the rows or the query, the update time and the evals that read it", () => {
   const summary = (id: string, query: unknown, rowCount = 0): DatasetSummary => ({
     id,
