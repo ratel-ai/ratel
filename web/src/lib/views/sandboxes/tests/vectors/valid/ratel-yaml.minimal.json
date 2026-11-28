@@ -1,0 +1,6 @@
+{
+  "name": "support-agent",
+  "input": {
+    "example": "Where is order 42?"
+  }
+}

@@ -81,7 +81,6 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
-  sandboxes: "FF_SANDBOXES",
   customMonitoring: "FF_CUSTOM_MONITORING",
   evals: "FF_EVALS",
 } as const satisfies Record<CoreFlag, string>;
@@ -523,18 +522,41 @@ const CONFIG_SCHEMA = schema({
   sandboxes: {
     /** Seals sandbox secrets: 32 random bytes in base64 (`lib/platform/sealed-secrets.ts`). */
     secretsKey: optional("SANDBOX_SECRETS_KEY", configured, { sensitive: true }),
-    /** The provider's account. With none, Ratel sandbox shows "not configured". */
-    modalTokenId: optional("MODAL_TOKEN_ID", configured, { sensitive: true }),
-    modalTokenSecret: optional("MODAL_TOKEN_SECRET", configured, { sensitive: true }),
-    /** The provider's app that holds the builds and the instances. */
-    modalApp: setting("MODAL_APP", trimmed, D.sandboxes.modalApp),
-    /** Where builds and instances run. */
-    region: setting("SANDBOX_REGION", trimmed, D.sandboxes.region),
+    /**
+     * The VM service: `boat`, or `local-docker` (the local Docker daemon, for development and proof
+     * only: refused in production and in the Cloud composition). Unset: `boat` when its key is set.
+     */
+    provider: optional("SANDBOX_PROVIDER", z.preprocess(lower, z.enum(["boat", "local-docker"]))),
+    /** The API key of the VM service. With none, Ratel sandbox shows "not configured". */
+    boatApiKey: optional("BOAT_API_KEY", configured, { sensitive: true }),
+    /** The base URL of the API of the VM service. */
+    boatApiUrl: setting("BOAT_API_URL", trimmed, D.sandboxes.boatApiUrl),
+    /** The machine size of each VM. */
+    boatVmType: setting(
+      "BOAT_VM_TYPE",
+      z.enum(["small", "default", "large", "xlarge"]),
+      D.sandboxes.boatVmType,
+    ),
+    /**
+     * The label of each VM this deployment starts. The sweep deletes only VMs with this label, so
+     * deployments that share one VM service account do not delete the VMs of each other. Unset: a
+     * hash of the public URL, else of the base URL (`sandboxDeploymentId`).
+     */
+    deploymentId: optional(
+      "SANDBOX_DEPLOYMENT_ID",
+      z
+        .string()
+        .trim()
+        .regex(/^[a-z0-9][a-z0-9-]{0,62}$/),
+    ),
     /** The address at which an instance reaches this deployment; the public URL when unset. */
     callbackUrl: optional("SANDBOX_CALLBACK_URL", trimmed),
     /** The folder of the pushed bundles; a folder of the system's temporary folder when unset. */
     bundleDir: optional("SANDBOX_BUNDLE_DIR", trimmed),
-    /** Each project's limits. A value above the hard limit counts as the hard limit. */
+    /**
+     * Each project's limits, and the VM start budgets of an organization and of the provider account.
+     * A value above the hard limit counts as the hard limit.
+     */
     limits: {
       sandbox_concurrent_instances: setting(
         "SANDBOX_CONCURRENT_INSTANCES",
@@ -561,7 +583,39 @@ const CONFIG_SCHEMA = schema({
         atMost(HARD.sandbox_bundle_bytes),
         D.sandboxes.limits.sandbox_bundle_bytes,
       ),
+      sandbox_vm_starts_per_day: setting(
+        "SANDBOX_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_vm_starts_per_day,
+      ),
+      sandbox_org_vm_starts_per_day: setting(
+        "SANDBOX_ORG_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_org_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_org_vm_starts_per_day,
+      ),
+      sandbox_account_vm_starts_per_minute: setting(
+        "SANDBOX_ACCOUNT_VM_STARTS_PER_MINUTE",
+        atMost(HARD.sandbox_account_vm_starts_per_minute),
+        D.sandboxes.limits.sandbox_account_vm_starts_per_minute,
+      ),
+      sandbox_account_vm_starts_per_hour: setting(
+        "SANDBOX_ACCOUNT_VM_STARTS_PER_HOUR",
+        atMost(HARD.sandbox_account_vm_starts_per_hour),
+        D.sandboxes.limits.sandbox_account_vm_starts_per_hour,
+      ),
+      sandbox_account_vm_starts_per_day: setting(
+        "SANDBOX_ACCOUNT_VM_STARTS_PER_DAY",
+        atMost(HARD.sandbox_account_vm_starts_per_day),
+        D.sandboxes.limits.sandbox_account_vm_starts_per_day,
+      ),
     },
+    /** A run VM with no run for this time is deleted. */
+    vmIdleSeconds: setting("SANDBOX_VM_IDLE_SECONDS", positiveCount, D.sandboxes.vmIdleSeconds),
+    /**
+     * The ready versions of each sandbox that keep their snapshots. The sweep retires each older
+     * version that no eval and no run holds, and deletes its snapshot (`snapshot-sweep.ts`).
+     */
+    keepVersions: setting("SANDBOX_KEEP_VERSIONS", positiveCount, D.sandboxes.keepVersions),
   },
   topics: {
     maxTurns: setting("TOPICS_MAX_TURNS", positiveCount, D.topics.maxTurns),

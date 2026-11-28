@@ -1,0 +1,19 @@
+{
+  "config": {
+    "name": "support-agent",
+    "input": {
+      "example": "hi"
+    }
+  },
+  "image": {
+    "digest": "abc"
+  },
+  "git": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dirty": false
+  },
+  "bundle": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 123
+  }
+}

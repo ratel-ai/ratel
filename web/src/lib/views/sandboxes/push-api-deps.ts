@@ -1,3 +1,4 @@
+import { getConfig } from "@/config";
 import { SANDBOX_IMAGE_BUILD_JOB } from "@/lib/jobs/kinds";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
@@ -5,7 +6,6 @@ import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { getDb } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
-import { publicUrl } from "@/lib/platform/public-url";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { usageLimits } from "@/lib/platform/usage-limits";
 import { bundleStore } from "./adapters/bundle-store-from-env";
@@ -14,7 +14,7 @@ import { sandboxProviderConfigured } from "./adapters/provider-from-env";
 import { sandboxesEnabledForProject, sandboxesOffForAll } from "./gate";
 import type { PushApiDeps } from "./push-api";
 
-/** The push API over the real database, bundle store and limits. */
+/** The push API over the real database, tarball store and limits. */
 export function pushApiDeps(req: Request, scope: ApiKeyScope): PushApiDeps {
   return {
     offForAll: sandboxesOffForAll,
@@ -32,9 +32,13 @@ export function pushApiDeps(req: Request, scope: ApiKeyScope): PushApiDeps {
       await trackServerEvent(
         "sandbox_version_pushed",
         { projectId },
-        { object_action: "sandbox_version_pushed", git_dirty: git.dirty, bytes: bundle.bytes },
+        {
+          object_action: "sandbox_version_pushed",
+          git_dirty: git?.dirty ?? null,
+          bytes: bundle.bytes,
+        },
       );
     },
-    publicUrl,
+    publicOrigin: () => getConfig().app.publicUrl || null,
   };
 }

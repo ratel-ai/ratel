@@ -1,0 +1,119 @@
+import type { ExecResult } from "../ports/sandbox-provider";
+import type { FakeProvider } from "./fake-provider";
+
+/** How the agent image in a fake prepare VM behaves. */
+export type AgentScript = {
+  /** The id that `docker image inspect` reports. */
+  imageId?: string;
+  /** False: `docker run -d` fails. */
+  starts?: boolean;
+  /** The stderr of a `docker run -d` or `docker create` that fails. */
+  startError?: string;
+  /**
+   * The polls of the image wait that find no image. A VM from a snapshot loads its images a few
+   * seconds after it is ready. `never`: the image never comes.
+   */
+  imageMissingPolls?: number | "never";
+  /** `stopped`: the container ends before it is healthy. `no_port`: nothing listens on $PORT. */
+  health?: "ok" | "never" | "stopped" | "no_port";
+  /**
+   * The answer of `POST /ratel/run` (HTTP mode), or the exit code of curl when it has none. A
+   * function gets the run request. `hang`: the call never ends.
+   */
+  answer?: Answer | ((request: unknown) => Answer) | "hang";
+  /** The end of the command (command mode). */
+  command?: { exitCode: number; stdout?: string; stderr?: string };
+  logs?: string;
+  /** True: `docker rm -f` leaves the container. */
+  keepsContainer?: boolean;
+  /** True: the image declares a `VOLUME`, so each container gets an anonymous volume. */
+  volumes?: boolean;
+  /** True: the removal of a container leaves its volume. */
+  keepsVolume?: boolean;
+};
+
+type Answer = { status: number; body: string } | { curlExit: number };
+
+const ok = (stdout = "", exitCode = 0, stderr = ""): ExecResult => ({
+  exitCode,
+  stdout,
+  stderr,
+  timedOut: false,
+});
+
+/**
+ * Answers the Docker, curl and rm commands of a container in the fake provider: the files that
+ * `rm -f` names leave the VM, and the containers that `docker run` or `docker create` makes stay
+ * until `docker rm -f`. An anonymous volume of a container goes only with `docker rm -f -v`.
+ * Docker gives each published port its own host port.
+ */
+export function scriptAgent(provider: FakeProvider, script: AgentScript = {}) {
+  const containers = new Set<string>();
+  const volumes = new Set<string>();
+  /** Each container that was made, with its host port in HTTP mode. */
+  const made: Array<{ name: string; hostPort: number | null }> = [];
+  /** Each run request that a container got. */
+  const requests: unknown[] = [];
+  let nextPort = 32768;
+  let imagePolls = 0;
+  provider.onExec = (vm, { command }) => {
+    const requestPath = /(?:@|< )(\/tmp\/\S+request\.json)/.exec(command)?.[1];
+    const request = requestPath ? vm.files.get(requestPath)?.toString() : undefined;
+    for (const [, targets] of command.matchAll(/rm -f ([^;&|>]+)/g)) {
+      const words = (targets ?? "").trim().split(/\s+/);
+      const withVolumes = words.includes("-v") && !script.keepsVolume;
+      for (const target of words.filter((word) => !word.startsWith("-"))) {
+        if (target.startsWith("/")) vm.files.delete(target);
+        else if (!script.keepsContainer) containers.delete(target);
+        if (withVolumes) volumes.delete(`volume-of-${target}`);
+      }
+    }
+    const name = /--name (\S+)/.exec(command)?.[1] ?? "";
+    if (command.startsWith("docker load")) return ok("Loaded image: agent:latest\n");
+    if (command.includes("docker image inspect") && command.includes("seq")) {
+      imagePolls++;
+      const missing = script.imageMissingPolls ?? 0;
+      return missing === "never" || imagePolls <= missing ? ok("", 1) : ok();
+    }
+    if (command.startsWith("docker image inspect")) {
+      return ok(`${script.imageId ?? `sha256:${"c".repeat(64)}`}\n`);
+    }
+    if (command.startsWith("docker create")) {
+      if (script.starts === false) {
+        return ok("", 125, script.startError ?? "docker: no such image.\n");
+      }
+      containers.add(name);
+      if (script.volumes) volumes.add(`volume-of-${name}`);
+      made.push({ name, hostPort: null });
+      requests.push(request === undefined ? undefined : JSON.parse(request));
+      const { exitCode, stdout = "", stderr = "" } = script.command ?? { exitCode: 0 };
+      return ok(stdout, exitCode, stderr);
+    }
+    if (command.startsWith("docker run -d")) {
+      if (script.starts === false) {
+        return ok("", 125, script.startError ?? "docker: no such image.\n");
+      }
+      containers.add(name);
+      if (script.volumes) volumes.add(`volume-of-${name}`);
+      const hostPort = nextPort++;
+      made.push({ name, hostPort });
+      return ok(`c0ffee\n127.0.0.1:${hostPort}\n`);
+    }
+    if (command.includes("/ratel/health")) {
+      const codes = { ok: 0, never: 1, stopped: 2, no_port: 3 };
+      return ok("", codes[script.health ?? "ok"]);
+    }
+    if (command.includes("/ratel/run")) {
+      const body = request === undefined ? undefined : JSON.parse(request);
+      requests.push(body);
+      if (script.answer === "hang") return new Promise<ExecResult>(() => {});
+      const scripted = typeof script.answer === "function" ? script.answer(body) : script.answer;
+      const answer = scripted ?? { status: 200, body: '{"output":{"reply":"refunded"}}' };
+      if ("curlExit" in answer) return ok("", answer.curlExit, "curl: failed\n");
+      return ok(`${answer.body}\n${answer.status}`);
+    }
+    if (command.startsWith("docker logs")) return ok(script.logs ?? "");
+    return command.includes("rm -f") ? ok() : undefined;
+  };
+  return { containers, volumes, made, requests };
+}

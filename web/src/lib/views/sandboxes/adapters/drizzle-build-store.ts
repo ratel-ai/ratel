@@ -8,8 +8,8 @@ import { toVersion } from "./drizzle-version-store";
 type Db = Pick<ReturnType<typeof getDb>, "select" | "update" | "execute">;
 
 export function createDrizzleBuildStore(db: Db): BuildStore {
-  const building = (versionId: string) =>
-    and(eq(sandboxVersions.id, versionId), eq(sandboxVersions.status, "building"));
+  const preparing = (versionId: string) =>
+    and(eq(sandboxVersions.id, versionId), eq(sandboxVersions.status, "preparing"));
   const uploaded = (projectId: string, versionId: string) =>
     and(
       eq(sandboxVersions.id, versionId),
@@ -20,7 +20,7 @@ export function createDrizzleBuildStore(db: Db): BuildStore {
     async claim(projectId, versionId, now) {
       const [row] = await db
         .update(sandboxVersions)
-        .set({ status: "building", reason: null, buildStartedAt: now, buildHeartbeatAt: now })
+        .set({ status: "preparing", reason: null, buildStartedAt: now, buildHeartbeatAt: now })
         .where(uploaded(projectId, versionId))
         .returning();
       if (!row) return null;
@@ -32,21 +32,24 @@ export function createDrizzleBuildStore(db: Db): BuildStore {
     },
 
     async heartbeat(versionId, now) {
-      await db.update(sandboxVersions).set({ buildHeartbeatAt: now }).where(building(versionId));
+      await db.update(sandboxVersions).set({ buildHeartbeatAt: now }).where(preparing(versionId));
     },
 
     async finish(versionId, outcome, now) {
-      await db
+      const rows = await db
         .update(sandboxVersions)
         .set({
           status: outcome.status,
           buildLog: outcome.log,
+          smoke: outcome.smoke,
           buildFinishedAt: now,
           ...(outcome.status === "ready"
             ? { imageRef: outcome.imageRef, reason: null }
             : { reason: outcome.reason }),
         })
-        .where(building(versionId));
+        .where(preparing(versionId))
+        .returning({ id: sandboxVersions.id });
+      return rows.length > 0;
     },
 
     async leaveUnbuilt(projectId, versionId, reason) {
@@ -59,7 +62,7 @@ export function createDrizzleBuildStore(db: Db): BuildStore {
         where j.status = 'running' and j.kind = ${SANDBOX_IMAGE_BUILD_JOB}
           and exists (
             select 1 from sandbox_versions v
-            where v.id::text = j.payload->>'versionId' and v.status = 'building'
+            where v.id::text = j.payload->>'versionId' and v.status = 'preparing'
               and v.build_heartbeat_at > ${since.toISOString()}
           )`);
       return result.rows.map((row) => row.id);
@@ -70,7 +73,7 @@ export function createDrizzleBuildStore(db: Db): BuildStore {
         .update(sandboxVersions)
         .set({ status: "failed", reason, buildFinishedAt: now })
         .where(
-          and(eq(sandboxVersions.status, "building"), lt(sandboxVersions.buildHeartbeatAt, since)),
+          and(eq(sandboxVersions.status, "preparing"), lt(sandboxVersions.buildHeartbeatAt, since)),
         )
         .returning({ id: sandboxVersions.id });
       return rows.length;

@@ -19,6 +19,7 @@
 4b3bcc9df05f21fc618e28b60aca197aad8003ef:scripts/tmp-fake-secret.mjs:github-pat:1
 82d98fe1a97fdaea329ad459e2af546c25c30b19:scripts/tmp-fake-secret.mjs:github-pat:1
 803a912858e8048121c24e8f87801955033bedae:docs/tmp-fake-secret.md:github-pat:1
+f1e10fee9898467b422e21e881ea16e524711d6e:web/src/lib/views/sandboxes/tests/image-build-job.integration.test.ts:generic-api-key:40
 # keyPrefix fixtures (rtl_a1b2c3d4) in the API-key CTA tests of PR 489's first commit; the next commit uses rtl_abc.
 522b082fda86dd0971db529720416786da52d2c1:web/src/lib/console/api-key-cta-ui.test.ts:generic-api-key:17
 522b082fda86dd0971db529720416786da52d2c1:web/src/lib/console/api-key-cta.test.ts:generic-api-key:11

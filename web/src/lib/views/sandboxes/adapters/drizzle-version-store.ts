@@ -26,7 +26,7 @@ export function createDrizzleVersionStore(db: Db): VersionStore {
         const checked = await check(row?.count ?? 0);
         if (!checked.ok) return checked;
 
-        const { name } = input.manifest;
+        const { name } = input.config;
         await tx
           .insert(sandboxes)
           .values({ projectId: input.projectId, name })
@@ -41,9 +41,11 @@ export function createDrizzleVersionStore(db: Db): VersionStore {
           .values({
             projectId: input.projectId,
             sandboxId: sandbox.id,
-            manifest: input.manifest,
-            gitCommit: input.git.commit,
-            gitDirty: input.git.dirty,
+            config: input.config,
+            imageDigest: input.image.digest,
+            imagePlatform: input.image.platform ?? null,
+            gitCommit: input.git?.commit ?? null,
+            gitDirty: input.git?.dirty ?? null,
             bundleSha256: input.bundle.sha256,
             bundleBytes: input.bundle.bytes,
             apiKeyId: input.apiKeyId,
@@ -74,6 +76,23 @@ export function createDrizzleVersionStore(db: Db): VersionStore {
       return rows.map((row) => toVersion(row.version, row.name));
     },
 
+    async newestReady(projectId, name) {
+      const [row] = await db
+        .select({ version: sandboxVersions, name: sandboxes.name })
+        .from(sandboxVersions)
+        .innerJoin(sandboxes, eq(sandboxes.id, sandboxVersions.sandboxId))
+        .where(
+          and(
+            eq(sandboxVersions.projectId, projectId),
+            eq(sandboxes.name, name),
+            eq(sandboxVersions.status, "ready"),
+          ),
+        )
+        .orderBy(desc(sandboxVersions.createdAt))
+        .limit(1);
+      return row ? toVersion(row.version, row.name) : null;
+    },
+
     async markUploaded(projectId, versionId) {
       const rows = await db
         .update(sandboxVersions)
@@ -88,19 +107,6 @@ export function createDrizzleVersionStore(db: Db): VersionStore {
         .returning({ id: sandboxVersions.id });
       return rows.length > 0;
     },
-
-    async markRefused(projectId, versionId, reason) {
-      await db
-        .update(sandboxVersions)
-        .set({ status: "failed", reason })
-        .where(
-          and(
-            eq(sandboxVersions.projectId, projectId),
-            eq(sandboxVersions.id, versionId),
-            eq(sandboxVersions.status, "uploading"),
-          ),
-        );
-    },
   };
 }
 
@@ -110,12 +116,14 @@ export function toVersion(row: typeof sandboxVersions.$inferSelect, name: string
     projectId: row.projectId,
     sandboxId: row.sandboxId,
     name,
-    manifest: row.manifest,
-    git: { commit: row.gitCommit, dirty: row.gitDirty },
+    config: row.config,
+    image: row.imageDigest ? { digest: row.imageDigest, platform: row.imagePlatform } : null,
+    git: row.gitCommit === null ? null : { commit: row.gitCommit, dirty: row.gitDirty ?? false },
     bundle: { sha256: row.bundleSha256, bytes: row.bundleBytes },
     status: row.status as VersionStatus,
     reason: row.reason,
     imageRef: row.imageRef,
+    smoke: row.smoke,
     buildLog: row.buildLog,
     createdAt: row.createdAt,
   };

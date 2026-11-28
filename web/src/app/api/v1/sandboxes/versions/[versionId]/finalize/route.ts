@@ -5,7 +5,7 @@ import { pushApiDeps } from "@/lib/views/sandboxes/push-api-deps";
 
 export const runtime = "nodejs";
 
-/** POST /api/v1/sandboxes/versions/[versionId]/finalize: step 3 of a push: checks the bundle. */
+/** POST /api/v1/sandboxes/versions/[versionId]/finalize: step 3 of a push: queues the preparation. */
 export const POST = withRequestLog(handle);
 
 async function handle(req: Request, { params }: { params: Promise<{ versionId: string }> }) {
@@ -13,5 +13,5 @@ async function handle(req: Request, { params }: { params: Promise<{ versionId: s
     req,
     BEARER_ROUTE_SCOPES["POST /api/v1/sandboxes/versions/[versionId]/finalize"],
   );
-  return handleFinalizeVersion((await params).versionId, deps);
+  return handleFinalizeVersion(req, (await params).versionId, deps);
 }

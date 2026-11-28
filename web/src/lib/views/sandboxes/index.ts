@@ -16,7 +16,7 @@ export type SandboxVersionSummary = Pick<
   "id" | "projectId" | "sandboxId" | "name" | "git" | "status" | "createdAt"
 > & { tools: ReadonlyArray<{ name: string; sideEffect: boolean }> };
 
-/** Starts one run of a ready version in a new instance. */
+/** Starts one run of a ready version in a new container of a warm VM. It answers before the run ends. */
 export function startRun(
   versionId: string,
   input: unknown,
@@ -46,8 +46,12 @@ export async function getSandboxVersion(
   return version ? summary(version) : null;
 }
 
+/** A tool that does not run live in an eval has side effects: it is simulated or recorded. */
 function summary(version: SandboxVersion): SandboxVersionSummary {
-  const { id, projectId, sandboxId, name, git, status, createdAt, manifest } = version;
-  const tools = manifest.tools.map((tool) => ({ name: tool.name, sideEffect: tool.sideEffect }));
+  const { id, projectId, sandboxId, name, git, status, createdAt, config } = version;
+  const tools = Object.entries(config.tools ?? {}).map(([name, tool]) => ({
+    name,
+    sideEffect: (tool.mode ?? "simulated") !== "live",
+  }));
   return { id, projectId, sandboxId, name, git, status, createdAt, tools };
 }

@@ -1,12 +1,16 @@
+import type { SmokeResult } from "../domain/contract";
 import type { SandboxVersion } from "../domain/version";
 
-/** The build state of versions, for the build job. */
+/** The preparation state of versions, for the build job. */
 export interface BuildStore {
-  /** `uploaded` to `building`. Null when the version has another status. */
+  /** `uploaded` to `preparing`. Null when the version has another status. */
   claim(projectId: string, versionId: string, now: Date): Promise<SandboxVersion | null>;
   heartbeat(versionId: string, now: Date): Promise<void>;
-  /** Ends a build. It changes a version that is `building` only. */
-  finish(versionId: string, outcome: BuildOutcome, now: Date): Promise<void>;
+  /**
+   * Ends a build. It changes a version that is `preparing` only. False when the version was not
+   * `preparing` (e.g. `failStopped` failed it), so nothing changed.
+   */
+  finish(versionId: string, outcome: BuildOutcome, now: Date): Promise<boolean>;
   /** Keeps an `uploaded` version unbuilt, with the reason. */
   leaveUnbuilt(projectId: string, versionId: string, reason: string): Promise<void>;
   /** The running build jobs whose build sent a heartbeat after `since`. */
@@ -18,5 +22,6 @@ export interface BuildStore {
 }
 
 export type BuildOutcome =
-  | { status: "ready"; imageRef: string; log: string }
-  | { status: "failed"; reason: string; log: string };
+  | { status: "ready"; imageRef: string; smoke: SmokeResult; log: string }
+  /** `smoke` is null when the build failed before the smoke check. */
+  | { status: "failed"; reason: string; smoke: SmokeResult | null; log: string };

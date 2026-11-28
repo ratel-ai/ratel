@@ -1,0 +1,9 @@
+{
+  "name": "support-agent",
+  "input": {
+    "message": "hi"
+  },
+  "params": {
+    "tone": "dry"
+  }
+}

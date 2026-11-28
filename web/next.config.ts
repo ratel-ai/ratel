@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   // Next 16.3 type-checks the whole tsconfig project with `tsc`, tests included; the image has no
   // repo scripts/ for them. Keep the compiler-API checker; `pnpm typecheck` covers the tests.
+  // Keep the default `proxyClientMaxBodySize` (10 MB): with a proxy (an edition's web/src/proxy.ts),
+  // Next holds that much of each request body in memory before any route checks a key. A bundle
+  // upload to `PUT /api/v1/sandboxes/versions/[id]/bundle` must not go through the proxy.
   experimental: { useTypeScriptCli: false },
   // A self-contained server bundle for the image: `node web/server.js`, no pnpm at runtime.
   // The tracing root is the monorepo root so the workspace packages and the native
@@ -108,8 +111,6 @@ const nextConfig: NextConfig = {
     "@opentelemetry/sdk-trace-node",
     "@opentelemetry/semantic-conventions",
     "pino",
-    // The sandbox provider's SDK (gRPC), loaded only on a call to it.
-    "modal",
   ],
 };
 

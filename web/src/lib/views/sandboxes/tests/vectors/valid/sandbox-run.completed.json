@@ -1,0 +1,28 @@
+{
+  "runId": "r_1",
+  "versionId": "v_1",
+  "status": "completed",
+  "input": "hi",
+  "params": {},
+  "output": {
+    "reply": "hello"
+  },
+  "toolCalls": [
+    {
+      "name": "refund_order",
+      "args": {
+        "id": "42"
+      },
+      "result": {
+        "refunded": true
+      },
+      "mode": "simulated"
+    }
+  ],
+  "usage": {
+    "inputTokens": 10,
+    "outputTokens": 2
+  },
+  "logs": "",
+  "url": "http://localhost:3000/sandboxes/runs/r_1"
+}

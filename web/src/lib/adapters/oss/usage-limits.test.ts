@@ -19,17 +19,43 @@ test("the hard limits are the decided values", async () => {
     sandbox_run_seconds: 1800,
     sandbox_runs_per_day: 5000,
     sandbox_versions_per_day: 100,
-    sandbox_bundle_bytes: 1024 ** 3,
+    sandbox_bundle_bytes: 2 * 1024 ** 3,
+    sandbox_vm_starts_per_day: 500,
+    sandbox_org_vm_starts_per_day: 5_000,
+    sandbox_account_vm_starts_per_minute: 1_000,
+    sandbox_account_vm_starts_per_hour: 20_000,
+    sandbox_account_vm_starts_per_day: 100_000,
   });
   assert.equal(await ossUsageLimits.limit(SUBJECT, "sandbox_runs_per_day"), 5000);
 });
 
 test("an operator may lower a limit in the configuration, never raise it", async () => {
-  const env = { SANDBOX_VERSIONS_PER_DAY: "2", SANDBOX_RUNS_PER_DAY: "999999" };
+  const env = {
+    SANDBOX_VERSIONS_PER_DAY: "2",
+    SANDBOX_RUNS_PER_DAY: "999999",
+    SANDBOX_VM_STARTS_PER_DAY: "20",
+  };
   const config = resolveConfig({ env });
   const limits = createOssUsageLimits(() => config.sandboxes.limits);
   assert.equal(await limits.limit(SUBJECT, "sandbox_versions_per_day"), 2);
   assert.equal(await limits.limit(SUBJECT, "sandbox_runs_per_day"), 5000);
+  assert.equal(await limits.limit(SUBJECT, "sandbox_vm_starts_per_day"), 20);
+  const vm = await limits.check(SUBJECT, "sandbox_vm_starts_per_day", { current: 20 });
+  assert.ok(!vm.ok && /sandbox_vm_starts_per_day/.test(vm.message));
+});
+
+test("the account budgets default to the paid plan, and an operator may raise them to the hard limit", async () => {
+  assert.equal(await ossUsageLimits.limit(SUBJECT, "sandbox_account_vm_starts_per_minute"), 12);
+  const config = resolveConfig({
+    env: {
+      SANDBOX_ACCOUNT_VM_STARTS_PER_DAY: "600",
+      SANDBOX_ACCOUNT_VM_STARTS_PER_HOUR: "9999999",
+    },
+  });
+  const limits = createOssUsageLimits(() => config.sandboxes.limits);
+  assert.equal(await limits.limit(SUBJECT, "sandbox_account_vm_starts_per_day"), 600);
+  assert.equal(await limits.limit(SUBJECT, "sandbox_account_vm_starts_per_hour"), 20_000);
+  assert.equal(await limits.limit(SUBJECT, "sandbox_org_vm_starts_per_day"), 100);
 });
 
 test("the core has no daily budget: the operator pays its own model calls", async () => {

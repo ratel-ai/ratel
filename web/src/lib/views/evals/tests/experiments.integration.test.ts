@@ -446,7 +446,7 @@ test("refusals of a start", async () => {
   assert.equal(await start(), "no_cases");
   await t.approvedCase("one");
   assert.equal(await start(OTHER_PROJECT_ID), "not_found");
-  t.setVersions([{ ...VERSION, status: "building" }]);
+  t.setVersions([{ ...VERSION, status: "preparing" }]);
   assert.equal(await start(), "not_ready");
   assert.equal(await start(VERSION.id), "not_ready");
   t.setVersions([{ ...VERSION, id: OTHER_PROJECT_ID, status: "failed" }, VERSION]);
@@ -618,7 +618,7 @@ test("the drain gives each project a turn, and a project has a limit of running 
   assert.equal(seen.size, MAX_RUNNING_EXPERIMENTS, "no experiment waits for an older one");
 });
 
-test("with the sandboxes flag off no trial starts", async () => {
+test("with the evals flag off no trial starts", async () => {
   const t = await setup();
   await t.approvedCase("one");
   const experiment = await t.start();

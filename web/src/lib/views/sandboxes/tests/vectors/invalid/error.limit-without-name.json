@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "limit_reached",
+    "message": "x",
+    "max": 1,
+    "current": 1
+  }
+}

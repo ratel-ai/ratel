@@ -49,8 +49,9 @@ import { tracesRegistration } from "@/lib/synthesis/traces/register";
 import { alertsRegistration } from "@/lib/views/alerts/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
 import { evalsRegistration } from "@/lib/views/evals/register";
+import { evalSandboxVersionHolds } from "@/lib/views/evals/version-holds";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
-import { sandboxesRegistration } from "@/lib/views/sandboxes/register";
+import { createSandboxesRegistration } from "@/lib/views/sandboxes/register";
 import { scorersRegistration } from "@/lib/views/scorers/register";
 import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
 import { taskEvalsRegistration } from "@/lib/views/task-evals/register";
@@ -165,7 +166,9 @@ const CORE: Registration[] = [
   sessionReplayRegistration,
   taskScorersRegistration,
   taskEvalsRegistration,
-  sandboxesRegistration,
+  // Evals depend on sandboxes, never the other way round: the versions that evals need reach the
+  // snapshot sweep of sandboxes here.
+  createSandboxesRegistration({ versionHolds: evalSandboxVersionHolds }),
   scorersRegistration,
   alertsRegistration,
   // After the sandboxes: their sweep ends the runs that a trial waits for.

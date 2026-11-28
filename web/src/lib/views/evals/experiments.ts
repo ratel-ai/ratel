@@ -103,8 +103,9 @@ export async function startExperiment(
     organizationId,
     sandboxVersionId: version.id,
     sandboxName: version.name,
-    gitCommit: version.git.commit,
-    gitDirty: version.git.dirty,
+    // A version pushed with no git information has no commit.
+    gitCommit: version.git?.commit ?? "",
+    gitDirty: version.git?.dirty ?? false,
     params,
     trialsPerCase,
     startedBy,

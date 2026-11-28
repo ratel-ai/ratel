@@ -1,0 +1,12 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "params": {
+    "maxTurns": {
+      "type": "number",
+      "default": "4"
+    }
+  }
+}

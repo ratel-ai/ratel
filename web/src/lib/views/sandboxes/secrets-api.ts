@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getLogger } from "@/lib/platform/logger";
 import { type SealedSecretsKey, sealSecret } from "@/lib/platform/sealed-secrets";
 import { type ConsoleAccessDeps, forMember, type Member, refuse, reply } from "./console-access";
-import { secretNameSchema } from "./domain/manifest";
+import { secretNameSchema } from "./domain/config";
 import type { SecretStore } from "./ports/secret-store";
 
 /** The session routes of sandbox secrets. A value goes in and never comes out. */

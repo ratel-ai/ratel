@@ -1,0 +1,21 @@
+{
+  "config": {
+    "name": "a",
+    "input": {
+      "example": 1
+    },
+    "entry": "x"
+  },
+  "image": {
+    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "platform": "linux/amd64"
+  },
+  "git": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dirty": false
+  },
+  "bundle": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 123
+  }
+}

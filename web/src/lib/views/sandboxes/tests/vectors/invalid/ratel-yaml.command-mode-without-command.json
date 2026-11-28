@@ -1,0 +1,9 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "run": {
+    "mode": "command"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "runId": "run_01",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Where is order 42?"
+      }
+    ]
+  },
+  "params": {
+    "model": "claude-sonnet-5-5",
+    "tone": "friendly",
+    "maxTurns": 4,
+    "verbose": false
+  },
+  "tools": {
+    "lookup_order": {
+      "mode": "live"
+    },
+    "refund_order": {
+      "mode": "simulated"
+    },
+    "get_weather": {
+      "mode": "recorded"
+    }
+  },
+  "fixtures": [
+    {
+      "tool": "get_weather",
+      "args": {
+        "city": "Rome"
+      },
+      "result": {
+        "tempC": 21
+      }
+    }
+  ],
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+}

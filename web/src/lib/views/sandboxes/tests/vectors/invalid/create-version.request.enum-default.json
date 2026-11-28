@@ -1,0 +1,29 @@
+{
+  "config": {
+    "name": "a",
+    "input": {
+      "example": 1
+    },
+    "params": {
+      "m": {
+        "type": "enum",
+        "options": [
+          "x"
+        ],
+        "default": "y"
+      }
+    }
+  },
+  "image": {
+    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "platform": "linux/amd64"
+  },
+  "git": {
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dirty": false
+  },
+  "bundle": {
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "bytes": 123
+  }
+}

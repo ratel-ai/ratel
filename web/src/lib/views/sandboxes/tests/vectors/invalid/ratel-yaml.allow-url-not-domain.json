@@ -1,0 +1,11 @@
+{
+  "name": "a",
+  "input": {
+    "example": 1
+  },
+  "network": {
+    "allow": [
+      "https://api.anthropic.com"
+    ]
+  }
+}

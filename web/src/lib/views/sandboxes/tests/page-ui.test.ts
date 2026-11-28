@@ -20,7 +20,7 @@ const version = (over: Partial<VersionRow> = {}): VersionRow => ({
   dirty: false,
   createdAt: NOW,
   buildLog: "> install command 1 (npm install)\n",
-  tools: [],
+  smoke: null,
   ...over,
 });
 const run: RunRow = {
@@ -28,6 +28,8 @@ const run: RunRow = {
   versionId: version().id,
   status: "completed",
   reason: null,
+  errorCode: null,
+  logs: "",
   input: { message: "refund it" },
   params: {},
   result: {
@@ -64,7 +66,21 @@ const STATES: Record<string, Partial<SandboxPageModel>> = {
   empty: {},
   "not configured": { configured: false },
   full: {
-    versions: [version(), version({ status: "failed", reason: "install command 1 failed." })],
+    versions: [
+      version(),
+      version({ status: "failed", reason: "install command 1 failed." }),
+      version({ status: "preparing", commit: null }),
+      version({
+        status: "failed",
+        reason: "GET /ratel/health did not answer 200 in 60 s.",
+        smoke: {
+          ok: false,
+          error: { code: "no_health", message: "GET /ratel/health did not answer 200 in 60 s." },
+          durationMs: 0,
+          logs: "agent booted\n",
+        },
+      }),
+    ],
     secrets: [
       { name: "ANTHROPIC_API_KEY", updatedAt: null, declared: true },
       { name: "OLD_KEY", updatedAt: NOW, declared: false },
@@ -85,7 +101,7 @@ const STATES: Record<string, Partial<SandboxPageModel>> = {
   },
 };
 
-test("a version shows its build state, its commit and its log", () => {
+test("a version shows its state, its commit, its smoke check and its log", () => {
   const text = visibleText(html(STATES.full));
   for (const words of [
     "support-demo",
@@ -93,6 +109,9 @@ test("a version shows its build state, its commit and its log", () => {
     "Failed",
     COMMIT.slice(0, 12),
     "install command 1",
+    "Preparing",
+    "no_health",
+    "Smoke check logs",
   ]) {
     assert.ok(text.includes(words), words);
   }
@@ -127,7 +146,7 @@ test("with no provider the page says not configured, with the push command", () 
 test("no text of the page names the provider", () => {
   for (const [name, state] of Object.entries(STATES)) {
     assert.match(visibleText(html(state)), /Ratel sandbox/, name);
-    assert.doesNotMatch(html(state), /modal/i, name);
+    assert.doesNotMatch(html(state), /boat/i, name);
   }
 });
 
@@ -139,7 +158,7 @@ test("the rail shows Ratel sandbox with the flag on only", async () => {
       edition: "Ratel OSS",
     });
   assert.deepEqual(await ids({}), []);
-  assert.deepEqual(await ids({ FF_SANDBOXES: "1" }), ["org-1"]);
+  assert.deepEqual(await ids({ FF_EVALS: "1" }), ["org-1"]);
   const nav = (sandboxPage?: boolean) =>
     consoleNav({ projectId: "p1", additions: [], ...(sandboxPage ? { sandboxPage } : {}) });
   const ofOff = flattenNav(nav()).map((item) => item.id);
