@@ -129,3 +129,14 @@ function placesIn(text: string): Record<string, string> {
     }),
   );
 }
+
+test("a dashboard built from words names each widget the ask left out, in a note to dismiss", () => {
+  const leftOut = [{ title: "Slowest tools", reason: "There is no table spans. Use events." }];
+  const page = html({ leftOut });
+  assert.match(page, /aria-label="Widgets left out"/);
+  assert.match(page, /1 drafted widget was left out/);
+  assert.match(page, /Slowest tools/);
+  assert.match(page, /There is no table spans\. Use events\./);
+  assert.match(page, /aria-label="Dismiss"/);
+  assert.doesNotMatch(html(), /Widgets left out/);
+});

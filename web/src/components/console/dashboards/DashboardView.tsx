@@ -17,6 +17,7 @@ import {
   Pencil,
   Plus,
   Trash2,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -51,6 +52,7 @@ import {
 } from "@/lib/synthesis/traces/v2/filters";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
 import { DEFAULT_TRACE_RANGE } from "@/lib/synthesis/traces/view";
+import { BUILT_BY_ASK_PARAM } from "@/lib/views/ask/outcome";
 import {
   collapseStep,
   expandedOf,
@@ -119,6 +121,7 @@ export function DashboardView({
   alerts,
   draft,
   ask = false,
+  leftOut = [],
   overview = false,
   readOnly = false,
   startEditing = false,
@@ -138,6 +141,8 @@ export function DashboardView({
   draft: WidgetInput | null;
   /** This deployment can draft widgets from words: the new widget dialog has its ask field. */
   ask?: boolean;
+  /** The widgets that the ask which built this dashboard left out, with their reason. */
+  leftOut?: readonly { title: string; reason: string }[];
   /** The Overview takes widgets of dashboards (`focusedConsole`). */
   overview?: boolean;
   /** A support session: a widget opens with its properties, and nothing saves. */
@@ -152,6 +157,7 @@ export function DashboardView({
   const { change, saving } = useDashboardAction(projectId);
   // A scorer's page starts a new widget from it: taken once, so the next new one starts clean.
   const [start, setStart] = useState(draft);
+  const [showLeftOut, setShowLeftOut] = useState(leftOut.length > 0);
   // The new widget dialog: open from any state of the page, never in a support session.
   const [adding, setAdding] = useState(draft !== null && !readOnly);
   // The address this page pushed to expand a widget: Close goes Back to the grid while it is current.
@@ -498,6 +504,18 @@ export function DashboardView({
             )
           }
         />
+        {showLeftOut ? (
+          <LeftOutNote
+            leftOut={leftOut}
+            onDismiss={() => {
+              setShowLeftOut(false);
+              const params = new URLSearchParams(window.location.search);
+              params.delete(BUILT_BY_ASK_PARAM);
+              const rest = params.toString();
+              window.history.replaceState(null, "", `${pathname}${rest ? `?${rest}` : ""}`);
+            }}
+          />
+        ) : null}
         {filtersRefused ? (
           <p role="alert" className="text-xs text-danger">
             {filtersRefused}
@@ -713,6 +731,38 @@ export function DashboardView({
         }}
       />
     </Page>
+  );
+}
+
+/** The widgets the ask that built this dashboard left out, each with its reason, until dismissed. */
+function LeftOutNote({
+  leftOut,
+  onDismiss,
+}: {
+  leftOut: readonly { title: string; reason: string }[];
+  onDismiss: () => void;
+}) {
+  return (
+    <section
+      aria-label="Widgets left out"
+      className="flex items-start gap-3 rounded-lg border border-line bg-app p-3 text-sm"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-fg">
+          Built from your words. {leftOut.length} drafted widget
+          {leftOut.length === 1 ? " was" : "s were"} left out: the RQL check refused{" "}
+          {leftOut.length === 1 ? "it" : "them"}.
+        </p>
+        <ul className="flex flex-col gap-0.5 text-xs text-fg-muted">
+          {leftOut.map(({ title, reason }) => (
+            <li key={`${title}\n${reason}`}>
+              <span className="text-fg">{title || "Untitled"}</span>: {reason}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <IconButton label="Dismiss" size="icon-sm" icon={<X />} onClick={onDismiss} />
+    </section>
   );
 }
 

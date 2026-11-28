@@ -12,6 +12,8 @@ import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { resolveTraceRange, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
 import { askConfigured } from "@/lib/views/ask/model";
+import { BUILT_BY_ASK_PARAM } from "@/lib/views/ask/outcome";
+import { askLeftOut } from "@/lib/views/ask/store";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { filtersProblem, shownFilters } from "@/lib/views/dashboards/filters";
 import { ADD_SCORER_PARAM } from "@/lib/views/dashboards/links";
@@ -29,7 +31,12 @@ export default async function ScopedDashboardPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string; dashboardId: string }>;
-  searchParams: Promise<TraceListSearchParams & { [ADD_SCORER_PARAM]?: string | string[] }>;
+  searchParams: Promise<
+    TraceListSearchParams & {
+      [ADD_SCORER_PARAM]?: string | string[];
+      [BUILT_BY_ASK_PARAM]?: string | string[];
+    }
+  >;
 }) {
   const { projectId, dashboardId } = await params;
   if (!(await dashboardsEnabled(projectId)))
@@ -80,6 +87,9 @@ export default async function ScopedDashboardPage({
       isRestrictedBySupportSession(),
     ]);
   const overview = await focusedConsoleEnabled(scope.organization);
+  // A dashboard an ask built names the widgets the ask left out.
+  const builtBy = parseProjectUuid(String(search[BUILT_BY_ASK_PARAM] ?? ""));
+  const leftOut = builtBy ? await askLeftOut(scope.project.id, builtBy) : null;
   const added = scorers?.scorers.find(({ id }) => id === search[ADD_SCORER_PARAM]);
   return (
     <ScorerPickerProvider projectId={scope.project.id} data={scorers}>
@@ -90,6 +100,7 @@ export default async function ScopedDashboardPage({
             overview={overview}
             readOnly={readOnly}
             ask={askConfigured()}
+            leftOut={leftOut ?? []}
             draft={added ? scorerWidget(added) : null}
             projectId={scope.project.id}
             dashboard={{

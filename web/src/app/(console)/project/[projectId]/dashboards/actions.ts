@@ -1,14 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
-import { getSessionContext } from "@/lib/platform/session";
-import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
-import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
+import { reportServerException } from "@/lib/platform/telemetry";
 import {
   changeDashboard,
   type DashboardActionInput,
@@ -21,7 +18,6 @@ import {
   filtersProblem,
   filtersRefusal,
 } from "@/lib/views/dashboards/filters";
-import { dashboardsHref } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { resolveWidgetRange } from "@/lib/views/dashboards/range";
 import * as store from "@/lib/views/dashboards/store";
@@ -29,6 +25,7 @@ import { isBroken } from "@/lib/views/dashboards/stored-widget";
 import type { WidgetResult } from "@/lib/views/dashboards/types";
 import { scorerNames } from "@/lib/views/scorers/picker";
 import { metricFeatures } from "./context";
+import { consoleDashboardDeps } from "./dashboard-deps";
 
 const logger = getLogger("dashboards/actions");
 
@@ -37,24 +34,7 @@ export async function changeDashboardAction(
 ): Promise<DashboardActionResult> {
   if (!isDbConfigured()) return { ok: false, error: "No database is connected." };
   try {
-    return await changeDashboard(input, {
-      getSession: getSessionContext,
-      findProjectScope,
-      enabled: (subject) => featureEnabled("customMonitoring", subject),
-      features: metricFeatures,
-      scorers: (projectId) => scorerNames(projectId),
-      isRestricted: isRestrictedBySupportSession,
-      store,
-      observe: async (fields) => {
-        logger.info(fields, "dashboard_changed");
-        await trackServerEvent(
-          "dashboard_changed",
-          { externalId: fields.actor, projectId: fields.project_id, orgId: fields.organization_id },
-          fields,
-        );
-        revalidatePath(dashboardsHref(fields.project_id), "layout");
-      },
-    });
+    return await changeDashboard(input, consoleDashboardDeps());
   } catch (err) {
     logger.error({ err }, "dashboard change failed");
     reportServerException(err, "system:dashboards", { operation: "dashboard_change" });

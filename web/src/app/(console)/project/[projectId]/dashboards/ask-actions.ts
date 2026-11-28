@@ -7,16 +7,22 @@ import { getLogger } from "@/lib/platform/logger";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { draftedDashboard } from "@/lib/views/ask/build";
 import { ASK_OUTCOMES, ASK_TARGETS, type AskOutcome, type AskTarget } from "@/lib/views/ask/domain";
 import { type DraftResult, draftWidgets } from "@/lib/views/ask/draft";
-import { setAskOutcome } from "@/lib/views/ask/store";
+import { linkAsk, setAskOutcome } from "@/lib/views/ask/store";
 import { loadSuggestions, type Suggestions } from "@/lib/views/ask/suggest-pick";
+import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { getDashboard } from "@/lib/views/dashboards/store";
+import { isWidget } from "@/lib/views/dashboards/stored-widget";
+import { MAX_DASHBOARD_NAME } from "@/lib/views/dashboards/types";
+import { consoleDashboardDeps } from "./dashboard-deps";
 
 /**
  * Ask in words in the console's dialogs (`customMonitoring`): a draft from words, the suggested
- * prompts, and the outcome of a draft. A draft saves no widget: the dialog saves through
- * `changeDashboardAction`. A support session reads only: it may not ask.
+ * prompts, the outcome of a draft, and a dashboard built from words. A widget draft saves nothing:
+ * the dialog saves through `changeDashboardAction`. A dashboard build makes the dashboard at once,
+ * with no confirm step (decision `ask-no-confirm`). A support session reads only: it may not ask.
  */
 
 const logger = getLogger("dashboards/ask-actions");
@@ -53,6 +59,72 @@ export async function draftWidgetsAction(
     logger.error({ err }, "ask draft failed");
     reportServerException(err, "system:dashboards", { operation: "ask_draft" });
     return { status: "invalid", message: "Could not ask for a draft. Try again." };
+  }
+}
+
+export type BuildDashboardResult =
+  | { ok: true; dashboardId: string; askId: string }
+  | { ok: false; message: string; notSetUp?: true };
+
+/**
+ * A new dashboard from words: drafts up to 8 widgets and makes the dashboard of the good ones in
+ * one write, as an import does. A refused widget is left out; the dashboard names it from the ask
+ * (`?ask=`). With no good widget no dashboard is made, and the ask is discarded. A made dashboard
+ * keeps the ask as kept, linked to it and to its widgets.
+ */
+export async function buildDashboardAction(
+  projectId: string,
+  input: { title: string; words: string },
+): Promise<BuildDashboardResult> {
+  const scope = await askScope(projectId, true);
+  if (typeof scope === "string") return { ok: false, message: scope };
+  const title = String(input.title ?? "").trim();
+  if (!title) return { ok: false, message: "Give the dashboard a title." };
+  if (title.length > MAX_DASHBOARD_NAME)
+    return { ok: false, message: `A title has at most ${MAX_DASHBOARD_NAME} characters.` };
+  try {
+    const draft = await draftWidgets({
+      projectId: scope.project.id,
+      actor: scope.user.externalId,
+      surface: "console",
+      target: "dashboard",
+      dashboardId: null,
+      words: String(input.words ?? ""),
+    });
+    if (draft.status === "not_set_up") return { ok: false, message: draft.message, notSetUp: true };
+    if (draft.status !== "drafted") return { ok: false, message: draft.message };
+    if (draft.widgets.length === 0) {
+      await setAskOutcome(scope.project.id, draft.askId, "discarded");
+      const first = draft.refused[0];
+      return {
+        ok: false,
+        message: first
+          ? `No widget passed the RQL check, so no dashboard was made. ${first.reason}`
+          : "The draft had no widget, so no dashboard was made. Say it in other words.",
+      };
+    }
+    const made = await changeDashboard(
+      {
+        projectId: scope.project.id,
+        action: "import",
+        document: draftedDashboard(title, draft.widgets),
+      },
+      consoleDashboardDeps(),
+    );
+    if (!made.ok) {
+      await setAskOutcome(scope.project.id, draft.askId, "discarded");
+      return { ok: false, message: made.error };
+    }
+    const dashboard = await getDashboard(scope.project.id, made.dashboardId);
+    await linkAsk(scope.project.id, draft.askId, {
+      dashboardId: made.dashboardId,
+      widgetIds: (dashboard?.widgets ?? []).filter(isWidget).map(({ id }) => id),
+    });
+    return { ok: true, dashboardId: made.dashboardId, askId: draft.askId };
+  } catch (err) {
+    logger.error({ err }, "ask build failed");
+    reportServerException(err, "system:dashboards", { operation: "ask_build" });
+    return { ok: false, message: "Could not build the dashboard. Try again." };
   }
 }
 
