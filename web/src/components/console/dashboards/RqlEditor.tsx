@@ -4,12 +4,14 @@ import {
   autocompletion,
   type Completion,
   type CompletionContext,
+  closeCompletion,
   completionKeymap,
+  completionStatus,
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { SQLDialect } from "@codemirror/lang-sql";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
+import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,16 +20,20 @@ import { usePropertyChoices } from "@/components/console/properties/PropertyChoi
 import {
   RQL_KEYWORDS,
   type RqlEditorData,
+  rankRqlCompletions,
   rqlCompletions,
   rqlEditorData,
 } from "@/lib/synthesis/rql/domain/editor";
+import { NO_USAGE, type RqlCompletionUsage } from "@/lib/synthesis/rql/domain/usage";
 import { type PropertyBlock, propertyBlock } from "@/lib/views/dashboards/properties";
 
 /**
  * The RQL field with highlighting and completion, from the compiler's catalog and the project's
  * trace properties. Loaded only where the field is shown (`SqlFields` imports it on demand); the
- * plain text area stands in until then. A property that is not indexed is offered off: picking it
- * writes nothing and shows why, with the link that fixes it.
+ * plain text area stands in until then. The list opens by itself where the domain gives one, and
+ * is ordered by the project's usage (`rankRqlCompletions`) once the page's read of it arrives. A
+ * property that is not indexed is offered off: picking it writes nothing and shows why, with the
+ * link that fixes it.
  */
 
 const DATA = rqlEditorData();
@@ -117,26 +123,30 @@ const errorMark = StateField.define({
 });
 
 /**
- * The completions at the cursor, in the order of the domain: the list sorts by score, so each kind
- * (columns, functions, keywords, operators) gets a boost by its place in that order. A property
- * that is not indexed calls `blocked` instead of writing.
+ * The completions at the cursor, in the order of the domain, ranked by the project's usage. The
+ * list sorts by how well an option matches the typed prefix, then by boost, then by `sortText`:
+ * each kind (columns, functions, keywords, operators) gets a boost by its place in that order, and
+ * `sortText` keeps the rank inside a kind. A property that is not indexed calls `blocked` instead
+ * of writing.
  */
-function completer(data: () => Pick<RqlEditorData, "properties">, blocked: (name: string) => void) {
+function completer(
+  data: () => { editor: Pick<RqlEditorData, "properties">; usage: RqlCompletionUsage },
+  blocked: (name: string) => void,
+) {
   return (context: CompletionContext) => {
-    const found = rqlCompletions(
-      context.state.doc.toString(),
-      context.pos,
-      context.explicit,
-      data(),
-    );
+    const text = context.state.doc.toString();
+    const { editor, usage } = data();
+    const found = rqlCompletions(text, context.pos, context.explicit, editor);
     if (!found) return null;
-    const kinds = [...new Set(found.options.map((option) => option.type))];
-    const options = found.options.map(
-      ({ disabled, ...option }): Completion =>
-        disabled
-          ? { ...option, boost: -1, apply: () => blocked(option.label) }
-          : { ...option, boost: kinds.length - 1 - kinds.indexOf(option.type) },
-    );
+    const ranked = rankRqlCompletions(text, found, usage);
+    const kinds = [...new Set(ranked.map((option) => option.type))];
+    const width = String(ranked.length).length;
+    const options = ranked.map(({ disabled, ...option }, index): Completion => {
+      const sortText = String(index).padStart(width, "0");
+      return disabled
+        ? { ...option, sortText, boost: -1, apply: () => blocked(option.label) }
+        : { ...option, sortText, boost: kinds.length - 1 - kinds.indexOf(option.type) };
+    });
     // A property name can hold any character but a quote. A word of the query ends at a space:
     // the next place has its own list.
     const inName = context.state.sliceDoc(found.from - 1, found.from) === "'";
@@ -164,15 +174,38 @@ export function RqlEditor({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const { projectId, choices } = usePropertyChoices();
+  // Whether the person moved through the open list since the last change of the text.
+  const moved = useRef(false);
+  const { projectId, choices, usage: usageRead } = usePropertyChoices();
   const [block, setBlock] = useState<PropertyBlock | null>(null);
+  const [saved, setSaved] = useState<RqlCompletionUsage>(NO_USAGE);
+  // The page's read of the usage: the list keeps its start order until it arrives.
+  useEffect(() => {
+    let current = true;
+    // A streamed promise is a thenable whose `then` returns nothing: wrap it.
+    if (usageRead)
+      Promise.resolve(usageRead)
+        .then((read) => current && setSaved(read))
+        .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [usageRead]);
   const data = useMemo(
-    () =>
-      rqlEditorData({
+    () => ({
+      editor: rqlEditorData({
         indexed: choices.indexed.map(({ name }) => name),
         detected: choices.detected.map(({ name }) => name),
       }),
-    [choices],
+      // An indexed property holds data when it has values in the page's range.
+      usage: {
+        ...saved,
+        propertiesWithData: choices.indexed
+          .filter(({ values }) => values.length > 0)
+          .map(({ name }) => name),
+      },
+    }),
+    [choices, saved],
   );
   // The latest callbacks and properties, read by the editor made once.
   const latest = useRef({ onChange, onRun, data });
@@ -188,6 +221,30 @@ export function RqlEditor({
       state: EditorState.create({
         doc: value,
         extensions: [
+          // Before the completion's own keys, which take the highest precedence.
+          Prec.highest(
+            keymap.of([
+              // A list that opened by itself with no word typed: Enter is a new line until the
+              // person moves through the list. Enter after a word still picks the first option.
+              ...["ArrowDown", "ArrowUp", "PageDown", "PageUp"].map((key) => ({
+                key,
+                run: () => {
+                  moved.current = true;
+                  return false;
+                },
+              })),
+              {
+                key: "Enter",
+                run: (editor) => {
+                  if (moved.current || completionStatus(editor.state) !== "active") return false;
+                  const at = editor.state.selection.main.head;
+                  if (/\w$/.test(editor.state.sliceDoc(Math.max(0, at - 1), at))) return false;
+                  closeCompletion(editor);
+                  return false;
+                },
+              },
+            ]),
+          ),
           history(),
           keymap.of([
             {
@@ -230,7 +287,9 @@ export function RqlEditor({
             autocapitalize: "off",
           }),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) latest.current.onChange(update.state.doc.toString());
+            if (!update.docChanged) return;
+            moved.current = false;
+            latest.current.onChange(update.state.doc.toString());
           }),
         ],
       }),
