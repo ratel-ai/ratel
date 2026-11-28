@@ -29,6 +29,9 @@ export interface RetentionStore {
   listRetiredSnapshots(limit: number): Promise<RetiredSnapshot[]>;
   /** Clears the snapshot of a retired version after its delete. */
   markSnapshotDeleted(versionId: string): Promise<void>;
-  /** Which of these version ids have a row. */
-  existing(versionIds: readonly string[]): Promise<Set<string>>;
+  /**
+   * Which of these version ids have a row that can hold a snapshot. A `failed` version cannot: its
+   * state is final and no run starts from it.
+   */
+  snapshotHolders(versionIds: readonly string[]): Promise<Set<string>>;
 }
