@@ -8,23 +8,31 @@ import {
 } from "@/lib/console/scope/member-access";
 import { storable } from "@/lib/platform/storable";
 import {
-  approvalProblem,
   type CaseContent,
   type CaseDetails,
   caseContentSchema,
   caseDetailsSchema,
-  draftVersion,
+  currentVersion,
+  type EvalCase,
+  inputProblem,
   MAX_CONTENT_CHARS,
 } from "./domain/case";
+import { evalContentSchema, evalDetailsSchema } from "./domain/eval";
 import { caseFromTurn, type TurnContent } from "./domain/from-turn";
 import type { CaseStore } from "./ports/case-store";
+import type { EvalStore } from "./ports/eval-store";
+import type { TaskLinks } from "./ports/task-links";
+import { saveOptions } from "./save-target";
 
 /**
- * The session routes of cases: create (from a turn or from nothing), edit and approve. An edit
- * writes the draft, or makes a new one. No route changes an approved version.
+ * The session routes of cases: create (from a turn or from nothing) in the datasets of one or more
+ * evals, and edit. A row counts at once. An edit adds a version, and the newest counts. No route
+ * changes a version (decision `rows-count-at-once`).
  */
 export type CasesApiDeps = MemberAccessDeps & {
   cases: () => CaseStore;
+  evals: () => EvalStore;
+  taskLinks: () => TaskLinks;
   /** Whether the project lets the product read captured text. */
   readContent: (projectId: string) => Promise<boolean>;
   loadTurn: (projectId: string, turnId: string) => Promise<TurnContent | null>;
@@ -36,13 +44,35 @@ export type CasesApiDeps = MemberAccessDeps & {
 
 export type CaseEvent =
   | { name: "eval_case_created"; source: "turn" | "blank" }
-  | { name: "eval_case_approved" };
+  | { name: "eval_created"; source: "save_case" };
 
 /** The JSON of a request may be a little larger than the content in it. */
 const MAX_BODY_CHARS = MAX_CONTENT_CHARS * 2;
+/** A turn of more tasks becomes one row in the eval of each task that the person chose. */
+const MAX_TARGETS = 20;
+/** The eval of a new case: one that exists, or a new one that the person confirmed. */
+const targetSchema = z.union([
+  z.object({ evalId: z.uuid() }),
+  z.object({
+    newEval: evalDetailsSchema.extend({
+      content: evalContentSchema.default(evalContentSchema.parse({})),
+    }),
+  }),
+]);
+type Target = z.infer<typeof targetSchema>;
+/** The evals of the new case: a list, or one eval. */
+const targetsSchema = z.union([
+  z.object({ targets: z.array(targetSchema).min(1).max(MAX_TARGETS) }),
+  targetSchema.transform((target) => ({ targets: [target] })),
+]);
 const fromTurnSchema = z.object({ turnId: z.uuid() });
 const editSchema = caseDetailsSchema.extend({ content: caseContentSchema });
-const tokenSchema = z.object({ versionId: z.uuid(), updatedAt: z.iso.datetime() });
+const optionsSchema = z.object({
+  turnId: z.uuid().optional(),
+  traceId: z.string().trim().min(1).max(200).optional(),
+  task: z.string().trim().min(1).max(200).optional(),
+});
+const tokenSchema = z.object({ versionId: z.uuid() });
 const changeSchema = editSchema.extend({ base: tokenSchema });
 
 export function handleCreateCase(
@@ -52,11 +82,16 @@ export function handleCreateCase(
 ): Promise<Response> {
   return write(projectId, "create_case", deps, async (member) => {
     const body = await readJson(request);
+    const chosen = targetsSchema.safeParse(body);
+    if (!chosen.success) {
+      return refuse(400, "invalid", "Choose the evals of the case: evalId, newEval or targets.");
+    }
+    const { targets } = chosen.data;
     const turn = fromTurnSchema.safeParse(body);
-    if (turn.success) return createFromTurn(turn.data.turnId, member, deps);
+    if (turn.success) return createFromTurn(turn.data.turnId, targets, member, deps);
     const edit = editSchema.safeParse(body);
     if (!edit.success) return invalid(edit.error);
-    return create(edit.data, { source: "blank" }, member, deps);
+    return create(edit.data, targets, { source: "blank" }, member, deps);
   });
 }
 
@@ -71,46 +106,42 @@ export function handleEditCase(
     if (!edit.success) return invalid(edit.error);
     if (!isId(caseId)) return notFound();
     const { base, ...change } = edit.data;
-    const token = { versionId: base.versionId, updatedAt: new Date(base.updatedAt) };
-    const saved = await deps.cases().saveDraft(member.projectId, caseId, change, token, deps.now());
+    const problem = inputProblem(change.content);
+    if (problem) return refuse(422, "no_input", problem);
+    const saved = await deps.cases().update(member.projectId, caseId, change, base, deps.now());
     if (saved === "not_found") return notFound();
     if (saved === "changed") return changed();
-    return reply(200, { caseId, draft: draftView(saved) });
+    return reply(200, rowView(saved));
   });
 }
 
-export function handleApproveCase(
+/**
+ * What the "Save as eval case" dialog shows first: the tasks of the turn or of the trace of a run,
+ * the default task, and the target eval of each task.
+ */
+export function handleSaveOptions(
   request: Request,
   projectId: string,
-  caseId: string,
   deps: CasesApiDeps,
 ): Promise<Response> {
-  return write(projectId, "approve_case", deps, async (member) => {
-    const body = tokenSchema.safeParse(await readJson(request));
-    if (!body.success) return invalid(body.error);
-    const evalCase = isId(caseId) ? await deps.cases().get(member.projectId, caseId) : null;
-    if (!evalCase) return notFound();
-    const draft = draftVersion(evalCase);
-    if (!draft || draft.id !== body.data.versionId) return changed();
-    const problem = approvalProblem(draft);
-    if (problem) return refuse(422, "not_ready", problem);
-    const result = await deps
-      .cases()
-      .approve(
-        member.projectId,
-        caseId,
-        { versionId: draft.id, updatedAt: new Date(body.data.updatedAt) },
-        { userId: member.externalId, now: deps.now() },
-      );
-    if (result === "not_found") return notFound();
-    if (result === "changed") return changed();
-    await deps.track({ name: "eval_case_approved" }, member);
-    return reply(200, { caseId, versionId: draft.id, number: draft.number, state: "approved" });
+  const span = { feature: "evals", operation: "save_case_options" } as const;
+  return forMember(projectId, span, deps, async (member) => {
+    const query = Object.fromEntries(new URL(request.url).searchParams);
+    const parsed = optionsSchema.safeParse(query);
+    if (!parsed.success) return invalid(parsed.error);
+    const { turnId, traceId, task } = parsed.data;
+    const source = turnId ? { turnId } : traceId ? { traceId } : null;
+    const options = await saveOptions(member.projectId, source, task ?? null, {
+      taskLinks: deps.taskLinks(),
+      evals: deps.evals(),
+    });
+    return reply(200, options);
   });
 }
 
 async function createFromTurn(
   turnId: string,
+  targets: readonly Target[],
   member: Member,
   deps: CasesApiDeps,
 ): Promise<Response> {
@@ -129,28 +160,69 @@ async function createFromTurn(
   if (!content.success) return invalid(content.error);
   return create(
     { name: made.name, labels: [], content: content.data },
+    targets,
     { source: "turn", turnId, output: made.sourceOutput },
     member,
     deps,
   );
 }
 
+/** One row in each eval of the targets, in one transaction. The same eval twice is one row. */
 async function create(
   edit: CaseDetails & { content: CaseContent },
+  targets: readonly Target[],
   origin: { source: "blank" } | { source: "turn"; turnId: string; output: string | null },
   member: Member,
   deps: CasesApiDeps,
 ): Promise<Response> {
-  const created = await deps.cases().create({
-    ...edit,
+  const problem = inputProblem(edit.content);
+  if (problem) return refuse(422, "no_input", problem);
+  const evalIds: string[] = [];
+  for (const target of targets) {
+    const evalId = await evalOf(target, member, deps);
+    if (!evalId) return refuse(404, "not_found", "There is no such eval.");
+    if (!evalIds.includes(evalId)) evalIds.push(evalId);
+  }
+  const created = await deps.cases().createAll(
+    evalIds.map((evalId) => ({
+      ...edit,
+      evalId,
+      projectId: member.projectId,
+      createdBy: member.externalId,
+      ...(origin.source === "turn"
+        ? { source: { turnId: origin.turnId, output: origin.output } }
+        : {}),
+    })),
+  );
+  if (created === "eval_not_found") return refuse(404, "not_found", "There is no such eval.");
+  await Promise.all(
+    created.map(() => deps.track({ name: "eval_case_created", source: origin.source }, member)),
+  );
+  return reply(201, { cases: created.map(rowView) });
+}
+
+/**
+ * The id of the eval of the case. A new eval with the name of an eval that exists is that eval:
+ * the person chose the name, and two saves at the same time make one eval.
+ */
+async function evalOf(target: Target, member: Member, deps: CasesApiDeps): Promise<string | null> {
+  if ("evalId" in target) return target.evalId;
+  const evals = deps.evals();
+  const { name, taskId, content } = target.newEval;
+  const found = await evals.getByName(member.projectId, name);
+  if (found) return found.id;
+  const made = await evals.create({
     projectId: member.projectId,
+    name,
+    taskId,
+    content,
     createdBy: member.externalId,
-    ...(origin.source === "turn"
-      ? { source: { turnId: origin.turnId, output: origin.output } }
-      : {}),
   });
-  await deps.track({ name: "eval_case_created", source: origin.source }, member);
-  return reply(201, { caseId: created.id, draft: draftView(created) });
+  if (made !== "name_taken") {
+    await deps.track({ name: "eval_created", source: "save_case" }, member);
+    return made.id;
+  }
+  return (await evals.getByName(member.projectId, name))?.id ?? null;
 }
 
 function write(
@@ -162,11 +234,15 @@ function write(
   return forMember(projectId, { feature: "evals", operation }, deps, work, { write: true });
 }
 
-function draftView(evalCase: Parameters<typeof draftVersion>[0]) {
-  const draft = draftVersion(evalCase);
-  return draft
-    ? { versionId: draft.id, number: draft.number, updatedAt: draft.updatedAt.toISOString() }
-    : null;
+/** A row and its version that counts: the base of the next edit. */
+function rowView(evalCase: EvalCase) {
+  const version = currentVersion(evalCase);
+  return {
+    caseId: evalCase.id,
+    evalId: evalCase.evalId,
+    versionId: version?.id ?? null,
+    number: version?.number ?? null,
+  };
 }
 
 async function readJson(request: Request): Promise<unknown> {

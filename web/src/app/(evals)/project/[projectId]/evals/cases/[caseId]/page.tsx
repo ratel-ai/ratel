@@ -7,6 +7,7 @@ import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { caseEditorModel } from "@/lib/views/evals/page-model";
 
@@ -15,13 +16,15 @@ export const metadata = { title: "Eval case" };
 
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
-/** One case: its draft in the editor, and the approved version. `new` is a case from nothing. */
+/** One case in the editor, from the version that counts. `new` is a case from nothing. */
 export default async function EvalCasePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string; caseId: string }>;
+  searchParams?: Promise<{ eval?: string | string[] }>;
 }) {
-  const { projectId, caseId } = await params;
+  const [{ projectId, caseId }, query] = await Promise.all([params, searchParams]);
   // Next renders a page next to its layout: the layout's 404 does not stop this data.
   if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
@@ -33,17 +36,20 @@ export default async function EvalCasePage({
   }
   if (!(await getSessionContext())) redirect("/");
   const { project } = await getProjectScope(projectId);
-  const found = UUID.test(caseId)
-    ? await withFeatureSpan(
-        "evals",
-        "load_case",
-        () => createDrizzleCaseStore(getDb()).get(project.id, caseId),
-        { attributes: { "project.id": project.id } },
-      )
-    : null;
+  const [found, evals] = await withFeatureSpan(
+    "evals",
+    "load_case",
+    () =>
+      Promise.all([
+        UUID.test(caseId) ? createDrizzleCaseStore(getDb()).get(project.id, caseId) : null,
+        createDrizzleEvalStore(getDb()).list(project.id),
+      ]),
+    { attributes: { "project.id": project.id } },
+  );
   if (!found && caseId !== "new") notFound();
   const canEdit = !(await isRestrictedBySupportSession());
-  const model = caseEditorModel({ projectId: project.id, canEdit }, found);
-  // Another draft is another form.
-  return <CaseEditor key={model.draft?.id ?? model.approved?.id ?? "new"} model={model} />;
+  const chosen = Array.isArray(query?.eval) ? query.eval[0] : query?.eval;
+  const model = caseEditorModel({ projectId: project.id, canEdit }, found, evals, chosen ?? null);
+  // Another version is another form.
+  return <CaseEditor key={model.current?.id ?? "new"} model={model} />;
 }

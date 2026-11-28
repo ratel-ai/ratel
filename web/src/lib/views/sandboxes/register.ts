@@ -21,6 +21,7 @@ import { sandboxesEnabledForProject } from "./gate";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
 import { runDeps } from "./run-deps";
 import { sweepRuns } from "./run-sweep";
+import { linkRunTasks } from "./run-tasks";
 import { sweepSnapshots } from "./snapshot-sweep";
 
 /** A version that waits longer than this with no job was left by a process that ended. */
@@ -35,6 +36,7 @@ export type SandboxesWiring = {
  * What Ratel sandboxes contribute to the background machinery: the image preparation, which the reaper
  * spares while it sends heartbeats (it can outlast the stale-job window), and the sweeps that end
  * an interrupted build, queue a build that was never queued, end the runs that their process left,
+ * give the turn of each run the task of its sandbox,
  * delete the run VMs that are idle or unknown, and delete the snapshots of old and deleted versions.
  * The composition root gives the holds of the modules that depend on sandboxes.
  */
@@ -93,6 +95,12 @@ export function createSandboxesRegistration(
             organizationIdOf: async (projectId) =>
               (await getOrganizationByProjectId(projectId))?.id ?? null,
           }),
+      },
+      // The turn of a run gets the task of its sandbox once the agent's spans have arrived.
+      {
+        name: "sandbox_run_tasks",
+        phase: "before",
+        run: async () => ({ linked: await linkRunTasks(getDb(), new Date()) }),
       },
       // After the runs: a run that its process left ends first, so its version can go.
       {

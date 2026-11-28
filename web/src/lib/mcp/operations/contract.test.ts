@@ -13,7 +13,11 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true, customMonitoring: true });
+const operations = assembleOperations({
+  focusedConsole: true,
+  customMonitoring: true,
+  evals: true,
+});
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -62,8 +66,13 @@ test("every params schema converts to JSON Schema for discovery", () => {
   }
 });
 
+/** A feature domain keeps its reads and writes together; each write still declares `mutates`. */
+const FEATURE_DOMAINS = new Set(["sandboxes", "evals"]);
+
 test("write operations are exactly those declaring mutates", () => {
-  const mutating = operations.filter((operation) => operation.mutates).map((o) => o.id);
+  const mutating = operations
+    .filter((operation) => operation.mutates && !FEATURE_DOMAINS.has(operation.domain))
+    .map((o) => o.id);
   const inWritesDomain = operations
     .filter((operation) => operation.domain === "writes")
     .map((o) => o.id);
@@ -71,7 +80,7 @@ test("write operations are exactly those declaring mutates", () => {
   assert.deepEqual(
     mutating.sort(),
     inWritesDomain.sort(),
-    "an operation that mutates must live in the writes domain, and vice versa",
+    "an operation that mutates must live in the writes domain or a feature domain, and every writes-domain operation mutates",
   );
 });
 
@@ -223,6 +232,25 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // RQL over trace data (RTL-325), behind customMonitoring.
   ["describe_rql_schema", false],
   ["run_rql", false],
+  // Ratel sandbox (decision `mcp-surface`), behind the `evals` flag. sandbox_run starts a VM run.
+  ["sandbox_list", false],
+  ["sandbox_get_version", false],
+  ["sandbox_run", true],
+  ["sandbox_get_run", false],
+  // Evals on Ratel sandbox (decision `mcp-surface`), behind the `evals` flag. Evals own their
+  // scorers and a dataset (decision `eval-definitions`).
+  ["evals_list", false],
+  ["evals_get", false],
+  ["evals_create", true],
+  ["evals_list_cases", false],
+  ["evals_get_case", false],
+  ["evals_create_case", true],
+  ["evals_start_run", true],
+  ["evals_list_runs", false],
+  ["evals_get_run", false],
+  ["evals_get_trial", false],
+  ["evals_compare", false],
+  ["evals_pin_baseline", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {
@@ -233,4 +261,36 @@ test("the operation contract matches the reviewed snapshot", () => {
     [...EXPECTED_CONTRACT].sort((a, b) => a[0].localeCompare(b[0])),
     "Operations changed. Update EXPECTED_CONTRACT, deciding explicitly whether each new operation mutates.",
   );
+});
+
+/**
+ * A key reaches over MCP only what it reaches over REST: each sandbox and eval tool asks the
+ * feature scope of its REST route too (`api-keys/routes.ts`).
+ */
+const EXPECTED_API_KEY_SCOPES: Readonly<Record<string, string>> = {
+  sandbox_list: "sandboxes:read",
+  sandbox_get_version: "sandboxes:read",
+  sandbox_run: "sandboxes:run",
+  sandbox_get_run: "sandboxes:read",
+  evals_list: "evals:read",
+  evals_get: "evals:read",
+  evals_create: "evals:write",
+  evals_list_cases: "evals:read",
+  evals_get_case: "evals:read",
+  evals_create_case: "evals:write",
+  evals_start_run: "evals:write",
+  evals_list_runs: "evals:read",
+  evals_get_run: "evals:read",
+  evals_get_trial: "evals:read",
+  evals_compare: "evals:read",
+  evals_pin_baseline: "evals:write",
+};
+
+test("feature tools ask the API-key scope of their REST route", () => {
+  const actual = Object.fromEntries(
+    operations.flatMap((operation) =>
+      operation.apiKeyScope ? [[operation.id, operation.apiKeyScope]] : [],
+    ),
+  );
+  assert.deepEqual(actual, EXPECTED_API_KEY_SCOPES);
 });

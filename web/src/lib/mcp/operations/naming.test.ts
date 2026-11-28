@@ -14,7 +14,12 @@ import { assembleOperations } from "@/lib/mcp/operations";
  * Read `lib/mcp/naming.ts` before adding a tool. Failing here means the surface
  * got harder to navigate, not that the test is fussy.
  */
-const operations = assembleOperations({ focusedConsole: true, customMonitoring: true });
+// The flagged tools too: their names must route as well as the rest.
+const operations = assembleOperations({
+  focusedConsole: true,
+  customMonitoring: true,
+  evals: true,
+});
 const byId = new Map(operations.map((operation) => [operation.id, operation]));
 
 const claims = new Map<string, string[]>();

@@ -5,15 +5,15 @@ import { Button } from "@ratel/design-system/button";
 import { Field, Input, Textarea } from "@ratel/design-system/input";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
+import { Select } from "@ratel/design-system/select";
 import { Callout } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { CaseScorer } from "@/lib/views/evals/domain/case";
 import type { CaseEditorModel, CaseVersionView } from "@/lib/views/evals/page-model";
 import { caseHref, evalsHref } from "@/lib/views/evals/paths";
-import { ScorerFields, scorerSentence } from "./ScorerFields";
+import { scorerSentence } from "./ScorerFields";
 
 const JSON_FIELDS = [
   ["input", "Input (JSON)", 4],
@@ -22,12 +22,14 @@ const JSON_FIELDS = [
 ] as const;
 type JsonField = (typeof JSON_FIELDS)[number][0];
 
-/** The draft of a case. With no draft, the approved version is the start of the next one. */
+/**
+ * A case: the form starts from the version that counts, and a save adds a new version that counts
+ * at once (decision `rows-count-at-once`).
+ */
 export function CaseEditor({ model }: { model: CaseEditorModel }) {
-  const { projectId, canEdit, approved, draft } = model;
+  const { projectId, canEdit, current: start } = model;
   const router = useRouter();
-  const start = draft ?? approved;
-  const [base, setBase] = useState(start && { versionId: start.id, updatedAt: start.updatedAt });
+  const [base, setBase] = useState(start && { versionId: start.id });
   const [name, setName] = useState(model.name);
   const [labels, setLabels] = useState(model.labels.join(", "));
   const [json, setJson] = useState<Record<JsonField, string>>({
@@ -36,14 +38,15 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
     toolFixtures: show(start?.toolFixtures ?? []),
   });
   const [expectedOutput, setExpectedOutput] = useState(start?.expectedOutput ?? "");
-  const [scorers, setScorers] = useState<CaseScorer[]>(start?.scorers ?? []);
+  const [evalId, setEvalId] = useState(model.evalId ?? model.evals[0]?.id ?? "");
+  const scorers = model.evals.find(({ id }) => id === evalId)?.scorers ?? [];
   const [errors, setErrors] = useState<Partial<Record<JsonField, string>>>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  /** The saved draft, or null when there is nothing to approve. */
-  async function save(): Promise<{ caseId: string; draft: Draft | null } | null> {
-    const content: Record<string, unknown> = { expectedOutput: expectedOutput || null, scorers };
+  /** The saved row, or null when it is not saved. */
+  async function save(): Promise<Saved | null> {
+    const content: Record<string, unknown> = { expectedOutput: expectedOutput || null };
     const wrong: Partial<Record<JsonField, string>> = {};
     for (const [field] of JSON_FIELDS) {
       try {
@@ -54,19 +57,21 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
     }
     setErrors(wrong);
     if (Object.keys(wrong).length > 0) return null;
-    return send(
-      model.id ? "PUT" : "POST",
-      `/api/projects/${projectId}/evals/cases${model.id ? `/${model.id}` : ""}`,
-      { name, labels: labelsOf(labels), content, ...(base ? { base } : {}) },
-    );
+    const body = { name, labels: labelsOf(labels), content };
+    if (model.id) {
+      return send<Saved>("PUT", `/api/projects/${projectId}/evals/cases/${model.id}`, {
+        ...body,
+        base,
+      });
+    }
+    const made = await send<{ cases: Saved[] }>("POST", `/api/projects/${projectId}/evals/cases`, {
+      ...body,
+      evalId,
+    });
+    return made?.cases[0] ?? null;
   }
 
-  async function send<T>(
-    method: string,
-    url: string,
-    body: unknown,
-    fail: (message: string) => void = setProblem,
-  ): Promise<T | null> {
+  async function send<T>(method: string, url: string, body: unknown): Promise<T | null> {
     setProblem(null);
     try {
       const response = await fetch(url, {
@@ -76,30 +81,25 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
       });
       const answer = (await response.json()) as T & { message?: string };
       if (response.ok) return answer;
-      fail(answer.message ?? "The change was not saved. Try again.");
+      setProblem(answer.message ?? "The change was not saved. Try again.");
     } catch {
-      fail("The change was not saved. Try again.");
+      setProblem("The change was not saved. Try again.");
     }
     return null;
   }
 
-  async function run(approve: boolean) {
+  async function run() {
     setPending(true);
     const saved = await save();
     if (!saved) return setPending(false);
-    if (saved.draft) setBase(saved.draft);
-    if (approve && saved.draft) {
-      const { versionId, updatedAt, number } = saved.draft;
-      const url = `/api/projects/${projectId}/evals/cases/${saved.caseId}/approve`;
-      const done = await send("POST", url, { versionId, updatedAt }, (message) =>
-        // The form can be a new one after the save, so the reason is not in it.
-        toast({ title: "Not approved", description: message, tone: "danger" }),
-      );
-      if (done) toast({ title: `Version ${number} is approved`, tone: "success" });
-    } else {
-      const title = saved.draft ? "Draft saved" : "Saved. No change to approve.";
-      toast({ title, tone: "success" });
-    }
+    setBase({ versionId: saved.versionId });
+    const changed = saved.number !== start?.number;
+    toast({
+      title: changed
+        ? `Version ${saved.number} saved. It counts now.`
+        : "Saved. The content did not change.",
+      tone: "success",
+    });
     // A new case stays pending until its page opens: a second click would make a second case.
     if (!model.id) return router.replace(caseHref(projectId, saved.caseId));
     router.refresh();
@@ -113,14 +113,9 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
         crumbs={[{ label: "Evals", href: evalsHref(projectId) }]}
         actions={
           canEdit ? (
-            <>
-              <Button variant="secondary" disabled={pending} onClick={() => run(false)}>
-                Save draft
-              </Button>
-              <Button variant="primary" disabled={pending} onClick={() => run(true)}>
-                Approve
-              </Button>
-            </>
+            <Button variant="primary" disabled={pending} onClick={run}>
+              Save
+            </Button>
           ) : null
         }
       />
@@ -130,8 +125,21 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
             {problem}
           </Callout>
         ) : null}
-        <Status projectId={projectId} approved={approved} draft={draft} />
+        <Status projectId={projectId} current={start} />
         <Section title="Case">
+          {model.id ? null : (
+            <Field label="Eval (its dataset gets the case)" className="w-full max-w-2xl">
+              {() => (
+                <Select
+                  aria-label="Eval"
+                  value={evalId}
+                  onValueChange={setEvalId}
+                  options={model.evals.map(({ id, name }) => ({ value: id, label: name }))}
+                  disabled={!canEdit}
+                />
+              )}
+            </Field>
+          )}
           <Field label="Name" className="w-full max-w-2xl">
             {(control) => (
               <Input
@@ -189,33 +197,33 @@ export function CaseEditor({ model }: { model: CaseEditorModel }) {
             )}
           </Field>
         </Section>
-        <ScorerFields scorers={scorers} onChange={setScorers} canEdit={canEdit} />
-        {draft && approved ? <Frozen version={approved} /> : null}
+        <Section title="Scorers" description="The scorers of the eval score each case of it.">
+          {scorers.length > 0 ? (
+            <ul className="text-ui text-fg-muted">
+              {scorers.map((scorer) => (
+                <li key={scorer.id}>{scorerSentence(scorer)}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-ui text-fg-muted">The eval has no scorer.</p>
+          )}
+        </Section>
       </PageBody>
     </Page>
   );
 }
 
-type Draft = { versionId: string; number: number; updatedAt: string };
+type Saved = { caseId: string; versionId: string; number: number };
 
-function Status({
-  projectId,
-  approved,
-  draft,
-}: {
-  projectId: string;
-  approved: CaseVersionView | null;
-  draft: CaseVersionView | null;
-}) {
-  const source = (draft ?? approved)?.sourceTurnId;
+function Status({ projectId, current }: { projectId: string; current: CaseVersionView | null }) {
+  const source = current?.sourceTurnId;
   return (
     <div className="flex flex-wrap items-center gap-3 text-ui text-fg-muted">
-      {approved ? <Badge tone="success">Approved v{approved.number}</Badge> : null}
-      {draft ? <Badge tone="neutral">Draft v{draft.number}</Badge> : null}
+      {current ? <Badge tone="success">v{current.number}</Badge> : null}
       <span>
-        {approved
-          ? `Version ${approved.number} counts in eval runs. An edit makes a new draft.`
-          : "This case does not count in eval runs until you approve it."}
+        {current
+          ? `Version ${current.number} counts in eval runs. A save adds a new version.`
+          : "The case counts in eval runs when you save it."}
       </span>
       {source ? (
         <Link
@@ -226,25 +234,6 @@ function Status({
         </Link>
       ) : null}
     </div>
-  );
-}
-
-/** The version that counts now, while a draft is open. */
-function Frozen({ version }: { version: CaseVersionView }) {
-  return (
-    <Section
-      title={`Approved version ${version.number}`}
-      description="It stays the version that counts until you approve the draft."
-    >
-      <pre className="max-h-60 max-w-2xl overflow-auto rounded-md border border-line bg-rail p-3 font-mono text-xs whitespace-pre-wrap text-fg-muted">
-        {show(version.input)}
-      </pre>
-      <ul className="text-ui text-fg-muted">
-        {version.scorers.map((scorer) => (
-          <li key={scorer.id}>{scorerSentence(scorer)}</li>
-        ))}
-      </ul>
-    </Section>
   );
 }
 

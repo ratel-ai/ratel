@@ -14,13 +14,51 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
-import type { CaseContent, CaseScorer, EarlierTurn } from "./domain/case";
+import type { CaseContent, EarlierTurn } from "./domain/case";
+import type { EvalScorer, FrozenEval } from "./domain/eval";
 import type { FrozenCase, TrialToolCall } from "./domain/experiment";
 import type { ScorerResult, ScorerSnapshot } from "./domain/score";
 
 /** The tables of evals (the `evals` flag). */
 
-/** A case: its name and its labels. What it checks is in its versions. */
+/** An eval: its name and its task. What it runs and how it scores is in its versions. */
+export const evalDefinitions = pgTable(
+  "eval_definitions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // No foreign key: a task is a reading of the traces, not a row of this module.
+    taskId: text("task_id"),
+    // The identity provider's user id, or `key:<id>`.
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("eval_definitions_project_name_idx").on(t.projectId, t.name)],
+);
+
+/** A version of an eval. It never changes: an edit adds a version, and a run freezes one. */
+export const evalDefinitionVersions = pgTable(
+  "eval_definition_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    evalId: uuid("eval_id")
+      .notNull()
+      .references(() => evalDefinitions.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(),
+    sandboxName: text("sandbox_name"),
+    params: jsonb("params").$type<Record<string, unknown>>().notNull(),
+    trials: integer("trials").notNull(),
+    scorers: jsonb("scorers").$type<EvalScorer[]>().notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("eval_definition_versions_eval_number_idx").on(t.evalId, t.number)],
+);
+
+/** A case: a row of the dataset of one eval, its name and its labels. What it holds is in its versions. */
 export const evalCases = pgTable(
   "eval_cases",
   {
@@ -28,6 +66,9 @@ export const evalCases = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    evalId: uuid("eval_id")
+      .notNull()
+      .references(() => evalDefinitions.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     // Plain text. A label for a task or an intent refers to no row.
     labels: text("labels").array().notNull().default(sql`'{}'::text[]`),
@@ -35,10 +76,13 @@ export const evalCases = pgTable(
     createdBy: text("created_by").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("eval_cases_project_created_idx").on(t.projectId, t.createdAt)],
+  (t) => [
+    index("eval_cases_project_created_idx").on(t.projectId, t.createdAt),
+    index("eval_cases_eval_idx").on(t.evalId),
+  ],
 );
 
-/** A version of a case. Only a draft changes: an approved version is frozen. */
+/** A version of a case (a row of a dataset). It never changes: an edit adds a version, and the newest counts. */
 export const evalCaseVersions = pgTable(
   "eval_case_versions",
   {
@@ -47,27 +91,19 @@ export const evalCaseVersions = pgTable(
       .notNull()
       .references(() => evalCases.id, { onDelete: "cascade" }),
     number: integer("number").notNull(),
-    // "draft" | "approved"
-    state: text("state").notNull().default("draft"),
     // In an object: a driver parses the text of a jsonb string one more time.
     input: jsonb("input").$type<{ value: unknown }>().notNull(),
     earlierTurns: jsonb("earlier_turns").$type<EarlierTurn[]>().notNull(),
     toolFixtures: jsonb("tool_fixtures").$type<CaseContent["toolFixtures"]>().notNull(),
     expectedOutput: text("expected_output"),
-    scorers: jsonb("scorers").$type<CaseScorer[]>().notNull(),
     // No foreign key: a pruned turn must not change a version.
     sourceTurnId: uuid("source_turn_id"),
     // The recorded answer of that turn, for the editor. No scorer reads it.
     sourceOutput: text("source_output"),
-    approvedBy: text("approved_by"),
-    approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("eval_case_versions_case_number_idx").on(t.caseId, t.number),
-    uniqueIndex("eval_case_versions_one_draft_idx").on(t.caseId).where(sql`${t.state} = 'draft'`),
-  ],
+  (t) => [uniqueIndex("eval_case_versions_case_number_idx").on(t.caseId, t.number)],
 );
 
 /** What the judge that Ratel pays spent, for each organization and UTC day, with what is held. */
@@ -100,6 +136,8 @@ export const evalExperiments = pgTable(
     params: jsonb("params").$type<Record<string, unknown>>().notNull(),
     trialsPerCase: integer("trials_per_case").notNull(),
     caseVersions: jsonb("case_versions").$type<FrozenCase[]>().notNull(),
+    // Empty for a run that started before evals had definitions.
+    evalVersions: jsonb("eval_versions").$type<FrozenEval[]>().notNull().default([]),
     scorerSnapshots: jsonb("scorer_snapshots").$type<Record<string, ScorerSnapshot[]>>().notNull(),
     // A person's identity provider id, or `key:<id>`.
     startedBy: text("started_by").notNull(),

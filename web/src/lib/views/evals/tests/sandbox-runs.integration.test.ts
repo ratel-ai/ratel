@@ -16,10 +16,11 @@ import { type AgentScript, scriptAgent } from "@/lib/views/sandboxes/tests/fake-
 import { createFakeProvider } from "@/lib/views/sandboxes/tests/fake-provider";
 import { bundleInfo, COMMIT, IMAGE, tarGz } from "@/lib/views/sandboxes/tests/support";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
 import { advanceExperiment, type ExperimentDeps, startExperiment } from "../experiments";
-import { content, createEvalsDb, ORGANIZATION_ID, PROJECT_ID } from "./support";
+import { content, createEvalsDb, inEval, ORGANIZATION_ID, PROJECT_ID, seedEval } from "./support";
 
 /**
  * An eval trial through the real runs of Ratel sandboxes (a fake provider): the evals engine reads
@@ -81,10 +82,12 @@ async function setup(agent: AgentScript = {}) {
     tools: [{ name: "refund_order", sideEffect: true }],
     params: [],
   };
-  const cases = createDrizzleCaseStore(db);
+  const refunds = await seedEval(db);
+  const cases = inEval(createDrizzleCaseStore(db), refunds.id);
   const experiments = createDrizzleExperimentStore(db);
   const deps = (more: Partial<RunDeps> = {}): ExperimentDeps => ({
     cases,
+    evals: createDrizzleEvalStore(db),
     experiments,
     sandboxes: {
       enabled: async () => true,
@@ -102,7 +105,7 @@ async function setup(agent: AgentScript = {}) {
     },
     now: () => new Date(),
   });
-  /** One trial of one approved case, to its end. */
+  /** One trial of one case, to its end. */
   const trial = async (more: Partial<RunDeps> = {}) => {
     const made = await cases.create({
       projectId: PROJECT_ID,
@@ -111,14 +114,7 @@ async function setup(agent: AgentScript = {}) {
       content: content(),
       createdBy: "user_1",
     });
-    const [draft] = made.versions;
-    assert.ok(draft);
-    await cases.approve(
-      PROJECT_ID,
-      made.id,
-      { versionId: draft.id, updatedAt: draft.updatedAt },
-      { userId: "user_1", now: new Date() },
-    );
+    assert.ok(made.versions[0]);
     const started = await startExperiment(
       SUBJECT,
       { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "user_1" },

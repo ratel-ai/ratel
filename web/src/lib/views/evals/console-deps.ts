@@ -7,7 +7,10 @@ import { trackServerEvent } from "@/lib/platform/telemetry";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
+import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
+import { createTaskLinks } from "./adapters/task-links";
 import type { CasesApiDeps } from "./cases-api";
+import type { EvalsApiDeps } from "./evals-api";
 import { evalsEnabledForProject } from "./gate";
 import { loadTurnContent } from "./turn-content";
 
@@ -22,6 +25,8 @@ export const evalsAccess: MemberAccessDeps = {
 export const casesApiDeps: CasesApiDeps = {
   ...evalsAccess,
   cases: () => createDrizzleCaseStore(getDb()),
+  evals: () => createDrizzleEvalStore(getDb()),
+  taskLinks: () => createTaskLinks(),
   readContent: (projectId) => contentOptIn(projectId),
   loadTurn: loadTurnContent,
   readOnlyTools,
@@ -35,7 +40,7 @@ export const casesApiDeps: CasesApiDeps = {
 };
 
 /** A tool that the newest version of any sandbox declares with side effects is not read-only. */
-async function readOnlyTools(projectId: string): Promise<ReadonlySet<string>> {
+export async function readOnlyTools(projectId: string): Promise<ReadonlySet<string>> {
   const newest = new Map<string, boolean>();
   const seen = new Set<string>();
   for (const { sandboxId, tools } of await listSandboxVersions(projectId, 100)) {
@@ -47,3 +52,9 @@ async function readOnlyTools(projectId: string): Promise<ReadonlySet<string>> {
   }
   return new Set([...newest].flatMap(([name, sideEffect]) => (sideEffect ? [] : [name])));
 }
+
+export const evalsApiDeps: EvalsApiDeps = {
+  ...evalsAccess,
+  evals: () => createDrizzleEvalStore(getDb()),
+  now: () => new Date(),
+};

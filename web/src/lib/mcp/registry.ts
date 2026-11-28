@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import type { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 
 /**
  * The internal operation registry behind the MCP tools.
@@ -24,7 +25,11 @@ export type OperationDomain =
   | "improvement"
   | "account"
   | "joins"
-  | "writes";
+  | "writes"
+  /** Ratel sandbox: versions and runs of a pushed agent (`sandbox_*`). */
+  | "sandboxes"
+  /** Eval cases, eval runs and comparisons on Ratel sandbox (`evals_*`). */
+  | "evals";
 
 export const OPERATION_DOMAINS: readonly OperationDomain[] = [
   "scope",
@@ -34,6 +39,8 @@ export const OPERATION_DOMAINS: readonly OperationDomain[] = [
   "account",
   "joins",
   "writes",
+  "sandboxes",
+  "evals",
 ];
 
 /** What the operation needs resolved and authorized before it runs. */
@@ -95,6 +102,12 @@ export interface McpOperation<Schema extends AnyParamsSchema = AnyParamsSchema> 
    * mechanically rather than by reading each implementation.
    */
   mutates: boolean;
+  /**
+   * The feature scope that an API key also needs, as the REST route of the same action asks
+   * (`sandboxes:run`, `evals:write`, ...). Dispatch checks it next to `mcp:read` or `mcp:write`, so a
+   * key reaches over MCP only what it reaches over REST. `contract.test.ts` pins each value.
+   */
+  apiKeyScope?: ApiKeyScope;
   /**
    * Called by an MCP Apps view through tools/call, not offered to an agent
    * (such as the replay's step content). Registered only with

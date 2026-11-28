@@ -93,6 +93,14 @@ export async function compareWithBaseline(
   return { ok: true, pin, ...sides, comparison };
 }
 
+/** The pinned baseline run with its trials. Null when none is pinned. */
+export async function pinnedRun(projectId: string, deps: BaselineDeps): Promise<Compared | null> {
+  const pinned = await deps.baselines.get(projectId);
+  const experiment = pinned && (await deps.experiments.get(projectId, pinned.experimentId));
+  if (!experiment) return null;
+  return { experiment, trials: await deps.experiments.trials(experiment.id) };
+}
+
 async function find(projectId: string, experimentId: string, { experiments }: BaselineDeps) {
   return z.uuid().safeParse(experimentId).success ? experiments.get(projectId, experimentId) : null;
 }

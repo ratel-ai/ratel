@@ -1,17 +1,8 @@
 import type { Member } from "@/lib/console/scope/member-access";
 import type { SandboxVersionSummary } from "@/lib/views/sandboxes";
 import type { ParamSpec } from "@/lib/views/sandboxes/run-form";
-import type { ComparisonResult } from "./baseline";
-import { approvedVersion, type CaseVersion, draftVersion, type EvalCase } from "./domain/case";
-import {
-  type CaseChange,
-  type CaseSide,
-  type ComparedCase,
-  changedCases,
-  otherCases,
-  type ScorerDifference,
-  type Verdict,
-} from "./domain/compare";
+import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./domain/case";
+import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
 import {
   type Counts,
   countTrials,
@@ -22,29 +13,11 @@ import {
 import { type CaseCounts, caseCounts, trialsByCase } from "./experiment-view";
 
 /** What the pages of evals show. Plain data. */
-export type CaseRow = {
-  id: string;
-  name: string;
-  labels: string[];
-  /** The number of the version that counts. */
-  approved: number | null;
-  draft: number | null;
-  /** The input of the approved version, else of the draft, cut to `PREVIEW_CHARS`. */
-  input: string;
-  /** The number of earlier turns that go with the input. */
-  turns: number;
-  /** The expected output, cut to `PREVIEW_CHARS`. Null when the case has none. */
-  expectedOutput: string | null;
-  createdAt: string;
-};
 
 /** The longest text of a cell of the cases table. The case page shows the full value. */
 export const PREVIEW_CHARS = 160;
 
-export type CaseVersionView = Omit<CaseVersion, "approvedAt" | "updatedAt"> & {
-  approvedAt: string | null;
-  updatedAt: string;
-};
+export type CaseVersionView = Omit<CaseVersion, "updatedAt"> & { updatedAt: string };
 
 export type CaseEditorModel = {
   projectId: string;
@@ -53,43 +26,17 @@ export type CaseEditorModel = {
   id: string | null;
   name: string;
   labels: string[];
-  approved: CaseVersionView | null;
-  draft: CaseVersionView | null;
+  /** The eval whose dataset has the case. Null for a new case: the person chooses it. */
+  evalId: string | null;
+  /** The evals of the project, with the scorers of their newest version. */
+  evals: EvalOption[];
+  /** The version that counts: the newest. Null for a new case. */
+  current: CaseVersionView | null;
 };
 
+export type EvalOption = { id: string; name: string; scorers: EvalScorer[] };
+
 export type CaseEditor = Pick<Member, "projectId"> & { canEdit: boolean };
-
-export function caseRow(evalCase: EvalCase): CaseRow {
-  const approved = approvedVersion(evalCase);
-  const draft = draftVersion(evalCase);
-  const shown = approved ?? draft;
-  return {
-    id: evalCase.id,
-    name: evalCase.name,
-    labels: evalCase.labels,
-    approved: approved?.number ?? null,
-    draft: draft?.number ?? null,
-    input: shown ? preview(shown.input) : "",
-    turns: shown?.earlierTurns.length ?? 0,
-    expectedOutput: shown?.expectedOutput ? preview(shown.expectedOutput) : null,
-    createdAt: evalCase.createdAt.toISOString(),
-  };
-}
-
-/** The labels of the cases, each one time, in order. */
-export function caseLabels(rows: readonly Pick<CaseRow, "labels">[]): string[] {
-  return [...new Set(rows.flatMap(({ labels }) => labels))].sort();
-}
-
-/** The cases that a run takes: the approved ones, with the label when there is one. */
-export function runnableCases(
-  rows: readonly Pick<CaseRow, "labels" | "approved">[],
-  label: string | null,
-): number {
-  return rows.filter(
-    (row) => row.approved !== null && (label === null || row.labels.includes(label)),
-  ).length;
-}
 
 /** A value as one line of text, cut to `PREVIEW_CHARS`. */
 export function preview(value: unknown): string {
@@ -103,6 +50,9 @@ export function preview(value: unknown): string {
 export function caseEditorModel(
   { projectId, canEdit }: CaseEditor,
   evalCase: EvalCase | null,
+  evals: readonly EvalDefinition[],
+  /** The eval that a new case goes to first, when the page names one. */
+  chosenEvalId: string | null = null,
 ): CaseEditorModel {
   return {
     projectId,
@@ -110,19 +60,18 @@ export function caseEditorModel(
     id: evalCase?.id ?? null,
     name: evalCase?.name ?? "",
     labels: evalCase?.labels ?? [],
-    approved: versionView(evalCase && approvedVersion(evalCase)),
-    draft: versionView(evalCase && draftVersion(evalCase)),
+    evalId: evalCase?.evalId ?? (evals.some(({ id }) => id === chosenEvalId) ? chosenEvalId : null),
+    evals: evals.map((definition) => ({
+      id: definition.id,
+      name: definition.name,
+      scorers: currentVersion(definition).scorers,
+    })),
+    current: versionView(evalCase && currentRow(evalCase)),
   };
 }
 
 function versionView(version: CaseVersion | null): CaseVersionView | null {
-  return (
-    version && {
-      ...version,
-      approvedAt: version.approvedAt?.toISOString() ?? null,
-      updatedAt: version.updatedAt.toISOString(),
-    }
-  );
+  return version && { ...version, updatedAt: version.updatedAt.toISOString() };
 }
 
 export type ExperimentRow = {
@@ -151,7 +100,7 @@ export type ExperimentPageModel = {
   trialsPerCase: number;
   /** The name that the person gave the run. Null when it has none. */
   name: string | null;
-  /** The label that chose the cases. Null: all approved cases. */
+  /** The label that chose the cases. Null: all cases. */
   labelFilter: string | null;
   createdAt: string;
   counts: Counts;
@@ -293,186 +242,6 @@ export function readyVersions(versions: readonly SandboxVersionSummary[]): Ready
     .map(({ id, name, git, params }) => ({ id, name, commit: git?.commit ?? "", params }));
 }
 
-/** One of the two experiments of a comparison. */
-export type ComparedExperiment = {
-  id: string;
-  name: string | null;
-  sandboxName: string;
-  sandboxVersionId: string;
-  commit: string;
-  dirty: boolean;
-  labelFilter: string | null;
-  createdAt: string;
-};
-export type ComparedCaseSide = CaseSide & {
-  /** Of the trials that have one. Null when none has. */
-  costUsd: number | null;
-  meanDurationMs: number | null;
-  trials: GridTrial[];
-};
-/** A param with another value on the two sides. Null: the side does not set it. */
-export type ParamChange = { name: string; baseline: string | null; candidate: string | null };
-/** An experiment that the reader can compare with. */
-export type CompareChoice = { id: string; label: string; pinned: boolean };
-/** The longest output text that a comparison diffs. */
-export const DIFF_CHARS = 2_000;
-export type ComparedCaseRow = {
-  caseId: string;
-  name: string;
-  change: CaseChange;
-  baseline: ComparedCaseSide | null;
-  candidate: ComparedCaseSide | null;
-};
-export type ComparePageModel = {
-  projectId: string;
-  experimentId: string;
-  /** The completed experiments that the reader can compare with, the newest first. */
-  choices: CompareChoice[];
-  /** The experiment that the reader chose. Null: the pinned baseline. */
-  chosenId: string | null;
-} & (
-  | {
-      ok: true;
-      verdict: Verdict;
-      rule: string;
-      baseline: ComparedExperiment;
-      candidate: ComparedExperiment;
-      /** Null: the other side is an experiment that is not pinned. */
-      pin: { by: string; at: string } | null;
-      params: ParamChange[];
-      /** Whether the two sides ran other versions of the sandbox. */
-      versionChanged: boolean;
-      changed: ComparedCaseRow[];
-      others: ComparedCaseRow[];
-    }
-  | {
-      ok: false;
-      reason: string;
-      message: string;
-      scorers: ScorerDifference[];
-      /** Null: no baseline is pinned. */
-      baselineId: string | null;
-    }
-);
-
-export function comparePageModel(
-  ids: { projectId: string; experimentId: string },
-  result: ComparisonResult,
-  /** The identity of the reader, to say "you". */
-  reader: string,
-  {
-    outputs = new Map(),
-    choices = [],
-    chosenId = null,
-  }: {
-    /** The outputs of the trials of both sides, by trial id. Longer than `DIFF_CHARS` is cut. */
-    outputs?: ReadonlyMap<string, string>;
-    choices?: CompareChoice[];
-    chosenId?: string | null;
-  } = {},
-): ComparePageModel {
-  const shared = { ...ids, choices, chosenId };
-  if (!result.ok) {
-    const { pin, otherId, ...refusal } = result.refusal;
-    return { ...shared, ok: false, ...refusal, baselineId: otherId ?? pin?.experimentId ?? null };
-  }
-  const { pin, baseline, candidate, comparison } = result;
-  const before = trialsByCase(baseline.trials);
-  const after = trialsByCase(candidate.trials);
-  const row = (compared: ComparedCase): ComparedCaseRow => ({
-    ...compared,
-    baseline: comparedSide(compared.baseline, before, outputs),
-    candidate: comparedSide(compared.candidate, after, outputs),
-  });
-  return {
-    ...shared,
-    ok: true,
-    verdict: comparison.verdict,
-    rule: comparison.rule,
-    baseline: comparedExperiment(baseline.experiment),
-    candidate: comparedExperiment(candidate.experiment),
-    pin: pin && { by: personOf(pin.pinnedBy, reader), at: pin.pinnedAt.toISOString() },
-    params: paramChanges(baseline.experiment.params, candidate.experiment.params),
-    versionChanged: baseline.experiment.sandboxVersionId !== candidate.experiment.sandboxVersionId,
-    changed: changedCases(comparison).map(row),
-    others: otherCases(comparison).map(row),
-  };
-}
-
-/** The params with another value on the two sides, by name. A value shows as its JSON text. */
-export function paramChanges(
-  baseline: Record<string, unknown>,
-  candidate: Record<string, unknown>,
-): ParamChange[] {
-  const text = (params: Record<string, unknown>, name: string) =>
-    Object.hasOwn(params, name) ? JSON.stringify(params[name]) : null;
-  return [...new Set([...Object.keys(baseline), ...Object.keys(candidate)])]
-    .sort()
-    .map((name) => ({ name, baseline: text(baseline, name), candidate: text(candidate, name) }))
-    .filter((change) => change.baseline !== change.candidate);
-}
-
-/** The label of an experiment in a list: its name, else its sandbox and commit, and its age. */
-export function compareChoice(
-  experiment: Pick<Experiment, "id" | "name" | "sandboxName" | "gitCommit" | "createdAt">,
-  pinnedId: string | null,
-): CompareChoice {
-  const title =
-    experiment.name ?? `${experiment.sandboxName} · ${experiment.gitCommit.slice(0, 12)}`;
-  const day = experiment.createdAt.toISOString().slice(0, 16).replace("T", " ");
-  const pinned = experiment.id === pinnedId;
-  return { id: experiment.id, label: `${title} · ${day}${pinned ? " · baseline" : ""}`, pinned };
-}
-
-function comparedSide(
-  side: CaseSide | null,
-  byCase: ReadonlyMap<string, Trial[]>,
-  outputs: ReadonlyMap<string, string>,
-): ComparedCaseSide | null {
-  if (!side) return null;
-  const trials = byCase.get(side.versionId) ?? [];
-  const costs = trials.flatMap(({ costUsd }) => (costUsd === null ? [] : [costUsd]));
-  const durations = trials.flatMap(({ durationMs }) => (durationMs === null ? [] : [durationMs]));
-  return {
-    ...side,
-    costUsd: costs.length > 0 ? sum(costs) : null,
-    meanDurationMs: durations.length > 0 ? sum(durations) / durations.length : null,
-    trials: trialViews(trials).map((trial) => ({
-      ...trial,
-      output: cut(outputs.get(trial.id)),
-    })),
-  };
-}
-
-/** An output of a comparison, with "…" when it is longer than `DIFF_CHARS`. */
-function cut(output: string | undefined): string | null {
-  if (output === undefined) return null;
-  return output.length > DIFF_CHARS ? `${output.slice(0, DIFF_CHARS)}…` : output;
-}
-
-function comparedExperiment(experiment: Experiment): ComparedExperiment {
-  const { id, name, sandboxName, sandboxVersionId, gitCommit, gitDirty, labelFilter } = experiment;
-  return {
-    id,
-    name,
-    sandboxName,
-    sandboxVersionId,
-    commit: gitCommit,
-    dirty: gitDirty,
-    labelFilter,
-    createdAt: experiment.createdAt.toISOString(),
-  };
-}
-
 function trialViews(trials: readonly Trial[] = []): TrialView[] {
   return trials.map(({ experimentId: _, ...trial }) => trial);
-}
-
-function personOf(pinnedBy: string, reader: string): string {
-  if (pinnedBy === reader) return "you";
-  return pinnedBy.startsWith("key:") ? "a project key" : "a member";
-}
-
-function sum(values: readonly number[]): number {
-  return values.reduce((total, value) => total + value, 0);
 }

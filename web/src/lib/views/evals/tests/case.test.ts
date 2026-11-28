@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { approvalProblem, caseContentSchema, caseDetailsSchema, runInputOf } from "../domain/case";
+import { caseContentSchema, caseDetailsSchema, inputProblem, runInputOf } from "../domain/case";
 import { caseFromTurn, recordedConversation, type TurnContent } from "../domain/from-turn";
-import { content, NO_REFUND } from "./support";
+import { content } from "./support";
 
 const call = (name: string, args: unknown, result: unknown, earlier = false) => ({
   id: `${name}-${JSON.stringify(args)}`,
@@ -49,7 +49,6 @@ test("a turn gives the input, the earlier turns, the recorded answer and the sid
         },
       ],
       expectedOutput: null,
-      scorers: [],
     },
     sourceOutput: "Refunded.",
   });
@@ -158,47 +157,12 @@ test("the recorded conversation is the messages of the calls, with no message re
   assert.equal(recordedConversation([]), null);
 });
 
-test("the content accepts the shared scorer definitions with the paths of a trial only", () => {
-  const check = (config: object) =>
-    caseContentSchema.safeParse(
-      content({
-        // biome-ignore lint/suspicious/noExplicitAny: a wrong config is the point
-        scorers: [{ ...NO_REFUND, definition: { kind: "check", config: config as any } }],
-      }),
-    ).success;
-  for (const path of [
-    "output",
-    "output.status",
-    "tools",
-    "duration_ms",
-    "cost_usd",
-    "tool_arguments.refund_order.order_id",
-  ]) {
-    assert.ok(check({ path, op: "eq", value: "1" }), path);
-  }
-  for (const path of ["attributes.x", "models", "tool_arguments.refund_order", "output.", "x"]) {
-    assert.ok(!check({ path, op: "eq", value: "1" }), path);
-  }
-  assert.ok(check({ path: "output", op: "exists" }));
-  assert.ok(!check({ path: "output", op: "eq" }));
-  assert.ok(!check({ path: "cost_usd", op: "lt", value: "cheap" }));
-  const judge = (output: string) =>
-    caseContentSchema.safeParse({
-      ...content(),
-      scorers: [
-        { ...NO_REFUND, definition: { kind: "judge", config: { prompt: "polite?", output } } },
-      ],
-    }).success;
-  assert.ok(judge("boolean"));
-  assert.ok(!judge("numeric"));
-});
-
-test("an approval needs an input and one gating scorer", () => {
-  assert.equal(approvalProblem(content()), null);
-  assert.match(approvalProblem(content({ input: null })) ?? "", /input/);
-  assert.match(
-    approvalProblem(content({ scorers: [{ ...NO_REFUND, gating: false }] })) ?? "",
-    /gating/,
+test("a row needs an input. The scorers are the eval's", () => {
+  assert.equal(inputProblem(content()), null);
+  assert.match(inputProblem(content({ input: null })) ?? "", /input/);
+  assert.equal(
+    Object.hasOwn(caseContentSchema.parse({ ...content(), scorers: [] }), "scorers"),
+    false,
   );
 });
 
@@ -207,17 +171,6 @@ test("a label is text", () => {
     caseDetailsSchema.parse({ name: " x ", labels: ["task:refunds", "task:refunds"] }),
     { name: "x", labels: ["task:refunds"] },
   );
-});
-
-test("a case has at most 5 judges", () => {
-  const judges = Array.from({ length: 6 }, (_, n) => ({
-    id: `j${n}`,
-    name: "Judge",
-    gating: false,
-    definition: { kind: "judge" as const, config: { prompt: "ok?", output: "boolean" as const } },
-  }));
-  assert.equal(caseContentSchema.safeParse(content({ scorers: judges })).success, false);
-  assert.equal(caseContentSchema.safeParse(content({ scorers: judges.slice(1) })).success, true);
 });
 
 test("the earlier turns of a case go into the run input as messages, next to the value", () => {

@@ -1,5 +1,12 @@
-import type { CaseVersion, EvalCase } from "./case";
-import { approvedVersion } from "./case";
+import { type CaseVersion, currentVersion as currentRow, type EvalCase } from "./case";
+import {
+  currentVersion,
+  type EvalDefinition,
+  type EvalVersion,
+  type FrozenEval,
+  freezeEval,
+  runProblem,
+} from "./eval";
 import { type ScorerResult, type ScorerSnapshot, snapshotOf, type TrialResult } from "./score";
 
 export const DEFAULT_TRIALS = 3;
@@ -10,8 +17,14 @@ export type ExperimentState = "running" | "completed";
 /** `starting` and `scoring` are claims of one process. Only `done` has a result. */
 export type TrialState = "pending" | "starting" | "running" | "scoring" | "done";
 
-/** A case version as an experiment freezes it. */
-export type FrozenCase = { caseId: string; versionId: string; number: number; name: string };
+/** A case version as an experiment freezes it. A run from before evals had definitions has no `evalId`. */
+export type FrozenCase = {
+  caseId: string;
+  versionId: string;
+  number: number;
+  name: string;
+  evalId?: string;
+};
 
 /** What an experiment is. Nothing but the state and the end changes after the start. */
 export type Experiment = {
@@ -22,14 +35,16 @@ export type Experiment = {
   sandboxName: string;
   /** The name that the person gave the run. Null when it has none. */
   name: string | null;
-  /** The label that chose the cases. Null: all approved cases. */
+  /** The label that chose the cases. Null: all cases. */
   labelFilter: string | null;
   gitCommit: string;
   gitDirty: boolean;
   params: Record<string, unknown>;
   trialsPerCase: number;
   caseVersions: FrozenCase[];
-  /** The frozen scorers of each case version, by its id. */
+  /** The eval versions that the run froze. Empty for a run from before evals had definitions. */
+  evalVersions: FrozenEval[];
+  /** The frozen scorers of each case version (the scorers of its eval version), by its id. */
   scorerSnapshots: Record<string, ScorerSnapshot[]>;
   startedBy: string;
   state: ExperimentState;
@@ -76,32 +91,89 @@ export type TrialOutcome = TrialEvidence &
 
 export type Counts = { pass: number; fail: number; invalid: number; open: number };
 
-/** The approved version of each case, and no draft. With a label, only the cases that have it. */
-export function freezeCases(
+export type FrozenSuite = Pick<Experiment, "caseVersions" | "evalVersions" | "scorerSnapshots">;
+
+/**
+ * Freezes the newest version of each eval that can run, and the newest version of each case of its
+ * dataset: each row counts (decision `rows-count-at-once`). A case version gets the scorers of its
+ * eval version. An eval with no gating scorer, or with no case, is left out. With a label, only the
+ * cases that have it.
+ */
+export function freezeSuite(
+  evals: readonly EvalDefinition[],
   cases: readonly EvalCase[],
   label: string | null = null,
-): {
-  caseVersions: FrozenCase[];
-  scorerSnapshots: Record<string, ScorerSnapshot[]>;
-} {
-  const approved = cases.flatMap(
-    (evalCase): Array<{ evalCase: EvalCase; version: CaseVersion }> => {
-      if (label !== null && !evalCase.labels.includes(label)) return [];
-      const version = approvedVersion(evalCase);
-      return version ? [{ evalCase, version }] : [];
-    },
-  );
+  run: { params?: Record<string, unknown>; trials?: number } = {},
+): FrozenSuite {
+  const byEval = Map.groupBy(cases, ({ evalId }) => evalId);
+  const frozen: FrozenSuite = { caseVersions: [], evalVersions: [], scorerSnapshots: {} };
+  for (const definition of evals) {
+    const version = currentVersion(definition);
+    if (runProblem(version)) continue;
+    const rows = rowsOf(byEval.get(definition.id) ?? [], label);
+    if (rows.length === 0) continue;
+    frozen.evalVersions.push(freezeEval(definition, run));
+    for (const { evalCase, caseVersion } of rows) {
+      frozen.caseVersions.push(frozenCase(evalCase, caseVersion));
+      frozen.scorerSnapshots[caseVersion.id] = snapshotsOf(version);
+    }
+  }
+  return frozen;
+}
+
+function rowsOf(
+  cases: readonly EvalCase[],
+  label: string | null,
+): Array<{ evalCase: EvalCase; caseVersion: CaseVersion }> {
+  return cases.flatMap((evalCase) => {
+    if (label !== null && !evalCase.labels.includes(label)) return [];
+    const caseVersion = currentRow(evalCase);
+    return caseVersion ? [{ evalCase, caseVersion }] : [];
+  });
+}
+
+function frozenCase(evalCase: EvalCase, version: CaseVersion): FrozenCase {
   return {
-    caseVersions: approved.map(({ evalCase, version }) => ({
-      caseId: evalCase.id,
-      versionId: version.id,
-      number: version.number,
-      name: evalCase.name,
-    })),
-    scorerSnapshots: Object.fromEntries(
-      approved.map(({ version }) => [version.id, version.scorers.map(snapshotOf)]),
-    ),
+    caseId: evalCase.id,
+    versionId: version.id,
+    number: version.number,
+    name: evalCase.name,
+    evalId: evalCase.evalId,
   };
+}
+
+function snapshotsOf(version: Pick<EvalVersion, "scorers">): ScorerSnapshot[] {
+  return version.scorers.map(snapshotOf);
+}
+
+/** The frozen eval of a case version. Null for a run from before evals had definitions. */
+export function evalOfVersion(
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions">,
+  caseVersionId: string,
+): FrozenEval | null {
+  const evalId = experiment.caseVersions.find(
+    ({ versionId }) => versionId === caseVersionId,
+  )?.evalId;
+  return experiment.evalVersions.find((frozen) => frozen.evalId === evalId) ?? null;
+}
+
+/** The trials of a case: the trials of its eval, else the trials of the run. */
+export function trialsOfCase(
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "trialsPerCase">,
+  frozen: FrozenCase,
+): number {
+  return (
+    experiment.evalVersions.find(({ evalId }) => evalId === frozen.evalId)?.trials ??
+    experiment.trialsPerCase
+  );
+}
+
+/** The params of a trial: the params of its eval with the run's over them, else the run's. */
+export function paramsOfTrial(
+  experiment: Pick<Experiment, "caseVersions" | "evalVersions" | "params">,
+  caseVersionId: string,
+): Record<string, unknown> {
+  return evalOfVersion(experiment, caseVersionId)?.params ?? experiment.params;
 }
 
 export function emptyCounts(): Counts {

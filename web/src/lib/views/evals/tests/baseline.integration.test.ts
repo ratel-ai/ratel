@@ -15,7 +15,7 @@ import {
   handleUnpinByKey,
   handleUnpinByMember,
 } from "../baseline-api";
-import type { CaseScorer } from "../domain/case";
+import type { EvalScorer } from "../domain/eval";
 import { unscored } from "../domain/experiment";
 import { snapshotOf, type TrialResult } from "../domain/score";
 import { createEvalsDb, NO_REFUND, ORGANIZATION_ID, OTHER_PROJECT_ID, PROJECT_ID } from "./support";
@@ -80,7 +80,7 @@ async function setup() {
   /** An experiment with one case. It ends when it has results. */
   const experiment = async (
     results: TrialResult[],
-    { scorers = [NO_REFUND], end = true }: { scorers?: CaseScorer[]; end?: boolean } = {},
+    { scorers = [NO_REFUND], end = true }: { scorers?: EvalScorer[]; end?: boolean } = {},
   ) => {
     const versionId = crypto.randomUUID();
     const made = await experiments.create(
@@ -96,6 +96,7 @@ async function setup() {
         params: {},
         trialsPerCase: results.length,
         caseVersions: [{ caseId: CASE_ID, versionId, number: 1, name: "late order" }],
+        evalVersions: [],
         scorerSnapshots: { [versionId]: scorers.map(snapshotOf) },
         startedBy: "user_1",
       },

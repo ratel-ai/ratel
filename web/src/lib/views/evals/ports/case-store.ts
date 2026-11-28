@@ -2,36 +2,35 @@ import type { CaseContent, CaseDetails, EvalCase } from "../domain/case";
 
 export type NewCase = CaseDetails & {
   projectId: string;
+  /** The eval whose dataset gets the case. */
+  evalId: string;
   content: CaseContent;
   createdBy: string;
-  source?: { turnId: string; output: string | null };
+  /** The turn or the sandbox run that the case was saved from. A run has no turn id. */
+  source?: { turnId: string | null; output: string | null };
 };
 
-export type VersionToken = { versionId: string; updatedAt: Date };
+/** The newest version of a case as the person read it. */
+export type VersionToken = { versionId: string };
 
-export type ApproveResult = "approved" | "not_found" | "changed";
-
-/** The cases of a project. No method changes an approved version. */
+/**
+ * The cases (the rows of the datasets) of a project. A version never changes: an edit adds a
+ * version, and the newest counts (decision `rows-count-at-once`).
+ */
 export interface CaseStore {
-  /** Adds a case with one draft. */
-  create(input: NewCase): Promise<EvalCase>;
+  /** Adds a case with its first version. `eval_not_found`: the project has no such eval. */
+  create(input: NewCase): Promise<EvalCase | "eval_not_found">;
+  /** Adds the cases in one transaction, in order. `eval_not_found` for one of them: none is added. */
+  createAll(inputs: readonly NewCase[]): Promise<EvalCase[] | "eval_not_found">;
   get(projectId: string, caseId: string): Promise<EvalCase | null>;
-  /** The newest first. */
-  list(projectId: string): Promise<EvalCase[]>;
-  /** Writes the draft, or a new draft when there is none and the content differs. */
-  saveDraft(
+  /** The newest first. With an eval, only its dataset. */
+  list(projectId: string, evalId?: string): Promise<EvalCase[]>;
+  /** Writes the name and the labels, and adds a version when the content differs from the newest. */
+  update(
     projectId: string,
     caseId: string,
     edit: CaseDetails & { content: CaseContent },
-    /** The newest version as the person read it. */
     base: VersionToken,
     now: Date,
   ): Promise<EvalCase | "not_found" | "changed">;
-  /** Approves the draft as the person saw it (`updatedAt`). */
-  approve(
-    projectId: string,
-    caseId: string,
-    draft: VersionToken,
-    by: { userId: string; now: Date },
-  ): Promise<ApproveResult>;
 }

@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { isSandboxTaskId } from "@/lib/readings/trace-signals/workflows/sandbox-tasks";
 
 /**
  * Writes a signal run's placement (`placeRuns`) to `trace_turns.workflow_id`,
@@ -58,15 +59,16 @@ export async function writeTaskPlacement(
         ),
       );
     const now = new Map(current.map((row) => [row.id, row.workflowId]));
+    const ofSandbox = (runId: string) => isSandboxTaskId(now.get(runId) ?? "");
     const sets: [string, string][] = [];
     let placed = 0;
     for (const [runId, taskId] of input.placement) {
       if (taskId === null) continue;
       placed += 1;
-      if (now.get(runId) !== taskId) sets.push([runId, taskId]);
+      if (now.get(runId) !== taskId && !ofSandbox(runId)) sets.push([runId, taskId]);
     }
     const clears = current
-      .filter((row) => (input.placement.get(row.id) ?? null) === null)
+      .filter((row) => (input.placement.get(row.id) ?? null) === null && !ofSandbox(row.id))
       .map((row) => row.id);
 
     for (const chunk of chunks(sets)) {

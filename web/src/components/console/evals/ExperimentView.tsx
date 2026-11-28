@@ -213,7 +213,7 @@ function ExperimentHeader({
               Label <Badge tone="neutral">{model.labelFilter}</Badge>
             </>
           ) : (
-            "All approved"
+            "All"
           )}{" "}
           <span className="text-fg-subtle">
             · {model.rows.length} × {model.trialsPerCase} trials

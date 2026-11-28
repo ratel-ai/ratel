@@ -10,10 +10,13 @@ import type {
 import { EVAL_TRIAL_PREFIX } from "@/lib/views/sandboxes/domain/run";
 import { refusedParam } from "@/lib/views/sandboxes/run-form";
 import { type CaseVersion, runInputOf } from "./domain/case";
+import { currentVersion, type EvalDefinition, runProblem } from "./domain/eval";
 import {
   type Experiment,
-  freezeCases,
+  type FrozenSuite,
+  freezeSuite,
   MAX_EXPERIMENT_TRIALS,
+  paramsOfTrial,
   type Trial,
   type TrialOutcome,
   unscored,
@@ -21,6 +24,7 @@ import {
 import { type JudgeOutcome, scoreTrial, type TrialRecord } from "./domain/score";
 import { type JudgeDeps, judgeTrial } from "./judge";
 import type { CaseStore } from "./ports/case-store";
+import type { EvalStore } from "./ports/eval-store";
 import type { ExperimentStore } from "./ports/experiment-store";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
@@ -39,18 +43,28 @@ export type SandboxPort = {
 export type ExperimentDeps = {
   experiments: ExperimentStore;
   cases: Pick<CaseStore, "list">;
+  evals: Pick<EvalStore, "list">;
   sandboxes: SandboxPort;
   judge: JudgeDeps;
   now: () => Date;
 };
 
 export type StartExperiment = {
-  /** A version id, or `latest`: the newest version that is ready. */
+  /**
+   * A version id, or `latest`: the newest ready version of the sandbox of the run. That sandbox is
+   * `sandbox`, else the sandbox of the evals named, else the sandbox of the newest ready version.
+   */
   sandboxVersion: string;
-  trialsPerCase: number;
+  /** The name of the sandbox of the run (the `name` of its ratel.yaml). */
+  sandbox?: string;
+  /** The trials of each case. Absent: the trials of its eval. */
+  trialsPerCase?: number;
+  /** The params of the run. They go over the default params of each eval. */
   params: Record<string, unknown>;
+  /** The names of the evals to run. Absent: the suite, each eval of the sandbox. */
+  evals?: string[];
   startedBy: string;
-  /** Only the approved cases with this label. All of them when it is not there. */
+  /** Only the cases with this label. All of them when it is not there. */
   label?: string;
   name?: string;
 };
@@ -65,7 +79,8 @@ export type StartRefusal =
   | "no_cases"
   | "too_many_running"
   | "too_many_trials"
-  | "invalid_params";
+  | "invalid_params"
+  | "wrong_sandbox";
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -78,35 +93,61 @@ const LATEST_OF = 100;
 
 const logger = getLogger("evals/experiments");
 
-/** Freezes the approved cases and their scorers. The trials start with `advanceExperiment`. */
+/**
+ * Freezes the evals, the newest version of each of their cases, and their scorers. The suite is each eval of the sandbox
+ * of the version (or of no sandbox). Chosen evals run by name. The trials start with
+ * `advanceExperiment`.
+ */
 export async function startExperiment(
   subject: UsageSubject,
-  { sandboxVersion, trialsPerCase, params, startedBy, label, name }: StartExperiment,
+  {
+    sandboxVersion,
+    sandbox,
+    trialsPerCase,
+    params,
+    startedBy,
+    label,
+    name,
+    evals,
+  }: StartExperiment,
   deps: ExperimentDeps,
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
     return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
   }
-  const version = await findVersion(projectId, sandboxVersion, deps);
-  if (!version) {
-    return sandboxVersion === "latest"
-      ? refused("not_ready", "No sandbox version is ready. Push one first.")
-      : refused("not_found", "There is no such sandbox version.");
-  }
+  const [allEvals, allCases] = await Promise.all([
+    deps.evals.list(projectId),
+    deps.cases.list(projectId),
+  ]);
+  const found = await findVersion(projectId, sandboxVersion, sandbox, allEvals, evals, deps);
+  if (!found.ok) return found;
+  const { version } = found;
   if (version.status !== "ready") {
     return refused("not_ready", `The sandbox version is ${version.status}. Use one that is ready.`);
   }
-  const refusal = refusedParam(version.params, params);
-  if (refusal) return refused("invalid_params", refusal);
-  const frozen = freezeCases(await deps.cases.list(projectId), label ?? null);
+  const runRefusal = refusedParam(version.params, params);
+  if (runRefusal) return refused("invalid_params", runRefusal);
+  const chosen = chooseEvals(allEvals, evals, version.name);
+  if (!chosen.ok) return chosen;
+  const frozen = freezeSuite(chosen.evals, allCases, label ?? null, {
+    params,
+    ...(trialsPerCase === undefined ? {} : { trials: trialsPerCase }),
+  });
+  const left = leftOut(chosen.evals, evals, frozen);
+  if (left) return refused("no_cases", left);
+  for (const { name: evalName, params: evalParams } of frozen.evalVersions) {
+    const refusal = refusedParam(version.params, evalParams);
+    if (refusal) return refused("invalid_params", `${evalName}: ${refusal}`);
+  }
   const cases = frozen.caseVersions.length;
   if (cases === 0) {
     return label === undefined
-      ? refused("no_cases", "No case is approved. Approve one first.")
-      : refused("no_cases", `No approved case has the label ${label}.`);
+      ? refused("no_cases", "No eval has a case and a gating scorer. Add a case first.")
+      : refused("no_cases", `No case has the label ${label}.`);
   }
-  if (cases * trialsPerCase > MAX_EXPERIMENT_TRIALS) {
+  const trials = totalTrials(frozen);
+  if (trials > MAX_EXPERIMENT_TRIALS) {
     return refused("too_many_trials", `An experiment has at most ${MAX_EXPERIMENT_TRIALS} trials.`);
   }
   const input = {
@@ -121,7 +162,7 @@ export async function startExperiment(
     gitCommit: version.git?.commit ?? "",
     gitDirty: version.git?.dirty ?? false,
     params,
-    trialsPerCase,
+    trialsPerCase: trialsPerCase ?? Math.max(...frozen.evalVersions.map((one) => one.trials)),
     startedBy,
   };
   const experiment = await deps.experiments.create(input, MAX_RUNNING_EXPERIMENTS);
@@ -130,7 +171,13 @@ export async function startExperiment(
     return refused("too_many_running", message);
   }
   logger.info(
-    { project_id: projectId, experiment_id: experiment.id, cases, trials: cases * trialsPerCase },
+    {
+      project_id: projectId,
+      experiment_id: experiment.id,
+      evals: frozen.evalVersions.length,
+      cases,
+      trials,
+    },
     "eval experiment started",
   );
   return { ok: true, experiment };
@@ -272,7 +319,7 @@ async function startTrial(
         projectId,
         organizationId,
         requestedBy: `${EVAL_TRIAL_PREFIX}${trial.id}`,
-        params: experiment.params,
+        params: paramsOfTrial(experiment, trial.caseVersionId),
         fixtures: version.toolFixtures,
       },
     );
@@ -336,10 +383,104 @@ async function finishTrial(
   return true;
 }
 
-async function findVersion(projectId: string, wanted: string, { sandboxes }: ExperimentDeps) {
-  if (wanted !== "latest") return sandboxes.getVersion(projectId, wanted);
+/** The evals with these names, or the suite of the sandbox. */
+function chooseEvals(
+  all: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+  sandboxName: string,
+): { ok: true; evals: EvalDefinition[] } | Extract<StartExperimentResult, { ok: false }> {
+  const ofSandbox = (one: EvalDefinition) => {
+    const wanted = currentVersion(one).sandboxName;
+    return wanted === null || wanted === sandboxName;
+  };
+  if (names === undefined) return { ok: true, evals: all.filter(ofSandbox) };
+  const evals: EvalDefinition[] = [];
+  for (const wanted of new Set(names)) {
+    const found = all.find((one) => one.name === wanted || one.id === wanted);
+    if (!found) return refused("not_found", `There is no eval named "${wanted}".`);
+    if (!ofSandbox(found)) {
+      const other = currentVersion(found).sandboxName;
+      return refused(
+        "wrong_sandbox",
+        `The eval "${found.name}" runs on the sandbox ${other}, not on ${sandboxName}.`,
+      );
+    }
+    evals.push(found);
+  }
+  return { ok: true, evals };
+}
+
+/** Why a chosen eval is not in the run, or null. The suite leaves such evals out. */
+function leftOut(
+  evals: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+  frozen: FrozenSuite,
+): string | null {
+  if (names === undefined) return null;
+  const kept = new Set(frozen.evalVersions.map(({ evalId }) => evalId));
+  const missing = evals.find(({ id }) => !kept.has(id));
+  if (!missing) return null;
+  const problem = runProblem(currentVersion(missing));
+  return problem
+    ? `The eval "${missing.name}" cannot run. ${problem}`
+    : `The eval "${missing.name}" has no case. Add one first.`;
+}
+
+function totalTrials({ caseVersions, evalVersions }: FrozenSuite): number {
+  const trials = new Map(evalVersions.map(({ evalId, trials: count }) => [evalId, count]));
+  return caseVersions.reduce((sum, { evalId }) => sum + (trials.get(evalId ?? "") ?? 0), 0);
+}
+
+/**
+ * The version of the run. `latest` is the newest ready version of the sandbox of the run, never of
+ * another sandbox: a project can have more than one sandbox.
+ */
+async function findVersion(
+  projectId: string,
+  wanted: string,
+  sandbox: string | undefined,
+  all: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+  { sandboxes }: ExperimentDeps,
+): Promise<
+  { ok: true; version: SandboxVersionSummary } | Extract<StartExperimentResult, { ok: false }>
+> {
+  if (wanted !== "latest") {
+    const version = await sandboxes.getVersion(projectId, wanted);
+    if (!version) return refused("not_found", "There is no such sandbox version.");
+    if (sandbox !== undefined && version.name !== sandbox) {
+      return refused(
+        "wrong_sandbox",
+        `The version is of the sandbox ${version.name}, not of ${sandbox}.`,
+      );
+    }
+    return { ok: true, version };
+  }
+  const ofRun = sandbox ?? sandboxOfEvals(all, names);
+  if (ofRun !== null && typeof ofRun === "object") return ofRun;
   const versions = await sandboxes.listVersions(projectId, LATEST_OF);
-  return versions.find(({ status }) => status === "ready") ?? null;
+  const version = versions.find(
+    ({ status, name }) => status === "ready" && (ofRun === null || name === ofRun),
+  );
+  if (version) return { ok: true, version };
+  return ofRun === null
+    ? refused("not_ready", "No sandbox version is ready. Push one first.")
+    : refused("not_ready", `No version of the sandbox ${ofRun} is ready. Push one first.`);
+}
+
+/** The one sandbox of the evals named, null when they name none, or a refusal for two or more. */
+function sandboxOfEvals(
+  all: readonly EvalDefinition[],
+  names: readonly string[] | undefined,
+): string | null | Extract<StartExperimentResult, { ok: false }> {
+  if (names === undefined) return null;
+  const named = all.filter((one) => names.includes(one.name) || names.includes(one.id));
+  const found = new Set(named.flatMap((one) => currentVersion(one).sandboxName ?? []));
+  if (found.size <= 1) return [...found][0] ?? null;
+  return refused(
+    "wrong_sandbox",
+    `The evals run on more than one sandbox (${[...found].sort().join(", ")}). Run the evals of one sandbox at a time.`,
+  );
 }
 
 async function inParallel<T>(items: T[], work: (item: T) => Promise<unknown>): Promise<void> {
