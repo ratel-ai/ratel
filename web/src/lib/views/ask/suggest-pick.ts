@@ -1,12 +1,13 @@
-import { sql } from "drizzle-orm";
 import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { resolveDecisionEngine } from "@/lib/readings/decisions/engine";
 import { type DecisionOption, decisionClient } from "@/lib/readings/decisions/openai";
-import type { RqlTableName } from "@/lib/synthesis/rql/compile";
 import { type DashboardsDb, getDashboards } from "@/lib/views/dashboards/store";
-import type { AskTarget } from "./domain";
+import { DASHBOARD_TEMPLATES, getTemplate } from "@/lib/views/dashboards/templates";
+import { loadDataProbes, templateData } from "@/lib/views/dashboards/templates/data";
+import { listTemplatePicks } from "@/lib/views/dashboards/templates/store";
+import type { AskTarget, EarlierAsk } from "./domain";
 import { listEarlierAsks } from "./store";
 import {
   buildCandidates,
@@ -196,12 +197,14 @@ export async function loadSuggestInput(
   target: SuggestTarget,
   db: DashboardsDb & Pick<ReturnType<typeof getDb>, "execute">,
 ): Promise<SuggestInput> {
-  const [dashboards, properties, earlierAsks, tablesWithData] = await Promise.all([
+  const [dashboards, properties, earlierAsks, probes, picks] = await Promise.all([
     getDashboards(projectId, undefined, db),
     loadStoredPropertyNames(projectId, db),
     listEarlierAsks(projectId, SUGGEST_ASKS, db),
-    loadTablesWithData(projectId, db),
+    loadDataProbes(projectId, db),
+    listTemplatePicks(projectId, SUGGEST_ASKS, db),
   ]);
+  const facts = { ...probes, properties: properties.indexed };
   return {
     target: target.target,
     dashboardId: target.dashboardId,
@@ -215,26 +218,22 @@ export async function loadSuggestInput(
       ),
     })),
     properties: properties.indexed,
-    tablesWithData,
-    earlierAsks,
+    tablesWithData: [...probes.tables],
+    // A dashboard made from a template is a kept ask in the template's own words.
+    earlierAsks: [...earlierAsks, ...picks.flatMap((id) => pickedAsk(id))],
+    templates: DASHBOARD_TEMPLATES.map((template) => ({
+      id: template.id,
+      name: template.name,
+      prompt: template.prompt,
+      has: templateData(template, facts).has,
+    })),
   };
 }
 
-/** The RQL tables that hold a row of the project: one indexed probe each. */
-async function loadTablesWithData(
-  projectId: string,
-  db: Pick<ReturnType<typeof getDb>, "execute">,
-): Promise<RqlTableName[]> {
-  const result = await db.execute(sql`
-    select
-      exists(select 1 from otel_trace_summaries where project_id = ${projectId}::uuid) as traces,
-      exists(select 1 from otel_spans where project_id = ${projectId}::uuid) as events,
-      exists(select 1 from trace_scores where project_id = ${projectId}::uuid) as scores,
-      exists(select 1 from event_metrics where project_id = ${projectId}::uuid) as prompts,
-      exists(select 1 from otel_trace_summaries where project_id = ${projectId}::uuid and session_id is not null) as sessions,
-      exists(select 1 from otel_trace_summaries where project_id = ${projectId}::uuid and end_user_id is not null) as users`);
-  const rows = ((result as { rows?: unknown[] }).rows ?? result) as Record<RqlTableName, boolean>[];
-  const [row] = rows;
-  if (!row) return [];
-  return (Object.keys(row) as RqlTableName[]).filter((table) => row[table]);
+/** The kept signal of a dashboard made from a template; none for a template no longer in code. */
+function pickedAsk(templateId: string): EarlierAsk[] {
+  const template = getTemplate(templateId);
+  if (!template) return [];
+  const widgets = template.property ? [] : template.widgets.map(({ title }) => title);
+  return [{ target: "dashboard", words: template.prompt, outcome: "kept", widgets }];
 }

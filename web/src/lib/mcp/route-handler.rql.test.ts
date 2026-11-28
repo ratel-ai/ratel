@@ -14,7 +14,7 @@ const auth: McpAuthContext = {
   scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
-const TOOLS = ["describe_rql_schema", "run_rql"];
+const TOOLS = ["describe_rql_schema", "run_rql", "list_dashboard_templates"];
 const HTML = "<!doctype html><html><head></head><body></body></html>";
 const catalog = buildMcpAppCatalog(
   [
@@ -55,7 +55,7 @@ async function call(on: boolean, method: string, params: unknown = {}) {
   };
 }
 
-test("customMonitoring on: both tools are listed as reads, and run_rql has the table view", async () => {
+test("customMonitoring on: the tools are listed as reads, and run_rql has the table view", async () => {
   const { tools } = (await call(true, "tools/list")).result;
   const named = (name: string) => tools.find((tool) => tool.name === name);
   for (const tool of TOOLS) assert.equal(named(tool)?.annotations.readOnlyHint, true, tool);

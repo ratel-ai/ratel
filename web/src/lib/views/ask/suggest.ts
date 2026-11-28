@@ -7,8 +7,9 @@ import type { AskContextWidget, AskTarget, EarlierAsk } from "./domain";
  * context of one project without a model. Pure. Each candidate is one short sentence a person
  * could type. The sources: what the project's dashboards already show (the topics read from their
  * stored RQL with the compiler's parser), what the dashboard of a new widget lacks next to what it
- * has, the indexed properties no widget reads yet, the tables with data, and the earlier asks: a
- * kept ask raises the candidates of its topic, a discarded one lowers them. The order is fixed: by
+ * has, the indexed properties no widget reads yet, the tables with data, the dashboard templates
+ * whose data the project has, and the earlier asks: a kept ask (a dashboard made from a template is
+ * one) raises the candidates of its topic, a discarded one lowers them. The order is fixed: by
  * score, then by the order of `TOPICS`. The decision model picks among them (`suggest-pick.ts`).
  */
 
@@ -23,10 +24,11 @@ export type SuggestTopic =
   | "scores"
   | "sessions"
   | "users"
-  | "property";
+  | "property"
+  | "template";
 
 export interface SuggestCandidate {
-  /** Stable for the same context: `<topic>` or `property:<name>`. */
+  /** Stable for the same context: `<topic>`, `property:<name>` or `template:<id>`. */
   id: string;
   topic: SuggestTopic;
   text: string;
@@ -44,6 +46,16 @@ export interface SuggestInput {
   /** The tables that hold rows of the project; null when not known (every table counts). */
   tablesWithData: readonly RqlTableName[] | null;
   earlierAsks: readonly EarlierAsk[];
+  /** The dashboard templates (`views/dashboards/templates`), and whether the project has their data. */
+  templates: readonly SuggestTemplate[];
+}
+
+/** A dashboard template as a candidate of a new dashboard: its sentence for Ask. */
+export interface SuggestTemplate {
+  id: string;
+  name: string;
+  prompt: string;
+  has: boolean;
 }
 
 /** The most candidates the decision model chooses from. */
@@ -191,6 +203,21 @@ export function buildCandidates(input: SuggestInput): SuggestCandidate[] {
         score: BASE + NEW_TO_PROJECT + askScore(words, input.earlierAsks),
       });
     }
+  if (input.target === "dashboard") {
+    const names = new Set(input.dashboards.map(({ name }) => name));
+    const texts = new Set(candidates.map(({ text }) => text));
+    for (const template of input.templates) {
+      // A template whose data the project lacks, or whose dashboard it has, is no suggestion.
+      if (!template.has || names.has(template.name) || texts.has(template.prompt)) continue;
+      const words = new RegExp(escapeRegExp(template.name), "i");
+      candidates.push({
+        id: `template:${template.id}`,
+        topic: "template",
+        text: template.prompt,
+        score: BASE + askScore(words, input.earlierAsks),
+      });
+    }
+  }
   return candidates
     .map((candidate, order) => ({ candidate, order }))
     .sort((a, b) => b.candidate.score - a.candidate.score || a.order - b.order)

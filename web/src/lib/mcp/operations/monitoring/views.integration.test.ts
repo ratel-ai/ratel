@@ -92,7 +92,12 @@ const READS = (): readonly [string, object, RegExp][] => [
   ["get_scorer", { scorerId: ids.scorerId }, /^Fast enough \(check, on\): 100% passed/],
   ["list_alerts", {}, /^1 alert: Errors \(No data\): Error rate is above 5% over 15 minutes\.$/],
   ["get_alert", { alertId: ids.alertId }, /^Errors \(No data\): .* No state change yet\.$/],
-  ["list_dashboards", {}, /^1 dashboard: Board \(2 widgets\)\.$/],
+  [
+    "list_dashboards",
+    {},
+    // The first read of the list also gives the project its three default dashboards.
+    /^4 dashboards: Board \(2 widgets\); Tools \(7 widgets\); Cost \(8 widgets\); Reliability \(7 widgets\)\.$/,
+  ],
   [
     "get_dashboard",
     { dashboardId: ids.dashboardId, since: "2026-11-24T00:00:00Z", until: "2026-11-25T00:00:00Z" },

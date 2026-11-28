@@ -6735,7 +6735,7 @@
   {
     "name": "import_dashboard",
     "title": "Import a dashboard",
-    "description": "Make a dashboard, with all of its widgets, from one document: the JSON that get_dashboard returns, or one you write. A scorer is given by its name. A refusal names the widget that is wrong. describe_monitoring_schema has the document's schema.",
+    "description": "Make a dashboard, with all of its widgets, from one document (the JSON that get_dashboard returns, or one you write) or from a template of list_dashboard_templates. A scorer is given by its name. A refusal names the widget that is wrong. describe_monitoring_schema has the document's schema.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -6747,17 +6747,24 @@
           "maxLength": 36
         },
         "document": {
+          "description": "A dashboard document. Example: {\"type\":\"ratel.dashboard\",\"version\":1,\"name\":\"Board\",\"widgets\":[{\"chart\":\"number\",\"query\":{\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"trace_count\",\"aggregation\":\"count\"}]},\"layout\":{\"x\":0,\"y\":0,\"w\":6,\"h\":6}}]}. Pass document or template.",
           "type": "object",
           "propertyNames": {
             "type": "string"
           },
-          "additionalProperties": {},
-          "description": "A dashboard document. Example: {\"type\":\"ratel.dashboard\",\"version\":1,\"name\":\"Board\",\"widgets\":[{\"chart\":\"number\",\"query\":{\"version\":1,\"kind\":\"metric\",\"measures\":[{\"measure\":\"trace_count\",\"aggregation\":\"count\"}]},\"layout\":{\"x\":0,\"y\":0,\"w\":6,\"h\":6}}]}."
+          "additionalProperties": {}
+        },
+        "template": {
+          "description": "A template id from list_dashboard_templates, instead of a document.",
+          "type": "string",
+          "maxLength": 80
+        },
+        "property": {
+          "description": "For the template by-customer: the name of an indexed trace property.",
+          "type": "string",
+          "maxLength": 200
         }
-      },
-      "required": [
-        "document"
-      ]
+      }
     },
     "annotations": {
       "title": "Import a dashboard",

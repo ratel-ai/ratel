@@ -3,6 +3,7 @@ import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavaila
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { askConfigured } from "@/lib/views/ask/model";
 import { listDashboards } from "@/lib/views/dashboards/store";
+import { ensureDefaultDashboards } from "@/lib/views/dashboards/templates/store";
 import { dashboardsScope } from "./context";
 
 /** The project's dashboards: what `page.tsx` shows with `customMonitoring` on. */
@@ -14,10 +15,11 @@ export async function DashboardsList({ projectId }: { projectId: string }) {
         Dashboards become available once setup finishes.
       </DatabaseUnavailable>
     );
-  const [dashboards, restricted] = await Promise.all([
-    listDashboards(scope.project.id),
-    isRestrictedBySupportSession(),
-  ]);
+  const restricted = await isRestrictedBySupportSession();
+  // A project gets Tools, Cost and Reliability one time, where its list is read. A support session
+  // may look but not change, so it makes none.
+  if (!restricted) await ensureDefaultDashboards(scope.project.id);
+  const dashboards = await listDashboards(scope.project.id);
   return (
     <DashboardsListView
       projectId={scope.project.id}

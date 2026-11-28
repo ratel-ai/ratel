@@ -57,6 +57,7 @@ function deps(): DashboardActionDeps {
     features: async () => ({ customMonitoring: true }),
     scorers: async () => [],
     isRestricted: async () => false,
+    templates: { indexedProperties: async () => [], recordPick: async () => {} },
     store: {
       createDashboard: (input) => store.createDashboard(input, db),
       updateDashboard: (input) => store.updateDashboard(input, db),

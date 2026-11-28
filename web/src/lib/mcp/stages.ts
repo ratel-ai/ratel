@@ -83,6 +83,7 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   describe_monitoring_schema: null,
   query_monitoring: "monitor",
   list_dashboards: "monitor",
+  list_dashboard_templates: "monitor",
   get_dashboard: "monitor",
   change_dashboard: "monitor",
   import_dashboard: "monitor",

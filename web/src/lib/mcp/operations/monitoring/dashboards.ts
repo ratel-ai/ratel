@@ -62,6 +62,12 @@ import { exactly } from "@/lib/views/dashboards/range";
 import { formAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
+import { DASHBOARD_TEMPLATES } from "@/lib/views/dashboards/templates";
+import { loadTemplateFacts, templateData } from "@/lib/views/dashboards/templates/data";
+import {
+  ensureDefaultDashboards,
+  templateActionDeps,
+} from "@/lib/views/dashboards/templates/store";
 import {
   type Dashboard,
   type DashboardSummary,
@@ -317,6 +323,8 @@ export function dashboardReadOperations(
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
         const { projectId } = await requireMonitoring(deps, ctx);
+        // A project gets Tools, Cost and Reliability one time, where its list is read.
+        await ensureDefaultDashboards(projectId, deps.db());
         const all = await store.listDashboards(projectId, deps.db());
         const tracker = new TruncationTracker();
         return {
@@ -336,7 +344,7 @@ export function dashboardReadOperations(
           truncated: tracker.value,
           hint:
             all.length === 0
-              ? "No dashboard yet. import_dashboard makes one; change_dashboard (create_starter) makes the traces overview."
+              ? "No dashboard yet. import_dashboard makes one from a document or a template (list_dashboard_templates)."
               : "get_dashboard shows one dashboard's widgets and numbers.",
         };
       },
@@ -452,6 +460,56 @@ export function dashboardReadOperations(
   ];
 }
 
+/**
+ * The dashboard templates (decision `dashboard-templates`): listed only with `customMonitoring` on,
+ * as the RQL tools. import_dashboard makes a dashboard from one.
+ */
+export function dashboardTemplateOperations(
+  deps: MonitoringDeps = defaultMonitoringDeps,
+): McpOperation[] {
+  return [
+    defineOperation({
+      id: "list_dashboard_templates",
+      domain: "observability",
+      title: "List dashboard templates",
+      description:
+        "The dashboard templates: id, name, what each one shows, the data it needs, and whether this project has that data (with what is missing). import_dashboard with template makes a normal dashboard from one.",
+      keywords: ["dashboard templates", "template gallery", "default dashboards"],
+      scope: "project",
+      mutates: false,
+      params: z.object({ ...projectScoped }),
+      async execute(ctx) {
+        const { projectId } = await requireMonitoring(deps, ctx);
+        const facts = await loadTemplateFacts(projectId, deps.db());
+        const templates = DASHBOARD_TEMPLATES.map((template) => {
+          const { has, missing } = templateData(template, facts);
+          return {
+            id: template.id,
+            name: template.name,
+            description: template.description,
+            needs: template.needs,
+            ...(template.property ? { takes: "property" } : {}),
+            hasData: has,
+            missing,
+          };
+        });
+        return {
+          data: {
+            summary: countOf(
+              templates.length,
+              "template",
+              templates.map(({ name, hasData }) => `${name}${hasData ? "" : " (no data yet)"}`),
+            ),
+            templates,
+            indexedProperties: facts.properties,
+          },
+          hint: 'import_dashboard with {"template":"<id>"} makes one. by-customer also takes "property": the name of an indexed trace property (indexedProperties).',
+        };
+      },
+    }),
+  ];
+}
+
 export function dashboardWriteOperations(
   deps: MonitoringDeps = defaultMonitoringDeps,
 ): McpOperation[] {
@@ -513,7 +571,7 @@ export function dashboardWriteOperations(
       domain: "writes",
       title: "Import a dashboard",
       description:
-        "Make a dashboard, with all of its widgets, from one document: the JSON that get_dashboard returns, or one you write. A scorer is given by its name. A refusal names the widget that is wrong. describe_monitoring_schema has the document's schema.",
+        "Make a dashboard, with all of its widgets, from one document (the JSON that get_dashboard returns, or one you write) or from a template of list_dashboard_templates. A scorer is given by its name. A refusal names the widget that is wrong. describe_monitoring_schema has the document's schema.",
       keywords: ["import dashboard", "dashboard from json", "build a dashboard"],
       scope: "project",
       mutates: true,
@@ -521,14 +579,29 @@ export function dashboardWriteOperations(
         ...projectScoped,
         document: z
           .record(z.string(), z.unknown())
-          .describe(`A dashboard document. ${EXAMPLE_DOCUMENT}`),
+          .optional()
+          .describe(`A dashboard document. ${EXAMPLE_DOCUMENT} Pass document or template.`),
+        template: z
+          .string()
+          .max(80)
+          .optional()
+          .describe("A template id from list_dashboard_templates, instead of a document."),
+        property: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("For the template by-customer: the name of an indexed trace property."),
       }),
       async execute(ctx, params) {
-        const { dashboardId, missingScorers } = await run(deps, ctx, async () => ({
-          action: "import",
-          document: params.document,
-        }));
-        const result = await saved(deps, ctx, "import", dashboardId);
+        if ((params.document === undefined) === (params.template === undefined))
+          throw invalidParams("Pass a document or a template, not both.");
+        const action = params.template === undefined ? "import" : "create-template";
+        const { dashboardId, missingScorers } = await run(deps, ctx, async () =>
+          params.template === undefined
+            ? { action, document: params.document }
+            : { action, template: params.template, property: params.property },
+        );
+        const result = await saved(deps, ctx, action, dashboardId);
         return {
           ...result,
           data: { ...result.data, missingScorers: missingScorers ?? [] },
@@ -762,6 +835,7 @@ async function run(
       }),
       features: async () => FEATURES,
       scorers: (projectId) => scorerNames(projectId, db),
+      templates: templateActionDeps(db),
       store: {
         createDashboard: (input) => store.createDashboard(input, db),
         updateDashboard: (input) => store.updateDashboard(input, db),

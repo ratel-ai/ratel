@@ -22,7 +22,6 @@ import { barChange, filtersProblem } from "@/lib/views/dashboards/filters";
 import { gridPositionSchema, inReadingOrder } from "@/lib/views/dashboards/layout";
 import { formQuery } from "@/lib/views/dashboards/metric-rql";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
-import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import {
   changeWidgets,
   countDashboards,
@@ -34,6 +33,8 @@ import {
   updateDashboard,
 } from "@/lib/views/dashboards/store";
 import { isBroken, isWidget } from "@/lib/views/dashboards/stored-widget";
+import { templateActionDeps } from "@/lib/views/dashboards/templates/store";
+import { TRACES_OVERVIEW_WIDGETS } from "@/lib/views/dashboards/templates/traces-overview";
 import {
   type DashboardFilters,
   MAX_WIDGETS,
@@ -68,11 +69,11 @@ const SAVED = formWidget(formOf(WIDGET.query), "line");
 const query = (change: object) => ({ query: { ...WIDGET.query, ...change } });
 
 let client: Awaited<ReturnType<typeof createMigratedPGlite>>;
-let db: DashboardsDb;
+let db: DashboardsDb & MetricsDb;
 
 before(async () => {
   client = await createMigratedPGlite();
-  db = drizzle(client, { schema }) as unknown as DashboardsDb;
+  db = drizzle(client, { schema }) as unknown as DashboardsDb & MetricsDb;
   await client.exec(`
     insert into organizations (id, name, slug) values ('${ORG}', 'Acme', 'acme');
     insert into projects (id, organization_id, name, slug) values
@@ -317,7 +318,7 @@ test("the starter set is four valid widgets", async () => {
   const stored = await widgets(result.dashboardId);
   assert.equal(stored.length, 4);
   assert.equal(new Set(stored.map((widget) => widget.id)).size, 4);
-  for (const widget of STARTER_WIDGETS) assert.ok(parseWidget(widget).ok);
+  for (const widget of TRACES_OVERVIEW_WIDGETS) assert.ok(parseWidget(widget).ok);
 });
 
 test("the filters and the range a dashboard opens with are saved with who saved them", async () => {
@@ -810,6 +811,7 @@ function deps(overrides: Partial<DashboardActionDeps> = {}): DashboardActionDeps
     features: async () => ({ customMonitoring: false }),
     scorers: async () => [],
     isRestricted: async () => false,
+    templates: templateActionDeps(db),
     store: {
       createDashboard: (input) => createDashboard(input, db),
       updateDashboard: (input) => updateDashboard(input, db),

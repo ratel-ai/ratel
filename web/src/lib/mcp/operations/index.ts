@@ -25,6 +25,7 @@ import { alertReadOperations, alertWriteOperations } from "@/lib/mcp/operations/
 import { askOperations } from "@/lib/mcp/operations/monitoring/ask";
 import {
   dashboardReadOperations,
+  dashboardTemplateOperations,
   dashboardWriteOperations,
 } from "@/lib/mcp/operations/monitoring/dashboards";
 import {
@@ -110,6 +111,7 @@ export function assembleOperations(
     ...dashboardReadOperations(),
     ...(options.customMonitoring ? rqlOperations() : []),
     ...(options.customMonitoring ? askOperations() : []),
+    ...(options.customMonitoring ? dashboardTemplateOperations() : []),
     ...locationReadOperations(),
     ...propertyReadOperations(),
     ...writeOperations(),
