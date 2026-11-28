@@ -13,13 +13,7 @@ import {
   type MetricQuery,
 } from "@/lib/contracts/query";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
-import {
-  EDIT_AS_SQL_NOTE,
-  type MetricRql,
-  metricAsRql,
-  sqlRangeProblem,
-} from "@/lib/views/dashboards/edit-as-sql";
-import type { DashboardRange } from "@/lib/views/dashboards/links";
+import { EDIT_AS_SQL_NOTE, metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
 import {
   MAX_WIDGET_TITLE,
   METRIC_CHARTS,
@@ -65,7 +59,6 @@ export function WidgetFields({
   facets,
   result,
   refused,
-  range,
 }: {
   widget: WidgetInput;
   onChange: (change: (current: WidgetInput) => WidgetInput) => void;
@@ -74,8 +67,6 @@ export function WidgetFields({
   result: WidgetResult | null;
   /** A change that was not made, said at its field. */
   refused?: { field: RefusedField; message: string } | null;
-  /** The range the widget is read on: `Edit as SQL` needs one RQL can read. */
-  range: DashboardRange;
 }) {
   const { query } = widget;
   const scorers = useScorers();
@@ -118,7 +109,6 @@ export function WidgetFields({
       {query.kind === "metric" ? (
         <EditAsSql
           widget={{ ...widget, query }}
-          range={range}
           bucket={result?.kind === "metric" ? result.bucket : (query.bucket ?? "hour")}
           onEdit={(text) =>
             onChange((current) => ({ ...current, query: sqlWidgetQuery(text), chart: "sql" }))
@@ -262,34 +252,24 @@ function MetricForm({
 
 /**
  * `Edit as SQL`: the widget becomes a widget of kind sql with the RQL text of its numbers. It does
- * not go back to the form. A metric that RQL cannot compute yet says why.
+ * not go back to the form.
  */
 function EditAsSql({
   widget,
   bucket,
-  range,
   onEdit,
 }: {
   widget: MetricWidget;
   bucket: Bucket;
-  range: DashboardRange;
   onEdit: (text: string) => void;
 }) {
-  const tooLong = sqlRangeProblem(range);
-  const converted = metricAsRql(widget, bucket);
-  const rql: MetricRql = tooLong ? { ok: false, reason: tooLong } : converted;
   return (
     <div className="flex items-center gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        disabled={!rql.ok}
-        onClick={() => rql.ok && onEdit(rql.text)}
-      >
+      <Button variant="secondary" size="sm" onClick={() => onEdit(metricAsRql(widget, bucket))}>
         <SquareCode className="size-3.5" aria-hidden />
         Edit as SQL
       </Button>
-      <p className="text-xs text-fg-subtle">{rql.ok ? EDIT_AS_SQL_NOTE : rql.reason}</p>
+      <p className="text-xs text-fg-subtle">{EDIT_AS_SQL_NOTE}</p>
     </div>
   );
 }

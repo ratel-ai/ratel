@@ -23,7 +23,6 @@ import { RQL_LIMITS } from "@/lib/synthesis/rql/compile";
 const CONCURRENCY = 4;
 /** Widgets of kind sql read at once: no more than the RQL gate gives one project. */
 const SQL_CONCURRENCY = RQL_LIMITS.parallelQueriesPerProject;
-const DAY_MS = 86_400_000;
 
 type Load = (
   projectId: string,
@@ -108,15 +107,9 @@ async function loadSqlWidget(
   db: BoundReadDb | undefined,
 ): Promise<WidgetResult | null> {
   try {
-    // A range longer than RQL reads runs on its last days, and the result says so.
-    const longest = RQL_LIMITS.maxWindowDays * DAY_MS;
-    const clamped = scope.until.getTime() - scope.since.getTime() > longest;
-    const window = clamped ? { ...scope, since: new Date(scope.until.getTime() - longest) } : scope;
     // The runner of kind sql reads through the RQL pool: `db` is only the contract's argument.
-    const result = await runQuery(projectId, query, window, db);
-    return clamped && result.kind === "sql"
-      ? { ...result, clampedToDays: RQL_LIMITS.maxWindowDays }
-      : result;
+    // A console run reads the whole range of the page, as a metric widget does.
+    return await runQuery(projectId, query, scope, db);
   } catch (error) {
     if (error instanceof QueryError && error.detail)
       return { kind: "refused", message: error.message, ...error.detail };

@@ -48,6 +48,28 @@ export function pageFilterConditions(
   return parts;
 }
 
+/** The list columns of `rql.traces` that a page filter names, by the key of the filter. */
+const LIST_FILTERS = {
+  models: "models",
+  tools: "tools",
+  agents: "agents",
+  mcp_servers: "mcpServers",
+} as const satisfies Record<string, keyof RqlPageFilter>;
+
+/**
+ * The values each clause of the filter keeps of one list column: one list per clause that names
+ * it. A value of `each(list)` must be in each of them, as the metric form groups a filtered list.
+ */
+export function pageFilterListValues(filter: RqlPageFilter, column: string): string[][] {
+  if (!Object.hasOwn(LIST_FILTERS, column)) return [];
+  const key = LIST_FILTERS[column as keyof typeof LIST_FILTERS];
+  const own = cleaned(filter[key] as readonly string[] | undefined);
+  return [
+    ...(own.length > 0 ? [own] : []),
+    ...(filter.and ?? []).flatMap((clause) => pageFilterListValues(clause, column)),
+  ];
+}
+
 /** Trimmed, without blanks and repeats: as the console's trace filter reads its values. */
 function cleaned(values: readonly string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];

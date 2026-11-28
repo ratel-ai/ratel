@@ -30,15 +30,17 @@ export interface RqlSchemaDescription {
 const RULES = [
   "RQL (Ratel Query Language) is a read-only query language over the trace data of one project.",
   "Send one SELECT from one table: select <columns> from <table> [where] [group by] [having] [order by] [limit].",
-  `Every query reads a window of time: by default the last ${RQL_LIMITS.defaultWindowHours} hours, at most ${RQL_LIMITS.maxWindowDays} days. The caller of the tool gives the window, not the query. A time filter in WHERE narrows it.`,
-  "For events, traces and scores the window applies to each row. For sessions and users the window applies to their traces, before the totals.",
+  `Every query reads a window of time: by default the last ${RQL_LIMITS.defaultWindowHours} hours, at most ${RQL_LIMITS.maxWindowDays} days for run_rql (a dashboard, Explore or an alert rule reads the range of its page, at most ${RQL_LIMITS.consoleMaxWindowDays} days). The caller of the tool gives the window, not the query. A time filter in WHERE narrows it.`,
+  "For events, traces, scores and prompts the window applies to each row. For sessions and users the window applies to their traces, before the totals. An alert rule reads its window by known time: traces.known_at and scores.scored_at.",
+  "A page filter (a dashboard, Explore) keeps the rows whose trace matches. prompts has no trace, so the page filter keeps all of its rows. Under a page filter of a list, each(list) gives only the values it keeps.",
   `A query gives at most ${RQL_LIMITS.maxLimit} rows. With no LIMIT it gives ${RQL_LIMITS.defaultLimit}.`,
   `A query has at most ${RQL_LIMITS.maxTextChars} characters, ${RQL_LIMITS.maxSelectItems} output columns (each column of * counts), ${RQL_LIMITS.maxListItems} items in one list and ${RQL_LIMITS.maxExpressionDepth} levels of nesting.`,
   `A cell longer than ${RQL_LIMITS.maxCellChars} characters is cut, and the rows stop at ${RQL_LIMITS.maxResultBytes / 1_000_000} MB of JSON. Either cut marks the result truncated: select fewer or shorter columns.`,
   `A project runs at most ${RQL_LIMITS.parallelQueriesPerProject} queries at the same time. One more gives rql_busy: run it again when one ends.`,
   "There are no joins, subqueries, UNION, WITH, CASE, window functions, casts or Postgres operators. Each table copies the trace columns that a question needs.",
   "Write text in single quotes. Compare a timestamp with an ISO 8601 text, for example '2026-11-01T00:00:00Z'.",
-  "Read a span attribute with attributes['key']: the value is text. Test a list with contains(list, 'value').",
+  "Read a span attribute with attributes['key']: the value is text. Test a list with contains(list, 'value'). Group by each value of a list with each(list).",
+  "A share is rate(condition). coalesce(sum(x), 0) gives 0 for a sum of no rows.",
   "GROUP BY and ORDER BY can name a select alias or a position. HAVING can name an alias. WHERE cannot.",
 ];
 
@@ -61,7 +63,15 @@ const EXAMPLES: { question: string; rql: string }[] = [
   },
   {
     question: "What is the pass rate of each scorer?",
-    rql: "select scorer, avg(value) as pass_rate, count(*) as scored from scores where scorer_kind = 'check' group by scorer order by pass_rate",
+    rql: "select scorer, rate(passed) as pass_rate, count(*) as scored from scores where passed is not null group by scorer order by pass_rate",
+  },
+  {
+    question: "What is the error rate of each model?",
+    rql: "select each(models) as model, rate(coalesce(root_error, has_error)) as error_rate, count(*) as traces from traces group by model order by error_rate desc",
+  },
+  {
+    question: "How many context tokens did the captured prompts use each day?",
+    rql: "select time_bucket('1 day', occurred_at) as day, coalesce(sum(context_tokens), 0) as tokens from prompts group by day order by day",
   },
   {
     question: "Which sessions were the longest?",

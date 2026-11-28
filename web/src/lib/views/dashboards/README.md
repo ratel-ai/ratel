@@ -17,9 +17,9 @@ widgets on a grid. A widget is one query object
 | `stored-widget.ts` | `readWidgets`, `writeWidgets`: each stored item passes the widget schema again; one that fails is a broken entry with its title and the reason, and goes back as it was |
 | `starter.ts` | the four widgets of "Start from the traces overview" |
 | `store.ts` | the reads and writes; a widget change locks its row |
-| `data.ts` | `loadWidget`, `loadWidgets`: the numbers, a few reads at a time, each bounded; a failed one, or one whose switch is off, is null; kind `sql` runs on the RQL path, in a lane as wide as the RQL gate of a project (2), and gives a refusal as `WidgetRefusal`. On a range longer than RQL reads it runs on the last 30 days and sets `clampedToDays` |
-| `edit-as-sql.ts` | `metricAsRql`: the RQL text that gives a metric widget's numbers (`Edit as SQL`), or why it has none yet (a rate, a context metric, a group-by on a list); buckets newest first, so a cut drops the oldest; numbers in plain digits. `sqlRangeProblem`: the reason `Edit as SQL` is off over 30 days (the console and MCP `query_monitoring` as sql). `EDIT_AS_SQL_NOTE`: what differs from the form; safe for the browser |
-| `sql-chart.ts` | `sqlAsMetric`: the rows of an RQL query as a chart's series, or null for a table. `sqlResultNotes`: the truncated and the clamped notes, shown under a chart as under a table; safe for the browser |
+| `data.ts` | `loadWidget`, `loadWidgets`: the numbers, a few reads at a time, each bounded; a failed one, or one whose switch is off, is null; kind `sql` runs on the RQL path, in a lane as wide as the RQL gate of a project (2), and gives a refusal as `WidgetRefusal`. It reads the whole range of the page, up to 372 days, as a metric widget does |
+| `edit-as-sql.ts` | `metricAsRql`: the RQL text that gives a metric widget's numbers, for every measure, aggregation, group-by, bucket and filter of the form (`rate`, `coalesce(sum, 0)`, `each` for a list, `prompts` for the context measures, the trace columns of `scores` for a filter); buckets newest first, so a cut drops the oldest; numbers in plain digits. `EDIT_AS_SQL_NOTE`: what differs from the form; safe for the browser |
+| `sql-chart.ts` | `sqlAsMetric`: the rows of an RQL query as a chart's series (the 10 of the highest sum, as the form keeps its groups), or null for a table; with a `SqlChartFrame` (the window, the bucket, 0 or nothing for an empty bucket) it draws every bucket of the window and a total only for a count or a sum. `sqlResultNotes`: the truncated note, shown under a chart as under a table; safe for the browser |
 | `chart-model.ts` | what a chart draws: six color slots by group name, "Other", the scale, the axis labels and the number formats |
 | `flow-model.ts` | what the flow widget draws: a column per step, one color per name |
 | `step-flow-model.ts` | what the step flow widget draws: a lane of cards per step, as many as fit, with the Health map's ribbons (`views/health/flow-journey-layout`); unfolding a bucket or Later is view state |
@@ -33,7 +33,8 @@ query kind has the one chart of its name. Kind `sql` (RQL text) has chart
 `sql`: a table, or a line when its rows have one time column (`sql-chart.ts`). The page filter
 (the dashboard's, or Explore's) applies to it when it runs: the compiler keeps the rows whose trace
 matches, on every table, so `Edit as SQL` keeps the form's numbers under a filter
-(`edit-as-sql.integration.test.ts`). A refusal of RQL is the widget's result
+(`metric-rql-parity.integration.test.ts`: every cell of the matrix, also under page filters, and the
+alert value by known time). A refusal of RQL is the widget's result
 (`WidgetRefusal`: the message and the fix). `query_monitoring` takes it alone, not as a panel. A move of a flow opens the Traces page for the traces of
 its source: the trace filter knows no order, and no skill. A node of a step flow opens the traces that
 had it at any step, for the same reason; a skill, an intent and a fold open none. A funnel step opens its traces only when

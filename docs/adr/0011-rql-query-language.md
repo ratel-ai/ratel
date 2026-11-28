@@ -21,7 +21,7 @@ A text filter on SQL (deny lists, regexes) fails open: one form that it does not
 
 ## Decision
 
-**A language of our own, RQL version 1.** One `SELECT` over one of five virtual tables, with
+**A language of our own, RQL version 1.** One `SELECT` over one of six virtual tables, with
 `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT` and `SELECT DISTINCT`:
 
 | Table | One row per | Window on |
@@ -31,6 +31,12 @@ A text filter on SQL (deny lists, regexes) fails open: one form that it does not
 | `scores` | scorer and trace (`trace_scores`, the scorer name, copied trace columns) | `trace_started_at` |
 | `sessions` | session: totals of its traces | its traces' `started_at` |
 | `users` | end user: totals of their traces | its traces' `started_at` |
+| `prompts` | captured prompt (`event_metrics`): the input tokens of each source of its context | `occurred_at` |
+
+`prompts` is the sixth table (decision `rql-sixth-table-allowed`): the context measures of the
+metric form read `event_metrics`, whose rows are model calls an SDK or a trace sent with their
+messages, not spans, so no other table has their grain. Its rows have no trace, so a page filter
+keeps all of them, as the form applies no trace filter to the context measures.
 
 `events.type` comes from `span_class`: `llm_call` gives `llm_call`, `tool` gives `tool_call` and
 `ratel_search` gives `search`. A span of another class with the gen_ai agent operation
@@ -47,10 +53,23 @@ second statement and each name that is not in the catalog. Each refusal has a co
 and a fix; an unknown name gets the nearest one by edit distance or a hint.
 
 **Neutral functions, no Postgres syntax.** `count` (with `*` and `distinct`), `count_distinct`,
-`sum`, `avg`, `min`, `max`, `p50`/`p90`/`p95`/`p99`, `percentile(x, f)`,
-`time_bucket('<n> minute|hour|day|week', ts)`, `contains(list, value)` for `models`, `tools`,
-`agents` and `mcp_servers`, and `attributes['key']`. The rewrite maps them to Postgres
-(`percentile_cont ... within group`, `date_bin`, `@> array[...]`, `->>`). The user cannot write
+`sum`, `avg`, `min`, `max`, `p50`/`p90`/`p95`/`p99`, `percentile(x, f)`, `rate(condition)`,
+`coalesce(x, y, ...)`, `time_bucket('<n> minute|hour|day|week', ts)`, `contains(list, value)` and
+`each(list)` for `models`, `tools`, `agents` and `mcp_servers`, and `attributes['key']`. The rewrite
+maps them to Postgres (`percentile_cont ... within group`, `avg(case when ...)`, `date_bin`,
+`@> array[...]`, a lateral join of `unnest`, `->>`).
+
+**Every metric of the form is RQL (decision `metric-is-rql`).** `rate(condition)` is the share of
+rows where the condition is true, a null counting as not true, as the form's rates count it (no
+`CASE` needed). `coalesce(sum(x), 0)` gives 0 for a sum of no rows, as a metric and an alert read
+it. `each(list)` reads a row once per distinct value of the list, as the form groups by a model,
+a tool or an agent; every `each` of one list in a query is one value (one join), and under a page
+filter of that list it gives only the values the filter keeps, as the form's group does. A
+widget's text is `metricAsRql` of its form selection, and a parity test runs both on one fixture
+for the whole matrix (`views/dashboards/metric-rql-parity.integration.test.ts`). The code that
+draws the rows keeps the 10 groups of the highest sum and fills the empty buckets
+(`views/dashboards/sql-chart.ts`): those belong to the chart, not to the language, and it invents
+no total for an average or a percentile. The user cannot write
 `::`, `->>`, `date_trunc`, `jsonb_*`, `@>`, `$1` or `now()`: the error names the RQL form. The
 functions belong to the language, not to Postgres, so a later engine can run the same queries.
 
@@ -59,8 +78,12 @@ functions belong to the language, not to Postgres, so a later engine can run the
 the checked tree. Each name in the SQL is a catalog name, each output column is `c1`, `c2`... (the
 result names come back in `columns`), and each literal is a bound parameter (`$1`, `$2`...). No
 text of the query reaches the database, comments included. The window is always `$1` and `$2`:
-the caller gives it (by default the last 24 hours, at most 30 days), never the query text, and a
-time filter in `WHERE` can only narrow it. The `LIMIT` is lowered to a cap (1000; 100 when the
+the caller gives it (by default the last 24 hours, at most 30 days for an agent's `run_rql`, at
+most 372 days for a console run of a dashboard, Explore or an alert: decision `rql-console-window`),
+never the query text, and a time filter in `WHERE` can only narrow it. A window `by: "known"` (an
+alert rule) applies to when a row became known to Ratel: `traces.known_at` (the summary's last
+write) and `scores.scored_at`; a table without such a column keeps its time column. So an alert
+counts a trace that arrives late in the window it arrived in, as the metric form does. The `LIMIT` is lowered to a cap (1000; 100 when the
 query has none). The bounds are in `domain/limits.ts`.
 
 **The cost of one query is bounded.** Before the parse, which takes time that grows faster than
@@ -73,7 +96,7 @@ project cannot hold every connection. Kind `sql` takes the place of the project 
 compile. A run that waits past the connect timeout of the pool is `rql_busy`.
 
 **Wall 2: the database.** The compiled SQL reads only the views `rql.events`, `rql.traces`,
-`rql.scores`, `rql.sessions` and `rql.users`. Each view filters on a per-transaction project
+`rql.scores`, `rql.sessions`, `rql.users` and `rql.prompts`. Each view filters on a per-transaction project
 setting, and they are `security_barrier` views: the planner applies that filter before any
 condition of the query, so a condition that fails cannot test another project's rows. The runner
 executes the SQL as the role `ratel_rql`, which can read only those views,
@@ -97,7 +120,7 @@ the console.
 **The page filter applies like the window, and through the trace.** A query that runs under a
 page (a dashboard widget, an Explore panel) gets the page's trace filter from the caller, never
 from the text, as it gets the window. The compiler adds it next to the window as bound
-parameters: on `traces` as conditions on its own columns, and on the other four tables as
+parameters: on `traces` as conditions on its own columns, and on `events`, `scores`, `sessions` and `users` as
 `trace_id in (select trace_id from rql.traces where ...)`. Each part of the filter then applies on
 every table, with the meaning the metric form gives it (the rows of the traces that match), so
 `Edit as SQL` keeps a widget's numbers under a filter. On `sessions` and `users` it narrows the

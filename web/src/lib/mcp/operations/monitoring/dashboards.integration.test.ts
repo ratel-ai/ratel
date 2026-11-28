@@ -527,7 +527,7 @@ test("a sql widget: change_dashboard, get_dashboard and import_dashboard carry i
   assert.deepEqual(catalog.kinds.find(({ kind }) => kind === "sql")?.charts, ["sql"]);
 });
 
-test("a sql widget on a 3 month range: get_dashboard gives the rows of the last 30 days, with the note", async () => {
+test("a sql widget on a 3 month range: get_dashboard reads the whole range, and as sql gives the text", async () => {
   const sql = {
     version: 1,
     kind: "sql",
@@ -543,15 +543,13 @@ test("a sql widget on a 3 month range: get_dashboard gives the rows of the last 
     dashboardId,
     widget: { query: sql, chart: "sql" },
   });
-  const read = await m.data<{
-    widgets: { summary: string; result?: { clampedToDays?: number } }[];
-  }>("get_dashboard", {
-    dashboardId,
-    since: new Date(NOW.getTime() - 90 * 86_400_000).toISOString(),
-  });
-  assert.match(read.widgets[0].summary, /last 30 days of the range/);
-  // As the console: no RQL text of a metric over a range longer than RQL reads.
-  const long = await m.call("query_monitoring", {
+  const read = await m.data<{ widgets: { summary: string; result?: { rows: unknown[][] } }[] }>(
+    "get_dashboard",
+    { dashboardId, since: new Date(NOW.getTime() - 90 * 86_400_000).toISOString() },
+  );
+  assert.doesNotMatch(read.widgets[0].summary, /last 30 days/);
+  // A metric over a long range has its RQL text, as the console makes it.
+  const long = await m.data<{ text: string }>("query_monitoring", {
     query: {
       version: 1,
       kind: "metric",
@@ -561,8 +559,7 @@ test("a sql widget on a 3 month range: get_dashboard gives the rows of the last 
     as: "sql",
     since: new Date(NOW.getTime() - 60 * 86_400_000).toISOString(),
   });
-  assert.ok(!long.ok);
-  assert.match(long.message, /at most 30 days/);
+  assert.match(long.text, /select count\(\*\) as value\nfrom traces/);
 });
 
 test("query_monitoring as sql gives the RQL text of a metric (Edit as SQL)", async () => {
@@ -590,16 +587,25 @@ test("query_monitoring as sql gives the RQL text of a metric (Edit as SQL)", asy
   });
   const rows = await m.data<{ result: { rows: unknown[][] } }>("query_monitoring", { query });
   assert.deepEqual(rows.result.rows, [[form.result.series[0].total]]);
-  const rate = await m.call("query_monitoring", {
+  // A rate has its RQL text too, and gives the form's number.
+  const rateQuery = {
+    version: 1,
+    kind: "metric",
+    measures: [{ measure: "error_rate", aggregation: "rate" }],
+  };
+  const rate = await m.data<{ query: unknown; text: string }>("query_monitoring", {
     ...params,
-    query: {
-      version: 1,
-      kind: "metric",
-      measures: [{ measure: "error_rate", aggregation: "rate" }],
-    },
+    query: rateQuery,
   });
-  assert.ok(!rate.ok);
-  assert.match(rate.message, /cannot compute a rate/);
+  assert.match(rate.text, /rate\(coalesce\(root_error, has_error\)\)/);
+  const rateForm = await m.data<{ result: { series: { total: number }[] } }>("query_monitoring", {
+    query: rateQuery,
+    chart: "number",
+  });
+  const rateRows = await m.data<{ result: { rows: unknown[][] } }>("query_monitoring", {
+    query: rate.query,
+  });
+  assert.deepEqual(rateRows.result.rows, [[rateForm.result.series[0].total]]);
 });
 
 test("query_monitoring runs each kind", async () => {

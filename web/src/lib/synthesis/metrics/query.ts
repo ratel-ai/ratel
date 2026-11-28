@@ -83,11 +83,6 @@ export interface SqlResult {
    * cap of RQL. `rows` holds the first ones.
    */
   truncated: boolean;
-  /**
-   * The range was longer than RQL reads (`RQL_LIMITS.maxWindowDays`): the rows are of its last
-   * this many days only. A stored widget on a long range sets it.
-   */
-  clampedToDays?: number;
 }
 
 export type QueryResult =

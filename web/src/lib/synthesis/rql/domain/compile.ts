@@ -15,6 +15,11 @@ export interface RqlCompileOptions {
   window?: RqlWindow;
   /** The filter of the page the query runs under: rows whose trace matches (`page-filter.ts`). */
   filter?: RqlPageFilter;
+  /**
+   * A run of the console (a dashboard, Explore, an alert rule): the window can be up to
+   * `consoleMaxWindowDays`. Without it, up to `maxWindowDays`, as `run_rql` gives an agent.
+   */
+  console?: boolean;
 }
 
 export type RqlCompileResult =
@@ -58,7 +63,11 @@ export function compileQuery(
       };
     }
     guardText(text);
-    const window = resolveWindow(options.now, options.window);
+    const window = resolveWindow(
+      options.now,
+      options.window,
+      options.console ? RQL_LIMITS.consoleMaxWindowDays : RQL_LIMITS.maxWindowDays,
+    );
     const parsed = parse(text);
     guardDepth(parsed);
     const select = checkQuery(parsed);

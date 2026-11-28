@@ -54,7 +54,7 @@ test("describe_rql_schema gives the language: tables, columns, functions, limits
   assert.deepEqual(data, describeRqlSchema());
   assert.deepEqual(
     (data.tables as { name: string }[]).map(({ name }) => name),
-    ["events", "traces", "scores", "sessions", "users"],
+    ["events", "traces", "scores", "sessions", "users", "prompts"],
   );
 });
 

@@ -20,8 +20,9 @@ import {
  * The text is compiled at every run, so a saved query is checked again at load against the RQL of
  * today. The place of the project in the gate is taken before the compile: a query waits up to
  * `gateWaitMs` for one, and is refused before its text costs a parse when none comes free. An
- * alert rule (`scope.purpose`) takes the alert gate and the alert timeout instead. The window of the scope is the window of the query; a time
- * condition in the text narrows it. The filter of the scope keeps the rows whose trace matches
+ * alert rule (`scope.purpose`) takes the alert gate and the alert timeout instead. The window of
+ * the scope is the window of the query, up to `consoleMaxWindowDays`, and by known time when the
+ * scope says so; a time condition in the text narrows it. The filter of the scope keeps the rows whose trace matches
  * (`domain/page-filter.ts`). Every refusal is a `QueryError` with the code, the message and the fix of RQL.
  */
 
@@ -71,7 +72,11 @@ async function runSqlQuery(
   try {
     const compiled = compileRql(query.text, {
       now: scope.until,
-      window: { from: scope.since, to: scope.until },
+      // The window of the page, by known time for an alert rule, as the metric form reads it.
+      window: { from: scope.since, to: scope.until, ...(scope.by ? { by: scope.by } : {}) },
+      // A console run reads the range of its page: up to `consoleMaxWindowDays`. An agent's
+      // `run_rql` keeps the shorter window of RQL.
+      console: scope.purpose !== "agent",
       // The page's filter keeps the rows whose trace matches, as it does for the other kinds.
       ...(scope.filter ? { filter: scope.filter } : {}),
     });

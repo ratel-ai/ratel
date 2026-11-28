@@ -50,8 +50,6 @@ import { SqlFields } from "../dashboards/SqlFields";
 import { AlertPreviewChart } from "./AlertPreviewChart";
 
 const DEFAULT_QUERY = metricQuery("error_rate", "rate");
-/** What a new RQL alert starts from when its metric has no RQL form: one row, one number. */
-const DEFAULT_SQL = "select count(*) as traces from traces where has_error";
 const MODES = [
   { value: "form", label: "Metric" },
   { value: "sql", label: "SQL" },
@@ -341,6 +339,5 @@ function startQuery(query: AlertQuery | null): AlertQuery {
  */
 function sqlOf(query: AlertQuery): AlertQuery {
   if (query.kind === "sql") return query;
-  const rql = metricAsRql({ title: "", chart: "number", query }, "hour");
-  return sqlWidgetQuery(rql.ok ? rql.text : DEFAULT_SQL);
+  return sqlWidgetQuery(metricAsRql({ title: "", chart: "number", query }, "hour"));
 }

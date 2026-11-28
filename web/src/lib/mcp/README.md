@@ -40,7 +40,7 @@ exact window, and a host with views draws the panels side by side. The filter of
 clauses that must all match: its own properties, then each one of `and`. All clauses with the filters
 of the dashboard or the call are 3,072 bytes of JSON at most. With `as: "sql"` it gives
 the RQL text of a lone metric query instead of its numbers: the web app's `Edit as SQL`
-(`views/dashboards/edit-as-sql.ts`), or the reason when the metric has no RQL form yet.
+(`views/dashboards/edit-as-sql.ts`). Every metric has one.
 `change_dashboard` (`create`, `add_widget`) saves a panel, and `change_alert` (`create`) watches an
 ungrouped metric. `EXPLORE` in `operations/monitoring/parity.ts` is that list, and the parity test
 fails for an action of the page that is not in it.
@@ -51,11 +51,12 @@ RQL (Ratel Query Language, `synthesis/rql`) answers a trace question that no que
 `operations/monitoring/rql.ts` give it to an agent, behind the `customMonitoring` flag:
 
 - `describe_rql_schema` gives `describeRqlSchema()`: the tables (`events`, `traces`, `scores`,
-  `sessions`, `users`), their columns, the functions, the operators, the limits, the rules and
+  `sessions`, `users`, `prompts`), their columns, the functions, the operators, the limits, the rules and
   examples.
 - `run_rql` takes `text`, an optional `rqlVersion` (default: the current one) and `since`/`until`
-  (default: the last 24 hours, clamped to 30 days). It runs kind `sql` of the query object through
-  `runQuery`, the same path as `query_monitoring`, and gives `summary`, `columns`, `rows` and
+  (default: the last 24 hours; a window over 30 days is refused). It runs kind `sql` of the query
+  object through `runQuery` with `purpose: "agent"`, the same path as `query_monitoring` (whose
+  kind `sql` reads up to 372 days, as the console), and gives `summary`, `columns`, `rows` and
   `truncated`. The `table` view of `mcp-apps/` draws it.
 
 `query_monitoring` runs a lone query of kind `sql` too and gives its table; a panel of `queries`

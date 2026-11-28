@@ -37,6 +37,10 @@ export type CheckedNode =
   | { kind: "percentile"; fraction: number | CheckedExpr; arg: CheckedExpr }
   | { kind: "time_bucket"; interval: CheckedExpr; arg: CheckedExpr }
   | { kind: "contains"; list: CheckedExpr; value: CheckedExpr }
+  | { kind: "rate"; arg: CheckedExpr }
+  | { kind: "coalesce"; args: CheckedExpr[] }
+  /** One value of a list column per row: `rewrite.ts` reads the list once per value. */
+  | { kind: "each"; column: string }
   | { kind: "attribute"; target: CheckedExpr; key: CheckedExpr }
   | { kind: "binary"; op: BinaryOp; left: CheckedExpr; right: CheckedExpr }
   | { kind: "unary"; op: UnaryOp; operand: CheckedExpr }
@@ -103,6 +107,13 @@ const POSTGRES_FUNCTIONS: Readonly<Record<string, string>> = {
   percentile_disc: "Use percentile(x, 0.95) or p95(x).",
   now: "The window bounds the time. Filter inside it with a literal like '2026-11-01T00:00:00Z'.",
   any: "Use contains(models, 'value').",
+  unnest: "Use each(models) to read a row once per value of a list.",
+  array_join: "Use each(models) to read a row once per value of a list.",
+  arrayjoin: "Use each(models) to read a row once per value of a list.",
+  count_if: "Use rate(condition) for a share, or count(*) with the condition in WHERE.",
+  countif: "Use rate(condition) for a share, or count(*) with the condition in WHERE.",
+  ifnull: "Use coalesce(x, y).",
+  nvl: "Use coalesce(x, y).",
   array_position: "Use contains(models, 'value').",
   cardinality: "Use contains(models, 'value').",
 };
@@ -687,8 +698,8 @@ function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope):
     }
     return parsed.args;
   };
-  const aggregate = (fnName: AggregateFn, arg: CheckedExpr, distinct: boolean, type: ValueType) => {
-    // An alias in HAVING stands for its expression, so an aggregate can reach here inside another.
+  /** The argument of an aggregate. An alias in HAVING stands for its expression, so an aggregate can reach here inside another. */
+  const plain = (arg: CheckedExpr): CheckedExpr => {
     if (arg.aggregate) {
       fail(
         "aggregate_misuse",
@@ -697,8 +708,17 @@ function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope):
         parsed.at,
       );
     }
-    return { kind: "aggregate", fn: fnName, distinct, arg, type, aggregate: true } as CheckedExpr;
+    return arg;
   };
+  const aggregate = (fnName: AggregateFn, arg: CheckedExpr, distinct: boolean, type: ValueType) =>
+    ({
+      kind: "aggregate",
+      fn: fnName,
+      distinct,
+      arg: plain(arg),
+      type,
+      aggregate: true,
+    }) as CheckedExpr;
 
   switch (name) {
     case "count": {
@@ -772,6 +792,58 @@ function checkCall(parsed: Extract<ParsedExpr, { kind: "call" }>, scope: Scope):
         arg: checked,
         type: "timestamp",
         aggregate: checked.aggregate,
+      };
+    }
+    case "rate": {
+      const [arg] = args(1);
+      const checked = plain(expectType(checkExpr(arg, inner), ["boolean"], name, arg));
+      return { kind: "rate", arg: checked, type: "number", aggregate: true };
+    }
+    case "coalesce": {
+      if (parsed.args.length < 2 || parsed.args.length > RQL_LIMITS.maxListItems) {
+        fail(
+          "wrong_arguments",
+          `coalesce takes 2 to ${RQL_LIMITS.maxListItems} arguments, and the query gives ${parsed.args.length}.`,
+          `Write ${fn.signature}.`,
+          parsed.at,
+        );
+      }
+      const checked = parsed.args.map((arg) => checkExpr(arg, inner));
+      let [first] = checked;
+      const rest = checked.slice(1).map((arg) => {
+        const [l, r] = comparable(first, arg, name, parsed.at);
+        first = l;
+        return r;
+      });
+      const all = [first, ...rest];
+      const type = all.every(({ type }) => type === "integer")
+        ? "integer"
+        : NUMERIC.includes(first.type)
+          ? "number"
+          : first.type;
+      return {
+        kind: "coalesce",
+        args: all,
+        type,
+        aggregate: all.some((arg) => arg.aggregate),
+      };
+    }
+    case "each": {
+      const [list] = args(1);
+      if (list.kind !== "column") {
+        fail(
+          "wrong_arguments",
+          `each reads a list column, and ${describe(list)} is not a column.`,
+          "Write each(models), each(tools), each(agents) or each(mcp_servers).",
+          at(list),
+        );
+      }
+      const column = expectType(checkExpr(list, inner), ["text_list"], name, list);
+      return {
+        kind: "each",
+        column: (column as { name: string }).name,
+        type: "text",
+        aggregate: false,
       };
     }
     case "contains": {
@@ -889,6 +961,12 @@ function ungroupedColumn(expr: CheckedExpr, keys: ReadonlySet<string>): string |
       return ungroupedColumn(expr.arg, keys);
     case "contains":
       return ungroupedColumn(expr.list, keys) ?? ungroupedColumn(expr.value, keys);
+    case "rate":
+      return undefined;
+    case "coalesce":
+      return expr.args.map((arg) => ungroupedColumn(arg, keys)).find(Boolean);
+    case "each":
+      return `each(${expr.column})`;
     case "attribute":
       return ungroupedColumn(expr.target, keys) && "attributes[...]";
     case "binary":

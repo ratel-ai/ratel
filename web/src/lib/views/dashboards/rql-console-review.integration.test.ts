@@ -17,7 +17,7 @@ import { METRIC_TO_SQL_WARNING } from "@/lib/views/alerts/format";
 import { measureSqlValue } from "@/lib/views/alerts/sql-value";
 import * as alerts from "@/lib/views/alerts/store";
 import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
-import { metricAsRql, sqlRangeProblem } from "@/lib/views/dashboards/edit-as-sql";
+import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
 import { sqlAsMetric, sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 
@@ -161,28 +161,21 @@ test("major 2: two readers load a dashboard of 6 sql widgets with no refused wid
   }
 });
 
-test("major 3: Edit as SQL is refused over 30 days, with the reason", () => {
-  const range = (preset: string, from: string, to: string) => ({ preset, from, to });
-  assert.equal(sqlRangeProblem(range("30d", "2026-10-26", "2026-11-24")), null);
-  for (const long of [
-    range("3m", "2026-08-26", "2026-11-24"),
-    range("12m", "2025-11-25", "2026-11-24"),
-    range("custom", "2026-10-01", "2026-11-24"),
-  ]) {
-    const reason = sqlRangeProblem(long);
-    assert.ok(reason, long.preset);
-    assert.match(reason, new RegExp(`at most ${RQL_LIMITS.maxWindowDays} days`));
-  }
+test("major 3: a metric has its text on any range: a console run reads up to 372 days", () => {
+  assert.match(
+    metricAsRql({ title: "", chart: "line", query: metricQuery("trace_count", "count") }, "day"),
+    /from traces/,
+  );
+  assert.equal(RQL_LIMITS.consoleMaxWindowDays, 372);
 });
 
-test("major 3: a stored sql widget on a 3 month range shows the rows of the last 30 days, with a note", async () => {
+test("a stored sql widget on a 3 month range reads the whole range, as a metric widget does", async () => {
   const scope = { since: new Date(NOW.getTime() - 90 * DAY_MS), until: NOW };
   const result = await loadWidget(PROJECT, sqlWidget("select count(*) from traces"), scope, db());
   assert.equal(result?.kind, "sql");
-  const sql = result as SqlResult;
-  assert.equal(sql.clampedToDays, RQL_LIMITS.maxWindowDays);
-  assert.deepEqual(sql.rows, [[RQL_LIMITS.maxWindowDays * 24]]);
-  assert.match(sqlResultNotes(sql).join(" "), /last 30 days/);
+  // The fixture has 60 days of traces: all of them, not the last 30 days.
+  assert.deepEqual((result as SqlResult).rows, [[60 * 24]]);
+  assert.deepEqual(sqlResultNotes(result as SqlResult), []);
 });
 
 test("major 4: a truncated result drawn as a chart still says it is truncated", () => {
@@ -209,8 +202,7 @@ test("major 4: Edit as SQL keeps the newest buckets when the rows pass the cap",
     },
     "hour",
   );
-  assert.ok(rql.ok);
-  assert.match(rql.text, /order by bucket desc/);
+  assert.match(rql, /order by bucket desc/);
 });
 
 test("major 5: the Metric to SQL switch names both differences", () => {
@@ -249,18 +241,17 @@ test("minor: Edit as SQL prints a filter number RQL can read", () => {
       },
       "hour",
     );
-    assert.ok(rql.ok);
-    assert.ok(compileRql(rql.text, { now: NOW }).ok, rql.text);
+    assert.ok(compileRql(rql, { now: NOW }).ok, rql);
   }
 });
 
-test("minor: a context metric gives its own reason, not the rate's", () => {
+test("minor: a context metric gives its text, not a refusal", () => {
   const rql = metricAsRql(
     { title: "", chart: "number", query: metricQuery("context_tokens", "avg") },
     "hour",
   );
-  assert.ok(!rql.ok);
-  assert.doesNotMatch(rql.reason, /rate/);
+  assert.match(rql, /from prompts/);
+  assert.doesNotMatch(rql, /rate\(/);
 });
 
 test("minor: an output name over maxAliasChars is refused", () => {
@@ -300,7 +291,6 @@ test("MCP says the notes of an sql result as the console does", () => {
     columns: [{ name: "traces", type: "integer" }],
     rows: [[1]],
     truncated: true,
-    clampedToDays: 30,
   };
   const summary = tableSummary(result);
   for (const note of sqlResultNotes(result))

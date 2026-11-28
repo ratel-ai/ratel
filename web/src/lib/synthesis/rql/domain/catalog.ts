@@ -1,12 +1,19 @@
 /**
- * The RQL catalog: the five virtual tables, their columns and types, and the neutral functions.
+ * The RQL catalog: the six virtual tables, their columns and types, and the neutral functions.
  * The compiler accepts only the names in this file, and `describeRqlSchema` describes the same
  * names. A change of a name or of a meaning is a new `RQL_VERSION`.
  */
 
 export { RQL_VERSION } from "./version";
 
-export const RQL_TABLE_NAMES = ["events", "traces", "scores", "sessions", "users"] as const;
+export const RQL_TABLE_NAMES = [
+  "events",
+  "traces",
+  "scores",
+  "sessions",
+  "users",
+  "prompts",
+] as const;
 export type RqlTableName = (typeof RQL_TABLE_NAMES)[number];
 
 /** The value types of RQL. `text_list` is a list of text; `attributes` is a map of text keys. */
@@ -42,6 +49,13 @@ export interface RqlTable {
   grain: "rows" | "totals";
   /** The column of the view that the window applies to. */
   timeColumn: string;
+  /**
+   * The column a window `by: "known"` applies to: when a row became known to Ratel. An alert
+   * counts by it, so a row that arrives late is still counted once. `timeColumn` when absent.
+   */
+  knownColumn?: string;
+  /** False when the rows have no trace: the page filter keeps every row. True when absent. */
+  traceRows?: false;
   /** Totals tables only: the column of the view that the traces are grouped by. */
   key?: string;
   hints?: readonly string[];
@@ -239,6 +253,7 @@ export const RQL_TABLES: readonly RqlTable[] = [
     view: "traces",
     grain: "rows",
     timeColumn: "started_at",
+    knownColumn: "known_at",
     hints: ["trace", "otel_trace_summaries", "runs", "turns"],
     columns: [
       { name: "trace_id", type: "text", description: "The trace." },
@@ -270,6 +285,13 @@ export const RQL_TABLES: readonly RqlTable[] = [
       },
       SESSION_ID,
       USER_ID,
+      {
+        name: "known_at",
+        type: "timestamp",
+        description:
+          "When Ratel last wrote the totals of the trace. A window by known time applies to this column.",
+        hints: ["updated_at"],
+      },
     ],
   },
   {
@@ -278,6 +300,7 @@ export const RQL_TABLES: readonly RqlTable[] = [
     view: "scores",
     grain: "rows",
     timeColumn: "trace_started_at",
+    knownColumn: "scored_at",
     hints: ["score", "trace_scores", "evals"],
     columns: [
       { name: "scorer_id", type: "text", description: "The scorer." },
@@ -305,7 +328,11 @@ export const RQL_TABLES: readonly RqlTable[] = [
         type: "number",
         description: "The confidence of the judge model (null for a check).",
       },
-      { name: "scored_at", type: "timestamp", description: "When the scorer ran." },
+      {
+        name: "scored_at",
+        type: "timestamp",
+        description: "When the scorer ran. A window by known time applies to this column.",
+      },
       {
         name: "trace_started_at",
         type: "timestamp",
@@ -319,6 +346,27 @@ export const RQL_TABLES: readonly RqlTable[] = [
       MODELS,
       TOOLS,
       AGENTS,
+      MCP_SERVERS,
+      {
+        name: "trace_has_error",
+        type: "boolean",
+        description: "At least one span of the trace failed (null when the trace is gone).",
+      },
+      {
+        name: "trace_input_tokens",
+        type: "integer",
+        description: "The input tokens of the trace (null when the trace is gone).",
+      },
+      {
+        name: "trace_output_tokens",
+        type: "integer",
+        description: "The output tokens of the trace (null when the trace is gone).",
+      },
+      {
+        name: "trace_cost_usd",
+        type: "number",
+        description: "The cost of the trace in US dollars (null when the trace is gone).",
+      },
     ],
   },
   {
@@ -358,6 +406,52 @@ export const RQL_TABLES: readonly RqlTable[] = [
         total: 'count(distinct "session_id")',
       },
       ...TRACE_TOTALS,
+    ],
+  },
+  {
+    name: "prompts",
+    description:
+      "One row per captured prompt: a model call that an SDK or a trace sent with its messages, and the input tokens of each source of its context. The rows have no trace properties, so the page filter keeps every row.",
+    view: "prompts",
+    grain: "rows",
+    timeColumn: "occurred_at",
+    traceRows: false,
+    hints: ["prompt", "event_metrics", "context", "calls"],
+    columns: [
+      {
+        name: "occurred_at",
+        type: "timestamp",
+        description:
+          "When the model call happened (when Ratel received it, if the SDK gave no time).",
+        hints: ["event_time", "started_at"],
+      },
+      { name: "provider", type: "text", description: "The model provider." },
+      { name: "model", type: "text", description: "The model." },
+      { name: "input_tokens", type: "integer", description: "The input tokens of the call." },
+      { name: "output_tokens", type: "integer", description: "The output tokens of the call." },
+      {
+        name: "context_tokens",
+        type: "number",
+        description:
+          "The input tokens of the five sources of the context: skills, tools, history, memory and user input.",
+      },
+      ...(["skills", "tools", "history", "memory", "user_input"] as const).map(
+        (source): RqlColumn => ({
+          name: `${source}_tokens`,
+          type: "number",
+          description: `The input tokens of the source ${source.replace("_", " ")}.`,
+        }),
+      ),
+      {
+        name: "cost_usd",
+        type: "number",
+        description: "The cost of the call in US dollars (null when the model has no price).",
+      },
+      {
+        name: "latency_ms",
+        type: "integer",
+        description: "The latency of the call in milliseconds.",
+      },
     ],
   },
 ];
@@ -437,6 +531,34 @@ export const RQL_FUNCTIONS: readonly RqlFunction[] = [
     aggregate: false,
     example:
       "select time_bucket('1 hour', started_at) as hour, count(*) from traces group by hour order by hour",
+  },
+  {
+    name: "rate",
+    signature: "rate(boolean)",
+    returns: "number",
+    description:
+      "The share of rows where the condition is true, from 0 to 1. A null condition counts as not true. No rows give null.",
+    aggregate: true,
+    example: "select rate(has_error) from traces",
+  },
+  {
+    name: "coalesce",
+    signature: "coalesce(x, y, ...)",
+    returns: "the type of x",
+    description:
+      "The first value that is not null. The values must be of one type (integer and number mix). coalesce(sum(x), 0) gives 0 for a sum of no rows.",
+    aggregate: false,
+    example: "select coalesce(sum(cost_usd), 0) from traces",
+  },
+  {
+    name: "each",
+    signature: "each(text_list)",
+    returns: "text",
+    description:
+      "One row for each value of the list: a row with two models is read once per model, and a row with an empty list is not read. Every each() of one list in a query is the same value. Under a page filter of that list, only its values.",
+    aggregate: false,
+    example:
+      "select each(models) as model, count(*) as traces from traces group by model order by traces desc",
   },
   {
     name: "contains",

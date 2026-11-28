@@ -5,13 +5,13 @@ import { RQL_FUNCTIONS, RQL_TABLES } from "../domain/catalog";
 
 const NOW = new Date("2026-11-25T12:00:00.000Z");
 
-test("the description has the language version, the five tables and the limits", () => {
+test("the description has the language version, the six tables and the limits", () => {
   const schema = describeRqlSchema();
   assert.equal(schema.language, "rql");
   assert.equal(schema.version, 1);
   assert.deepEqual(
     schema.tables.map((table) => table.name),
-    ["events", "traces", "scores", "sessions", "users"],
+    ["events", "traces", "scores", "sessions", "users", "prompts"],
   );
   assert.deepEqual(schema.limits, { ...RQL_LIMITS });
 });
