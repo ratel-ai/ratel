@@ -14,15 +14,15 @@ const RQL_ONLY = {
 /**
  * RQL text on the read-only RQL path, over the rule's window. The evaluator reads on the reserved
  * path of alerts (`reserved`: the alert gate and `RQL_LIMITS.alertTimeoutMs`); a preview of the form
- * does not, so previews never queue in front of a rule. A refusal of RQL, or a
- * result that is not one row with one number, is the error the rule shows. RQL selects rows by
- * when they started: the window's `by: "known"` of a metric rule has no RQL form, so it is not
- * passed, and a late trace is not counted (`METRIC_TO_SQL_WARNING`).
+ * does not, so previews never queue in front of a rule. Every rule reads here. A refusal of RQL, or
+ * a result that is not one row with one number, is the error the rule shows. The window's
+ * `by: "known"` reads rows by when they became known, so a late trace is counted when it arrives,
+ * as the metric form counted it.
  */
 export async function measureSqlValue(
   projectId: string,
   query: SqlQuery,
-  { since, until }: QueryScope,
+  { since, until, by }: QueryScope,
   /** The evaluator's read: the reserved path. A preview of the form stays on the interactive one. */
   { reserved = false }: { reserved?: boolean } = {},
 ): Promise<Measurement | { error: string }> {
@@ -30,7 +30,7 @@ export async function measureSqlValue(
     const { columns, rows } = await runQuery(
       projectId,
       query,
-      { since, until, ...(reserved ? { purpose: "alert" as const } : {}) },
+      { since, until, ...(reserved ? { purpose: "alert" as const } : {}), ...(by ? { by } : {}) },
       RQL_ONLY,
     );
     if (columns.length !== 1 || !NUMERIC_TYPES.includes(columns[0].type))

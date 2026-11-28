@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { type MetricQuery, metricQuery } from "@/lib/contracts/query";
+import { type MetricQuery, metricQuery, type SqlQuery } from "@/lib/contracts/query";
 import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
 import * as schema from "@/lib/platform/db/tables";
@@ -31,6 +31,7 @@ import {
   PAGE_FILTERS_PARAM,
 } from "@/lib/views/alerts/links";
 import { parseAlertQuery } from "@/lib/views/alerts/parse-rule";
+import { measureSqlValue } from "@/lib/views/alerts/sql-value";
 import { changeDashboard, type DashboardActionDeps } from "@/lib/views/dashboards/actions";
 // The modules that run the kinds register with it.
 import { loadWidget } from "@/lib/views/dashboards/data";
@@ -44,7 +45,7 @@ import {
   WIDGET_KINDS,
   type WidgetResult,
 } from "@/lib/views/dashboards/types";
-import { queryFilter, widgetOfKind, withFilter } from "@/lib/views/dashboards/widget";
+import { metricOfForm, queryFilter, widgetOfKind, withFilter } from "@/lib/views/dashboards/widget";
 import { START_PANEL } from "@/lib/views/explore/starts";
 import { decodePanels, encodePanels } from "@/lib/views/explore/state";
 
@@ -169,8 +170,9 @@ test("the saved widget, the alert and the trace link read the rows the panel sho
     const saved = await loadWidget(PROJECT, stored, HOUR, db as never);
     assert.equal(sumOf(saved), expected.length, name);
 
-    const alert = alertOf(newAlertHref(PROJECT, merged, takesPageFilters(query, page)));
-    assert.deepEqual(await runQuery(PROJECT, alert, HOUR, db), shown, name);
+    // The rule runs its RQL text, as the evaluator does: the same number as the panel showed.
+    const rule = alertRuleOf(newAlertHref(PROJECT, merged, takesPageFilters(query, page)));
+    assert.deepEqual(await measureSqlValue(PROJECT, rule, HOUR), { value: expected.length }, name);
 
     const href = widgetTracesHref(PROJECT, withClause(queryFilter(query), page), HOUR);
     assert.deepEqual(
@@ -267,15 +269,23 @@ test("Create alert opens the form with the panel's metric and filter", () => {
   );
 });
 
-/** The query the alert form opens with. */
+/** The metric of the form the alert form opens with. */
 function alertOf(href: string): MetricQuery {
+  const { form } = alertRuleOf(href);
+  assert.ok(form);
+  return metricOfForm(form);
+}
+
+/** The rule the alert form opens with: its RQL text, with the form's selection. */
+function alertRuleOf(href: string): SqlQuery {
   const { searchParams, hash } = new URL(href, "https://x.test");
   const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
   const parsed = parseAlertQuery(
     alertQueryOf(value === IN_FRAGMENT ? hash.slice(1) : value),
     FEATURES,
   );
-  assert.ok(parsed.ok && parsed.query.kind === "metric");
+  // An alert keeps its metric as the form of its RQL.
+  assert.ok(parsed.ok && parsed.query.form);
   return parsed.query;
 }
 

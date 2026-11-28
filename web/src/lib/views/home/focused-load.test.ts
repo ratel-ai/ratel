@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { focusedStats } from "@/components/console/home/overview-stats";
 import { metricQuery } from "@/lib/contracts/query";
 import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
+import { alertFormQuery } from "@/lib/views/alerts/parse-rule";
+import { formOf } from "@/lib/views/dashboards/widget";
 import { MOCK_HEALTH_MODEL } from "@/lib/views/health/mock-fixture";
 import {
   type FocusedReads,
@@ -305,7 +307,7 @@ test("the alert rules are counted only when none fires, and a failed count is no
   const rule = {
     id: "r1",
     name: "Errors",
-    query: metricQuery("error_rate", "rate"),
+    query: alertFormQuery(formOf(metricQuery("error_rate", "rate"))),
     operator: "above" as const,
     threshold: 0.5,
     lastValue: 0.6,

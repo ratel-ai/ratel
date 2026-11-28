@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { metricQuery } from "@/lib/contracts/query";
+import { formOf } from "@/lib/views/dashboards/widget";
 import {
   alertWindowText,
   conditionText,
@@ -9,10 +10,10 @@ import {
   thresholdInput,
 } from "./format";
 import { alertQueryOf, NEW_ALERT_PARAM, newAlertHref } from "./links";
-import { parseAlertQuery } from "./parse-rule";
+import { alertFormQuery, parseAlertQuery } from "./parse-rule";
 
 test("a condition reads as a sentence, in the metric's unit", () => {
-  const query = metricQuery("latency", "p95");
+  const query = alertFormQuery(formOf(metricQuery("latency", "p95")));
   assert.equal(
     conditionText({ query }, { operator: "above", threshold: 2000, windowMinutes: 60 }),
     "Latency p95 is above 2\u00a0s over 1 hour",
@@ -40,7 +41,7 @@ test("a widget's query survives the link to the form", () => {
   const href = newAlertHref("p", { ...query, dimensions: ["model"], bucket: "day" });
   const value = new URL(href, "https://ratel.test").searchParams.get(NEW_ALERT_PARAM);
   const parsed = parseAlertQuery(alertQueryOf(value ?? ""), { customMonitoring: true });
-  assert.deepEqual(parsed, { ok: true, query });
+  assert.deepEqual(parsed, { ok: true, query: alertFormQuery(formOf(query)) });
 });
 
 test("F446-1, F446-2: the form says what the window reads and what nothing is", () => {

@@ -13,7 +13,7 @@ import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
 import { createRqlGate } from "@/lib/synthesis/rql/run";
 import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import { evaluateAlerts } from "@/lib/views/alerts/evaluate";
-import { METRIC_TO_SQL_WARNING } from "@/lib/views/alerts/format";
+import { alertFormQuery } from "@/lib/views/alerts/parse-rule";
 import { measureSqlValue } from "@/lib/views/alerts/sql-value";
 import * as alerts from "@/lib/views/alerts/store";
 import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
@@ -105,7 +105,11 @@ test("major 1: project B's rule evaluates in the same tick while project A has 2
       );
     const victim = await alerts.createAlertRule(
       OTHER,
-      { ...base, name: "victim", query: metricQuery("trace_count", "count") },
+      {
+        ...base,
+        name: "victim",
+        query: alertFormQuery(formOf(metricQuery("trace_count", "count"))),
+      },
       "u",
       store,
     );
@@ -202,10 +206,12 @@ test("major 4: the text of a metric keeps the newest buckets when the rows pass 
   assert.match(rql, /order by bucket desc/);
 });
 
-test("major 5: the Metric to SQL switch names both differences", () => {
-  assert.match(METRIC_TO_SQL_WARNING, /late/);
-  assert.match(METRIC_TO_SQL_WARNING, /no value/);
-  assert.match(METRIC_TO_SQL_WARNING, /0/);
+test("major 5: a metric's RQL has no difference to warn of: a sum of nothing is 0", () => {
+  // The other difference, a late trace, is gone too: a rule reads by known time
+  // (`metric-rql-parity.integration.test.ts` compares both on late traces and an empty window).
+  const { text } = alertFormQuery(formOf(metricQuery("cost", "sum")));
+  assert.match(text, /coalesce\(sum\(/);
+  assert.match(text, /, 0\)/);
 });
 
 test("major 6: a dashboard of wide sql widgets stays under the result cap of each widget", async () => {

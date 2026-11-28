@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { metricQuery } from "@/lib/contracts/query";
+import { formOf } from "@/lib/views/dashboards/widget";
 import { breaches, evaluationIntervalMs, evaluationWindow, nextState } from "./domain";
-import { parseAlertQuery, parseRule, sqlAlertProblem } from "./parse-rule";
+import { alertFormQuery, parseAlertQuery, parseRule, sqlAlertProblem } from "./parse-rule";
 
 const ABOVE = { operator: "above", threshold: 10 } as const;
 const BELOW = { operator: "below", threshold: 10 } as const;
@@ -87,7 +88,12 @@ test("a rule from outside is checked like a widget", () => {
   const off = { customMonitoring: false };
   const parsed = parseRule(draft, off);
   assert.ok(parsed.ok);
-  assert.deepEqual(parsed.draft, { ...draft, name: "Slow" });
+  // A metric is kept as RQL with the metric as its form.
+  assert.deepEqual(parsed.draft, {
+    ...draft,
+    name: "Slow",
+    query: alertFormQuery(formOf(draft.query)),
+  });
   const refused: [Record<string, unknown>, RegExp][] = [
     [{ name: " " }, /name/],
     [{ name: "x".repeat(81) }, /80/],

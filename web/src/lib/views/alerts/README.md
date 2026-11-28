@@ -14,10 +14,10 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 |---|---|
 | `types.ts` | the rule, the states and the limits; safe for the browser |
 | `domain.ts` | `nextState`, `breaches`, the evaluation window and interval; pure |
-| `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's. Kind `sql` is compiled at save and must give one row with one number (`sqlAlertProblem`) |
-| `sql-value.ts` | `measureSqlValue`: the value of an RQL rule over its window on the read-only RQL path, or the error that marks it failing. The evaluator reads on the reserved alert path (`reserved`, so `purpose: "alert"`): a gate of its own, one query per project, and a timeout of `RQL_LIMITS.alertTimeoutMs` (2 s), so a busy dashboard never fails a rule. A preview of the form stays on the interactive path, so it never queues in front of a rule. RQL selects by start time, not by `known`: `format.ts#METRIC_TO_SQL_WARNING` says so where the form turns a metric into RQL |
+| `parse-rule.ts` | `parseRule`: a rule from outside; its query passes the same contract as a widget's. A rule is RQL (kind `sql`), with the metric form's selection (ungrouped) when the form wrote the text: `parseAlertQuery` reads an ungrouped metric (an older stored rule, or a caller's) as `alertFormQuery` of it, and the next save writes that shape. The text is compiled at save and must give one row with one number (`sqlAlertProblem`) |
+| `sql-value.ts` | `measureSqlValue`: the value of an RQL rule over its window on the read-only RQL path, or the error that marks it failing. The evaluator reads on the reserved alert path (`reserved`, so `purpose: "alert"`): a gate of its own, one query per project, and a timeout of `RQL_LIMITS.alertTimeoutMs` (2 s), so a busy dashboard never fails a rule. A preview of the form stays on the interactive path, so it never queues in front of a rule. It reads by known time (`by: "known"`: `traces.known_at`, `scores.scored_at`), so a late trace counts when it arrives, and a sum of nothing is 0 (`coalesce`), as the metric form gave (`metric-rql-parity.integration.test.ts`) |
 | `store.ts` | the reads and writes of rules and their history; `pruneAlertEvents`: the retention; `listAlertingRules`: the rules that alert now, for the Overview |
-| `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each, one rule of each project in turn, and at most `PROJECT_TIME_BUDGET_MS` (5 s) of a tick for one project's rules. An RQL rule reads its value before its transaction; a refusal sets `last_error` (failing: no state change, no message) and the next read clears it |
+| `evaluate.ts` | `evaluateAlerts`: the due rules under an advisory lock, one transaction each, one rule of each project in turn, and at most `PROJECT_TIME_BUDGET_MS` (5 s) of a tick for one project's rules. Every rule reads its RQL value before its transaction, on the alert path; a refusal sets `last_error` (failing: no state change, no message) and the next read clears it |
 | `deliver.ts` | `deliverAlerts`: claims and sends the pending messages |
 | `notifier.ts` | the `AlertNotifier` port, with `memoryNotifier` for tests |
 | `actions.ts` | `changeAlert`: one change by a person, after membership, the flag and a support-session check |
@@ -28,7 +28,7 @@ without dimensions), an operator, a threshold and a window. Core-owned.
 | `slack-message.ts` | the fire, recovery and test messages |
 | `webhook-post.ts` | one POST with a deadline and no redirect, on `node:https`: a `fetch` span carries the URL |
 | `format.ts`, `links.ts` | how an alert reads, and the pages' addresses; safe for the browser |
-| `preview.ts` | `loadAlertPreview`: the last 7 days for the form's chart; for RQL text, its value now or its error |
+| `preview.ts` | `loadAlertPreview`: for a rule of the form, its last 7 days through RQL (the text of its selection by bucket); for a Custom text, its value now or its error |
 | `register.ts` | the `alerts_evaluate` before-step of the drain: evaluate, then deliver; the `alert_events_prune` after-step |
 
 Rules:

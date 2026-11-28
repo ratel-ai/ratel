@@ -8,9 +8,9 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
 import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
 import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
-import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { createRqlGate, type RqlGate } from "@/lib/synthesis/rql/run";
 import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
-import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
+import { formOf, sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 import { type AlertActionDeps, changeAlert } from "./actions";
 import { deliverAlerts, MAX_ATTEMPTS } from "./deliver";
 import {
@@ -22,8 +22,10 @@ import {
   sealedDestination,
   sealedDestinationsOfRule,
 } from "./destinations";
+import { evaluationWindow } from "./domain";
 import { evaluateAlerts } from "./evaluate";
 import { type AlertNotifier, memoryNotifier } from "./notifier";
+import { alertFormQuery } from "./parse-rule";
 import { alertsRegistration, alertsStep } from "./register";
 import { slackMessage } from "./slack-message";
 import * as store from "./store";
@@ -35,7 +37,7 @@ const OTHER = "33333333-3333-4333-8333-333333333333";
 const START = new Date("2026-11-24T10:00:00Z");
 const DRAFT: AlertDraft = {
   name: "Too many errors",
-  query: metricQuery("error_rate", "rate"),
+  query: metric("error_rate", "rate"),
   operator: "above",
   threshold: 0.5,
   windowMinutes: 5,
@@ -55,6 +57,7 @@ before(async () => {
     insert into projects (id, organization_id, name, slug) values
       ('${PROJECT}', '${ORG}', 'Agent', 'agent'), ('${OTHER}', '${ORG}', 'Other', 'other');
   `);
+  useRql();
 });
 beforeEach(async () => {
   now = START;
@@ -117,7 +120,7 @@ test("a rule fires once, stays alerting in silence, then recovers with one messa
 });
 
 test("F446-1: a trace longer than the window fires once, when its summary is known", async () => {
-  await rule({ query: metricQuery("latency", "p95"), threshold: 1000, windowMinutes: 5 });
+  await rule({ query: metric("latency", "p95"), threshold: 1000, windowMinutes: 5 });
   const { tick, notifier } = stepper();
   for (let minute = 0; minute <= 12; minute++) {
     // It started at minute 0 and ended at minute 6, as its summary was written.
@@ -144,7 +147,7 @@ test("F446-1: a result counts when it was stored, and a dashboard reads by the t
     [PROJECT],
   );
   const id = await rule({
-    query: metricQuery("scorer_count", "count"),
+    query: metric("scorer_count", "count"),
     operator: "above",
     threshold: 0,
   });
@@ -156,6 +159,7 @@ test("F446-1: a result counts when it was stored, and a dashboard reads by the t
   );
   await evaluate();
   assert.equal((await store.getAlertRule(PROJECT, id, db))?.state, "alerting");
+  // The dashboard reads the metric by the trace's start.
   const query = metricQuery("scorer_count", "count");
   const read = (since: Date) => runQuery(PROJECT, query, { since, until: now }, db);
   assert.equal((await read(new Date(now.getTime() - 300_000))).series[0]?.total, 0);
@@ -164,10 +168,10 @@ test("F446-1: a result counts when it was stored, and a dashboard reads by the t
 
 test("F446-2: a count or a sum of nothing is 0; an average of nothing is no data", async () => {
   const below = { operator: "below", threshold: 10 } as const;
-  const count = await rule({ query: metricQuery("trace_count", "count"), ...below });
-  const sum = await rule({ query: metricQuery("cost", "sum"), ...below });
-  const average = await rule({ query: metricQuery("cost", "avg"), ...below });
-  const p95 = await rule({ query: metricQuery("latency", "p95"), ...below });
+  const count = await rule({ query: metric("trace_count", "count"), ...below });
+  const sum = await rule({ query: metric("cost", "sum"), ...below });
+  const average = await rule({ query: metric("cost", "avg"), ...below });
+  const p95 = await rule({ query: metric("latency", "p95"), ...below });
   const { tick, notifier } = stepper();
   await tick();
   const states = await Promise.all(
@@ -183,6 +187,57 @@ test("F446-2: a count or a sum of nothing is 0; an average of nothing is no data
     ["no_data", null],
   ]);
   assert.deepEqual(notifier.notices.map(({ ruleId }) => ruleId).sort(), [count, sum].sort());
+});
+
+test("an old metric rule loads as RQL with its form, evaluates to the metric's value, and saves in the new shape", async () => {
+  const id = await rule();
+  const old = metricQuery("error_rate", "rate");
+  await client.query("update alert_rules set query = $1::jsonb where id = $2", [old, id]);
+  const loaded = await store.getAlertRule(PROJECT, id, db);
+  assert.deepEqual(loaded?.query, metric("error_rate", "rate"));
+  await trace(true);
+  await trace(false);
+  await evaluate();
+  // The value the metric form gives over the rule's window, by known time.
+  const expected = await runQuery(PROJECT, old, evaluationWindow(5, now), db);
+  assert.equal((await store.getAlertRule(PROJECT, id, db))?.lastValue, expected.series[0].total);
+  assert.equal(expected.series[0].total, 0.5);
+  const saved = await change({
+    action: "update",
+    ruleId: id,
+    draft: { ...DRAFT, query: old, threshold: 0.4 },
+  });
+  assert.ok(saved.ok, JSON.stringify(saved));
+  const { rows } = await client.query<{ query: { kind: string; form?: unknown } }>(
+    "select query from alert_rules where id = $1",
+    [id],
+  );
+  assert.equal(rows[0]?.query.kind, "sql");
+  assert.deepEqual(rows[0]?.query.form, formOf(old));
+});
+
+test("every rule reads on the alert path: the alert gate, never the interactive one", async () => {
+  await rule();
+  await trace(true);
+  const entered: string[] = [];
+  const spy = (name: string, gate = createRqlGate(1)): RqlGate => ({
+    enter: (project) => (entered.push(name), gate.enter(project)),
+    wait: (project, ms) => (entered.push(name), gate.wait(project, ms)),
+  });
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(client)),
+      gate: spy("interactive"),
+      observe: async () => {},
+    },
+    alertGate: spy("alert"),
+  });
+  try {
+    assert.equal((await evaluate()).evaluated, 1);
+    assert.deepEqual(entered, ["alert"]);
+  } finally {
+    useRql();
+  }
 });
 
 test("a rule is not evaluated twice in one tick, nor while it is paused", async () => {
@@ -248,7 +303,7 @@ test("a scorer metric fires on that scorer's results", async () => {
     [scorer, PROJECT, new Date(now.getTime() - 1000)],
   );
   const id = await rule({
-    query: metricQuery("scorer_pass_rate", "rate", { filters: { scorer: { id: scorer } } }),
+    query: metric("scorer_pass_rate", "rate", { filters: { scorer: { id: scorer } } }),
     operator: "below",
   });
   const result = await evaluateAlerts({ now: () => now, flagOn: async () => true }, db);
@@ -558,7 +613,7 @@ function evaluate() {
   return evaluateAlerts({ now: () => now, flagOn: async () => true }, db);
 }
 
-/** Kind sql through the RQL runner on this database. */
+/** Kind sql through the RQL runner on this database: every rule reads there, on the alert path. */
 function useRql() {
   metricSeams.sql = sqlQueryRunner({
     run: {
@@ -566,7 +621,13 @@ function useRql() {
       gate: createRqlGate(),
       observe: async () => {},
     },
+    alertGate: createRqlGate(1),
   });
+}
+
+/** An ungrouped metric as a rule keeps it: RQL with the metric as its form. */
+function metric(...args: Parameters<typeof metricQuery>) {
+  return alertFormQuery(formOf(metricQuery(...args)));
 }
 
 function stepper() {

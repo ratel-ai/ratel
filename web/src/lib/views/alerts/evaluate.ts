@@ -1,12 +1,8 @@
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
-import type { MetricQuery } from "@/lib/contracts/query";
 import { getDb } from "@/lib/platform/db/client";
-import { supplementaryReadTimeoutMs } from "@/lib/platform/db/statement-timeout";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { notOnHold } from "@/lib/platform/org-hold/sql";
-import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
-import { runQuery } from "@/lib/synthesis/metrics/query";
 import {
   evaluationIntervalMs,
   evaluationWindow,
@@ -160,8 +156,9 @@ interface SqlRead {
 }
 
 /**
- * An RQL rule reads on the RQL pool before its transaction: a query of up to its own timeout must
- * hold no row lock and no connection of the primary pool. Null for a metric rule.
+ * Every rule reads on the RQL pool before its transaction, on the alert path: a query of up to its
+ * own timeout must hold no row lock and no connection of the primary pool. Null for a rule that is
+ * not due, or whose stored query fails.
  */
 async function readSqlFirst(db: Db, ruleId: string, now: Date): Promise<SqlRead | null> {
   const [rule] = await db
@@ -173,7 +170,7 @@ async function readSqlFirst(db: Db, ruleId: string, now: Date): Promise<SqlRead 
     .from(alertRules)
     .where(and(eq(alertRules.id, ruleId), dueAt(now)));
   const query = rule && storedQuery(rule.query).query;
-  if (query?.kind !== "sql") return null;
+  if (!query) return null;
   return {
     query: JSON.stringify(query),
     measured: await measureSqlValue(
@@ -208,13 +205,9 @@ async function evaluateOne(
     await tx.update(alertRules).set({ lastEvaluatedAt: now }).where(eq(alertRules.id, rule.id));
     return "skipped";
   }
-  const window = evaluationWindow(rule.windowMinutes, now);
-  let measured: Measurement | { error: string };
-  if (query.kind === "sql") {
-    // Changed since it was read: the next tick reads it again.
-    if (read?.query !== JSON.stringify(query)) return "gone";
-    measured = read.measured;
-  } else measured = await measureMetric(tx, rule.projectId, query, window);
+  // Changed since it was read: the next tick reads it again.
+  if (read?.query !== JSON.stringify(query)) return "gone";
+  const measured: Measurement | { error: string } = read.measured;
   if ("error" in measured) {
     // Failing, not firing: the state and the last value stay, and the rule says why.
     await tx
@@ -252,26 +245,12 @@ async function evaluateOne(
     change: {
       projectId: rule.projectId,
       ruleId: rule.id,
-      metric: query.kind === "sql" ? "sql" : query.measures[0].measure,
+      metric: query.form?.measures[0].measure ?? "sql",
       from: rule.state,
       to: next.state,
       notice: next.notice,
     },
   };
-}
-
-async function measureMetric(
-  tx: Tx,
-  projectId: string,
-  query: MetricQuery,
-  window: QueryScope,
-): Promise<Measurement> {
-  await tx.execute(
-    sql`select set_config('statement_timeout', ${String(supplementaryReadTimeoutMs() ?? 0)}, true)`,
-  );
-  const { series } = await runQuery(projectId, query, window, tx);
-  const [only] = series;
-  return { value: only.total };
 }
 
 function dueAt(now: Date) {

@@ -56,7 +56,7 @@ const ruleShape = z.strictObject({
   query: z
     .record(z.string(), z.unknown())
     .describe(
-      'A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {"version":1,"kind":"metric","measures":[{"measure":"error_rate","aggregation":"rate"}]}. Or a query of kind sql: RQL text that gives one row with one number, such as {"version":1,"kind":"sql","rqlVersion":1,"text":"select count(*) from traces where has_error"}. Its window is the rule\'s window.',
+      'A metric query object without dimensions: describe_monitoring_schema has its schema. Example: {"version":1,"kind":"metric","measures":[{"measure":"error_rate","aggregation":"rate"}]}. The rule keeps it as RQL: kind sql with the RQL text of the metric and the metric as its form. Or a query of kind sql: RQL text that gives one row with one number, such as {"version":1,"kind":"sql","rqlVersion":1,"text":"select count(*) from traces where has_error"}. Every rule runs its RQL text over the rule\'s window, by when traces became known.',
     ),
   operator: z.enum(ALERT_OPERATORS),
   threshold: z
@@ -499,6 +499,8 @@ function listed(rule: AlertRule) {
     threshold: rule.threshold,
     windowMinutes: rule.windowMinutes,
     unit,
+    /** The RQL text the rule runs, or null for a stored query that needs attention. */
+    rql: rule.query?.text ?? null,
     enabled: rule.enabled,
     state: rule.state,
     status: rule.problem
