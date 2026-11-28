@@ -14,9 +14,9 @@ import {
 } from "@/lib/views/dashboards/layout";
 import { sqlChartOfText } from "@/lib/views/dashboards/legacy-chart";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
-import { STARTER_NAME, STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import type * as store from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
+import { templateDashboard } from "@/lib/views/dashboards/templates";
 import {
   type DashboardDefaults,
   type DashboardEditor,
@@ -26,7 +26,6 @@ import {
   MAX_DASHBOARD_NAME,
   MAX_DASHBOARDS,
   MAX_WIDGETS,
-  type Widget,
   type WidgetInput,
 } from "@/lib/views/dashboards/types";
 import type { PickerScorer } from "@/lib/views/scorers/picker";
@@ -34,6 +33,8 @@ import type { PickerScorer } from "@/lib/views/scorers/picker";
 export type DashboardActionInput = { projectId: string } & (
   | { action: "create"; name: string }
   | { action: "create-starter" }
+  /** A dashboard of a template (`templates/`). `property`: the indexed property of By customer. */
+  | { action: "create-template"; template: string; property?: string }
   /** A document that an export or an agent wrote. */
   | { action: "import"; document: unknown }
   | { action: "rename"; dashboardId: string; name: string }
@@ -82,6 +83,17 @@ export interface DashboardActionDeps {
   scorers(projectId: string): Promise<readonly Pick<PickerScorer, "id" | "name" | "verdict">[]>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
+  templates: {
+    /** The names of the project's own indexed trace properties. */
+    indexedProperties(projectId: string): Promise<readonly string[]>;
+    /** Records a dashboard made from a template: a kept signal of Ask in words. */
+    recordPick(pick: {
+      projectId: string;
+      templateId: string;
+      dashboardId: string;
+      actor: string;
+    }): Promise<void>;
+  };
   store: Pick<
     typeof store,
     "createDashboard" | "updateDashboard" | "deleteDashboard" | "changeWidgets"
@@ -111,6 +123,8 @@ class Refusal extends Error {}
 const layoutsSchema = z.record(z.string(), gridPositionSchema);
 
 const INVALID = "The dashboard change is invalid.";
+/** What "Start from the traces overview" makes. */
+const STARTER = "traces-overview";
 const MISSING = "This dashboard no longer exists.";
 
 /** One change to a project's dashboards: membership and the flag first, then the widget's rules. */
@@ -138,7 +152,7 @@ export async function changeDashboard(
       id: dashboardId,
       missingScorers,
       widgetId,
-    } = await apply(input, scope.project.id, editor, deps, () =>
+    } = await apply(input, scope.project.id, { ...editor, actor }, deps, () =>
       deps.features({
         projectId: scope.project.id,
         organizationId: scope.organization.id,
@@ -169,17 +183,29 @@ export async function changeDashboard(
 async function apply(
   input: Record<string, unknown>,
   projectId: string,
-  editor: DashboardEditor,
-  { store, scorers }: DashboardActionDeps,
+  { actor, ...editor }: DashboardEditor & { actor: string },
+  { store, scorers, templates }: DashboardActionDeps,
   features: () => Promise<MetricFeatures>,
 ): Promise<{ id: string; missingScorers?: string[]; widgetId?: string }> {
   switch (input.action) {
-    case "create":
-    case "create-starter": {
-      const starter = input.action === "create-starter";
-      const name = starter ? STARTER_NAME : dashboardName(input.name);
-      const widgets = starter ? starterWidgets() : [];
-      return roomFor(await store.createDashboard({ projectId, name, widgets, ...editor }));
+    case "create": {
+      const name = dashboardName(input.name);
+      return roomFor(await store.createDashboard({ projectId, name, widgets: [], ...editor }));
+    }
+    case "create-starter":
+    case "create-template": {
+      const templateId = input.action === "create-starter" ? STARTER : text(input.template);
+      const property = text(input.property);
+      const made = templateDashboard(templateId, {
+        ...(property ? { property } : {}),
+        indexed: property ? await templates.indexedProperties(projectId) : [],
+      });
+      if (!made.ok) throw new Refusal(made.error);
+      const { name, widgets } = made;
+      const { id } = roomFor(await store.createDashboard({ projectId, name, widgets, ...editor }));
+      if (input.action === "create-template")
+        await templates.recordPick({ projectId, templateId, dashboardId: id, actor });
+      return { id };
     }
     case "import": {
       const read = importDashboard(input.document, {
@@ -336,16 +362,6 @@ function dashboardIdOf(input: Record<string, unknown>): string {
   const id = parseProjectUuid(text(input.dashboardId));
   if (!id) throw new Refusal(INVALID);
   return id;
-}
-
-function starterWidgets(): Widget[] {
-  const placed: Widget[] = [];
-  for (const widget of STARTER_WIDGETS) placed.push(withId(widget, freePosition(placed)));
-  return placed;
-}
-
-function withId(widget: WidgetInput, layout: GridPosition): Widget {
-  return { ...widget, id: randomUUID(), layout };
 }
 
 function text(value: unknown): string {

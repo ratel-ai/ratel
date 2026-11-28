@@ -19,6 +19,7 @@ const input = (over: Partial<SuggestInput> = {}): SuggestInput => ({
   dashboardId: null,
   properties: [],
   tablesWithData: null,
+  templates: [],
   earlierAsks: [],
   ...over,
 });

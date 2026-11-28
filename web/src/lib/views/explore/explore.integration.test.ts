@@ -366,6 +366,7 @@ async function change(input: object): Promise<string> {
     features: async () => FEATURES,
     scorers: async () => [],
     isRestricted: async () => false,
+    templates: { indexedProperties: async () => [], recordPick: async () => {} },
     store: {
       createDashboard: (input) => store.createDashboard(input, db),
       updateDashboard: (input) => store.updateDashboard(input, db),

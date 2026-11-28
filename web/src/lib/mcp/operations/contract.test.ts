@@ -218,6 +218,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // Custom monitoring: dashboards and the query tool (RTL-212).
   ["describe_monitoring_schema", false],
   ["query_monitoring", false],
+  ["list_dashboard_templates", false],
   ["list_dashboards", false],
   ["get_dashboard", false],
   ["change_dashboard", true],

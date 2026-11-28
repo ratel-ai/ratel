@@ -16,7 +16,12 @@ import { decodePanels, PANELS_PARAM } from "@/lib/views/explore/state";
 import { loadScorerPicker } from "@/lib/views/scorers/picker";
 import { createScorer } from "@/lib/views/scorers/store";
 import { checkDraft } from "@/lib/views/scorers/test-support";
-import { dashboardReadOperations, dashboardWriteOperations, EXAMPLES } from "./dashboards";
+import {
+  dashboardReadOperations,
+  dashboardTemplateOperations,
+  dashboardWriteOperations,
+  EXAMPLES,
+} from "./dashboards";
 import { POINT_CAP } from "./results";
 import {
   insertTrace,
@@ -116,12 +121,15 @@ const CALLS: readonly [string, object][] = [
   ["get_dashboard", { dashboardId: MISSING }],
   ["change_dashboard", { action: "create", name: "Board" }],
   ["import_dashboard", { document: DOCUMENT }],
+  ["list_dashboard_templates", {}],
+  ["import_dashboard", { template: "cost" }],
 ];
 
 let m: Monitoring;
 before(async () => {
   m = await monitoring((deps) => [
     ...dashboardReadOperations(deps),
+    ...dashboardTemplateOperations(deps),
     ...dashboardWriteOperations(deps),
   ]);
 });
@@ -208,6 +216,7 @@ test("an import through MCP equals the web app's", async () => {
       findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
       enabled: async () => true,
       isRestricted: async () => false,
+      templates: { indexedProperties: async () => [], recordPick: async () => {} },
       features: async () => ({ customMonitoring: true }),
       scorers: async (projectId) => (await loadScorerPicker(projectId, new Date(), m.db)).scorers,
       store: {
@@ -875,3 +884,56 @@ function asRql(document: typeof DOCUMENT) {
 function widget(title: string, chart: string, query: object, x: number, y: number) {
   return { title, query, chart, layout: { x, y, w: 6, h: 6 } };
 }
+
+test("list_dashboards gives the defaults one time; a template makes a dashboard; flag off makes none", async () => {
+  await m.client.exec("delete from dashboard_template_uses; delete from trace_property_keys");
+  m.set.on = false;
+  for (const [id, params] of [
+    ["list_dashboards", {}],
+    ["list_dashboard_templates", {}],
+    ["import_dashboard", { template: "tools" }],
+  ] as const) {
+    const off = await m.call(id, params);
+    assert.equal(!off.ok && off.reason, "custom_monitoring_off", id);
+  }
+  assert.deepEqual(await store.listDashboards(PROJECT, m.db), [], "no default with the flag off");
+  m.set.on = true;
+
+  const listed = await m.call("list_dashboards", {});
+  assert.ok(listed.ok);
+  const names = (result: Awaited<ReturnType<typeof m.call>>) =>
+    result.ok
+      ? (result.data as { dashboards: { name: string }[] }).dashboards.map(({ name }) => name)
+      : [];
+  assert.deepEqual(names(listed), ["Tools", "Cost", "Reliability"]);
+  assert.deepEqual(names(await m.call("list_dashboards", {})), ["Tools", "Cost", "Reliability"]);
+
+  const templates = await m.call("list_dashboard_templates", {});
+  assert.ok(templates.ok);
+  const listedTemplates = (
+    templates.data as {
+      templates: { id: string; description: string; hasData: boolean; missing: string[] }[];
+    }
+  ).templates;
+  assert.equal(listedTemplates.length, 10);
+  assert.deepEqual(
+    listedTemplates.find(({ id }) => id === "quality"),
+    {
+      id: "quality",
+      name: "Quality",
+      description: listedTemplates.find(({ id }) => id === "quality")?.description,
+      needs: ["scores"],
+      hasData: false,
+      missing: ["No scorer yet"],
+    },
+  );
+
+  const made = await m.call("import_dashboard", { template: "agents" });
+  assert.ok(made.ok);
+  assert.equal((made.data as { dashboard: { name: string } }).dashboard.name, "Agents");
+  const both = await m.call("import_dashboard", { template: "agents", document: DOCUMENT });
+  assert.equal(!both.ok && both.error, "invalid_params");
+  const property = await m.call("import_dashboard", { template: "by-customer", property: "plan" });
+  assert.equal(!property.ok && property.error, "invalid_params");
+  assert.match(!property.ok ? property.message : "", /The property plan is not indexed/);
+});

@@ -240,7 +240,13 @@ test("the RQL tools are listed only with customMonitoring on", () => {
   }
   assert.deepEqual(
     ids(true).filter((id) => !ids(false).includes(id)),
-    ["describe_rql_schema", "run_rql", "draft_widgets", "suggest_prompts"],
+    [
+      "describe_rql_schema",
+      "run_rql",
+      "draft_widgets",
+      "suggest_prompts",
+      "list_dashboard_templates",
+    ],
   );
 });
 

@@ -15,7 +15,7 @@ import {
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
-import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
+import { TRACES_OVERVIEW_WIDGETS } from "@/lib/views/dashboards/templates/traces-overview";
 import type { MetricWidget } from "@/lib/views/dashboards/types";
 import { scorerWidget } from "@/lib/views/dashboards/widget";
 
@@ -152,7 +152,7 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
   let running = 0;
   let most = 0;
   const widgets = Array.from({ length: 10 }, (_, index) => ({
-    ...STARTER_WIDGETS[0],
+    ...TRACES_OVERVIEW_WIDGETS[0],
     title: String(index),
   }));
   const results = await loadWidgets(
@@ -179,7 +179,7 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
 test("a scorer widget reads nothing while customMonitoring is off", async () => {
   const widgets = [
     scorerWidget({ id: "44444444-4444-4444-8444-444444444444", verdict: true }),
-    STARTER_WIDGETS[0],
+    TRACES_OVERVIEW_WIDGETS[0],
   ];
   const read = async (customMonitoring: boolean) => {
     const asked: string[] = [];

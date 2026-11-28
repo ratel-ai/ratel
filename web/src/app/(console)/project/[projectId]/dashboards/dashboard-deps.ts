@@ -9,6 +9,7 @@ import { followDashboardChange } from "@/lib/views/ask/store";
 import type { DashboardActionDeps } from "@/lib/views/dashboards/actions";
 import { dashboardsHref } from "@/lib/views/dashboards/links";
 import * as store from "@/lib/views/dashboards/store";
+import { templateActionDeps } from "@/lib/views/dashboards/templates/store";
 import { scorerNames } from "@/lib/views/scorers/picker";
 import { metricFeatures } from "./context";
 
@@ -26,6 +27,7 @@ export function consoleDashboardDeps(): DashboardActionDeps {
     features: metricFeatures,
     scorers: (projectId) => scorerNames(projectId),
     isRestricted: isRestrictedBySupportSession,
+    templates: templateActionDeps(),
     store,
     observe: async (fields) => {
       logger.info(fields, "dashboard_changed");
