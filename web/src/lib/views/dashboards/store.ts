@@ -1,6 +1,7 @@
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { lockProjectScope } from "@/lib/platform/db/project-lock";
+import { sqlChartOfText } from "@/lib/views/dashboards/legacy-chart";
 import { dashboards } from "@/lib/views/dashboards/schema";
 import { readWidgets, writeWidgets } from "@/lib/views/dashboards/stored-widget";
 import {
@@ -13,6 +14,9 @@ import {
   MAX_DASHBOARDS,
   type Widget,
 } from "@/lib/views/dashboards/types";
+
+/** A widget an older version stored is read in today's shape; the next save writes it so. */
+const READ = { sqlChart: sqlChartOfText };
 
 export type DashboardsDb = Pick<
   ReturnType<typeof getDb>,
@@ -117,7 +121,7 @@ export async function updateDashboard(
       .where(inProject(input.projectId, input.id))
       .for("update");
     if (!row) return false;
-    input.check?.(readWidgets(row.widgets));
+    input.check?.(readWidgets(row.widgets, READ));
     await tx
       .update(dashboards)
       .set({ ...input.set, ...changedBy(input) })
@@ -157,7 +161,7 @@ export async function changeWidgets(
       .where(inProject(input.projectId, input.id))
       .for("update");
     if (!row) return "missing";
-    const widgets = writeWidgets(input.change(readWidgets(row.widgets), row.filters));
+    const widgets = writeWidgets(input.change(readWidgets(row.widgets, READ), row.filters));
     await tx
       .update(dashboards)
       .set({ widgets, ...changedBy(input) })
@@ -167,7 +171,7 @@ export async function changeWidgets(
 }
 
 function readDashboard(row: Omit<Dashboard, "widgets"> & { widgets: unknown }): Dashboard {
-  return { ...row, widgets: readWidgets(row.widgets) };
+  return { ...row, widgets: readWidgets(row.widgets, READ) };
 }
 
 function inProject(projectId: string, id: string) {

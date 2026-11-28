@@ -1,12 +1,19 @@
-import { type MetricQuery, QUERY_KINDS, type Query } from "@/lib/contracts/query";
+import { type MetricQuery, QUERY_KINDS, type Query, type SqlQuery } from "@/lib/contracts/query";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
-/** What a widget can show: every kind. */
-export type WidgetQuery = Query;
+/**
+ * What a widget can show: every kind but `metric`. A metric widget is RQL (kind `sql`), with the
+ * form's selection when the form wrote its text. A stored widget of kind `metric` is read as one
+ * (`parse-widget.ts`).
+ */
+export type WidgetQuery = Exclude<Query, MetricQuery>;
 export type WidgetKind = WidgetQuery["kind"];
-export const WIDGET_KINDS = QUERY_KINDS;
+export const WIDGET_KINDS: readonly WidgetKind[] = [
+  "sql",
+  ...QUERY_KINDS.filter((kind): kind is WidgetKind => kind !== "metric" && kind !== "sql"),
+];
 
 /** Why RQL refused a query of kind sql: its message, its stable code and the fix. */
 export interface WidgetRefusal {
@@ -19,7 +26,10 @@ export interface WidgetRefusal {
 /** What a widget shows: its numbers, or the refusal of its RQL text. */
 export type WidgetResult = QueryResult | WidgetRefusal;
 
-/** How a metric is drawn. Each other query kind has the one chart of its name. */
+/**
+ * How a metric widget (RQL) is drawn: the rows decide which ones fit (`sql-chart.ts`). Each other
+ * query kind has the one chart of its name.
+ */
 export const METRIC_CHARTS = ["line", "bar", "number", "table"] as const;
 export type MetricChartKind = (typeof METRIC_CHARTS)[number];
 export const WIDGET_CHARTS = [
@@ -29,10 +39,10 @@ export const WIDGET_CHARTS = [
   "funnel",
   "clusters",
   "geography",
-  // The rows of an RQL query: a table, or a chart when they have one time column.
-  "sql",
 ] as const;
 export type WidgetChart = (typeof WIDGET_CHARTS)[number];
+/** What a stored widget or a document may hold: `sql` is the chart an older widget of kind sql has. */
+export const STORED_CHARTS = [...WIDGET_CHARTS, "sql"] as const;
 
 /** Cells of the 12-column grid, from its top left. */
 export interface GridPosition {
@@ -50,7 +60,8 @@ export interface WidgetInput {
   chart: WidgetChart;
 }
 
-export type MetricWidget = WidgetInput & { query: MetricQuery };
+/** A metric widget: RQL text, drawn as a line, a bar, a number or a table. */
+export type MetricWidget = WidgetInput & { query: SqlQuery; chart: MetricChartKind };
 
 export type Widget = WidgetInput & {
   id: string;

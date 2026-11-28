@@ -5,6 +5,11 @@ import { metricQuery } from "@/lib/contracts/query";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import { metricSeams } from "@/lib/synthesis/metrics/query";
+import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
+import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 import { loadWidget, loadWidgets } from "@/lib/views/dashboards/data";
 import {
@@ -16,7 +21,7 @@ import {
 } from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
 import type { Widget, WidgetResult } from "@/lib/views/dashboards/types";
-import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
+import { formOf, formWidget, sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 import { readDashboardItems } from "@/lib/views/home/dashboard-items";
 import { FOCUSED_READS, loadFocusedOverview } from "@/lib/views/home/focused-load";
 import type { OverviewReadScope } from "@/lib/views/home/overview-reads";
@@ -39,10 +44,9 @@ const OTHER = "33333333-3333-4333-8333-333333333333";
 const NOW = new Date("2026-11-24T10:00:00Z");
 const EDITOR = { updatedBy: "ana", updatedByName: "Ana" };
 const BY_MODEL: Widget = {
+  ...formWidget(formOf(metricQuery("trace_count", "count", { dimensions: ["model"] })), "table"),
   id: "models",
   title: "Runs by model",
-  query: metricQuery("trace_count", "count", { dimensions: ["model"] }),
-  chart: "table",
   layout: { x: 0, y: 0, w: 6, h: 5 },
 };
 
@@ -52,6 +56,14 @@ let db: ReturnType<typeof getDb>;
 before(async () => {
   client = await createMigratedPGlite();
   db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
+  // A metric widget is RQL: it reads through the RQL runner.
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: createPgRqlExecutor(pglitePoolOf(client)),
+      gate: createRqlGate(),
+      observe: async () => {},
+    },
+  });
   await client.exec(`
     insert into organizations (id, name, slug) values ('${ORG}', 'Acme', 'acme');
     insert into projects (id, organization_id, name, slug) values
@@ -137,9 +149,9 @@ test("the same rows as on the dashboard, for the same range and filters", async 
       (project, widget, at) => loadWidget(project, widget, at, db),
     );
     assert.deepEqual(item.result, result);
-    assert.ok(result?.kind === "metric");
+    assert.ok(result?.kind === "sql");
     assert.deepEqual(
-      result.series.map(({ groups, total }) => [groups[0].value, total]),
+      result.rows.map(([model, traces]) => [model, Number(traces)]),
       [
         ["gpt-4o", window === 7 ? 2 : 3],
         ["claude-sonnet-4-6", 1],
@@ -162,9 +174,8 @@ test("it follows an edit of the source widget", async () => {
       change: (widgets) =>
         widgets.filter(isWidget).map((widget) => ({
           ...widget,
+          ...formWidget(formOf(metricQuery("trace_count", "count")), "number"),
           title: "Runs",
-          chart: "number",
-          query: metricQuery("trace_count", "count"),
         })),
       ...EDITOR,
     },
@@ -175,8 +186,11 @@ test("it follows an edit of the source widget", async () => {
   assert.ok(item && item.kind === "widget");
   assert.equal(item.title, "Runs");
   assert.equal(item.widget.chart, "number");
-  assert.ok(item.result?.kind === "metric");
-  assert.equal(item.result.series[0].total, 3);
+  assert.ok(item.result?.kind === "sql");
+  assert.deepEqual(
+    item.result.rows.map(([traces]) => Number(traces)),
+    [3],
+  );
 });
 
 test("a source that is gone, another project's, or a reference that cannot be read is broken", async () => {
@@ -233,7 +247,7 @@ test("an RQL widget shows its rows", async () => {
           id: "rql",
           title: "Traces",
           query: sqlWidgetQuery("select count(*) as traces from traces"),
-          chart: "sql",
+          chart: "table",
           layout: { x: 0, y: 0, w: 6, h: 5 },
         },
       ],

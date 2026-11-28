@@ -35,9 +35,10 @@ import { createRqlGate } from "@/lib/synthesis/rql/run";
 import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { evaluationWindow } from "@/lib/views/alerts/domain";
-import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
+import { metricAsRql } from "@/lib/views/dashboards/metric-rql";
 import { sqlAsMetric } from "@/lib/views/dashboards/sql-chart";
-import type { MetricWidget } from "@/lib/views/dashboards/types";
+import type { MetricChartKind } from "@/lib/views/dashboards/types";
+import { formOf } from "@/lib/views/dashboards/widget";
 import "@/lib/views/scorers/metrics";
 
 /**
@@ -174,7 +175,7 @@ describe("an alert rule reads the same value as RQL, by known time", () => {
         for (const aggregation of metric.aggregations) {
           const query = metricQuery(metric.id, aggregation);
           const form = await runQuery(PROJECT, query, window, database.db);
-          const text = metricAsRql({ title: "", chart: "number", query }, "hour");
+          const text = metricAsRql(formOf(query), "number", "hour");
           const rql = await runQuery(
             PROJECT,
             sqlQuery(text),
@@ -193,7 +194,7 @@ describe("an alert rule reads the same value as RQL, by known time", () => {
 
   test("the late trace is counted in the window it became known in, not the one it started in", async () => {
     const query = metricQuery("trace_count", "count");
-    const text = metricAsRql({ title: "", chart: "number", query }, "hour");
+    const text = metricAsRql(formOf(query), "number", "hour");
     const known = evaluationWindow(60, new Date("2026-11-02T12:30:00Z"));
     const rql = await runQuery(
       PROJECT,
@@ -251,9 +252,9 @@ async function expectSame(list: readonly Cell[]): Promise<void> {
   const failures: string[] = [];
   for (const { query, shape, page } of list) {
     const scope: QueryScope = { ...PARITY_WINDOW, filter: page };
-    const chart: MetricWidget["chart"] =
+    const chart: MetricChartKind =
       shape !== "total" ? "line" : query.dimensions.length > 0 ? "table" : "number";
-    const text = metricAsRql({ title: "", chart, query }, shape === "total" ? "hour" : shape);
+    const text = metricAsRql(formOf(query), chart, shape === "total" ? "hour" : shape);
     const form = await runQuery(PROJECT, query, scope, database.db);
     const rql = await runQuery(PROJECT, sqlQuery(text), scope, database.db);
     const expected = formValues(form, shape);

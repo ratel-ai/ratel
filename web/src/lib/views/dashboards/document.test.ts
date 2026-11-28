@@ -13,6 +13,7 @@ import {
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { exportDashboard, importDashboard } from "@/lib/views/dashboards/document";
 import { jsonSchemas } from "@/lib/views/dashboards/json-schemas";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 
 const WIDGET = {
   title: "Speed",
@@ -47,8 +48,8 @@ test("a document is refused by what it is, then by the widget that is wrong", ()
     [{ ...DOCUMENT, id: "x" }, /unknown fields: id/],
     [{ ...DOCUMENT, widgets: Array(25).fill(WIDGET) }, /24 widgets/],
     [widgets({ chart: "pie" }), /^Widget 2 "Speed": The widget settings are invalid/],
-    [widgets({ chart: "table" }), /^Widget 2 "Speed": A table needs a group-by/],
-    [widgets({ title: "", chart: "table" }), /^Widget 2 "Latency p95": /],
+    [widgets({ chart: "flow" }), /^Widget 2 "Speed": A metric cannot be drawn as a flow/],
+    [widgets({ title: "", chart: "flow" }), /^Widget 2 "Latency p95": /],
     [widgets({ layout: { x: 9, y: 0, w: 6, h: 6 } }), /^Widget 2 "Speed": The layout/],
     [widgets({ id: "x" }), /^Widget 2 "Speed": /],
     [query({ kind: "pie" }), /^Widget 2 "Speed": Unknown query kind "pie"/],
@@ -69,7 +70,8 @@ test("what an agent leaves out has its default, and overlaps are put apart", () 
   const read = importDashboard({ ...short, widgets: [{ ...WIDGET, query }, WIDGET] }, CONTEXT);
   assert.ok(read.ok);
   assert.deepEqual([read.dashboard.filters, read.dashboard.range], [{}, null]);
-  assert.deepEqual(read.dashboard.widgets[0].query, WIDGET.query);
+  // A metric of an older document is read as RQL that its form writes.
+  assert.deepEqual(read.dashboard.widgets[0].query, formWidget(formOf(WIDGET.query), "line").query);
   assert.deepEqual(
     read.dashboard.widgets.map(({ layout }) => layout.y),
     [0, 6],
@@ -208,13 +210,14 @@ test("a scorer deleted under its widget leaves no id in the document", () => {
       name: "Board",
       filters: {},
       range: null,
-      widgets: [{ ...WIDGET, chart: "line", id: "1", query }],
+      widgets: [{ ...formWidget(formOf(query), "line"), layout: WIDGET.layout, id: "1" }],
     },
     [],
   );
-  assert.deepEqual((document.widgets[0].query as { filters: { scorer?: object } }).filters.scorer, {
-    name: "Deleted scorer",
-  });
+  const exported = document.widgets[0].query as { text: string; form: { filters: object } };
+  assert.deepEqual(exported.form.filters, { scorer: { name: "Deleted scorer" } });
+  assert.match(exported.text, /scorer = 'Deleted scorer'/);
+  assert.doesNotMatch(exported.text, /44444444/);
 });
 
 test("the published JSON Schemas are the zod schemas", () => {

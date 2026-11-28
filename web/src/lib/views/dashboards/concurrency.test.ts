@@ -17,6 +17,7 @@ import {
   updateDashboard,
 } from "@/lib/views/dashboards/store";
 import { MAX_DASHBOARDS } from "@/lib/views/dashboards/types";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 
 /**
  * Two transactions that overlap need two connections, which PGlite does not have. With
@@ -139,10 +140,9 @@ function actionDeps(db: DashboardsDb): DashboardActionDeps {
 
 function widget(id: string, x: number) {
   return {
+    ...formWidget(formOf(metricQuery("trace_count", "count")), "line"),
     id,
     title: id,
-    query: metricQuery("trace_count", "count"),
-    chart: "line" as const,
     layout: { x, y: 0, w: 6, h: 6 },
   };
 }

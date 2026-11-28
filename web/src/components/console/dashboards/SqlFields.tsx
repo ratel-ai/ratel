@@ -4,37 +4,37 @@ import { Button } from "@ratel/design-system/button";
 import { Field, Textarea } from "@ratel/design-system/input";
 import { Play } from "lucide-react";
 import { useState } from "react";
-import { MAX_SQL_TEXT, type SqlQuery } from "@/lib/contracts/query";
+import { MAX_SQL_TEXT } from "@/lib/contracts/query";
 import type { WidgetResult } from "@/lib/views/dashboards/types";
-import { sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 
 /**
- * The RQL text of a widget of kind sql. The text runs when the person asks (Run, or ⌘Enter), not at
- * each key. A refusal of RQL shows its message and its fix under the editor.
+ * The RQL text of a widget. The text runs when the person asks (Run, or ⌘Enter), not at each key.
+ * A refusal of RQL shows its message and its fix under the editor. A text from outside (a change
+ * of a dropdown of the form) replaces the draft.
  */
 export function SqlFields({
-  query,
+  text,
   result,
-  onChange,
+  onRun,
   window = "The time range of the page is its window.",
 }: {
-  query: SqlQuery;
+  /** What the widget runs now. */
+  text: string;
   /** What the query's window is, said under the editor. */
   window?: string;
   /** The last result read: a refusal is said under the editor. */
   result: WidgetResult | null;
-  onChange: (next: SqlQuery) => void;
+  onRun: (text: string) => void;
 }) {
-  const [draft, setDraft] = useState(query.text);
-  const [ran, setRan] = useState(query.text);
-  // Another text from outside (Edit as SQL, a starting point): the editor follows it.
-  if (query.text !== ran) {
-    setRan(query.text);
-    setDraft(query.text);
+  const [draft, setDraft] = useState(text);
+  const [shown, setShown] = useState(text);
+  if (text !== shown) {
+    setShown(text);
+    setDraft(text);
   }
-  const changed = draft.trim() !== query.text.trim();
+  const changed = draft.trim() !== text.trim();
   const run = () => {
-    if (draft.trim()) onChange(sqlWidgetQuery(draft));
+    if (draft.trim()) onRun(draft);
   };
   const refusal = result?.kind === "refused" && !changed ? result : null;
 
@@ -42,7 +42,7 @@ export function SqlFields({
     <div className="flex flex-col gap-2">
       <Field
         label="RQL query"
-        description={`RQL (Ratel Query Language): one SELECT over events, traces, scores, sessions and users. ${window}`}
+        description={`RQL (Ratel Query Language): one SELECT over events, traces, scores, sessions, users and prompts. ${window}`}
         error={
           refusal ? (
             <>

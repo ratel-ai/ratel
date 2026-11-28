@@ -21,6 +21,7 @@ import {
   scoredIssues,
 } from "@/lib/readings/trace-signals/health-score";
 import { type HealthPageModel, windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
+import { formOf, formWidget } from "@/lib/views/dashboards/widget";
 import { MOCK_HEALTH_MODEL } from "@/lib/views/health/mock-fixture";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
 import type { DashboardItem } from "@/lib/views/home/dashboard-items";
@@ -667,10 +668,9 @@ const COST_ITEM: Extract<DashboardItem, { kind: "widget" }> = {
   title: "Cost now",
   dashboard: { name: "Board", href: `/project/${PROJECT_ID}/dashboards/${BOARD}` },
   widget: {
+    ...formWidget(formOf(metricQuery("cost", "sum")), "number"),
     id: "cost",
     title: "Cost now",
-    query: metricQuery("cost", "sum"),
-    chart: "number",
     layout: { x: 0, y: 0, w: 6, h: 5 },
   },
   result: null,

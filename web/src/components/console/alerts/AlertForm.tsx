@@ -37,9 +37,10 @@ import {
   type AlertWindow,
   MAX_ALERT_NAME,
 } from "@/lib/views/alerts/types";
-import { metricAsRql } from "@/lib/views/dashboards/edit-as-sql";
+import { metricAsRql } from "@/lib/views/dashboards/metric-rql";
 import {
   changeQuery,
+  formOf,
   type QueryChange,
   queryName,
   sqlWidgetQuery,
@@ -166,9 +167,9 @@ export function AlertForm({
           ) : null}
           {query.kind === "sql" ? (
             <SqlFields
-              query={query}
+              text={query.text}
               result={null}
-              onChange={setQuery}
+              onRun={(text) => setQuery(sqlWidgetQuery(text))}
               window="The alert's window is its window."
             />
           ) : (
@@ -339,5 +340,5 @@ function startQuery(query: AlertQuery | null): AlertQuery {
  */
 function sqlOf(query: AlertQuery): AlertQuery {
   if (query.kind === "sql") return query;
-  return sqlWidgetQuery(metricAsRql({ title: "", chart: "number", query }, "hour"));
+  return sqlWidgetQuery(metricAsRql(formOf(query), "number", "hour"));
 }

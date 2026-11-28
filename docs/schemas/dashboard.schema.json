@@ -1801,6 +1801,423 @@
                     "minimum": 1,
                     "maximum": 9007199254740991,
                     "description": "The RQL version the text was written in. A saved query is compiled again at load."
+                  },
+                  "form": {
+                    "type": "object",
+                    "properties": {
+                      "measures": {
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "type": "array",
+                        "items": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "trace_count"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "count"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "error_rate"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "rate"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "latency"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "p50",
+                                    "p95"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "tokens"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sum",
+                                    "avg"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "cost"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sum",
+                                    "avg"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "context_tokens"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sum"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "context_cost"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sum"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "scorer_pass_rate"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "rate"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "scorer_average"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "avg"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "measure": {
+                                  "type": "string",
+                                  "const": "scorer_count"
+                                },
+                                "aggregation": {
+                                  "type": "string",
+                                  "enum": [
+                                    "count"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "measure",
+                                "aggregation"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "description": "One measure and its aggregation."
+                      },
+                      "dimensions": {
+                        "default": [],
+                        "maxItems": 2,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "model",
+                            "service",
+                            "environment",
+                            "agent",
+                            "tool",
+                            "scorer"
+                          ]
+                        }
+                      },
+                      "filters": {
+                        "default": {},
+                        "description": "All clauses together with the filters of the page or dashboard: 3,072 bytes of JSON at most.",
+                        "type": "object",
+                        "properties": {
+                          "models": {
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "tools": {
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "services": {
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "environments": {
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "agents": {
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "mcpServers": {
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "failed",
+                              "ok"
+                            ]
+                          },
+                          "minCostUsd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "minTokens": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "and": {
+                            "description": "More clauses: a trace must match every one, also on the same property.",
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "models": {
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "tools": {
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "services": {
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "environments": {
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "agents": {
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "mcpServers": {
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "failed",
+                                    "ok"
+                                  ]
+                                },
+                                "minCostUsd": {
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "minTokens": {
+                                  "type": "number",
+                                  "minimum": 0
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "scorer": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      "bucket": {
+                        "description": "Chosen from the window when absent.",
+                        "type": "string",
+                        "enum": [
+                          "hour",
+                          "day"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "measures"
+                    ],
+                    "additionalProperties": false,
+                    "description": "The metric form's selection that wrote the text. Absent: the text is Custom, written by hand."
                   }
                 },
                 "required": [

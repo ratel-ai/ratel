@@ -4337,7 +4337,7 @@
                   "geography",
                   "sql"
                 ],
-                "description": "line, bar, number or table for a metric; else the query's kind."
+                "description": "line, bar, number or table for a metric or RQL (kind sql: its rows decide which ones draw); else the query's kind. A metric widget is kept as RQL: kind sql with its form."
               }
             },
             "required": [
@@ -4384,7 +4384,7 @@
           "maximum": 50
         },
         "as": {
-          "description": "sql: for a lone metric query, give the RQL text of its numbers (the web app's Edit as SQL) instead of running it. A rate, a context metric and a group-by model, tool or agent have none yet: the refusal says why.",
+          "description": "sql: for a lone metric query, give the RQL text of its numbers instead of running it: the query of kind sql, with the form, that a metric widget keeps.",
           "type": "string",
           "enum": [
             "sql"
@@ -6593,7 +6593,7 @@
                 "geography",
                 "sql"
               ],
-              "description": "line, bar, number or table for a metric; else the query's kind."
+              "description": "line, bar, number or table for a metric or RQL (kind sql: its rows decide which ones draw); else the query's kind. A metric widget is kept as RQL: kind sql with its form."
             }
           },
           "additionalProperties": false

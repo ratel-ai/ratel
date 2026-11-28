@@ -32,7 +32,13 @@ import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { rangeProblem, resolveWidgetRange } from "@/lib/views/dashboards/range";
 import type { WidgetInput } from "@/lib/views/dashboards/types";
-import { queryFilter, sqlWidgetQuery } from "@/lib/views/dashboards/widget";
+import {
+  formOf,
+  formWidget,
+  metricOfForm,
+  queryFilter,
+  sqlWidgetQuery,
+} from "@/lib/views/dashboards/widget";
 import { exploreHref, explorePanelHref, exploreTracesHref } from "@/lib/views/explore/links";
 import { START_PANEL, STARTING_POINTS } from "@/lib/views/explore/starts";
 import {
@@ -49,13 +55,17 @@ import {
 } from "@/lib/views/explore/state";
 
 const METRIC: WidgetInput = {
+  ...formWidget(
+    formOf(
+      metricQuery("latency", "p95", {
+        dimensions: ["model", "agent"],
+        filters: { tools: ["größe"], status: "failed", minCostUsd: 0 },
+        bucket: "hour",
+      }),
+    ),
+    "table",
+  ),
   title: "Größe 中文 🚀",
-  query: metricQuery("latency", "p95", {
-    dimensions: ["model", "agent"],
-    filters: { tools: ["größe"], status: "failed", minCostUsd: 0 },
-    bucket: "hour",
-  }),
-  chart: "table",
 };
 const FOUR: WidgetInput[] = [
   METRIC,
@@ -110,8 +120,8 @@ test("a bad, an old or a forged value is refused with a reason", () => {
     [raw([]), /damaged/],
     [raw(Array(5).fill({ chart: "bar", query })), /damaged/],
     [raw([{ chart: "bar", query: { ...query, kind: "spans" } }]), /Unknown query kind/],
-    [raw([{ chart: "bar", query: sqlWidgetQuery("select count(*) from traces") }]), /chart "sql"/],
-    [raw([{ chart: "table", query }]), /needs a group-by/],
+    [raw([{ chart: "flow", query: sqlWidgetQuery("select count(*) from traces") }]), /a flow/],
+    [raw([{ chart: "flow", query }]), /A metric cannot be drawn as a flow/],
     [`2.${"A".repeat(MAX_STATE_CHARS)}`, /too long/],
   ] as const) {
     const parsed = decodePanels(value);
@@ -127,8 +137,19 @@ test("a link of the encoding before this one still opens", () => {
       query: { kind: "metric", measures: [{ measure: "latency", aggregation: "p95" }] },
     },
   ];
+  // A metric of an older link opens as RQL that its form writes.
   assert.deepEqual(shown(`1.${btoa(JSON.stringify(raw)).replace(/=+$/, "")}`), [
-    { title: "", query: metricQuery("latency", "p95"), chart: "line" },
+    formWidget(formOf(metricQuery("latency", "p95")), "line"),
+  ]);
+  // An older RQL panel of chart "sql" opens as a table, and a metric table needs no group-by.
+  const sql = sqlWidgetQuery("select count(*) from traces");
+  const older = [
+    { chart: "sql", query: sql },
+    { chart: "table", query: { kind: "metric", measures: raw[0].query.measures } },
+  ];
+  assert.deepEqual(shown(`1.${btoa(JSON.stringify(older)).replace(/=+$/, "")}`), [
+    { title: "", query: sql, chart: "table" },
+    formWidget(formOf(metricQuery("latency", "p95")), "table"),
   ]);
 });
 
@@ -149,9 +170,11 @@ function largest(seed: number, bytes: number = MAX_FILTER_BYTES): WidgetInput {
   });
   const spare = bytes - JSON.stringify(filters("")).length;
   return {
+    ...formWidget(
+      formOf(metricQuery("latency", "p95", { filters: filters(noise(spare, seed + 3)) })),
+      "line",
+    ),
     title: noise(80, seed),
-    query: metricQuery("latency", "p95", { filters: filters(noise(spare, seed + 3)) }),
-    chart: "line",
   };
 }
 const opened = (address: string) => {
@@ -186,10 +209,14 @@ test("an edit one step over a bound is refused, and what it edits still fits", (
   assert.equal(panelProblem(largest(7)), null);
   assert.equal(panelProblem(largest(7, MAX_FILTER_BYTES + 1)), TOO_LONG);
   assert.match(panelProblem({ ...METRIC, title: "x".repeat(81) }) ?? "", /80 characters/);
+  // The form writes each value into the text: the text bound refuses it first.
   const many = { tools: Array.from({ length: 1_001 }, (_, i) => `${i}`) };
   assert.match(
-    panelProblem({ ...METRIC, query: metricQuery("latency", "p95", { filters: many }) }) ?? "",
-    /filters\.tools/,
+    panelProblem({
+      ...METRIC,
+      ...formWidget(formOf(metricQuery("latency", "p95", { filters: many })), "line"),
+    }) ?? "",
+    /The RQL text has at most 4,000 characters/,
   );
 });
 
@@ -243,14 +270,9 @@ test("from the Traces page the bar takes its filters and the panel keeps the oth
   const params = paramsOf(exploreTracesHref("p1", search, { preset: "24h", from: "", to: "" }));
   assert.deepEqual(shownFilters(`?${params}`, {}), { models: ["gpt"], agents: ["a"] });
   assert.equal(params.get("range"), "24h");
+  const filters = { tools: ["search"], status: "failed" as const, minCostUsd: 0.1 };
   assert.deepEqual(shown(params.get(PANELS_PARAM)), [
-    {
-      ...START_PANEL,
-      query: {
-        ...START_PANEL.query,
-        filters: { tools: ["search"], status: "failed", minCostUsd: 0.1 },
-      },
-    },
+    formWidget(formOf(metricQuery("trace_count", "count", { bucket: "day", filters })), "bar"),
   ]);
 });
 
@@ -274,6 +296,11 @@ function fullest(seed: number, over = 0): WidgetInput {
   const room = JSON.stringify(PAGE).length + ",".length;
   return largest(seed, MAX_FILTER_BYTES - room + over);
 }
+/** The metric query of a panel's form: what the page filters narrow, and what an alert reads. */
+function metricOfPanel({ query }: WidgetInput): MetricQuery {
+  assert.ok(query.kind === "sql" && query.form, "a panel of the metric form");
+  return metricOfForm(query.form);
+}
 const exact = {
   preset: "exact",
   from: "2026-11-17T18:00:00.000Z",
@@ -282,7 +309,7 @@ const exact = {
 
 test("View traces carries the longest filter whole, in an address that a request takes", () => {
   for (const seed of [1, 2, 3, 4, 5]) {
-    const merged = withPageFilters(fullest(seed).query, PAGE);
+    const merged = withPageFilters(metricOfPanel(fullest(seed)), PAGE);
     assert.equal(JSON.stringify(queryFilter(merged)).length, MAX_FILTER_BYTES);
     const groups = [{ by: "service" as const, value: noise(500, seed + 50) }];
     for (const [named, extra] of [
@@ -329,11 +356,12 @@ test("the budget is what the measured request leaves", () => {
 
 test("the fullest panels with their page filters fit an address, a widget and an alert link", () => {
   const four = [1, 1_001, 2_001, 3_001].map((seed) => fullest(seed));
-  const queries = four.map(({ query }) => query);
+  // The page filters narrow the metric of a panel's form: its widget and its alert read them.
+  const queries = four.map(metricOfPanel);
   assert.equal(filtersProblem(queries, PAGE), null);
   assert.deepEqual(opened(withPanels("?range=7d", four)), four);
-  const saved = withPageFilters(four[0].query, PAGE) as MetricQuery;
-  assert.ok(parseWidget({ ...four[0], query: saved }, { customMonitoring: true }).ok);
+  const saved = withPageFilters(queries[0], PAGE);
+  assert.ok(parseWidget(formWidget(formOf(saved), "line"), { customMonitoring: true }).ok);
   const { hash, searchParams } = new URL(newAlertHref("p1", saved, true), "https://x.test");
   const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
   const parsed = parseAlertQuery(alertQueryOf(value === "hash" ? hash.slice(1) : value), {
@@ -342,10 +370,10 @@ test("the fullest panels with their page filters fit an address, a widget and an
   assert.ok(parsed.ok);
   assert.deepEqual(parsed.query, saved);
   // One byte more is refused in the bar, in a panel and in the alert.
-  const over = fullest(1, 1);
-  assert.equal(filtersProblem([over.query], PAGE), TOO_LONG);
-  assert.equal(panelProblem({ ...over, query: withPageFilters(over.query, PAGE) }), TOO_LONG);
-  const alert = parseAlertQuery(withPageFilters(over.query, PAGE), { customMonitoring: true });
+  const over = metricOfPanel(fullest(1, 1));
+  assert.equal(filtersProblem([over], PAGE), TOO_LONG);
+  assert.equal(panelProblem(formWidget(formOf(withPageFilters(over, PAGE)), "line")), TOO_LONG);
+  const alert = parseAlertQuery(withPageFilters(over, PAGE), { customMonitoring: true });
   assert.deepEqual(alert, { ok: false, error: TOO_LONG });
 });
 

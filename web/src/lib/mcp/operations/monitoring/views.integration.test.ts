@@ -148,8 +148,8 @@ test("the view's model is read only for a view, and never reaches the text", asy
   assert.deepEqual(
     widgets.map(({ widget, result }) => [Object.keys(widget).sort(), result.kind]),
     [
-      [["chart", "query", "title"], "metric"],
-      [["chart", "query", "title"], "metric"],
+      [["chart", "query", "title"], "sql"],
+      [["chart", "query", "title"], "sql"],
     ],
   );
 });

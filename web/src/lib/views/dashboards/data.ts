@@ -11,8 +11,9 @@ import {
   type QueryScope,
 } from "@/lib/synthesis/metrics/catalog";
 import { QueryError, type QueryResult, runQuery } from "@/lib/synthesis/metrics/query";
+import { textToRun } from "@/lib/views/dashboards/metric-rql";
 import type { BrokenWidget, Widget, WidgetInput, WidgetResult } from "@/lib/views/dashboards/types";
-import { queryMetric } from "@/lib/views/dashboards/widget";
+import { isMetricChart, queryMetric } from "@/lib/views/dashboards/widget";
 // What these modules own is read through what they register.
 import "@/lib/views/scorers/metrics";
 import "@/lib/views/dashboards/clusters";
@@ -43,7 +44,18 @@ export const loadWidget = (
   db?: BoundReadDb,
 ): Promise<WidgetResult | null> =>
   widget.query.kind === "sql"
-    ? loadSqlWidget(projectId, widget.query, scope, db)
+    ? loadSqlWidget(
+        projectId,
+        // A text of the form follows the window, as the form did.
+        {
+          ...widget.query,
+          text: isMetricChart(widget.chart)
+            ? textToRun(widget.query, widget.chart, scope)
+            : widget.query.text,
+        },
+        scope,
+        db,
+      )
     : loadOrFallback<QueryResult | null>({
         operation: "dashboard_widget",
         distinctId: `project:${projectId}`,

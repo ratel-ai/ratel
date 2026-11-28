@@ -9,6 +9,7 @@ import {
   type GeographyQuery,
   geographyQuery,
   type MeasureId,
+  type MetricForm,
   type MetricQuery,
   metricQuery,
   QUERY_VERSION,
@@ -22,13 +23,14 @@ import { placeName } from "@/lib/ingest/geo/codes";
 import { getMetric, type MetricDefinition } from "@/lib/synthesis/metrics/catalog";
 import { RQL_VERSION } from "@/lib/synthesis/rql/domain/version";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
+import { formQuery } from "@/lib/views/dashboards/metric-rql";
 import {
   METRIC_CHARTS,
+  type MetricChartKind,
   type MetricWidget,
   type WidgetChart,
   type WidgetInput,
   type WidgetKind,
-  type WidgetQuery,
 } from "@/lib/views/dashboards/types";
 import type { PickerScorer } from "@/lib/views/scorers/picker";
 
@@ -44,25 +46,21 @@ export const CHART_LABELS: Readonly<Record<WidgetChart, string>> = {
   funnel: "Funnel",
   clusters: "Clusters",
   geography: "Map",
-  sql: "Table or chart",
 };
 
+/** The kind choice: a metric widget is kind sql, RQL that the form can write. */
 export const KIND_LABELS: Readonly<Record<WidgetKind, string>> = {
-  metric: "Metric",
+  sql: "Metric",
   flow: "Flow",
   step_flow: "Step flow",
   funnel: "Funnel",
   clusters: "Clusters",
   geography: "Map",
-  sql: "SQL",
 };
 
-export const SQL_CHART_PROBLEM =
-  'A query of kind sql is drawn as chart "sql": a table, or a chart when its rows have one time column.';
-
-/** What a new widget of kind sql starts from. */
+/** What a new metric widget starts from: the newest traces, as a table. */
 export const NEW_SQL_TEXT =
-  "select time_bucket('1 hour', started_at) as hour, count(*) as traces\nfrom traces\ngroup by hour\norder by hour";
+  "select trace_id, started_at, duration_ms, has_error, cost_usd, models\nfrom traces\norder by started_at desc\nlimit 50";
 
 const NODE_LABELS: Readonly<Record<StepFlowNode, string>> = {
   tool: "Tools",
@@ -90,15 +88,17 @@ const DIMENSION_LABELS: Readonly<Record<Dimension, string>> = {
   scorer: "Scorer",
 };
 
-/** Why a chart does not fit the grouping, or null. */
+/**
+ * Why a chart does not fit the query, or null. A metric widget takes a line, a bar, a number or a
+ * table: its rows decide which ones draw (`chartChoices`), so a text that gives other rows says why
+ * at its chart control, not here.
+ */
 export function chartProblem({ chart, query }: Pick<WidgetInput, "chart" | "query">) {
-  if (query.kind === "sql") return chart === "sql" ? null : SQL_CHART_PROBLEM;
-  if (query.kind !== "metric")
+  if (query.kind !== "sql")
     return chart === query.kind ? null : `A ${query.kind} is drawn as a ${query.kind}.`;
   if (!isMetricChart(chart)) return `A metric cannot be drawn as a ${chart}.`;
-  const grouped = query.dimensions.length > 0;
-  if (chart === "table" && !grouped) return "A table needs a group-by.";
-  if (chart === "number" && grouped) return "A number cannot be grouped.";
+  if (chart === "number" && (query.form?.dimensions.length ?? 0) > 0)
+    return "A number cannot be grouped.";
   return null;
 }
 
@@ -146,6 +146,20 @@ export function changeQuery(
   );
 }
 
+/** The nearest selection of the metric form after one field changes. */
+export function changeForm(
+  form: MetricForm,
+  change: QueryChange,
+  scorers: readonly Pick<PickerScorer, "id" | "name" | "verdict">[],
+): MetricForm {
+  const {
+    version: _,
+    kind: __,
+    ...next
+  } = changeQuery({ version: QUERY_VERSION, kind: "metric", ...form }, change, scorers);
+  return next;
+}
+
 /** The nearest map after one field of the measure changes. */
 export function changeGeography(
   query: GeographyQuery,
@@ -162,19 +176,19 @@ export function changeGeography(
   return { ...query, measures, filters };
 }
 
-/** The nearest widget whose chart fits its query: what the editor shows after a change. */
+/**
+ * The nearest widget whose chart fits its query: what the editor shows after a change. A metric
+ * widget of the form gets the text of its selection again, so the text always follows the form.
+ */
 export function fitWidget(widget: MetricWidget): MetricWidget;
 export function fitWidget(widget: WidgetInput): WidgetInput;
 export function fitWidget(widget: WidgetInput): WidgetInput {
   const { query, chart } = widget;
-  if (query.kind !== "metric") return { ...widget, chart: query.kind };
-  if (!isMetricChart(chart)) return fitWidget({ ...widget, chart: "line" });
-  if (chart === "number") return { ...widget, query: { ...query, dimensions: [] } };
-  if (chart !== "table" || query.dimensions.length > 0) return widget;
-  const [first] = getMetric(query.measures[0].measure)?.dimensions ?? [];
-  return first
-    ? { ...widget, query: { ...query, dimensions: [first] } }
-    : { ...widget, chart: "line" };
+  if (query.kind !== "sql") return { ...widget, chart: query.kind };
+  if (!isMetricChart(chart)) return fitWidget({ ...widget, chart: "table" });
+  if (!query.form) return widget;
+  const form = chart === "number" ? { ...query.form, dimensions: [] } : query.form;
+  return { ...widget, query: formQuery(form, chart, form.bucket ?? "hour") };
 }
 
 /** The widget a person starts from when they pick a kind: its filter stays where the kind has one. */
@@ -182,12 +196,6 @@ export function widgetOfKind(kind: WidgetKind, from: WidgetInput): WidgetInput {
   if (from.query.kind === kind) return from;
   const filters = queryFilter(from.query) ?? {};
   switch (kind) {
-    case "metric":
-      return {
-        ...from,
-        query: metricQuery("trace_count", "count", { filters: filters as MetricQuery["filters"] }),
-        chart: "line",
-      };
     case "flow":
       return {
         ...from,
@@ -217,8 +225,18 @@ export function widgetOfKind(kind: WidgetKind, from: WidgetInput): WidgetInput {
         chart: "geography",
       };
     case "sql":
-      return { ...from, query: sqlWidgetQuery(NEW_SQL_TEXT), chart: "sql" };
+      return { ...from, query: sqlWidgetQuery(NEW_SQL_TEXT), chart: "table" };
   }
+}
+
+/** The widget of a metric of the form: its selection, drawn as `chart`. */
+export function formWidget(form: MetricForm, chart: MetricChartKind = "line"): MetricWidget {
+  return fitWidget({ title: "", query: formQuery(form, chart, form.bucket ?? "hour"), chart });
+}
+
+/** The selection of a query object of kind metric: what a form widget holds. */
+export function formOf({ version: _, kind: __, ...form }: MetricQuery): MetricForm {
+  return form;
 }
 
 /** A query of kind sql in the RQL version of this build. */
@@ -232,21 +250,29 @@ const NEW_FUNNEL: readonly FunnelStep[] = [
   { name: "No error", condition: { type: "no_error" } },
 ];
 
-/** The catalog entry a query reads, or null for a kind without one. */
+/** The catalog entry a query reads, or null for a kind without one. A Custom text reads none. */
 export function queryMetric(query: Query): MetricDefinition | null {
+  if (query.kind === "sql") return query.form ? getMetric(query.form.measures[0].measure) : null;
   return measuresOne(query) ? getMetric(query.measures[0].measure) : null;
 }
 
-/** A query's own trace filter, without its scorer. */
-export function queryFilter(query: WidgetQuery): TraceFilter {
-  if (query.kind === "clusters" || query.kind === "sql") return {};
+/** A query's own trace filter, without its scorer: of a metric widget, its form's. */
+export function queryFilter(query: Query): TraceFilter {
+  if (query.kind === "clusters") return {};
+  if (query.kind === "sql") return query.form ? queryFilter(metricOfForm(query.form)) : {};
   if (!measuresOne(query)) return query.filters;
   const { scorer: _, ...filter } = query.filters;
   return filter;
 }
 
 export function queryScorerId(query: Query): string | undefined {
+  if (query.kind === "sql") return query.form?.filters.scorer?.id;
   return measuresOne(query) ? query.filters.scorer?.id : undefined;
+}
+
+/** The query object of kind metric of a selection: what the form compiler and an alert read. */
+export function metricOfForm(form: MetricForm): MetricQuery {
+  return { version: QUERY_VERSION, kind: "metric", ...form };
 }
 
 /** The kinds that show one measure of the catalog. */
@@ -254,15 +280,15 @@ export function measuresOne(query: Query): query is MetricQuery | GeographyQuery
   return query.kind === "metric" || query.kind === "geography";
 }
 
-/** The query with another trace filter; its scorer stays. */
-export function withFilter<Q extends WidgetQuery>(query: Q, filter: TraceFilter): Q {
+/** The query with another trace filter; its scorer stays. RQL text keeps its own. */
+export function withFilter<Q extends Query>(query: Q, filter: TraceFilter): Q {
   if (query.kind === "clusters" || query.kind === "sql") return query;
   const scorer = queryScorerId(query);
   return { ...query, filters: { ...filter, ...(scorer ? { scorer: { id: scorer } } : {}) } };
 }
 
 /** Whether the dashboard's filters narrow it. */
-export function isFilterable(query: WidgetQuery): boolean {
+export function isFilterable(query: Query): boolean {
   // RQL text has no filter of its own to take the page's: the page's filter applies when it runs.
   if (query.kind === "clusters" || query.kind === "sql") return false;
   return !measuresOne(query) || queryMetric(query)?.filterable === true;
@@ -301,13 +327,13 @@ export function scorersOfMetric<T extends Pick<PickerScorer, "verdict">>(
 
 /** The widget "Add to dashboard" starts from on a scorer's page. */
 export function scorerWidget({ id, verdict }: Pick<PickerScorer, "id" | "verdict">): MetricWidget {
-  return {
-    title: "",
-    query: metricQuery(verdict ? "scorer_pass_rate" : "scorer_average", verdict ? "rate" : "avg", {
-      filters: { scorer: { id } },
-    }),
-    chart: "line",
-  };
+  return formWidget(
+    formOf(
+      metricQuery(verdict ? "scorer_pass_rate" : "scorer_average", verdict ? "rate" : "avg", {
+        filters: { scorer: { id } },
+      }),
+    ),
+  );
 }
 
 /** A value as text, the same whatever the order of its keys. */
@@ -320,7 +346,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 /** "Latency p95 by model": the name of a widget without its own title. */
-export function widgetName({ title, query }: Pick<WidgetInput, "title" | "query">): string {
+export function widgetName({ title, query }: { title: string; query: Query }): string {
   return title || queryName(query);
 }
 
@@ -352,7 +378,7 @@ export function queryName(query: NamedQuery): string {
         ? `${metricName({ ...query, dimensions: [] })} by region of ${placeName(query.country)}`
         : `${metricName({ ...query, dimensions: [] })} by country`;
     case "sql":
-      return "RQL query";
+      return query.form ? metricName(query.form) : "RQL query";
   }
 }
 
@@ -364,7 +390,7 @@ type NamedQuery =
   | { kind: "funnel"; steps: readonly { name: string }[] }
   | Pick<ClustersQuery, "kind" | "view">
   | Pick<GeographyQuery, "kind" | "measures" | "country">
-  | { kind: "sql" };
+  | { kind: "sql"; form?: Pick<MetricForm, "measures" | "dimensions"> };
 
 function metricName({
   measures: [{ measure, aggregation }],

@@ -5,11 +5,16 @@ import {
   metricQuery,
   stepFlowQuery,
 } from "@/lib/contracts/query";
-import type { WidgetChart, WidgetInput, WidgetQuery } from "@/lib/views/dashboards/types";
-import { widgetOfKind } from "@/lib/views/dashboards/widget";
+import type {
+  MetricChartKind,
+  WidgetChart,
+  WidgetInput,
+  WidgetQuery,
+} from "@/lib/views/dashboards/types";
+import { formOf, formWidget, widgetOfKind } from "@/lib/views/dashboards/widget";
 
 /** What the page opens with, so it is never empty. */
-export const START_PANEL: WidgetInput = panel(
+export const START_PANEL: WidgetInput = metric(
   metricQuery("trace_count", "count", { bucket: "day" }),
   "bar",
 );
@@ -19,11 +24,11 @@ export const STARTING_POINTS: readonly { label: string; panel: WidgetInput }[] =
   { label: "Traces by day", panel: START_PANEL },
   {
     label: "Errors by model",
-    panel: panel(metricQuery("error_rate", "rate", { dimensions: ["model"] }), "line"),
+    panel: metric(metricQuery("error_rate", "rate", { dimensions: ["model"] }), "line"),
   },
   {
     label: "Cost by agent",
-    panel: panel(metricQuery("cost", "sum", { dimensions: ["agent"] }), "bar"),
+    panel: metric(metricQuery("cost", "sum", { dimensions: ["agent"] }), "bar"),
   },
   { label: "Tool flow", panel: panel(flowQuery("tool"), "flow") },
   { label: "Step flow", panel: panel(stepFlowQuery("tool"), "step_flow") },
@@ -36,7 +41,12 @@ export const STARTING_POINTS: readonly { label: string; panel: WidgetInput }[] =
 
 /** The start panel for the traces of a filter. */
 export function startPanel(filters: MetricQuery["filters"]): WidgetInput {
-  return { ...START_PANEL, query: { ...START_PANEL.query, filters } as WidgetQuery };
+  return metric(metricQuery("trace_count", "count", { bucket: "day", filters }), "bar");
+}
+
+/** A panel of the metric form: RQL with its selection. */
+function metric(query: MetricQuery, chart: MetricChartKind): WidgetInput {
+  return formWidget(formOf(query), chart);
 }
 
 function panel(query: WidgetQuery, chart: WidgetChart): WidgetInput {

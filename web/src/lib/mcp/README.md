@@ -39,8 +39,10 @@ window and one set of filters; its `href` is the Explore page with the same pane
 exact window, and a host with views draws the panels side by side. The filter of a query is a list of
 clauses that must all match: its own properties, then each one of `and`. All clauses with the filters
 of the dashboard or the call are 3,072 bytes of JSON at most. With `as: "sql"` it gives
-the RQL text of a lone metric query instead of its numbers: the web app's `Edit as SQL`
-(`views/dashboards/edit-as-sql.ts`). Every metric has one.
+the RQL text of a lone metric query instead of its numbers: the query of kind `sql` with its `form`
+that a metric widget keeps (`views/dashboards/metric-rql.ts`). Every metric has one. A widget given
+as kind `metric` (change_dashboard, import_dashboard) is kept as kind `sql` with its form, and
+get_dashboard gives it so; its summary says its numbers as the metric does.
 `change_dashboard` (`create`, `add_widget`) saves a panel, and `change_alert` (`create`) watches an
 ungrouped metric. `EXPLORE` in `operations/monitoring/parity.ts` is that list, and the parity test
 fails for an action of the page that is not in it.

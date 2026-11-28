@@ -12,7 +12,7 @@ import {
   widgetTracesHref,
 } from "@/lib/views/dashboards/links";
 import type { DashboardFilters, WidgetInput } from "@/lib/views/dashboards/types";
-import { queryFilter } from "@/lib/views/dashboards/widget";
+import { metricOfForm, queryFilter } from "@/lib/views/dashboards/widget";
 
 /** Where a widget's menu leads, on a dashboard and in Explore. */
 export function WidgetLinkItems({
@@ -35,10 +35,16 @@ export function WidgetLinkItems({
   /** The alert takes the page's filters too. */
   alertWithFilters?: boolean;
 }) {
-  const withFilters = alertWithFilters && takesPageFilters(query, filters);
+  // An alert watches the metric of a widget's form: a hand-written text has none yet.
+  const metric = query.kind === "sql" && query.form ? metricOfForm(query.form) : null;
+  const withFilters = alertWithFilters && metric !== null && takesPageFilters(metric, filters);
   const alertHref =
-    alerts && query.kind === "metric"
-      ? newAlertHref(projectId, withFilters ? withPageFilters(query, filters) : query, withFilters)
+    alerts && metric
+      ? newAlertHref(
+          projectId,
+          withFilters ? withPageFilters(metric, filters) : metric,
+          withFilters,
+        )
       : null;
   return (
     <>
