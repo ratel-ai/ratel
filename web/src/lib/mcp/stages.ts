@@ -89,6 +89,7 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   describe_rql_schema: null,
   run_rql: "monitor",
   draft_widgets: "monitor",
+  suggest_prompts: "monitor",
 
   // Insights: what the data says is wrong or worth changing.
   list_insights: "insights",

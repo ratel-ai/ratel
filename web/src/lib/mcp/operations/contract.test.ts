@@ -227,6 +227,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["run_rql", false],
   // Ask in words: drafts widgets and saves none, behind customMonitoring.
   ["draft_widgets", false],
+  ["suggest_prompts", false],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

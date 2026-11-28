@@ -7,7 +7,7 @@ import type { AskModel } from "@/lib/views/ask/model";
 import { askRequests } from "@/lib/views/ask/schema";
 import { getDashboards } from "@/lib/views/dashboards/store";
 import { askOperations } from "./ask";
-import { type Monitoring, monitoring, NOW, PROJECT } from "./test-support";
+import { insertTrace, type Monitoring, monitoring, NOW, PROJECT } from "./test-support";
 
 const GOOD = {
   title: "Traces per hour",
@@ -34,7 +34,13 @@ let current: AskModel | null = model;
 beforeEach(async () => {
   calls = 0;
   current = model;
-  m = await monitoring((deps) => askOperations(deps, () => ({ model: current })));
+  m = await monitoring((deps) =>
+    askOperations(
+      deps,
+      () => ({ model: current }),
+      () => ({ engine: null }),
+    ),
+  );
 });
 
 test("draft_widgets drafts checked widgets, names the broken one and saves no dashboard", async () => {
@@ -109,4 +115,15 @@ test("draft_widgets for a widget needs the dashboard", async () => {
   })) as DispatchFailure;
   assert.equal(result.error, "invalid_params");
   assert.equal(calls, 0);
+});
+
+test("suggest_prompts gives the fixed order with no engine, and is refused with the flag off", async () => {
+  assert.deepEqual(await m.data("suggest_prompts", {}), { prompts: [], source: "fixed" });
+  await insertTrace(m.client, "c".repeat(32));
+  const data = await m.data<{ prompts: string[]; source: string }>("suggest_prompts", {});
+  assert.equal(data.source, "fixed");
+  assert.ok(data.prompts.length > 0 && data.prompts.length <= 4);
+  m.set.on = false;
+  const result = (await m.call("suggest_prompts", {})) as DispatchFailure;
+  assert.equal(result.error, "forbidden");
 });
