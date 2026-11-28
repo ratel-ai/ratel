@@ -5,7 +5,10 @@ import { keyBaselineDeps } from "@/lib/views/evals/key-deps";
 
 export const runtime = "nodejs";
 
-/** GET /api/v1/evals/experiments/[experimentId]/comparison: against the pinned baseline. */
+/**
+ * GET /api/v1/evals/experiments/[experimentId]/comparison: against the experiment in `?baseline=`,
+ * else the pinned baseline.
+ */
 export const GET = withRequestLog(
   async (req: Request, { params }: { params: Promise<{ experimentId: string }> }) =>
     handleCompareByKey(
@@ -14,5 +17,6 @@ export const GET = withRequestLog(
         req,
         BEARER_ROUTE_SCOPES["GET /api/v1/evals/experiments/[experimentId]/comparison"],
       ),
+      new URL(req.url).searchParams.get("baseline"),
     ),
 );

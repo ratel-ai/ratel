@@ -42,6 +42,10 @@ const VERSION: SandboxVersionSummary = {
   status: "ready",
   createdAt: new Date(),
   tools: [],
+  params: [
+    { name: "model", type: "string", default: null, description: null, options: [] },
+    { name: "depth", type: "number", default: 1, description: null, options: [] },
+  ],
 };
 const JUDGE: CaseScorer = {
   id: "judge",
@@ -114,11 +118,15 @@ async function setup() {
     },
     now: () => new Date(clock),
   };
-  const approvedCase = async (name: string, over: Partial<CaseContent> = {}) => {
+  const approvedCase = async (
+    name: string,
+    over: Partial<CaseContent> = {},
+    labels: string[] = [],
+  ) => {
     const made = await cases.create({
       projectId: PROJECT_ID,
       name,
-      labels: [],
+      labels,
       content: content(over),
       createdBy: "user_1",
     });
@@ -210,13 +218,78 @@ test("two approved cases make 6 trials and 6 sandbox runs, each in a new instanc
   assert.deepEqual(one[0]?.options.fixtures, fixtures);
   assert.deepEqual(one[0]?.options.params, { model: "x" });
   assert.deepEqual(one[0]?.input, { message: "refund A200" });
-  assert.ok(
-    t.started.some(
-      ({ options }) =>
-        JSON.stringify(options.params) ===
-        JSON.stringify({ model: "x", earlierTurns: [{ role: "user", text: "hi" }] }),
-    ),
+  for (const { options } of t.started) assert.deepEqual(options.params, { model: "x" });
+  const two = t.started.filter(({ input }) => JSON.stringify(input).includes("messages"));
+  assert.equal(two.length, 3);
+  assert.deepEqual(two[0]?.input, {
+    message: "refund A200",
+    messages: [{ role: "user", content: "hi" }],
+  });
+});
+
+test("a run with a label takes only the approved cases with that label, with its name", async () => {
+  const t = await setup();
+  await t.approvedCase("refund one", {}, ["refunds"]);
+  await t.approvedCase("refund two", {}, ["refunds", "smoke"]);
+  await t.approvedCase("status", {}, ["status"]);
+  await t.cases.create({
+    projectId: PROJECT_ID,
+    name: "refund draft",
+    labels: ["refunds"],
+    content: content(),
+    createdBy: "u",
+  });
+  const experiment = await t.start({ label: "refunds", name: "Refunds on the new prompt" });
+  assert.deepEqual(experiment.caseVersions.map(({ name }) => name).sort(), [
+    "refund one",
+    "refund two",
+  ]);
+  assert.equal(experiment.labelFilter, "refunds");
+  assert.equal(experiment.name, "Refunds on the new prompt");
+  const [row] = await t.table("eval_experiments");
+  assert.equal(row?.label_filter, "refunds");
+  assert.equal(row?.name, "Refunds on the new prompt");
+  const all = await t.start();
+  assert.equal(all.caseVersions.length, 3);
+  assert.equal(all.labelFilter, null);
+  assert.equal(all.name, null);
+  const none = await startExperiment(
+    SUBJECT,
+    { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "u", label: "nope" },
+    t.deps,
   );
+  assert.deepEqual(none, {
+    ok: false,
+    reason: "no_cases",
+    message: "No approved case has the label nope.",
+  });
+});
+
+test("a param that the version does not declare, or of the wrong type, is refused with the reason", async () => {
+  const t = await setup();
+  await t.approvedCase("one");
+  const start = (params: Record<string, unknown>) =>
+    startExperiment(
+      SUBJECT,
+      { sandboxVersion: "latest", trialsPerCase: 1, params, startedBy: "u" },
+      t.deps,
+    );
+  assert.deepEqual(await start({ temperature: 1 }), {
+    ok: false,
+    reason: "invalid_params",
+    message: "The version does not declare the param temperature.",
+  });
+  assert.deepEqual(await start({ depth: "deep" }), {
+    ok: false,
+    reason: "invalid_params",
+    message: "The param depth must be a number.",
+  });
+  assert.deepEqual(await start({ earlierTurns: [] }), {
+    ok: false,
+    reason: "invalid_params",
+    message: "The version does not declare the param earlierTurns.",
+  });
+  assert.ok((await start({ model: "x", depth: 2 })).ok);
 });
 
 test("the experiment records the version, the commit, the params, the cases and the scorers", async () => {
@@ -691,6 +764,25 @@ test("the read of a key does not load the outputs", async () => {
   const evidence = await t.deps.experiments.trialEvidence(PROJECT_ID, first.id);
   assert.deepEqual(evidence, { output: "No.", toolCalls: [] });
   assert.equal(await t.deps.experiments.trialEvidence(OTHER_PROJECT_ID, first.id), null);
+});
+
+test("the grid reads a cut output of each trial and the case versions of an experiment", async () => {
+  const t = await setup();
+  const made = await t.approvedCase("one", { expectedOutput: "Yes." });
+  const experiment = await t.start({ trialsPerCase: 2 });
+  await t.step(experiment);
+  const [first, second] = [...t.runs.values()];
+  assert.ok(first && second);
+  t.end(first, {}, "x".repeat(50));
+  t.end(second, {}, { reply: "ok" });
+  await t.step(experiment);
+  const previews = await t.deps.experiments.outputPreviews(experiment.id, 20);
+  const texts = [...previews.values()].sort();
+  assert.deepEqual(texts, ["x".repeat(20), '{"reply": "ok"}'].sort());
+  const versions = await t.deps.experiments.caseVersions([made.versions[0]?.id ?? ""]);
+  assert.equal(versions.length, 1);
+  assert.equal(versions[0]?.expectedOutput, "Yes.");
+  assert.deepEqual(await t.deps.experiments.caseVersions([]), []);
 });
 
 test("a run that started stays linked when the trial did not become running", async () => {

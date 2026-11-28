@@ -45,6 +45,8 @@ const startSchema = z.object({
   sandboxVersion: z.union([z.literal("latest"), z.uuid()]),
   trials: z.number().int().min(1).max(MAX_TRIALS).default(DEFAULT_TRIALS),
   params: z.record(z.string(), z.unknown()).default({}),
+  label: z.string().trim().min(1).max(100).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
 });
 const STATUS: Record<StartRefusal, number> = {
   sandboxes_off: 409,
@@ -53,6 +55,7 @@ const STATUS: Record<StartRefusal, number> = {
   no_cases: 409,
   too_many_running: 429,
   too_many_trials: 413,
+  invalid_params: 400,
 };
 
 export function handleStartByKey(request: Request, deps: KeyDeps): Promise<Response> {
@@ -128,10 +131,17 @@ async function start(
     const where = issue?.path.join(".");
     return refuse(400, "invalid", `${where ? `${where}: ` : ""}${issue?.message ?? "Invalid."}`);
   }
-  const { sandboxVersion, trials, params } = body.data;
+  const { sandboxVersion, trials, params, label, name } = body.data;
   const result = await startExperiment(
     { projectId, organizationId },
-    { sandboxVersion, trialsPerCase: trials, params, startedBy: by.startedBy },
+    {
+      sandboxVersion,
+      trialsPerCase: trials,
+      params,
+      startedBy: by.startedBy,
+      ...(label ? { label } : {}),
+      ...(name ? { name } : {}),
+    },
     deps.experiments(),
   );
   if (!result.ok) return refuse(STATUS[result.reason], result.reason, result.message);

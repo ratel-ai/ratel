@@ -17,7 +17,7 @@ import { ScorerFields, scorerSentence } from "./ScorerFields";
 
 const JSON_FIELDS = [
   ["input", "Input (JSON)", 4],
-  ["earlierTurns", "Earlier turns (JSON, the agent gets them as params.earlierTurns)", 3],
+  ["earlierTurns", "Conversation history (JSON, the agent gets it as input.messages)", 3],
   ["toolFixtures", "Tool fixtures (JSON)", 6],
 ] as const;
 type JsonField = (typeof JSON_FIELDS)[number][0];

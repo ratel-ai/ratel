@@ -2,7 +2,9 @@ import { getDb } from "@/lib/platform/db/client";
 import { createDrizzleVersionStore } from "./adapters/drizzle-version-store";
 import type { SandboxRun } from "./domain/run";
 import type { SandboxVersion } from "./domain/version";
+import { versionSpec } from "./page-model";
 import { runDeps } from "./run-deps";
+import type { ParamSpec } from "./run-form";
 import * as runs from "./runs";
 
 /** The public interface of the module: other modules import only this file. */
@@ -14,7 +16,11 @@ export type { StartRunOptions, StartRunResult } from "./runs";
 export type SandboxVersionSummary = Pick<
   SandboxVersion,
   "id" | "projectId" | "sandboxId" | "name" | "git" | "status" | "createdAt"
-> & { tools: ReadonlyArray<{ name: string; sideEffect: boolean }> };
+> & {
+  tools: ReadonlyArray<{ name: string; sideEffect: boolean }>;
+  /** The params that `ratel.yaml` declares. */
+  params: ParamSpec[];
+};
 
 /** Starts one run of a ready version in a new container of a warm VM. It answers before the run ends. */
 export function startRun(
@@ -53,5 +59,6 @@ function summary(version: SandboxVersion): SandboxVersionSummary {
     name,
     sideEffect: (tool.mode ?? "simulated") !== "live",
   }));
-  return { id, projectId, sandboxId, name, git, status, createdAt, tools };
+  const { params } = versionSpec(config);
+  return { id, projectId, sandboxId, name, git, status, createdAt, tools, params };
 }

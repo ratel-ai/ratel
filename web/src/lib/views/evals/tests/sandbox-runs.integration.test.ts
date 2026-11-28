@@ -79,6 +79,7 @@ async function setup(agent: AgentScript = {}) {
     status: "ready",
     createdAt: version.createdAt,
     tools: [{ name: "refund_order", sideEffect: true }],
+    params: [],
   };
   const cases = createDrizzleCaseStore(db);
   const experiments = createDrizzleExperimentStore(db);

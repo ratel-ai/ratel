@@ -14,6 +14,12 @@ export interface ExperimentStore {
   /** In the order of the cases, then of the index. With no output and no tool calls. */
   trials(experimentId: string): Promise<Trial[]>;
   trialEvidence(projectId: string, trialId: string): Promise<TrialEvidence | null>;
+  /**
+   * The output of each trial that has one, as text cut to `chars` (a string as it is, other JSON as
+   * its text), by the trial id. The grid reads it with no large value.
+   */
+  outputPreviews(experimentId: string, chars: number): Promise<Map<string, string>>;
+  caseVersions(versionIds: readonly string[]): Promise<CaseVersion[]>;
   /** Some of the running experiments. Each call mixes them, so none waits for an older one. */
   listRunning(limit: number): Promise<Experiment[]>;
   caseVersion(versionId: string): Promise<CaseVersion | null>;

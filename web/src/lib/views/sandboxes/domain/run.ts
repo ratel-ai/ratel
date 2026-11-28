@@ -55,8 +55,8 @@ export const runRequestSchema = z.object({
     .optional(),
 });
 /**
- * The params of an eval also hold its earlier turns, so a stored request can hold a param that is
- * not a scalar.
+ * A request stored before the earlier turns of an eval moved into `input.messages` holds them in
+ * its params, so a stored param can be other than a scalar.
  */
 export type RunRequest = Omit<z.infer<typeof runRequestSchema>, "params"> & {
   params: Record<string, unknown>;
@@ -153,6 +153,9 @@ export type SandboxRun = {
   startedAt: Date | null;
   finishedAt: Date | null;
 };
+
+/** The start of `requestedBy` of a run that a trial of an eval started: `eval_trial:<trial id>`. */
+export const EVAL_TRIAL_PREFIX = "eval_trial:";
 
 /** The request, the input and the params, as JSON. The container reads it from a file. */
 export const MAX_REQUEST_BYTES = 1024 * 1024;

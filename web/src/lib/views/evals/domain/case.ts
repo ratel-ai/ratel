@@ -139,3 +139,17 @@ export function approvalProblem(content: Pick<CaseContent, "input" | "scorers">)
   if (!content.scorers.some(({ gating }) => gating)) return "Make at least one scorer gating.";
   return null;
 }
+
+/**
+ * The input that a run of the case gets. The earlier turns of the conversation are part of it, as
+ * `messages` (`{ role, content }`, as in `protocol/sandbox/v1`). An object input gets the field next
+ * to its own fields. Any other input, and an object that has `messages` already, goes in `value`.
+ */
+export function runInputOf(version: Pick<CaseContent, "input" | "earlierTurns">): unknown {
+  const { input, earlierTurns } = version;
+  if (earlierTurns.length === 0) return input;
+  const messages = earlierTurns.map(({ role, text }) => ({ role, content: text }));
+  const isRecord = typeof input === "object" && input !== null && !Array.isArray(input);
+  if (isRecord && !Object.hasOwn(input, "messages")) return { ...input, messages };
+  return { value: input, messages };
+}

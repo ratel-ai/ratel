@@ -559,6 +559,21 @@ test("a VM start over the daily limit is refused with the limit name, and the ru
   assert.equal(t.provider.starts.length, 1);
 });
 
+test("the list of the page can leave out the runs of eval trials", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const mine = await t.start();
+  const trial = await t.start({}, { message: "case" }, { requestedBy: "eval_trial:t1" });
+  assert.ok(mine.ok && trial.ok);
+  await t.settle();
+  assert.equal((await t.runs.list(PROJECT_ID, 10)).length, 2);
+  const manual = await t.runs.list(PROJECT_ID, 10, { excludeEvalTrials: true });
+  assert.deepEqual(
+    manual.map(({ id }) => id),
+    [mine.run.id],
+  );
+});
+
 test("a start over the concurrency limit is refused with the limit name", async () => {
   const t = await setup({ limits: { sandbox_concurrent_instances: 2 }, agent: { answer: "hang" } });
   await t.makeReady();

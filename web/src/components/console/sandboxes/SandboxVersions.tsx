@@ -33,6 +33,7 @@ export function SandboxVersions({ versions, now }: { versions: VersionRow[]; now
             <li key={version.id} className="flex flex-col gap-1 px-4 py-3">
               <VersionHead version={version} now={now} />
               {version.reason ? <p className="text-ui text-fg-muted">{version.reason}</p> : null}
+              <VersionSpecView spec={version.spec} />
               {version.smoke && !version.smoke.ok ? (
                 <p className="text-ui text-fg-muted">
                   Smoke check: <code className="font-mono text-xs">{version.smoke.error.code}</code>
@@ -58,6 +59,59 @@ export function SandboxVersions({ versions, now }: { versions: VersionRow[]; now
       )}
     </Section>
   );
+}
+
+/** What the version takes: the input example, the params, the tools with modes and the run mode. */
+function VersionSpecView({ spec }: { spec: VersionRow["spec"] }) {
+  return (
+    <Disclosure
+      title={`Declared: ${spec.runMode} run · ${count(spec.params.length, "parameter")} · ${count(spec.tools.length, "tool")}`}
+    >
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
+        <dt className="text-fg-muted">Input example</dt>
+        <dd>
+          <pre className="max-h-40 overflow-auto rounded-md border border-line bg-rail p-2 font-mono whitespace-pre-wrap text-fg">
+            {JSON.stringify(spec.inputExample, null, 2)}
+          </pre>
+        </dd>
+        <dt className="text-fg-muted">Parameters</dt>
+        <dd className="flex flex-col gap-1">
+          {spec.params.length === 0 ? <span className="text-fg-subtle">None</span> : null}
+          {spec.params.map((param) => (
+            <span key={param.name} className="text-fg">
+              <code className="font-mono">{param.name}</code>{" "}
+              <span className="text-fg-subtle">
+                {param.type === "enum" ? param.options.join(" | ") : param.type}
+                {param.default === null ? "" : ` = ${String(param.default)}`}
+              </span>
+              {param.description ? (
+                <span className="text-fg-muted"> · {param.description}</span>
+              ) : null}
+            </span>
+          ))}
+        </dd>
+        <dt className="text-fg-muted">Tools</dt>
+        <dd className="flex flex-wrap gap-2">
+          {spec.tools.length === 0 ? <span className="text-fg-subtle">None</span> : null}
+          {spec.tools.map((tool) => (
+            <span key={tool.name} className="inline-flex items-center gap-1.5">
+              <code className="font-mono text-fg">{tool.name}</code>
+              <Badge tone="neutral">{tool.mode}</Badge>
+            </span>
+          ))}
+        </dd>
+        <dt className="text-fg-muted">Run mode</dt>
+        <dd className="font-mono text-fg">
+          {spec.runMode}
+          {spec.timeoutSeconds ? ` · timeout ${spec.timeoutSeconds} s` : ""}
+        </dd>
+      </dl>
+    </Disclosure>
+  );
+}
+
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 function VersionHead({ version, now }: { version: VersionRow; now: string }) {

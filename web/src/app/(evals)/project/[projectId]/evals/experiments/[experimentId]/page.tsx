@@ -9,14 +9,14 @@ import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import { evalsEnabledForProject } from "@/lib/views/evals/gate";
-import { experimentPageModel } from "@/lib/views/evals/page-model";
+import { experimentPageModel, PREVIEW_CHARS } from "@/lib/views/evals/page-model";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Experiment" };
 
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
-/** One experiment and its trials. */
+/** One experiment as a grid of its cases, with their trials. */
 export default async function ExperimentPage({
   params,
 }: {
@@ -42,11 +42,14 @@ export default async function ExperimentPage({
       const store = createDrizzleExperimentStore(db);
       const found = UUID.test(experimentId) ? await store.get(project.id, experimentId) : null;
       if (!found) return null;
-      const [trials, baseline] = await Promise.all([
+      const [trials, baseline, versions, outputs] = await Promise.all([
         store.trials(found.id),
         createDrizzleBaselineStore(db).get(project.id),
+        store.caseVersions(found.caseVersions.map(({ versionId }) => versionId)),
+        // One more character than the grid shows, so a cut output gets its "…".
+        store.outputPreviews(found.id, PREVIEW_CHARS + 1),
       ]);
-      return { model: experimentPageModel(found, trials), baseline };
+      return { model: experimentPageModel(found, trials, { versions, outputs }), baseline };
     },
     { attributes: { "project.id": project.id } },
   );
