@@ -12,7 +12,6 @@ import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
 import { hasUsableApiKey } from "@/lib/console/has-api-key";
 import { BASE_URL } from "@/lib/platform/app-config";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
 import { CONTEXT_PEEK, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
@@ -40,7 +39,7 @@ export async function FocusedOverviewPage({
   const window = parseOverviewWindow(range);
   const now = new Date();
   const { layout, revision, undo, read } = await pageLayout(project.id);
-  const [data, linked, dashboardsOn] = await Promise.all([
+  const [data, linked] = await Promise.all([
     loadFocusedOverview({
       project,
       organization,
@@ -50,7 +49,6 @@ export async function FocusedOverviewPage({
       contextOpen: peek === CONTEXT_PEEK,
     }),
     projectEntitiesEnabled(organization),
-    featureEnabled("customMonitoring", { projectId: project.id, organizationId: organization.id }),
   ]);
   // The setup guide shows until the first event, and points at the key onboarding made.
   const hasApiKey = !data.hasTelemetry && (await hasUsableApiKey(project.id));
@@ -68,9 +66,7 @@ export async function FocusedOverviewPage({
               undo: undoOverviewLayout.bind(null, project.id),
               restore: restoreOverviewLayoutEntry.bind(null, project.id),
               history: loadOverviewHistory.bind(null, project.id),
-              dashboardWidgets: dashboardsOn
-                ? loadOverviewDashboardWidgets.bind(null, project.id)
-                : null,
+              dashboardWidgets: loadOverviewDashboardWidgets.bind(null, project.id),
             }
       }
       actions={

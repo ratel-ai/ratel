@@ -1,16 +1,14 @@
 import { Section } from "@ratel/design-system/section";
 import type { ProjectScope } from "@/lib/console/scope/project-scope";
 import { loadGeoAttributes } from "@/lib/ingest/geo/store";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { GeoAttributesForm } from "./GeoAttributesForm";
 
-/** The location attributes of Settings > General, with `customMonitoring` on. */
+/** The location attributes of Settings > General. */
 export async function GeoAttributesSection({
-  scope: { project, organization, role },
+  scope: { project, role },
 }: {
-  scope: Pick<ProjectScope, "project" | "organization" | "role">;
+  scope: Pick<ProjectScope, "project" | "role">;
 }) {
-  if (!(await featureEnabled("customMonitoring", { organizationId: organization.id }))) return null;
   return (
     <Section title="Location attributes">
       <GeoAttributesForm

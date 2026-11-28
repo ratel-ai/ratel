@@ -1,16 +1,14 @@
 import { Section } from "@ratel/design-system/section";
 import type { ProjectScope } from "@/lib/console/scope/project-scope";
 import { listTraceProperties } from "@/lib/ingest/properties/store";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { TracePropertiesTable } from "./TracePropertiesTable";
 
-/** The trace properties of Settings > General (RTL-395), with `customMonitoring` on. */
+/** The trace properties of Settings > General (RTL-395). */
 export async function TracePropertiesSection({
-  scope: { project, organization, role },
+  scope: { project, role },
 }: {
-  scope: Pick<ProjectScope, "project" | "organization" | "role">;
+  scope: Pick<ProjectScope, "project" | "role">;
 }) {
-  if (!(await featureEnabled("customMonitoring", { organizationId: organization.id }))) return null;
   return (
     // The forms link here with ?property=<name>#trace-properties: the table opens on that property.
     <div id="trace-properties" className="scroll-mt-6">

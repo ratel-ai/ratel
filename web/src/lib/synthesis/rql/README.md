@@ -182,8 +182,7 @@ way: on a large database run the `CREATE INDEX CONCURRENTLY` statement in its co
 ## Kind `sql` of the query object
 
 `{ "version": 1, "kind": "sql", "text": "<RQL>", "rqlVersion": 1 }` runs through `runQuery` once
-something imports `synthesis/rql/query`. The seam has no flag check: each caller of `runQuery` is
-behind `customMonitoring` already. The text is compiled at every run, so a
+something imports `synthesis/rql/query`. The text is compiled at every run, so a
 saved query is checked again at load: a version newer than `RQL_VERSION` is `rql_version`, an older
 one is compiled with today's RQL and, when it no longer compiles, the compile error says so. The
 window of the query is the scope's (`since`, `until`, and `by: "known"` for an alert rule), up to

@@ -288,7 +288,7 @@ test("a rule whose stored query is malformed needs attention, is skipped with on
   await client.query("update alert_rules set query = 'null' where id = $1", [fine]);
   await client.exec("update alert_events set delivery = 'pending' where notice is not null");
   const notifier = memoryNotifier();
-  await deliverAlerts(notifier, { now: () => now, flagOn: async () => true }, db);
+  await deliverAlerts(notifier, { now: () => now }, db);
   assert.match(slackMessage(notifier.notices[0], "https://x").text, /The value is above 0.5/);
 });
 
@@ -306,29 +306,11 @@ test("a scorer metric fires on that scorer's results", async () => {
     query: metric("scorer_pass_rate", "rate", { filters: { scorer: { id: scorer } } }),
     operator: "below",
   });
-  const result = await evaluateAlerts({ now: () => now, flagOn: async () => true }, db);
+  const result = await evaluateAlerts({ now: () => now }, db);
   assert.deepEqual(
     result.changes.map(({ ruleId, notice }) => [ruleId, notice]),
     [[id, "fire"]],
   );
-});
-
-test("with the flag off, nothing is read, changed or sent", async () => {
-  const id = await rule();
-  await trace(true);
-  const off = { now: () => now, flagOn: async () => false };
-  assert.deepEqual(await evaluateAlerts(off, db), {
-    evaluated: 0,
-    failed: 0,
-    skipped: [],
-    changes: [],
-    lockContended: false,
-  });
-  assert.equal((await store.getAlertRule(PROJECT, id, db))?.state, "no_data");
-  await evaluate();
-  const notifier = memoryNotifier();
-  assert.equal((await deliverAlerts(notifier, off, db)).sent, 0);
-  assert.deepEqual(notifier.notices, []);
 });
 
 test("a failed message is tried again, 3 times at most, and never in two ticks at once", async () => {
@@ -336,7 +318,7 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
   await trace(true);
   await evaluate();
   const notifier = memoryNotifier();
-  const on = { now: () => now, flagOn: async () => true };
+  const on = { now: () => now };
   notifier.fail = MAX_ATTEMPTS;
   for (let i = 1; i < MAX_ATTEMPTS; i++)
     assert.equal((await deliverAlerts(notifier, on, db)).retrying, 1);
@@ -366,28 +348,11 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
   );
 });
 
-test("F446-3: the pending messages of a project that is off never hold up another project's", async () => {
-  const off = await store.createAlertRule(OTHER, DRAFT, "u", db);
-  assert.ok(off);
-  await pending(off, 101, new Date(now.getTime() - 60_000));
-  const on = await rule();
-  await pending(on, 1, now);
-  const notifier = memoryNotifier();
-  const flagOn = async (projectId: string) => projectId === PROJECT;
-  const result = await deliverAlerts(notifier, { now: () => now, flagOn }, db);
-  assert.deepEqual([result.sent, notifier.notices.map(({ ruleId }) => ruleId)], [1, [on]]);
-  const { rows } = await client.query<{ delivery: string; n: number }>(
-    "select delivery, count(*)::int as n from alert_events where rule_id = $1 group by 1",
-    [off],
-  );
-  assert.deepEqual(rows, [{ delivery: "pending", n: 101 }], "kept for when the flag is on again");
-});
-
 test("F446-3: a message still pending after a day expires, with a log", async () => {
   const id = await rule();
   await pending(id, 1, new Date(now.getTime() - 25 * 3_600_000));
   const notifier = memoryNotifier();
-  const result = await deliverAlerts(notifier, { now: () => now, flagOn: async () => false }, db);
+  const result = await deliverAlerts(notifier, { now: () => now }, db);
   assert.equal(result.expired, 1);
   const [event] = await store.listAlertEvents(PROJECT, id, db);
   assert.deepEqual([event.delivery, event.error], ["failed", "The message expired unsent."]);
@@ -560,10 +525,6 @@ test("a person creates, edits, pauses and deletes a rule; others cannot", async 
   const saved = await store.getAlertRule(PROJECT, ruleId, db);
   assert.deepEqual([saved?.threshold, saved?.enabled, saved?.query], [0.9, false, DRAFT.query]);
   assert.equal(
-    (await change({ action: "create", draft: DRAFT }, { enabled: async () => false })).ok,
-    false,
-  );
-  assert.equal(
     (await change({ action: "delete", ruleId }, { findProjectScope: async () => null })).ok,
     false,
   );
@@ -610,7 +571,7 @@ async function later(minutes: number) {
 }
 
 function evaluate() {
-  return evaluateAlerts({ now: () => now, flagOn: async () => true }, db);
+  return evaluateAlerts({ now: () => now }, db);
 }
 
 /** Kind sql through the RQL runner on this database: every rule reads there, on the alert path. */
@@ -635,7 +596,7 @@ function stepper() {
   const tracked: string[] = [];
   const step = alertsStep({
     evaluate,
-    deliver: () => deliverAlerts(notifier, { now: () => now, flagOn: async () => true }, db),
+    deliver: () => deliverAlerts(notifier, { now: () => now }, db),
     track: async (event) => {
       tracked.push(event);
     },
@@ -655,9 +616,7 @@ function change(input: Record<string, unknown>, over: Partial<AlertActionDeps> =
     {
       getSession: async () => ({ user: { id: "u", externalId: "ext" } }),
       findProjectScope: async (id) => ({ project: { id }, organization: { id: ORG } }),
-      enabled: async () => true,
       isRestricted: async () => false,
-      features: async () => ({ customMonitoring: false }),
       store: bound,
       observe: async () => {},
       ...over,

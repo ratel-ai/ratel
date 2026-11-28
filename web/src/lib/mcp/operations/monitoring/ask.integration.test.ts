@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 import type { McpErrorBody as DispatchFailure } from "@/lib/mcp/errors";
-import { assembleOperations } from "@/lib/mcp/operations";
 import { ASK_LIMITS, ASK_MODEL } from "@/lib/views/ask/limits";
 import type { AskModel } from "@/lib/views/ask/model";
 import { askRequests } from "@/lib/views/ask/schema";
@@ -71,17 +70,6 @@ test("draft_widgets drafts checked widgets, names the broken one and saves no da
   );
 });
 
-test("draft_widgets is refused with customMonitoring off, and is not listed", async () => {
-  m.set.on = false;
-  const result = (await m.call("draft_widgets", { words: "errors" })) as DispatchFailure;
-  assert.equal(result.ok, false);
-  assert.equal(result.error, "forbidden");
-  assert.equal(calls, 0);
-  const ids = (on: boolean) => assembleOperations({ customMonitoring: on }).map(({ id }) => id);
-  assert.ok(ids(true).includes("draft_widgets"));
-  assert.ok(!ids(false).includes("draft_widgets"));
-});
-
 test("draft_widgets counts against the same limits as the console", async () => {
   await m.db.insert(askRequests).values(
     Array.from({ length: ASK_LIMITS.draftsPerPersonPerMinute }, () => ({
@@ -123,13 +111,10 @@ test("draft_widgets for a widget needs the dashboard", async () => {
   assert.equal(calls, 0);
 });
 
-test("suggest_prompts gives the fixed order with no engine, and is refused with the flag off", async () => {
+test("suggest_prompts gives the fixed order with no engine", async () => {
   assert.deepEqual(await m.data("suggest_prompts", {}), { prompts: [], source: "fixed" });
   await insertTrace(m.client, "c".repeat(32));
   const data = await m.data<{ prompts: string[]; source: string }>("suggest_prompts", {});
   assert.equal(data.source, "fixed");
   assert.ok(data.prompts.length > 0 && data.prompts.length <= 4);
-  m.set.on = false;
-  const result = (await m.call("suggest_prompts", {})) as DispatchFailure;
-  assert.equal(result.error, "forbidden");
 });

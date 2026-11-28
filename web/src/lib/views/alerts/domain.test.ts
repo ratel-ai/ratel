@@ -85,8 +85,7 @@ test("a rule from outside is checked like a widget", () => {
     windowMinutes: 5,
     destinationIds: [],
   };
-  const off = { customMonitoring: false };
-  const parsed = parseRule(draft, off);
+  const parsed = parseRule(draft);
   assert.ok(parsed.ok);
   // A metric is kept as RQL with the metric as its form.
   assert.deepEqual(parsed.draft, {
@@ -105,10 +104,9 @@ test("a rule from outside is checked like a widget", () => {
     [{ query: metricQuery("nope" as never, "p95") }, /Unknown measure/],
     [{ query: metricQuery("latency", "sum") }, /aggregated/],
     [{ query: metricQuery("latency", "p95", { dimensions: ["model"] }) }, /cannot be grouped/],
-    [{ query: metricQuery("scorer_pass_rate", "rate") }, /off for this project/],
   ];
   for (const [change, error] of refused) {
-    const result = parseRule({ ...draft, ...change }, off);
+    const result = parseRule({ ...draft, ...change });
     assert.ok(!result.ok);
     assert.match(result.error, error);
   }
@@ -116,7 +114,7 @@ test("a rule from outside is checked like a widget", () => {
 
 test("an alert takes a query of kind sql", () => {
   const query = { version: 1, kind: "sql", text: "select count(*) from traces", rqlVersion: 1 };
-  assert.deepEqual(parseAlertQuery(query, { customMonitoring: true }), {
+  assert.deepEqual(parseAlertQuery(query), {
     ok: true,
     query,
   });

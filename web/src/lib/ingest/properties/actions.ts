@@ -6,7 +6,7 @@ import type { TraceProperty } from "./store";
 /**
  * Index a trace property, stop it, or erase its stored values: what Settings > General > Trace
  * properties and `change_trace_property` both call. An organization admin, outside a support
- * session, with `customMonitoring` on. Indexing a key of the user's own is a plan feature
+ * session. Indexing a key of the user's own is a plan feature
  * (`maxIndexedPropertiesPerProject`), capped at {@link MAX_USER_INDEXED}; a standard property is
  * indexed on every plan.
  */
@@ -36,7 +36,6 @@ export interface TracePropertyActionDeps {
     organization: OrgLimitView;
     role: string | null;
   } | null>;
-  enabled(subject: { organizationId: string }): Promise<boolean>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
   /** The entitlement: how many properties of its own a project of this organization may index. */
@@ -74,8 +73,6 @@ export async function changeTraceProperty(
   const scope = await deps.findProjectScope(projectId);
   if (!scope || scope.role !== "admin")
     return refuse("forbidden", "Only organization admins can change the trace properties.");
-  if (!(await deps.enabled({ organizationId: scope.organization.id })))
-    return refuse("forbidden", "Trace properties are off for this project.");
   if (await deps.isRestricted())
     return refuse("forbidden", "A support session cannot change settings.");
   const parsed = changeSchema.safeParse(raw);

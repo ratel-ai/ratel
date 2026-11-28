@@ -83,8 +83,6 @@ export async function readDashboardItems(
     at.projectId,
     found.map(({ widget }) => widget),
     at.current,
-    // They are on the Overview only with the flag.
-    { customMonitoring: true },
     (projectId, widget, scope: QueryScope) =>
       reads.widget(projectId, widget, { ...scope, filter: filterOf.get(widget as Widget) }, at.db),
   );

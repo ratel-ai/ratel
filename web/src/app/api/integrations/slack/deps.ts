@@ -2,7 +2,6 @@ import { getConfig } from "@/config";
 import { composition } from "@/lib/composition/ports";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { secretBoxConfigured } from "@/lib/platform/secret-box";
 import { getSessionContext } from "@/lib/platform/session";
@@ -20,7 +19,6 @@ export function installDeps(): InstallDeps {
   return {
     getSession: getSessionContext,
     findProjectScope: (projectId) => findProjectScope(projectId),
-    enabled: (subject) => featureEnabled("customMonitoring", subject),
     isRestricted: isRestrictedBySupportSession,
     role: async (projectId) => (await findProjectScope(projectId))?.role ?? null,
     app: (organizationId) => slackAppOf(organizationId),

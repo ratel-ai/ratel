@@ -53,7 +53,6 @@ beforeEach(async () => {
     values ('${PROJECT}', 't1', now(), 1, false, 0, 0, 0, now(), '{"organization":"acme"}'),
       ('${OTHER}', 't2', now(), 1, false, 0, 0, 0, now(), '{"organization":"acme"}');
   `);
-  m.set.on = true;
   limit.value = Number.POSITIVE_INFINITY;
   m.events.length = 0;
 });
@@ -143,18 +142,6 @@ test("without the entitlement the index is refused as a quota, with the reason a
   assert.ok((await change({ action: "index", name: "organization" })).ok);
 });
 
-test("with the flag off both tools refuse", async () => {
-  m.set.on = false;
-  for (const [id, params] of [
-    ["list_trace_properties", {}],
-    ["change_trace_property", { action: "index", name: "app.plan" }],
-  ] as const) {
-    const result = await m.call(id, { projectId: PROJECT, ...params }, personAuth());
-    assert.equal(!result.ok && result.reason, "custom_monitoring_off", id);
-  }
-  assert.equal((await listTraceProperties(PROJECT, m.db))[2]?.state, "detected");
-});
-
 test("tenant: project A's keys and values do not reach project B", async () => {
   // The tools.
   const listed = await m.call("list_trace_properties", { projectId: OTHER }, personAuth());
@@ -188,7 +175,6 @@ test("tenant: project A's keys and values do not reach project B", async () => {
         organization: { id: ORG },
         role: "admin",
       }),
-      enabled: async () => true,
       isRestricted: async () => false,
       observe: async () => {},
     },

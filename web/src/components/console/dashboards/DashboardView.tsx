@@ -43,7 +43,6 @@ import { type TimeWindow, TimeWindowMenu } from "@/components/console/traces/Tra
 import { placeWords } from "@/lib/console/grid/edit-mode";
 import { type GridItem, type GridStep, stepped } from "@/lib/console/grid/layout";
 import { projectRoot } from "@/lib/console/navigation";
-import { metricOffered } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   filterChips,
@@ -89,7 +88,6 @@ import {
   isFilterable,
   NEW_SQL_TEXT,
   queryFilter,
-  queryMetric,
   queryScorerId,
   sqlWidgetQuery,
   widgetName,
@@ -118,7 +116,6 @@ export function DashboardView({
   widgets,
   facets,
   timeWindow,
-  alerts,
   draft,
   ask = false,
   leftOut = [],
@@ -135,8 +132,6 @@ export function DashboardView({
   widgets: readonly { widget: DashboardWidget; result: WidgetResult | null }[];
   facets: TraceFilterBarFacets;
   timeWindow: TimeWindow;
-  /** Alerts are on: a widget can start one. */
-  alerts: boolean;
   /** A widget to start adding as the page opens, from a scorer's page. */
   draft: WidgetInput | null;
   /** This deployment can draft widgets from words: the new widget dialog has its ask field. */
@@ -151,7 +146,6 @@ export function DashboardView({
   startEditing?: boolean;
 }) {
   const router = useRouter();
-  // Null while scorers are off.
   const scorers = useScorers();
   const { pathname, search, pending, go } = useTraceNavigation();
   const { change, saving } = useDashboardAction(projectId);
@@ -382,11 +376,6 @@ export function DashboardView({
     }
   }
 
-  function available(widget: Widget) {
-    const metric = queryMetric(widget.query);
-    return !metric || metricOffered(metric, { customMonitoring: scorers !== null });
-  }
-
   const cards = placed.map((widget) => ({ ...cardOf(widget), min: MIN_WIDGET, ownHeight: true }));
 
   return (
@@ -583,11 +572,7 @@ export function DashboardView({
                   );
                 const title = widgetName(widget);
                 const editItem = (
-                  <MenuItem
-                    icon={<Maximize2 />}
-                    disabled={!available(widget)}
-                    onClick={() => expand(widget.id)}
-                  >
+                  <MenuItem icon={<Maximize2 />} onClick={() => expand(widget.id)}>
                     {readOnly ? "Open widget" : "Edit widget"}
                   </MenuItem>
                 );
@@ -596,14 +581,14 @@ export function DashboardView({
                   // biome-ignore lint/a11y/noStaticElementInteractions: the keyboard opens it from the card's menu.
                   // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard opens it from the card's menu.
                   <div
-                    className={cn("h-full", !arranging && available(widget) && "cursor-pointer")}
+                    className={cn("h-full", !arranging && "cursor-pointer")}
                     onPointerDown={(event) => {
                       pressedAt.current = { x: event.clientX, y: event.clientY };
                     }}
                     onClick={(event) => {
                       const from = pressedAt.current;
                       pressedAt.current = null;
-                      if (arranging || !available(widget) || !from) return;
+                      if (arranging || !from) return;
                       const target = event.target as Element;
                       if (expandsCard(from, { x: event.clientX, y: event.clientY }, target))
                         expand(widget.id);
@@ -656,14 +641,14 @@ export function DashboardView({
                                 filters={filters}
                                 range={timeWindow}
                                 exploreHref={
-                                  available(widget) && !widget.missingScorer
+                                  !widget.missingScorer
                                     ? explorePanelHref(projectId, widget, {
                                         filters,
                                         range: timeWindow,
                                       })
                                     : null
                                 }
-                                alerts={alerts && available(widget) && !widget.missingScorer}
+                                alerts={!widget.missingScorer}
                               />
                             </MenuContent>
                           </Menu>
@@ -676,7 +661,6 @@ export function DashboardView({
                         result={resultOf.get(widget.id) ?? null}
                         range={timeWindow}
                         filters={filters}
-                        available={available(widget)}
                         missingScorer={widget.missingScorer}
                       />
                     </CardFrame>

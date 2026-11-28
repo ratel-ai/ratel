@@ -15,7 +15,6 @@ import { selfCorrectionsHref as selfCorrectionsPageHref } from "@/lib/views/heal
 import { absoluteTime, timeAgo } from "@/lib/views/intents/map/labels";
 import { compactNumber } from "@/lib/views/intents/map/map-model";
 import { formatShare, MISSING } from "@/lib/views/tasks/format";
-import type { TaskLiveScore } from "@/lib/views/tasks/live-scores";
 import type { TaskListModel } from "@/lib/views/tasks/model";
 import { agentHealthHref } from "@/lib/views/tasks/paths";
 
@@ -40,14 +39,12 @@ export function TasksView({
   model,
   now,
   topLevel = false,
-  scores,
   progress = null,
 }: {
   projectId: string;
   model: TaskListModel;
   now: Date;
   topLevel?: boolean;
-  scores?: ReadonlyMap<string, TaskLiveScore> | null;
   /** Where the jobs behind tasks stand (RC-210); null reads as idle. */
   progress?: SectionProgress | null;
 }) {
@@ -66,14 +63,7 @@ export function TasksView({
               <Callout>{readingSinceText(model.readingSince, model.excludedRuns)}</Callout>
             ) : null}
             {topLevel ? (
-              <>
-                {scores === null ? (
-                  <Callout tone="danger" title="Live scores did not load">
-                    Refresh to try again.
-                  </Callout>
-                ) : null}
-                <TopLevelTasksTable projectId={projectId} rows={model.rows} scores={scores} />
-              </>
+              <TopLevelTasksTable projectId={projectId} rows={model.rows} />
             ) : (
               <TasksTable projectId={projectId} rows={model.rows} unserved={model.unserved} />
             )}

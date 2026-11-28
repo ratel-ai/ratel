@@ -129,7 +129,7 @@ test("near the limit, the migration converts every definition, once, out of the 
     // The sweep reads tables of later migrations (org_holds): the schema as a deploy leaves it.
     for (const file of files.slice(files.indexOf(MIGRATION) + 1)) await client.exec(read(file));
     // The sweep takes every enabled scorer, past the limit: 95 checks and 10 presets (no judge engine).
-    const sweep = await sweepScorers({ flagOn: async () => true, judge: { engine: null } }, db);
+    const sweep = await sweepScorers({ judge: { engine: null } }, db);
     assert.equal(sweep.scorers, existing + 10);
   } finally {
     await client.close();
@@ -238,16 +238,15 @@ test("a change of a task scorer moves its scorer of the one model: updated, crea
   }
 });
 
-test("after 0055, every task scorer write moves its converted scorer, flag on or off: no stale limit, no second judge", async () => {
+test("after 0055, every task scorer write moves its converted scorer: no stale limit, no second judge", async () => {
   const { client, db } = await migratedWith(`
     ('${PROJECT}', 'task-a', 'max_latency_ms', '{"max": 2000}', true, 'user', 'u1'),
     ('${PROJECT}', 'task-a', 'judge_criteria', '{"criteria": "Did it book?"}', true, 'user', 'u1')`);
   try {
-    // The old task page (flag off) and MCP save through these; under the limit the sync runs.
+    // The task page and MCP save through these; under the limit the sync runs.
     const save = (scorer: Parameters<typeof saveTaskScorer>[0]["scorer"], enabled = true) =>
       saveTaskScorer(
         { projectId: PROJECT, taskId: "task-a", scorer, enabled, updatedBy: "u1" },
-        false,
         db,
       );
     await save({ kind: "max_latency_ms", max: 9000 });
@@ -267,7 +266,7 @@ test("after 0055, every task scorer write moves its converted scorer, flag on or
       ],
     );
     // A reset to no default detaches it from the task.
-    await resetTaskScorer(PROJECT, "task-a", "judge_criteria", "u1", false, db);
+    await resetTaskScorer(PROJECT, "task-a", "judge_criteria", "u1", db);
     assert.equal(
       (await listTaskScorers(PROJECT, "task-a", db)).some((scorer) => scorer.kind === "judge"),
       false,
@@ -277,40 +276,7 @@ test("after 0055, every task scorer write moves its converted scorer, flag on or
   }
 });
 
-test("flag off, at or over the limit with no matching scorer: the task scorer is saved, as before the one model", async () => {
-  for (const scorers of [MAX_SCORERS, MAX_SCORERS + 30]) {
-    const { client, db } = await migratedWith(
-      `('${PROJECT}', 'task-b', 'ends_well', '{}', true, 'user', 'u1')`,
-    );
-    try {
-      // The converted scorer of task-b is the system's and does not count.
-      await fill(client, scorers);
-      assert.equal(await countScorers(PROJECT, db), scorers);
-      await saveTaskScorer(
-        {
-          projectId: PROJECT,
-          taskId: "task-a",
-          scorer: { kind: "max_tool_calls", max: 3 },
-          enabled: true,
-          updatedBy: "u1",
-        },
-        false,
-        db,
-      );
-      await resetTaskScorer(PROJECT, "task-a", "ends_well", "u1", false, db);
-      const saved = (await scorersFor(PROJECT, "task-a", db)).find(
-        (scorer) => scorer.kind === "max_tool_calls",
-      );
-      assert.deepEqual([saved?.source, saved?.kind === "max_tool_calls" && saved.max], ["user", 3]);
-      // The refused sync creates nothing: the project stays where it was.
-      assert.equal(await countScorers(PROJECT, db), scorers, String(scorers));
-    } finally {
-      await client.close();
-    }
-  }
-});
-
-test("flag on, at the limit with no matching scorer: the change is refused before any write", async () => {
+test("at the limit with no matching scorer: the change is refused before any write", async () => {
   const { client, db } = await migratedWith(
     `('${PROJECT}', 'task-a', 'max_tool_calls', '{"max": 5}', true, 'user', 'u1')`,
   );
@@ -331,13 +297,12 @@ test("flag on, at the limit with no matching scorer: the change is refused befor
           enabled: true,
           updatedBy: "u1",
         },
-        true,
         db,
       ),
       ScorerLimitError,
     );
     await assert.rejects(
-      resetTaskScorer(PROJECT, "task-a", "max_tool_calls", "u1", true, db),
+      resetTaskScorer(PROJECT, "task-a", "max_tool_calls", "u1", db),
       ScorerLimitError,
     );
     assert.deepEqual(await legacy(), before);

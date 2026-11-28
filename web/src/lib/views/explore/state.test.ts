@@ -361,12 +361,10 @@ test("the fullest panels with their page filters fit an address, a widget and an
   assert.equal(filtersProblem(queries, PAGE), null);
   assert.deepEqual(opened(withPanels("?range=7d", four)), four);
   const saved = withPageFilters(queries[0], PAGE);
-  assert.ok(parseWidget(formWidget(formOf(saved), "line"), { customMonitoring: true }).ok);
+  assert.ok(parseWidget(formWidget(formOf(saved), "line")).ok);
   const { hash, searchParams } = new URL(newAlertHref("p1", saved, true), "https://x.test");
   const value = searchParams.get(NEW_ALERT_PARAM) ?? "";
-  const parsed = parseAlertQuery(alertQueryOf(value === "hash" ? hash.slice(1) : value), {
-    customMonitoring: true,
-  });
+  const parsed = parseAlertQuery(alertQueryOf(value === "hash" ? hash.slice(1) : value));
   assert.ok(parsed.ok);
   // An alert keeps the metric as the form of its RQL.
   assert.deepEqual(parsed.query.form, formOf(saved));
@@ -374,7 +372,7 @@ test("the fullest panels with their page filters fit an address, a widget and an
   const over = metricOfPanel(fullest(1, 1));
   assert.equal(filtersProblem([over], PAGE), TOO_LONG);
   assert.equal(panelProblem(formWidget(formOf(withPageFilters(over, PAGE)), "line")), TOO_LONG);
-  const alert = parseAlertQuery(withPageFilters(over, PAGE), { customMonitoring: true });
+  const alert = parseAlertQuery(withPageFilters(over, PAGE));
   assert.deepEqual(alert, { ok: false, error: TOO_LONG });
 });
 

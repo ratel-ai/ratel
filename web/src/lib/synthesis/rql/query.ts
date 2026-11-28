@@ -18,9 +18,8 @@ import {
 
 /**
  * Kind `sql` of the query object: `runQuery` sends it here through `metricSeams.sql`, which this
- * file fills on import. It has no flag check: each caller of `runQuery` is behind
- * `customMonitoring` already (`query_monitoring`, `run_rql`, the dashboards, Explore and the alerts).
- * The text is compiled at every run, so a saved query is checked again at load against the RQL of
+ * file fills on import. Its callers are `query_monitoring`, `run_rql`, the dashboards, Explore and
+ * the alerts. The text is compiled at every run, so a saved query is checked again at load against the RQL of
  * today. The place of the project in the gate of its path is taken before the compile: a query
  * waits up to `gateWaitMs` for one, and is refused before its text costs a parse when none comes
  * free. Each path has its gate (`scope.purpose`): the console (`parallelConsoleQueriesPerProject`),

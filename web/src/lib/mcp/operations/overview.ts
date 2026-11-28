@@ -57,7 +57,6 @@ import {
   visibleWidgets,
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
-import { projectDashboardsOn, projectWidgets } from "@/lib/views/overview-layout/offered";
 import type { OverviewLayoutStore } from "@/lib/views/overview-layout/ports/store";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 import type { Topology } from "@/lib/views/project-entities/topology";
@@ -82,8 +81,6 @@ export interface OverviewOperationDeps {
   /** Every widget there is, which the parameter lists. A project may be offered fewer. */
   widgets: OfferedWidgets;
   offeredWidgets: (projectId: string) => Promise<OfferedWidgets>;
-  /** The project has dashboards, so their widgets can be on the Overview. */
-  dashboardsOn: LayoutDeps["dashboardsOn"];
   dashboardWidget: LayoutDeps["dashboardWidget"];
   /** What an agent reads of each widget. */
   widgetData: Readonly<Record<OverviewWidgetId, WidgetData>>;
@@ -113,8 +110,7 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   loadOverview: loadFocusedOverview,
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
   widgets: WIDGET_CATALOG,
-  offeredWidgets: (projectId) => projectWidgets(projectId),
-  dashboardsOn: (projectId) => projectDashboardsOn(projectId),
+  offeredWidgets: async () => WIDGET_CATALOG,
   dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref),
   widgetData: WIDGET_DATA,
   restricted: isRestrictedBySupportSession,
@@ -416,7 +412,6 @@ function layoutDeps(deps: OverviewOperationDeps, auth: McpAuthContext): LayoutDe
     reader: mcpLayoutReader(auth, deps.restricted),
     store: deps.layoutStore,
     offered: deps.offeredWidgets,
-    dashboardsOn: deps.dashboardsOn,
     dashboardWidget: deps.dashboardWidget,
     source: async () => ({ kind: "mcp", client: await deps.clientName() }),
   };
@@ -500,7 +495,6 @@ async function onlyLayout(
   if (id === undefined) return null;
   if (!isDashboardItem(id))
     return onlyWidget(requireWidget(id, await deps.offeredWidgets(projectId)));
-  if (!(await deps.dashboardsOn(projectId))) throw refused({ ok: false, reason: "dashboards_off" });
   const ref = parseDashboardItem(id);
   const source = ref && (await deps.dashboardWidget(projectId, ref));
   if (!source) throw refused({ ok: false, reason: "no_source" });

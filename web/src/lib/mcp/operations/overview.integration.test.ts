@@ -96,7 +96,6 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
     loadOverview: (input) => loadFocusedOverview({ ...input, db }),
     layoutStore: store,
     offeredWidgets: async () => WIDGET_CATALOG,
-    dashboardsOn: async () => true,
     dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref, db as never),
     restricted: async () => false,
     clientName: async () => "claude-code",
@@ -153,7 +152,6 @@ function webDeps(db: Db, externalId: string) {
     }),
     store: () => createDrizzleOverviewLayoutStore(db),
     offered: async () => WIDGET_CATALOG,
-    dashboardsOn: async () => true,
     dashboardWidget: (projectId: string, ref: DashboardItemRef) =>
       findDashboardWidget(projectId, ref, db as never),
     source: async () => ({ kind: "web" as const }),
@@ -785,16 +783,6 @@ test("a dashboard widget: the same refusals as the web", async () => {
   }
   assert.deepEqual(await at(on.call, add), ["conflict", "too_many"]);
 
-  const off = await withBoard({ dashboardsOn: async () => false });
-  assert.deepEqual(await at(off.call, { change: "add", ...off.ref }), [
-    "forbidden",
-    "dashboards_off",
-  ]);
-  assert.deepEqual(refusal(await off.call("get_overview", off.ref)), [
-    "forbidden",
-    "dashboards_off",
-  ]);
-  assert.deepEqual(dataOf(await off.call("get_overview")).dashboardWidgets, []);
   const support = await withBoard({ restricted: async () => true });
   assert.deepEqual(await at(support.call, { change: "add", ...support.ref }), [
     "forbidden",

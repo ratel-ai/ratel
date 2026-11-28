@@ -84,7 +84,6 @@ beforeEach(async () => {
   await m.client.exec(
     "delete from trace_scorers; delete from alert_rules; delete from alert_destinations; delete from slack_connections; delete from otel_trace_summaries",
   );
-  m.set.on = true;
   m.set.channels = { ok: true, channels: [], partial: false };
   m.set.access = { ok: true, teamId: "T1", name: "alerts" };
   m.set.post = { ok: true };
@@ -92,18 +91,6 @@ beforeEach(async () => {
   m.posted.length = 0;
 });
 after(() => m.client.close());
-
-test("with the flag off every operation refuses and writes nothing", async () => {
-  m.set.on = false;
-  for (const [id, params] of CALLS) {
-    const result = await m.call(id, params);
-    assert.equal(!result.ok && result.error, "forbidden", id);
-    assert.equal(!result.ok && result.reason, "custom_monitoring_off", id);
-  }
-  assert.deepEqual(m.events, []);
-  assert.deepEqual(await listScorers(PROJECT, m.db), []);
-  assert.deepEqual(await listAlertRules(PROJECT, m.db), []);
-});
 
 test("with the flag on every operation works for a key and for a member", async () => {
   for (const [id, params] of CALLS) {
@@ -187,7 +174,6 @@ test("a scorer made through MCP equals the one the web app makes", async () => {
     {
       getSession: async () => ({ user: { id: "u", externalId: "u" } }),
       findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
-      enabled: async () => true,
       isRestricted: async () => false,
       get: async () => null,
       count: async () => 0,
@@ -372,9 +358,7 @@ test("an alert made through MCP equals the one the web app makes", async () => {
     {
       getSession: async () => ({ user: { id: "u", externalId: "u" } }),
       findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
-      enabled: async () => true,
       isRestricted: async () => false,
-      features: async () => ({ customMonitoring: true }),
       store: {
         ...store,
         createAlertRule: (p, d, a) => store.createAlertRule(p, d, a, m.db),
@@ -641,9 +625,6 @@ test("F452-1: an admin changes the location attributes through MCP; a member and
   }
   assert.ok((await change({ reset: true })).ok);
   assert.deepEqual(await loadGeoAttributes(PROJECT, m.db), DEFAULT_GEO_ATTRIBUTES);
-  m.set.on = false;
-  const off = await change({ address: "app.ip" });
-  assert.equal(!off.ok && off.reason, "custom_monitoring_off");
 });
 
 test("no result holds a secret, and no refusal or event repeats one", async () => {

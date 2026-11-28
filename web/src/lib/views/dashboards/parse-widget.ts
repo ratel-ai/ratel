@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { hasNoNul, NUL_PROBLEM } from "@/lib/contracts/json-text";
 import { MAX_SQL_TEXT, parseQuery, type Query } from "@/lib/contracts/query";
-import { type MetricFeatures, metricOffered } from "@/lib/synthesis/metrics/catalog";
 import { isFormText } from "@/lib/views/dashboards/metric-rql";
 import {
   MAX_WIDGET_TITLE,
@@ -16,7 +15,6 @@ import {
   formOf,
   formWidget,
   isMetricChart,
-  queryMetric,
 } from "@/lib/views/dashboards/widget";
 
 const widgetShape = z.strictObject({
@@ -27,7 +25,7 @@ const widgetShape = z.strictObject({
 
 export type ParsedWidget = { ok: true; widget: WidgetInput } | { ok: false; error: string };
 
-/** How a widget is read: the project's switches, and the chart of an older widget of kind sql. */
+/** How a widget is read: the chart of an older widget of kind sql. */
 export interface ParseWidgetOptions {
   /**
    * The chart of an older RQL widget, drawn as "a table, or a line when its rows have one time
@@ -37,14 +35,12 @@ export interface ParseWidgetOptions {
 }
 
 /**
- * A widget from outside: its shape, its query's contract, the project's switches (all off unless
- * given), then the chart's rules. A widget an older version stored is read in today's shape: a
+ * A widget from outside: its shape, its query's contract, then the chart's rules. A widget an older version stored is read in today's shape: a
  * metric is RQL with the form's selection, and the chart `sql` is the chart its rows drew. A
  * selection whose text is not its own any more is dropped: the text is Custom.
  */
 export function parseWidget(
   raw: unknown,
-  features: MetricFeatures = { customMonitoring: false },
   { sqlChart = () => "table" }: ParseWidgetOptions = {},
 ): ParsedWidget {
   const parsed = widgetShape.safeParse(raw);
@@ -55,22 +51,12 @@ export function parseWidget(
         parsed.error.issues.find(({ message }) => message === NUL_PROBLEM)?.message ??
         "The widget settings are invalid.",
     };
-  const query = parseOfferedQuery(parsed.data.query, features);
+  const query = parseQuery(parsed.data.query);
   if (!query.ok) return query;
   const widget = currentWidget(parsed.data.title, query.query, parsed.data.chart, sqlChart);
   if (!widget.ok) return widget;
   const problem = chartProblem(widget.widget);
   return problem ? { ok: false, error: problem } : widget;
-}
-
-/** A query the contract allows and the project's switches offer. */
-export function parseOfferedQuery(raw: unknown, features: MetricFeatures) {
-  const parsed = parseQuery(raw);
-  if (!parsed.ok) return parsed;
-  const metric = queryMetric(parsed.query);
-  if (metric && !metricOffered(metric, features))
-    return { ok: false as const, error: `${metric.label} is off for this project.` };
-  return parsed;
 }
 
 /** A widget in today's shape. */

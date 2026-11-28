@@ -3,7 +3,7 @@ import { invalidParams, McpOperationError } from "@/lib/mcp/errors";
 import {
   defaultMonitoringDeps,
   type MonitoringDeps,
-  requireMonitoring,
+  monitoringCaller,
 } from "@/lib/mcp/operations/monitoring/deps";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
@@ -17,7 +17,7 @@ import { loadSuggestions, type SuggestDeps } from "@/lib/views/ask/suggest-pick"
 import { getDashboard } from "@/lib/views/dashboards/store";
 
 /**
- * Ask in words over MCP (`customMonitoring`): `draft_widgets` drafts RQL widgets from a sentence,
+ * Ask in words over MCP: `draft_widgets` drafts RQL widgets from a sentence,
  * as the console's ask field does, with the same limits. It saves no widget and no dashboard: it
  * stores the ask, which the limits count. To keep a draft, the caller adds its widgets with
  * `change_dashboard` (add_widget) or makes a dashboard with `import_dashboard`. `suggest_prompts`
@@ -64,7 +64,7 @@ export function askOperations(
         until: windowParams.until,
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const dashboardId = params.dashboardId ?? null;
         if (params.target === "widget" && !dashboardId)
           throw invalidParams(
@@ -140,7 +140,7 @@ export function askOperations(
           .describe("The title of the new dashboard, when it has one."),
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const dashboardId = params.dashboardId ?? null;
         if (dashboardId && !(await getDashboard(caller.projectId, dashboardId, deps.db())))
           throw new McpOperationError("not_found", "The dashboard does not exist.");

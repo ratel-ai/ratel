@@ -137,12 +137,11 @@ beforeEach(async () => {
   await m.client.exec(
     "delete from dashboards; delete from trace_scorers; delete from otel_trace_summaries",
   );
-  m.set.on = true;
   m.events.length = 0;
 });
 after(() => m.client.close());
 
-test("each operation with the flag on and off, with and without access", async () => {
+test("each operation with and without access", async () => {
   for (const [id, params] of CALLS) {
     const expected = id === "get_dashboard" ? "not_found" : true;
     const keyed = await m.call(id, params);
@@ -157,11 +156,6 @@ test("each operation with the flag on and off, with and without access", async (
       personAuth("admin", MISSING),
     );
     assert.equal(!stranger.ok && stranger.error, "not_found", id);
-  }
-  m.set.on = false;
-  for (const [id, params] of CALLS) {
-    const off = await m.call(id, params);
-    assert.equal(!off.ok && off.reason, "custom_monitoring_off", id);
   }
 });
 
@@ -214,10 +208,8 @@ test("an import through MCP equals the web app's", async () => {
         user: { id: "u", externalId: "u", name: "Ann", username: null, email: "a@b.c" },
       }),
       findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
-      enabled: async () => true,
       isRestricted: async () => false,
       templates: { indexedProperties: async () => [], recordPick: async () => {} },
-      features: async () => ({ customMonitoring: true }),
       scorers: async (projectId) => (await loadScorerPicker(projectId, new Date(), m.db)).scorers,
       store: {
         ...store,
@@ -885,19 +877,8 @@ function widget(title: string, chart: string, query: object, x: number, y: numbe
   return { title, query, chart, layout: { x, y, w: 6, h: 6 } };
 }
 
-test("list_dashboards gives the defaults one time; a template makes a dashboard; flag off makes none", async () => {
+test("list_dashboards gives the defaults one time; a template makes a dashboard", async () => {
   await m.client.exec("delete from dashboard_template_uses; delete from trace_property_keys");
-  m.set.on = false;
-  for (const [id, params] of [
-    ["list_dashboards", {}],
-    ["list_dashboard_templates", {}],
-    ["import_dashboard", { template: "tools" }],
-  ] as const) {
-    const off = await m.call(id, params);
-    assert.equal(!off.ok && off.reason, "custom_monitoring_off", id);
-  }
-  assert.deepEqual(await store.listDashboards(PROJECT, m.db), [], "no default with the flag off");
-  m.set.on = true;
 
   const listed = await m.call("list_dashboards", {});
   assert.ok(listed.ok);

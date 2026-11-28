@@ -5,8 +5,8 @@
 Accepted. RQL is the Ratel Query Language, Ratel's read-only query language over trace data. The
 compiler, the views, the role, the runner (`web/src/lib/synthesis/rql`) and the MCP tools
 `describe_rql_schema` and `run_rql` are in place, with every metric widget of the dashboards and
-Explore on RQL (the metric form writes the text) and RQL alert rules, behind `customMonitoring`
-(`FF_CUSTOM_MONITORING`, off by default), the flag of custom monitoring: RQL has no flag of its own.
+Explore on RQL (the metric form writes the text) and RQL alert rules. RQL has no flag: it is on for
+every deployment, as the rest of custom monitoring.
 
 ## Context
 

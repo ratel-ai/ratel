@@ -78,7 +78,6 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     launchAccess: async () => true,
     appCatalog: () => catalog,
     // The pinned surface is without the RQL tools: route-handler.rql.test.ts has them.
-    customMonitoring: async () => false,
     ...overrides,
   };
 }

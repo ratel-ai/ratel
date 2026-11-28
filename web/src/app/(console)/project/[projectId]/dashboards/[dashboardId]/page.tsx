@@ -1,12 +1,10 @@
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { DashboardView } from "@/components/console/dashboards/DashboardView";
 import { TaskNamesProvider } from "@/components/console/dashboards/TaskNamesProvider";
 import { PropertyChoicesProvider } from "@/components/console/properties/PropertyChoicesProvider";
 import { ScorerPickerProvider } from "@/components/console/scorers/ScorerPickerProvider";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { focusedConsoleEnabled } from "@/lib/console/focused-console";
-import { projectRoot } from "@/lib/console/navigation";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { searchFromParams } from "@/lib/synthesis/traces/v2/filters";
@@ -20,7 +18,7 @@ import { ADD_SCORER_PARAM } from "@/lib/views/dashboards/links";
 import { getDashboard } from "@/lib/views/dashboards/store";
 import { isWidget } from "@/lib/views/dashboards/stored-widget";
 import { scorerWidget } from "@/lib/views/dashboards/widget";
-import { dashboardsEnabled, dashboardsScope, metricFeatures } from "../context";
+import { dashboardsScope } from "../context";
 import { loadWidgetForm } from "../form-data";
 
 export const metadata = { title: "Dashboard" };
@@ -39,8 +37,6 @@ export default async function ScopedDashboardPage({
   >;
 }) {
   const { projectId, dashboardId } = await params;
-  if (!(await dashboardsEnabled(projectId)))
-    permanentRedirect(`${projectRoot(projectId)}?peek=context`);
   const scope = await dashboardsScope(projectId);
   if (!scope)
     return (
@@ -65,27 +61,11 @@ export default async function ScopedDashboardPage({
     dashboard.widgets.filter(isWidget).map(({ query }) => query),
     filters,
   );
-  const features = await metricFeatures({
-    projectId: scope.project.id,
-    organizationId: scope.organization.id,
-    actor: scope.user.externalId,
-  });
-  const [results, { facets, scorers, properties, usage, taskNames }, alerts, readOnly] =
-    await Promise.all([
-      loadWidgets(
-        scope.project.id,
-        problem ? [] : dashboard.widgets,
-        { ...range, filter: filters },
-        features,
-      ),
-      loadWidgetForm(scope.project.id, range, features),
-      featureEnabled("customMonitoring", {
-        projectId: scope.project.id,
-        organizationId: scope.organization.id,
-        actor: scope.user.externalId,
-      }),
-      isRestrictedBySupportSession(),
-    ]);
+  const [results, { facets, scorers, properties, usage, taskNames }, readOnly] = await Promise.all([
+    loadWidgets(scope.project.id, problem ? [] : dashboard.widgets, { ...range, filter: filters }),
+    loadWidgetForm(scope.project.id, range),
+    isRestrictedBySupportSession(),
+  ]);
   const overview = await focusedConsoleEnabled(scope.organization);
   // A dashboard an ask built names the widgets the ask left out.
   const builtBy = parseProjectUuid(String(search[BUILT_BY_ASK_PARAM] ?? ""));
@@ -96,7 +76,6 @@ export default async function ScopedDashboardPage({
       <PropertyChoicesProvider projectId={scope.project.id} choices={properties} usage={usage}>
         <TaskNamesProvider names={taskNames}>
           <DashboardView
-            alerts={alerts}
             overview={overview}
             readOnly={readOnly}
             ask={askConfigured()}

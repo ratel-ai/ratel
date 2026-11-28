@@ -75,7 +75,7 @@ test("a body that holds an address is located and stored, and its raw copy is no
     let located = 0;
     const deployment = await queued([body], {
       traces: {
-        locate: async (projectId, _organization, spans) => {
+        locate: async (projectId, spans) => {
           assert.equal(projectId, PROJECT_ID);
           located += spans.length;
           return { addressed };

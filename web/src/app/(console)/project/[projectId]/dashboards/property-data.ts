@@ -13,15 +13,13 @@ import { loadPropertyChoices } from "@/lib/views/dashboards/property-choices";
 
 /**
  * The trace properties the metric forms offer (RTL-396), with the plan's entitlement and the
- * console's upgrade link for the tooltip of a detected one. None while `customMonitoring` is off,
- * and none when the read fails: the forms then show their built-in fields only.
+ * console's upgrade link for the tooltip of a detected one. None when the read fails: the forms
+ * then show their built-in fields only.
  */
 export async function loadFormProperties(
   projectId: string,
   range: { since: Date; until?: Date },
-  customMonitoring: boolean,
 ): Promise<PropertyChoices> {
-  if (!customMonitoring) return NO_PROPERTIES;
   return loadOrFallback({
     operation: "form_properties",
     distinctId: `project:${projectId}`,
@@ -44,14 +42,9 @@ export async function loadFormProperties(
 
 /**
  * What the RQL field of the forms orders its list by (`completion-usage.ts`), read once at page
- * load. No history while `customMonitoring` is off, and none when the read fails: the list then
- * keeps its fixed start order.
+ * load. None when the read fails: the list then keeps its fixed start order.
  */
-export async function loadFormCompletionUsage(
-  projectId: string,
-  customMonitoring: boolean,
-): Promise<RqlCompletionUsage> {
-  if (!customMonitoring) return NO_USAGE;
+export async function loadFormCompletionUsage(projectId: string): Promise<RqlCompletionUsage> {
   return loadOrFallback({
     operation: "form_completion_usage",
     distinctId: `project:${projectId}`,

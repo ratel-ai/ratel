@@ -120,7 +120,6 @@ function destinationDeps(db: store.AlertsDb): DestinationActionDeps {
   return {
     getSession: async () => ({ user: { id: "u", externalId: "ext" } }),
     findProjectScope: async (id: string) => ({ project: { id }, organization: { id } }),
-    enabled: async () => true,
     isRestricted: async () => false,
     canSeal: () => true,
     create: (input: Parameters<typeof createDestination>[0]) =>
@@ -144,9 +143,7 @@ function deps(db: store.AlertsDb): AlertActionDeps {
   return {
     getSession: async () => ({ user: { id: "u", externalId: "ext" } }),
     findProjectScope: async (id) => ({ project: { id }, organization: { id: PROJECT } }),
-    enabled: async () => true,
     isRestricted: async () => false,
-    features: async () => ({ customMonitoring: false }),
     store: {
       createAlertRule: (p, d, a) => store.createAlertRule(p, d, a, db),
       updateAlertRule: (p, i, d, a) => store.updateAlertRule(p, i, d, a, db),

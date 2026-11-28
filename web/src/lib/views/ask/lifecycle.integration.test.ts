@@ -53,8 +53,6 @@ function deps(): DashboardActionDeps {
       user: { id: "u1", externalId: "u1", name: "Ann", username: null, email: "ann@example.com" },
     }),
     findProjectScope: async () => ({ project: { id: PROJECT }, organization: { id: ORG } }),
-    enabled: async () => true,
-    features: async () => ({ customMonitoring: true }),
     scorers: async () => [],
     isRestricted: async () => false,
     templates: { indexedProperties: async () => [], recordPick: async () => {} },

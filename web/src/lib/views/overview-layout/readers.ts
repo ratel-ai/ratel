@@ -11,8 +11,7 @@ import {
 } from "./actions";
 import { createDrizzleOverviewLayoutStore } from "./adapters/drizzle-store";
 import { findDashboardWidget } from "./dashboard-widgets";
-import { UNFLAGGED_LAYOUT } from "./domain/layout";
-import { projectDashboardsOn, projectWidgets } from "./offered";
+import { DEFAULT_LAYOUT, WIDGET_CATALOG } from "./domain/layout";
 
 /** The web's side: the signed-in person, with the console's own project check. */
 export interface WebReaderDeps {
@@ -40,8 +39,7 @@ export function webLayoutReader(
 export const webLayoutDeps: LayoutDeps = {
   reader: webLayoutReader(),
   store: () => createDrizzleOverviewLayoutStore(getDb()),
-  offered: (projectId) => projectWidgets(projectId),
-  dashboardsOn: (projectId) => projectDashboardsOn(projectId),
+  offered: async () => WIDGET_CATALOG,
   dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref),
   source: async () => ({ kind: "web" }),
 };
@@ -54,7 +52,7 @@ export function pageLayout(
   projectId: string,
   deps: LayoutDeps = webLayoutDeps,
 ): Promise<LayoutSnapshot & { read: boolean }> {
-  const unread = { layout: UNFLAGGED_LAYOUT, revision: "", undo: null, read: false };
+  const unread = { layout: DEFAULT_LAYOUT, revision: "", undo: null, read: false };
   return loadOrFallback({
     operation: "overview_layout",
     distinctId: `project:${projectId}`,

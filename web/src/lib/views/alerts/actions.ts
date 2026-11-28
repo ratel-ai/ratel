@@ -1,5 +1,4 @@
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
-import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 import { parseRule } from "@/lib/views/alerts/parse-rule";
 import type * as store from "@/lib/views/alerts/store";
 import { type AlertDraft, MAX_ALERT_RULES } from "@/lib/views/alerts/types";
@@ -20,7 +19,6 @@ export interface AlertAccessDeps {
     projectId: string,
     userId: string,
   ): Promise<{ project: { id: string }; organization: { id: string } } | null>;
-  enabled(subject: AlertSubject): Promise<boolean>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
 }
@@ -32,8 +30,6 @@ export interface AlertSubject {
 }
 
 export interface AlertActionDeps extends AlertAccessDeps {
-  /** The switches that decide which metrics a rule may use. */
-  features(subject: AlertSubject): Promise<MetricFeatures>;
   store: Pick<
     typeof store,
     "createAlertRule" | "updateAlertRule" | "setAlertRuleEnabled" | "deleteAlertRule"
@@ -50,7 +46,7 @@ export interface AlertActionDeps extends AlertAccessDeps {
 const INVALID = { ok: false, error: "The alert change is invalid." } as const;
 const MISSING = { ok: false, error: "This alert no longer exists." } as const;
 
-/** One change to a project's alert rules: membership and the flag first, then the rule itself. */
+/** One change to a project's alert rules: membership first, then the rule itself. */
 export async function changeAlert(raw: unknown, deps: AlertActionDeps): Promise<AlertActionResult> {
   const input = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   const access = await authorizeAlerts(input.projectId, deps);
@@ -63,7 +59,7 @@ export async function changeAlert(raw: unknown, deps: AlertActionDeps): Promise<
   switch (input.action) {
     case "create":
     case "update": {
-      const parsed = parseRule(input.draft, await deps.features(subject));
+      const parsed = parseRule(input.draft);
       if (!parsed.ok) return parsed;
       if (input.action === "create") {
         const created = await deps.store.createAlertRule(projectId, parsed.draft, actor);
@@ -104,7 +100,7 @@ export async function changeAlert(raw: unknown, deps: AlertActionDeps): Promise<
   return { ok: true, ruleId: id };
 }
 
-/** Require a session, project membership, the project's flag and no support session. */
+/** Require a session, project membership and no support session. */
 export async function authorizeAlerts(
   rawProjectId: unknown,
   deps: AlertAccessDeps,
@@ -120,8 +116,6 @@ export async function authorizeAlerts(
     organizationId: scope.organization.id,
     actor: session.user.externalId,
   };
-  if (!(await deps.enabled(subject)))
-    return { ok: false, error: "Alerts are off for this project." };
   if (await deps.isRestricted())
     return { ok: false, error: "A support session cannot change alerts." };
   return { ok: true, subject };

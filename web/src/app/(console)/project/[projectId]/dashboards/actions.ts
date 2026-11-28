@@ -2,7 +2,6 @@
 
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { reportServerException } from "@/lib/platform/telemetry";
@@ -24,7 +23,6 @@ import * as store from "@/lib/views/dashboards/store";
 import { isBroken } from "@/lib/views/dashboards/stored-widget";
 import type { WidgetResult } from "@/lib/views/dashboards/types";
 import { scorerNames } from "@/lib/views/scorers/picker";
-import { metricFeatures } from "./context";
 import { consoleDashboardDeps } from "./dashboard-deps";
 
 const logger = getLogger("dashboards/actions");
@@ -59,8 +57,6 @@ export async function exportDashboardAction(
   if (!isDbConfigured()) return { ok: false, error: "No database is connected." };
   const scope = await findProjectScope(projectId);
   if (!scope) return { ok: false, error: "You cannot read this project." };
-  if (!(await featureEnabled("customMonitoring", { organizationId: scope.organization.id })))
-    return { ok: false, error: "Dashboards are off for this project." };
   const id = parseProjectUuid(dashboardId);
   try {
     const dashboard = id ? await store.getDashboard(scope.project.id, id) : null;
@@ -89,14 +85,7 @@ export async function previewWidgetAction(
   if (!isDbConfigured()) return { ok: false, error: "No database is connected." };
   const scope = await findProjectScope(projectId);
   if (!scope) return { ok: false, error: "You cannot read this project." };
-  if (!(await featureEnabled("customMonitoring", { organizationId: scope.organization.id })))
-    return { ok: false, error: "Dashboards are off for this project." };
-  const features = await metricFeatures({
-    projectId: scope.project.id,
-    organizationId: scope.organization.id,
-    actor: scope.user.externalId,
-  });
-  const parsed = parseWidget(widget, features);
+  const parsed = parseWidget(widget);
   if (!parsed.ok) return parsed;
   const window = resolveWidgetRange(
     { range: String(range.preset), from: String(range.from), to: String(range.to) },

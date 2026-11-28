@@ -18,7 +18,7 @@ export const SYSTEM_EDITOR = { updatedBy: "system", updatedByName: "Ratel" } as 
  * normal dashboards, in one transaction under the project's dashboards lock, and records each one
  * as given. A default given before is never made again, even after its dashboard is deleted. A
  * project at `MAX_DASHBOARDS` gets none and gets them later. Returns the ids of the dashboards it
- * made. The caller calls it only with `customMonitoring` on, and never in a support session.
+ * made. The caller never calls it in a support session.
  */
 export async function ensureDefaultDashboards(
   projectId: string,

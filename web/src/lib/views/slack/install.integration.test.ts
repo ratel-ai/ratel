@@ -101,7 +101,6 @@ test("a missing, changed, expired or foreign state stores nothing and calls nobo
     [makeState({ ...SUBJECT, organizationId: PROJECT }, now, KEY)],
     [good, { findProjectScope: async () => null }],
     [good, { getSession: async () => null }],
-    [good, { enabled: async () => false }],
     [good, { isRestricted: async () => true }],
   ];
   for (const [state, over] of refused) {
@@ -355,7 +354,6 @@ function deps(over: Partial<InstallDeps> = {}): InstallDeps {
   return {
     getSession: async () => ({ user: { id: "u", externalId: "ext" } }),
     findProjectScope: async (id) => ({ project: { id }, organization: { id: ORG } }),
-    enabled: async () => true,
     isRestricted: async () => false,
     role: async () => "admin",
     app: (organizationId) => store.readSlackApp(organizationId, db, KEY),
@@ -385,7 +383,6 @@ function change(
       role,
       user: { externalId: "ext" },
     }),
-    enabled: async () => true,
     editionOwned: () => edition,
     isRestricted: async () => false,
     canSeal: () => true,

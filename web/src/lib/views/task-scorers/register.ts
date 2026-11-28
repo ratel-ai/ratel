@@ -1,5 +1,4 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { seedTaskPresets } from "@/lib/views/scorers/task-presets";
 import {
@@ -14,8 +13,9 @@ import "@/lib/views/task-evals/spend";
  * The task scorers' registration (upstream's `score_tasks` line in `lib/jobs/handlers.ts`), and
  * what they supply to the signal run: a completed run queues the project's live task scores.
  * The queue checks `evalGate` itself: with the gate off it queues nothing, and records the
- * refusal as a finished job with one `task_scores_skipped` event. With the `customMonitoring` flag
- * on, the top-level scorers do a project's live scoring, so both triggers skip it the same way.
+ * refusal as a finished job with one `task_scores_skipped` event. The top-level scorers do every
+ * project's live scoring, so both triggers skip it the same way, and a `score_tasks` job queued
+ * before writes nothing.
  * Loads the task loop's spend reader, so the worker's budget checks count the live judge.
  */
 export const computeSeamFills: Required<Pick<typeof computeSeams, "enqueueTaskScores">> = {
@@ -28,8 +28,9 @@ export function fillComputeSeams(seams: typeof computeSeams = computeSeams): voi
 
 fillComputeSeams();
 
-const scorersOn = (projectId: string) => featureEnabled("customMonitoring", { projectId });
-/** With the flag on, a new task gets its default presets when it is next due for scoring. */
+/** The top-level scorers do the live scoring of every project. */
+const scorersOn = async () => true;
+/** A new task gets its default presets when it is next due for scoring. */
 const oneModel: Pick<EnqueueScoreTasksDeps, "scorersOn" | "seedPresets"> = {
   scorersOn,
   seedPresets: (projectId, now, db) => seedTaskPresets(projectId, now, db),

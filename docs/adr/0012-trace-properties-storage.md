@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, behind `customMonitoring` (RTL-395).
+Accepted (RTL-395). On for every deployment.
 
 ## Context
 
@@ -92,9 +92,9 @@ a newly indexed key needs no index and no schema change.
 
 ## Privacy
 
-With `customMonitoring` on, Ratel stores the key names of every project's traces; the values of
-the standard properties, automatically; and the values of a property of the user's own only after a
-person indexes it. With the flag off, ingest records and stores none of it. A person stops a
+Ratel stores the key names of every project's traces; the values of the standard properties,
+automatically; and the values of a property of the user's own only after a person indexes it. A
+person stops a
 property in Settings > General > Trace properties, or with `change_trace_property` (a column-backed
 standard property is a core trace field and cannot be stopped), and erases its stored values there.
 

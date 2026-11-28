@@ -8,13 +8,7 @@ import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { tracePropertyStorage } from "@/lib/synthesis/traces/property-storage";
-import {
-  callerRole,
-  defaultMonitoringDeps,
-  type MonitoringDeps,
-  observeChange,
-  requireMonitoring,
-} from "./deps";
+import { callerRole, defaultMonitoringDeps, type MonitoringDeps, observeChange } from "./deps";
 
 /**
  * The trace properties of a project (RTL-395), as Settings > General > Trace properties shows
@@ -53,7 +47,7 @@ export function propertyReadOperations(
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const properties = await listTraceProperties(projectId, deps.db());
         return {
           data: shown(projectId, properties),
@@ -89,7 +83,7 @@ export function propertyWriteOperations(
         erase: z.boolean().optional().describe("With stop: also erase the stored values."),
       }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         if (params.erase !== undefined && params.action !== "stop")
           throw invalidParams("erase goes with action stop only.");
         const change =
@@ -99,8 +93,7 @@ export function propertyWriteOperations(
         const result = await changeTraceProperty(projectId, change, {
           ...propertyDeps.storage(deps.db()),
           findProjectScope: async () => scopeOf(ctx, propertyDeps),
-          // requireMonitoring let the caller in, and a support session is a browser's.
-          enabled: async () => true,
+          // A support session is a browser's.
           isRestricted: async () => false,
           observe: observeChange(deps, ctx, "project_settings_updated"),
         });

@@ -25,8 +25,7 @@ import { saveTaskScorer, seedTaskPresets, updateScorerWithTask } from "./task-pr
 import { loadTaskScorers } from "./task-scores";
 
 /**
- * The major findings of the review of the one scorer model, each as the case that showed it, and
- * the paths they changed with `customMonitoring` off.
+ * The major findings of the review of the one scorer model, each as the case that showed it.
  */
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -87,7 +86,6 @@ function countingJudge() {
   return {
     calls,
     deps: {
-      flagOn: async () => true,
       judge: {
         engine: {
           model: "m",
@@ -143,72 +141,29 @@ test("major 2: a task scorer save never changes a scorer that a person shares wi
       "u1",
       db,
     );
-    for (const live of [true, false]) {
+    for (const max of [2, 3]) {
       await saveTaskScorer(
         {
           projectId: PROJECT,
           taskId: "task-a",
-          scorer: { kind: "max_tool_calls", max: live ? 2 : 3 },
+          scorer: { kind: "max_tool_calls", max },
           enabled: false,
           updatedBy: "u1",
         },
-        live,
         db,
       );
       const after = await getScorer(PROJECT, shared, db);
-      assert.deepEqual(after?.config, { preset: "max_tool_calls", max: 10 }, `live ${live}`);
+      assert.deepEqual(after?.config, { preset: "max_tool_calls", max: 10 }, `max ${max}`);
       assert.equal(after?.enabled, true);
       assert.deepEqual(after?.tasks, ["task-a", "task-b"]);
       const own = (await listTaskScorers(PROJECT, "task-a", db)).filter(
         (scorer) => scorer.id !== shared,
       );
       assert.equal(own.length, 1, "task-a has one scorer of its own, made once");
-      assert.deepEqual(own[0]?.config, { preset: "max_tool_calls", max: live ? 2 : 3 });
+      assert.deepEqual(own[0]?.config, { preset: "max_tool_calls", max });
       assert.equal(own[0]?.enabled, false);
       assert.deepEqual(own[0]?.tasks, ["task-a"]);
     }
-  } finally {
-    await client.close();
-  }
-});
-
-test("major 3: flag off, a saved judge_criteria makes a judge that is off, and turning it on judges no backlog", async () => {
-  const { client, db } = await setup();
-  try {
-    await addTurn(client, "task-a", { trace: "t-1" });
-    await saveTaskScorer(
-      {
-        projectId: PROJECT,
-        taskId: "task-a",
-        scorer: { kind: "judge_criteria", criteria: "Did it book?" },
-        enabled: true,
-        updatedBy: "u1",
-      },
-      false,
-      db,
-    );
-    const [judge] = await listTaskScorers(PROJECT, "task-a", db);
-    assert.equal(judge?.kind, "judge");
-    assert.equal(judge?.enabled, false, "no live judge with the flag off");
-    assert.equal(judge?.sampleRate, TASK_JUDGE_SAMPLE_RATE);
-    // The eval gate still has the task scorer as the person saved it.
-    const gate = (await scorersFor(PROJECT, "task-a", db)).find((s) => s.kind === "judge_criteria");
-    assert.equal(gate?.enabled, true);
-
-    await client.exec(
-      `update trace_scorers set cursor_at = now() - interval '30 days', created_at = now() - interval '30 days'`,
-    );
-    for (let n = 1; n <= 8; n++) {
-      if (n > 1) await addTurn(client, "task-a", { trace: `t-${n}` });
-      await addSummary(client, `t-${n}`);
-    }
-    const { calls, deps } = countingJudge();
-    await sweepScorers(deps, db);
-    assert.equal(calls.n, 0, "the flag turns on: an off judge makes no call");
-    assert.ok(judge);
-    await setScorerEnabled(PROJECT, judge.id, true, "u1", db);
-    await sweepScorers(deps, db);
-    assert.equal(calls.n, 0, "turned on, it starts now: the backlog is not judged");
   } finally {
     await client.close();
   }
@@ -244,7 +199,6 @@ test("major 4: a converted judge shows its off state, and a save neither turns i
         enabled: true,
         updatedBy: "u1",
       },
-      true,
       db,
     );
     const after = await getScorer(PROJECT, converted, db);
@@ -297,10 +251,10 @@ test("major 5: a trace of a run that is still open is scored once the run closes
     await client.exec(
       `update trace_scorers set cursor_at = now() - interval '1 hour', created_at = now() - interval '1 hour' where id = '${id}'`,
     );
-    const first = await sweepScorers({ flagOn: async () => true }, db);
+    const first = await sweepScorers({}, db);
     assert.equal(first.scoresWritten, 0, "the run is open: the cursor waits");
     await client.exec(`update trace_turns set status = 'closed' where id = '${turn}'`);
-    await sweepScorers({ flagOn: async () => true }, db);
+    await sweepScorers({}, db);
     assert.equal((await latestScores(PROJECT, id, 10, db)).length, 1);
   } finally {
     await client.close();
@@ -334,7 +288,7 @@ test("major 5: a run open past the hold is passed, and the scorer goes on", asyn
     await client.exec(
       `update trace_scorers set cursor_at = now() - interval '3 hours', created_at = now() - interval '3 hours' where id = '${id}'`,
     );
-    await sweepScorers({ flagOn: async () => true }, db);
+    await sweepScorers({}, db);
     const scored = (await latestScores(PROJECT, id, 10, db)).map((score) => score.traceId);
     assert.deepEqual(scored, ["t-done"]);
   } finally {
@@ -354,7 +308,6 @@ test("major 6: a Panel edit of a task's system scorer reaches task_scorers, whic
         enabled: true,
         updatedBy: "u1",
       },
-      true,
       db,
     );
     const [preset] = await listTaskScorers(PROJECT, "task-a", db);
@@ -402,7 +355,7 @@ test("major 6: a Panel edit of a task's system scorer reaches task_scorers, whic
   }
 });
 
-test("minor: with evalGate off and customMonitoring on, new tasks still get their presets", async () => {
+test("minor: with evalGate off, new tasks still get their presets", async () => {
   const { client, db } = await setup();
   try {
     await addTurn(client, "task-a");
@@ -427,18 +380,6 @@ test("minor: with evalGate off and customMonitoring on, new tasks still get thei
       },
       observability: { trackSystemEvent: async () => {} },
     } as never);
-    // Flag off: no seed, as before.
-    let seededOff = 0;
-    await enqueueScoreTasksJob(PROJECT, {
-      db,
-      flagDeps: resolveConfig({ override: { flags: { evalGate: false } } }),
-      scorersOn: async () => false,
-      seedPresets: async () => {
-        seededOff += 1;
-      },
-      observability: { trackSystemEvent: async () => {} },
-    } as never);
-    assert.equal(seededOff, 0);
   } finally {
     await client.close();
   }
@@ -461,7 +402,7 @@ test("minor: two seeds of the same task at the same time make each scorer once",
   }
 });
 
-test("flag off: a preset save still moves the task's own scorer with it, as before", async () => {
+test("a preset save moves the task's own scorer with it", async () => {
   const { client, db } = await setup();
   try {
     await addTurn(client, "task-a");
@@ -473,7 +414,6 @@ test("flag off: a preset save still moves the task's own scorer with it, as befo
         enabled: true,
         updatedBy: "u1",
       },
-      false,
       db,
     );
     await saveTaskScorer(
@@ -484,7 +424,6 @@ test("flag off: a preset save still moves the task's own scorer with it, as befo
         enabled: false,
         updatedBy: "u1",
       },
-      false,
       db,
     );
     const scorers = await listTaskScorers(PROJECT, "task-a", db);
@@ -510,9 +449,11 @@ test("a Panel edit of an off converted judge changes the criteria, and the eval 
         enabled: true,
         updatedBy: "u1",
       },
-      false,
       db,
     );
+    const [made] = await listTaskScorers(PROJECT, "task-a", db);
+    assert.ok(made);
+    await setScorerEnabled(PROJECT, made.id, false, "u1", db);
     const [judge] = await listTaskScorers(PROJECT, "task-a", db);
     assert.equal(judge?.enabled, false, "the live judge is off");
     assert.ok(judge && judge.kind === "judge");

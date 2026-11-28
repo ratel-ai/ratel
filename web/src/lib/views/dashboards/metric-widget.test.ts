@@ -21,7 +21,6 @@ import { fitWidget, formOf, formWidget, sqlWidgetQuery } from "@/lib/views/dashb
  * read of the shapes an older version stored, the chart rule of RQL rows, and the text of a form.
  */
 
-const ON = { customMonitoring: true } as const;
 const LAYOUT = { x: 0, y: 0, w: 6, h: 6 };
 const SCORER = "5f0e8a39-6f0e-4a8e-9c5c-0e4a1f1b0001";
 const LATENCY = metricQuery("latency", "p95", { dimensions: ["model"], filters: { tools: ["a"] } });
@@ -50,10 +49,7 @@ test("an old metric widget reads as RQL with its form, the same chart, and saves
 
 test("an old metric table without a group-by and an old number keep their chart", () => {
   for (const chart of ["table", "number", "bar"] as const) {
-    const parsed = parseWidget(
-      { title: "", query: metricQuery("trace_count", "count"), chart },
-      ON,
-    );
+    const parsed = parseWidget({ title: "", query: metricQuery("trace_count", "count"), chart });
     assert.ok(parsed.ok, chart);
     assert.equal(parsed.widget.chart, chart);
     assert.equal(parsed.widget.query.kind, "sql");
@@ -80,7 +76,7 @@ test("an old sql widget of chart sql draws as a line when its rows have one time
   });
   assert.equal((read(table) as { chart: string }).chart, "table");
   // Without the compiler (the browser), an old one is a table.
-  const parsed = parseWidget({ title: "", chart: "sql", query: sqlWidgetQuery(timed) }, ON);
+  const parsed = parseWidget({ title: "", chart: "sql", query: sqlWidgetQuery(timed) });
   assert.ok(parsed.ok && parsed.widget.chart === "table");
 });
 
@@ -89,7 +85,7 @@ test("a form whose text is not its own any more is Custom", () => {
     ...formQuery(formOf(LATENCY), "line", "hour"),
     text: "select count(*) from traces",
   };
-  const parsed = parseWidget({ title: "", chart: "line", query }, ON);
+  const parsed = parseWidget({ title: "", chart: "line", query });
   assert.ok(parsed.ok);
   assert.deepEqual(parsed.widget.query, sqlWidgetQuery("select count(*) from traces"));
 });
@@ -240,7 +236,6 @@ test("a dashboard exports a metric widget with its scorer by name, and imports i
   const other = "6f0e8a39-6f0e-4a8e-9c5c-0e4a1f1b0009";
   const imported = importDashboard(JSON.parse(JSON.stringify(document)), {
     scorers: [{ id: other, name: "Depth", verdict: false }],
-    features: ON,
   });
   assert.ok(imported.ok, JSON.stringify(imported));
   const [back] = imported.dashboard.widgets;
@@ -269,7 +264,7 @@ test("an old dashboard document imports in the new shape", () => {
         },
       ],
     },
-    { scorers: [], features: ON },
+    { scorers: [] },
   );
   assert.ok(imported.ok, JSON.stringify(imported));
   const [number, sql] = imported.dashboard.widgets;
@@ -291,7 +286,7 @@ test("an old metric whose RQL text would pass the limit stays as stored, a broke
   // A save of the dashboard writes it back as it was: the metric is not lost.
   assert.deepEqual(writeWidgets([read]), stored);
   // The same refusal at the boundary: an import or an MCP change of it is refused with the reason.
-  const parsed = parseWidget({ title: "", query: long, chart: "line" }, ON);
+  const parsed = parseWidget({ title: "", query: long, chart: "line" });
   assert.ok(!parsed.ok && /4,000 characters/.test(parsed.error));
 });
 

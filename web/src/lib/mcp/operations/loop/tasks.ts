@@ -5,7 +5,6 @@ import { loadProjectFixes } from "@/lib/mcp/operations/loop/read";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
@@ -245,8 +244,6 @@ export interface TaskOperationDeps {
   /** A task's cases, excluded ones included, for `restore` by case id. */
   taskEvalCases: (projectId: string, taskId: string) => Promise<TaskEvalCaseRow[]>;
   changeTaskScorer: typeof changeTaskScorer;
-  /** Whether the project's live scoring is the one scorer model (`customMonitoring`). */
-  scorersOn: (projectId: string) => Promise<boolean>;
   /** Save a task scorer and move its scorer of the one model (`saveTaskScorer`). */
   saveScorer: (...args: Parameters<typeof saveTaskScorer>) => Promise<void>;
   resetScorer: (...args: Parameters<typeof resetTaskScorer>) => Promise<void>;
@@ -273,10 +270,8 @@ export const defaultTaskDeps: TaskOperationDeps = {
     taskSimulationDetailFor(projectId, taskId, fix),
   taskEvalCases: async (projectId, taskId) => (await taskEvalSetFor(projectId, taskId)).cases,
   changeTaskScorer,
-  scorersOn: (projectId) => featureEnabled("customMonitoring", { projectId }),
-  saveScorer: (input, live) => saveTaskScorer(input, live),
-  resetScorer: (projectId, taskId, kind, actor, live) =>
-    resetTaskScorer(projectId, taskId, kind, actor, live),
+  saveScorer: (input) => saveTaskScorer(input),
+  resetScorer: (projectId, taskId, kind, actor) => resetTaskScorer(projectId, taskId, kind, actor),
   changeTaskEval,
   enqueueTaskEvalRefresh: (projectId, taskId) => enqueueTaskEvalRefreshJob(projectId, taskId),
   draftTaskTest,
@@ -525,9 +520,8 @@ export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDep
                   criteria: params.criteria,
                 },
               };
-        // The scorer of the one model moves with the task scorer. Flag off, the save is the result, as
-        // before; flag on, a change past the scorer limit is refused before any write.
-        const live = await deps.scorersOn(ctx.projectId);
+        // The scorer of the one model moves with the task scorer; a change past the scorer limit is
+        // refused before any write.
         let result: Awaited<ReturnType<typeof deps.changeTaskScorer>>;
         try {
           result = await deps.changeTaskScorer(input, {
@@ -535,9 +529,8 @@ export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDep
             enabled: decided,
             // A support session exists only in the console; an MCP caller acts as itself.
             isRestricted: async () => false,
-            save: (scorer) => deps.saveScorer(scorer, live),
-            reset: (projectId, taskId, kind) =>
-              deps.resetScorer(projectId, taskId, kind, actor, live),
+            save: (scorer) => deps.saveScorer(scorer),
+            reset: (projectId, taskId, kind) => deps.resetScorer(projectId, taskId, kind, actor),
             observe: (fields) => track(deps, ctx, "task_scorer_updated", fields),
           });
         } catch (err) {

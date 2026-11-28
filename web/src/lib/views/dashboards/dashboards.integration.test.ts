@@ -278,7 +278,6 @@ test("a stored widget that is not one is a broken entry; the rest loads, and the
     PROJECT,
     read,
     { since: new Date("2026-11-02"), until: new Date("2026-11-03") },
-    { customMonitoring: true },
     async (projectId, item, scope) => {
       asked.push(item.title);
       return runQuery(projectId, metricOf(item), scope, db as unknown as MetricsDb);
@@ -368,7 +367,6 @@ test("a dashboard filter narrows every widget, on top of its own filter", async 
         PROJECT,
         shown,
         { since: new Date("2026-11-02"), until: new Date("2026-11-03"), filter },
-        { customMonitoring: false },
         (projectId, widget, scope) =>
           runQuery(projectId, metricOf(widget), scope, db as unknown as MetricsDb),
       )
@@ -386,7 +384,6 @@ test("a dashboard filter narrows every widget, on top of its own filter", async 
 });
 
 test("export, then import into another project, gives an equal dashboard", async () => {
-  const on = { features: async () => ({ customMonitoring: true }) };
   const mine = [
     { id: OTHER, name: "Polite", verdict: true },
     { id: ORG, name: "Depth", verdict: false },
@@ -408,7 +405,7 @@ test("export, then import into another project, gives an equal dashboard", async
     ),
   ];
   for (const widget of shown)
-    assert.ok((await run({ action: "add-widget", dashboardId: id, widget }, on)).ok);
+    assert.ok((await run({ action: "add-widget", dashboardId: id, widget })).ok);
   const source = await getDashboard(PROJECT, id, db);
   assert.ok(source);
   const document = exportDashboard(source, mine);
@@ -419,7 +416,7 @@ test("export, then import into another project, gives an equal dashboard", async
 
   const result = await run(
     { projectId: OTHER, action: "import", document: JSON.parse(json) },
-    { ...on, scorers: async () => theirs },
+    { scorers: async () => theirs },
   );
   assert.ok(result.ok, JSON.stringify(result));
   assert.deepEqual(result.missingScorers, ["Depth"]);
@@ -434,7 +431,7 @@ test("export, then import into another project, gives an equal dashboard", async
   // Edited, it is whole again.
   const fixed = { title: "", query: depth.query, chart: depth.chart };
   const edit = { action: "edit-widget", dashboardId: copy.id, widgetId: depth.id, widget: fixed };
-  assert.ok((await run({ projectId: OTHER, ...edit }, on)).ok);
+  assert.ok((await run({ projectId: OTHER, ...edit })).ok);
   const whole = (await getDashboard(OTHER, copy.id, db))?.widgets[2];
   assert.ok(whole && !isBroken(whole));
   assert.equal(whole.missingScorer, undefined);
@@ -477,7 +474,6 @@ test("context data of two environments stays whole under a dashboard filter; a t
         PROJECT,
         shown,
         { since: new Date("2026-11-12"), until: new Date("2026-11-13"), filter },
-        { customMonitoring: false },
         (projectId, item, scope) =>
           runQuery(projectId, metricOf(item), scope, db as unknown as MetricsDb),
       )
@@ -577,15 +573,12 @@ test("a sql widget: saved, loaded, refused by RQL, exported and imported", async
   assert.deepEqual(exportDashboard(copy, []), document);
 });
 
-test("a scorer widget is accepted with customMonitoring only", async () => {
+test("a scorer widget is accepted, and checked as any widget", async () => {
   const id = await created();
   const widget = scorerWidget({ id: OTHER, verdict: true });
-  await refused({ action: "add-widget", dashboardId: id, widget }, /is off/);
-  const on = { features: async () => ({ customMonitoring: true }) };
-  assert.ok((await run({ action: "add-widget", dashboardId: id, widget }, on)).ok);
+  assert.ok((await run({ action: "add-widget", dashboardId: id, widget })).ok);
   const [stored] = await widgets(id);
   assert.deepEqual(stored, { ...widget, id: stored.id, layout: stored.layout });
-  await refused({ action: "edit-widget", dashboardId: id, widgetId: stored.id, widget }, /is off/);
   const bad: [Partial<MetricQuery>, RegExp][] = [
     [{ filters: { scorer: { id: "nope" } } }, /Unknown scorer/],
     [{ dimensions: ["tool"] }, /be grouped/],
@@ -593,7 +586,7 @@ test("a scorer widget is accepted with customMonitoring only", async () => {
   ];
   for (const [change, error] of bad) {
     const changed = formWidget(formOf({ ...metricOf(widget), ...change }), "line");
-    await refused({ action: "add-widget", dashboardId: id, widget: changed }, error, on);
+    await refused({ action: "add-widget", dashboardId: id, widget: changed }, error);
   }
 });
 
@@ -615,11 +608,10 @@ test("leaving the scorer metrics drops the scorer; each metric offers the scorer
   assert.deepEqual(ids("scorer_count"), ["a", "b"]);
 });
 
-test("a caller without project access, the flag, a session or write access changes nothing", async () => {
+test("a caller without project access, a session or write access changes nothing", async () => {
   const id = await created();
   const denials: [Partial<DashboardActionDeps>, RegExp][] = [
     [{ findProjectScope: async () => null }, /cannot change this project/],
-    [{ enabled: async () => false }, /are off/],
     [{ getSession: async () => null }, /Sign in/],
     [{ isRestricted: async () => true }, /support session/],
   ];
@@ -807,8 +799,6 @@ function deps(overrides: Partial<DashboardActionDeps> = {}): DashboardActionDeps
       project: { id: projectId },
       organization: { id: ORG },
     }),
-    enabled: async () => true,
-    features: async () => ({ customMonitoring: false }),
     scorers: async () => [],
     isRestricted: async () => false,
     templates: templateActionDeps(db),

@@ -54,7 +54,6 @@ function page(change: Partial<LayoutDeps> = {}) {
     offered: async () => WIDGET_CATALOG,
     dashboardWidget: async (projectId, { dashboardId, widgetId }) =>
       projectId === "p1" && dashboardId === BOARD && !widgetId.startsWith("gone") ? SOURCE : null,
-    dashboardsOn: async () => true,
     source: async () => ({ kind: "web" }),
     ...change,
   };
@@ -166,22 +165,10 @@ test("the limit, a source that is not there, and dashboards that are off are ref
   await refused("no_source", dashboardItemId(BOARD, "gone"));
   await refused("no_source", dashboardItemId(PERSON.kind === "person" ? ORG : "", "cost"));
   await refused("invalid", "dashboard:x");
-  await refused("dashboards_off", COST, { dashboardsOn: async () => false });
   await refused("api_key", COST, { reader: async () => ({ kind: "api-key" }) });
   await refused("support_session", COST, { reader: async () => ({ ...PERSON, restricted: true }) });
   await refused("not_found", COST, { reader: async () => null });
   assert.deepEqual(at.stored(), before);
-});
-
-test("with dashboards off the entry is kept and not drawn, and it comes back", async () => {
-  const at = page();
-  await at.change({ kind: "add", widget: COST });
-  const placed = itemIn((await at.read()).layout);
-  const off = { dashboardsOn: async () => false };
-  assert.equal(itemIn((await at.read(off)).layout), undefined);
-  assert.ok((await at.change({ kind: "remove", widget: "topology" }, off)).ok);
-  assert.ok((await at.change({ kind: "add", widget: "topology" }, off)).ok);
-  assert.deepEqual(itemIn((await at.read()).layout), placed);
 });
 
 test("a source that is gone, or a reference that cannot be read, can still be moved and removed", async () => {

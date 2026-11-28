@@ -7,8 +7,8 @@ import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { resolveRange } from "@/lib/synthesis/dashboard";
 import {
+  METRICS as CATALOG,
   METRIC_GROUP_LIMIT,
-  offeredMetrics,
   type QueryWindow,
 } from "@/lib/synthesis/metrics/catalog";
 import {
@@ -36,7 +36,7 @@ const DAYS = ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"].map(
 );
 
 /** The scorer entries read another module's tables: `views/scorers/metrics.integration.test.ts`. */
-const METRICS = offeredMetrics({ customMonitoring: false });
+const METRICS = CATALOG.filter(({ source }) => source !== "scores");
 
 let client: Awaited<ReturnType<typeof createMigratedPGlite>>;
 let db: MetricsDb;
@@ -136,15 +136,6 @@ test("each metric returns its series by day, with the window's total", async () 
   assert.equal(
     cases.length,
     METRICS.reduce((sum, metric) => sum + metric.aggregations.length, 0),
-  );
-});
-
-test("the scorer entries are offered with the customMonitoring switch only", () => {
-  const ids = (customMonitoring: boolean) =>
-    offeredMetrics({ customMonitoring }).map(({ id }) => id);
-  assert.deepEqual(
-    ids(true).filter((id) => !ids(false).includes(id)),
-    ["scorer_pass_rate", "scorer_average", "scorer_count"],
   );
 });
 

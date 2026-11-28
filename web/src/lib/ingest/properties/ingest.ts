@@ -1,10 +1,8 @@
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
-import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
 import { enqueuePropertyFill } from "./fill";
 import {
   detectPropertyKeys,
-  NO_PROPERTY_VALUES,
   type PropertyValuesBySpan,
   propertyValues,
   storedPropertyNames,
@@ -18,8 +16,6 @@ import {
 
 /** How long a key that was written is not written again by this process. */
 export const SEEN_MS = 60 * 60_000;
-/** How long an organization's flag decision is kept: the flag port may be a slow network call. */
-const DECISION_MS = 5 * 60_000;
 /** How long a project's indexed names are kept: a change takes effect within it. */
 const INDEXED_MS = 60_000;
 /** Most keys a project's cache holds; past it, the cache starts again. */
@@ -27,11 +23,7 @@ const MAX_CACHED_KEYS = 1_000;
 
 const logger = getLogger("ingest/properties");
 
-type IngestOrganization = { id?: string } | string | null | undefined;
-
 export interface PropertyIngestDeps {
-  /** Whether `customMonitoring` is on. Never rejects. */
-  enabled(subject: { organizationId?: string }): Promise<boolean>;
   record(projectId: string, sightings: KeySighting[]): Promise<RecordedKey[]>;
   indexed(projectId: string): Promise<ReadonlySet<string>>;
   /** Start the fill of stored traces for standard properties this export indexed. Absent, none. */
@@ -47,10 +39,9 @@ interface SeenKey {
 
 /**
  * What the ingest route and the queue's worker take: one for both, so that a process keeps one
- * cache. Nothing while `customMonitoring` is off.
+ * cache.
  */
 export const propertyIngest = createPropertyIngest({
-  enabled: (subject) => featureEnabled("customMonitoring", subject),
   record: (projectId, sightings) => recordPropertyKeys(projectId, sightings),
   indexed: (projectId) => loadIndexedProperties(projectId),
   // Best-effort: a fill that is not queued leaves old traces without the value, never the export.
@@ -62,7 +53,6 @@ export const propertyIngest = createPropertyIngest({
 });
 
 export function createPropertyIngest(deps: PropertyIngestDeps) {
-  const decisions = new Map<string | undefined, { enabled: Promise<boolean>; at: number }>();
   const seen = new Map<string, Map<string, SeenKey>>();
   const indexedNames = new Map<string, { names: Set<string>; at: number }>();
 
@@ -75,10 +65,8 @@ export function createPropertyIngest(deps: PropertyIngestDeps) {
    */
   async function capture(
     projectId: string,
-    organization: IngestOrganization,
     spans: readonly DecodedSpan[],
   ): Promise<PropertyValuesBySpan> {
-    if (!(await enabledFor(organization))) return NO_PROPERTY_VALUES;
     const indexed = await indexedOf(projectId);
     const fresh: string[] = [];
     for (const { name, state, created } of await recordNew(projectId, detectPropertyKeys(spans))) {
@@ -115,16 +103,6 @@ export function createPropertyIngest(deps: PropertyIngestDeps) {
     const recorded = await deps.record(projectId, sightings);
     for (const { name } of sightings) keys.set(name, { at: now, pending: 0 });
     return recorded;
-  }
-
-  function enabledFor(organization: IngestOrganization): Promise<boolean> {
-    const organizationId = typeof organization === "string" ? organization : organization?.id;
-    const now = deps.now();
-    const kept = decisions.get(organizationId);
-    if (kept && now - kept.at < DECISION_MS) return kept.enabled;
-    const enabled = deps.enabled(organizationId ? { organizationId } : {});
-    decisions.set(organizationId, { enabled, at: now });
-    return enabled;
   }
 
   async function indexedOf(projectId: string): Promise<Set<string>> {

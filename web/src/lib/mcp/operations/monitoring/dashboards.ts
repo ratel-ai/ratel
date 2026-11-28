@@ -18,11 +18,11 @@ import {
   defaultMonitoringDeps,
   type MonitoringCaller,
   type MonitoringDeps,
+  monitoringCaller,
   observeChange,
   queryRefusal,
   refusal,
   required,
-  requireMonitoring,
 } from "@/lib/mcp/operations/monitoring/deps";
 import {
   cappedResult,
@@ -39,9 +39,9 @@ import { resolveWindow, windowParams } from "@/lib/mcp/windows";
 import {
   getMetric,
   MAX_METRIC_WINDOW_DAYS,
+  METRICS,
   metricBucket,
   nothingIsZero,
-  offeredMetrics,
   type QueryWindow,
 } from "@/lib/synthesis/metrics/catalog";
 import { RQL_VERSION } from "@/lib/synthesis/rql/compile";
@@ -92,7 +92,6 @@ import { explorePanelsHref } from "@/lib/views/explore/links";
 import { MAX_PANELS } from "@/lib/views/explore/types";
 import { scorerNames } from "@/lib/views/scorers/picker";
 
-const FEATURES = { customMonitoring: true } as const;
 const QUERY_WINDOW = { defaultDays: 7, maxDays: MAX_METRIC_WINDOW_DAYS } as const;
 /** Kind sql reads the window of RQL: its default and its longest window, as `run_rql`. */
 const SQL_WINDOW = RQL_WINDOW;
@@ -187,7 +186,6 @@ export function dashboardReadOperations(
           .describe("catalog: without the two schemas. query or dashboard: one schema alone."),
       }),
       async execute(ctx, { part }) {
-        await requireMonitoring(deps, ctx);
         const has = (wanted: string) => part === "all" || part === wanted;
         return {
           data: {
@@ -241,7 +239,7 @@ export function dashboardReadOperations(
           ),
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const { projectId } = caller;
         if (params.as === "sql") return editAsSql(deps, params);
         const sql = loneSql(params);
@@ -322,7 +320,7 @@ export function dashboardReadOperations(
       mutates: false,
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         // A project gets Tools, Cost and Reliability one time, where its list is read.
         await ensureDefaultDashboards(projectId, deps.db());
         const all = await store.listDashboards(projectId, deps.db());
@@ -368,7 +366,7 @@ export function dashboardReadOperations(
           .describe("false: the document and the widgets alone, without a read of the numbers."),
       }),
       async execute(ctx, params) {
-        const caller = await requireMonitoring(deps, ctx);
+        const caller = monitoringCaller(ctx);
         const { projectId } = caller;
         const dashboard = await store.getDashboard(projectId, params.dashboardId, deps.db());
         if (!dashboard) throw notFound("dashboard");
@@ -380,7 +378,6 @@ export function dashboardReadOperations(
                 projectId,
                 dashboard.widgets,
                 { ...window, filter: dashboard.filters },
-                FEATURES,
                 deps.loadWidget,
               )
             : dashboard.widgets.map(() => null),
@@ -461,8 +458,8 @@ export function dashboardReadOperations(
 }
 
 /**
- * The dashboard templates (decision `dashboard-templates`): listed only with `customMonitoring` on,
- * as the RQL tools. import_dashboard makes a dashboard from one.
+ * The dashboard templates (decision `dashboard-templates`). import_dashboard makes a dashboard from
+ * one.
  */
 export function dashboardTemplateOperations(
   deps: MonitoringDeps = defaultMonitoringDeps,
@@ -479,7 +476,7 @@ export function dashboardTemplateOperations(
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        const { projectId } = await requireMonitoring(deps, ctx);
+        const { projectId } = ctx;
         const facts = await loadTemplateFacts(projectId, deps.db());
         const templates = DASHBOARD_TEMPLATES.map((template) => {
           const { has, missing } = templateData(template, facts);
@@ -818,7 +815,7 @@ async function run(
   ctx: OperationContext,
   change: (projectId: string) => Promise<object>,
 ) {
-  const caller = await requireMonitoring(deps, ctx);
+  const caller = monitoringCaller(ctx);
   const db = deps.db();
   const result = await changeDashboard(
     { ...(await change(caller.projectId)), projectId: caller.projectId },
@@ -833,7 +830,6 @@ async function run(
           email: EDITOR_NAME,
         },
       }),
-      features: async () => FEATURES,
       scorers: (projectId) => scorerNames(projectId, db),
       templates: templateActionDeps(db),
       store: {
@@ -1024,7 +1020,7 @@ function catalog() {
       })),
       SQL_KIND,
     ],
-    measures: offeredMetrics(FEATURES).map(
+    measures: METRICS.map(
       ({ id, label, description, unit, aggregations, dimensions, buckets, filterable }) => ({
         id,
         label,

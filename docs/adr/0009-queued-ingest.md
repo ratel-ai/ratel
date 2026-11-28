@@ -17,8 +17,7 @@ must keep working with no extra setup.
 **The request only accepts.** With the flag on, a route authenticates, checks the key's scope, the
 Content-Type, the declared and streamed body size, the decompressed size and the monthly plan cap,
 stores the body as it arrived in `ingest_batches` (with its `Content-Encoding`) and answers 202. It
-does not decode, with one exception: while `customMonitoring` is on for the organization, a trace
-export that carries an IP address or coordinates is located and rewritten without them first, because
+does not decode, with one exception: a trace export that carries an IP address or coordinates is located and rewritten without them first, because
 a stored body must not hold them (`ingest/geo/redact.ts`). One that cannot be rewritten stays inline.
 Auth (401/403), size (413), encoding (415, 400 for a bad gzip) and plan-cap (429)
 answers are unchanged. What needs a decode moves to the worker and no longer reaches the caller: a

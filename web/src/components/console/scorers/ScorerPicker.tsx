@@ -14,7 +14,7 @@ import { useScorerPicker } from "./ScorerPickerProvider";
 /**
  * Pick a scorer, create one or edit one, without leaving the surface. Each option says where the
  * scorer is used. New scorer and Edit open the same Panel; a new scorer is picked after its save.
- * Nothing shows while scorers are off (no `ScorerPickerProvider` data).
+ * Nothing shows outside a `ScorerPickerProvider`.
  */
 export function ScorerPicker({
   value,

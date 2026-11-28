@@ -8,7 +8,7 @@ import { ScorerPicker } from "@/components/console/scorers/ScorerPicker";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import type { Aggregation, MeasureId, MetricQuery } from "@/lib/contracts/query";
-import { getMetric, offeredMetrics } from "@/lib/synthesis/metrics/catalog";
+import { getMetric, METRICS } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   type TraceFilterBarFacets,
@@ -54,9 +54,9 @@ export function MetricFields({
             {...control}
             className="w-full"
             options={[
-              ...offeredMetrics({ customMonitoring: scorers !== null })
-                .filter(({ filterable }) => filterable || !filterableOnly)
-                .map(({ id, label }) => ({ value: id, label })),
+              ...METRICS.filter(({ filterable }) => filterable || !filterableOnly).map(
+                ({ id, label }) => ({ value: id, label }),
+              ),
               ...(custom === undefined ? [] : [{ value: CUSTOM_METRIC, label: "Custom" }]),
             ]}
             value={custom ? CUSTOM_METRIC : measure}

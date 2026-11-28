@@ -96,7 +96,6 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   focusedConsole = false,
-  customMonitoring = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -116,8 +115,6 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
-  /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
-  customMonitoring?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -174,7 +171,7 @@ export function consoleNav({
           href: root,
           icon: "overview",
           exact: true,
-          also: [`${root}/dashboards`, `${root}/insights`],
+          also: [`${root}/insights`],
           shortcut: "o",
           keywords: ["home", "summary", "dashboard", "needs attention"],
         },
@@ -410,9 +407,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root
-      ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole, customMonitoring })
-      : core),
+    ...(root ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole }) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -428,18 +423,14 @@ export function consoleNav({
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. With `customMonitoring`, Monitor also has Dashboards, Explore and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
+ * Ship is new. Monitor also has Dashboards, Explore and Alerts. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
  * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the list, unlabelled; MCP sits in the footer.
  */
 function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  {
-    entityPages,
-    focusedConsole,
-    customMonitoring,
-  }: { entityPages: boolean; focusedConsole: boolean; customMonitoring: boolean },
+  { entityPages, focusedConsole }: { entityPages: boolean; focusedConsole: boolean },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -520,13 +511,7 @@ function stageRailNav(
     : classicTraces;
   const overview = pick("overview");
   return [
-    ...stage(
-      "monitor",
-      "Monitor",
-      customMonitoring
-        ? withMonitoringPages(root, { overview, health, traces })
-        : [overview, health, traces],
-    ),
+    ...stage("monitor", "Monitor", withMonitoringPages(root, { overview, health, traces })),
     ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
@@ -539,8 +524,8 @@ function stageRailNav(
 }
 
 /**
- * Monitor with the `customMonitoring` pages, each an item of its own: they are destinations as much as
- * the pages beside them. Overview gives up `/dashboards`, which is then a page and not an old address.
+ * Monitor with Dashboards, Explore and Alerts, each an item of its own: they are destinations as much
+ * as the pages beside them.
  */
 function withMonitoringPages(
   root: string,
@@ -556,7 +541,7 @@ function withMonitoringPages(
     keywords: ["dashboards", "widgets", "charts", "metrics", "scorers", "scores", "judge"],
   };
   return [
-    { ...overview, also: overview.also?.filter((path) => path !== dashboards.href) },
+    overview,
     dashboards,
     {
       id: "explore",
@@ -626,7 +611,6 @@ export function commandEntries({
     const below = (path: string, label: string, group: string, keywords: string[]) =>
       pages.push({ id: `${root}/${path}`, label, group, href: `${root}/${path}`, keywords });
     add("Project", items);
-    below("dashboards", "Usage and spend", "Overview", ["dashboards", "cost", "tokens", "context"]);
     below("settings/api-keys", "API keys", "Settings", ["sdk", "token", "credentials", "connect"]);
     below("settings/danger", "Danger zone", "Settings", ["delete project"]);
     below("calibration", "Experiments", "Quality", ["calibration", "comparison", "shadow"]);

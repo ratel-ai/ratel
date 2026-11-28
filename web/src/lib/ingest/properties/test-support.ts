@@ -70,11 +70,10 @@ export function propertyExport(traceId: string, plan = "pro") {
   };
 }
 
-/** A property ingest on this database with the flag on (or off), and no cache between exports. */
-export function testPropertyIngest(db: Db, enabled = true) {
+/** A property ingest on this database, with no cache between exports. */
+export function testPropertyIngest(db: Db) {
   let now = 0;
   return createPropertyIngest({
-    enabled: async () => enabled,
     record: (projectId, sightings) => recordPropertyKeys(projectId, sightings, db),
     indexed: (projectId) => loadIndexedProperties(projectId, db),
     // Every export is an hour later: nothing is cached.

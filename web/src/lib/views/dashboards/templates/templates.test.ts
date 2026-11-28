@@ -26,7 +26,7 @@ function widgetsOf(template: DashboardTemplate): readonly TemplateWidget[] {
 /** Why a widget of a template is wrong, or null: the editor's parser, RQL and the chart rule. */
 function widgetProblem(widget: TemplateWidget, property = PROPERTY): string | null {
   const { size: _, ...input } = widget;
-  const parsed = parseWidget(input, { customMonitoring: true }, { sqlChart: sqlChartOfText });
+  const parsed = parseWidget(input, { sqlChart: sqlChartOfText });
   if (!parsed.ok) return `the editor refuses it: ${parsed.error}`;
   const problem = chartProblem(input);
   if (problem) return problem;

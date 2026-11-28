@@ -1,6 +1,6 @@
 # Explore
 
-The project's Explore page, behind the `customMonitoring` flag: one to four panels over one time
+The project's Explore page: one to four panels over one time
 range and one filter bar. A panel is a dashboard widget without a place (`WidgetInput` of
 `../dashboards`), so it has the widget editor's fields, the widget bodies and the widget reads.
 Nothing is stored: the address is the whole state.

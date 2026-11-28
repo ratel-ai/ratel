@@ -144,7 +144,7 @@ function deps(lookup: typeof LOOKUP): PersistSpansDeps {
     insertTraceEvents: (id, rows) => insertTraceEvents(id, rows, db),
     agentSpanDedupe: null,
     agentRunsEnabled: async () => true,
-    locate: (_id, _organization, spans) =>
+    locate: (_id, spans) =>
       locateSpans(spans, DEFAULT_GEO_ATTRIBUTES, { address: lookup, reverse: loadReverseLookup }),
     logError: () => {},
     captureFailure: () => {},

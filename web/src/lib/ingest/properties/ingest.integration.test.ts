@@ -87,15 +87,3 @@ test("a key the user indexes gets its values from the next export on", async () 
   });
   await client.close();
 });
-
-test("with customMonitoring off, ingest records no key and stores no value", async () => {
-  const { client, db } = await setupDb();
-  await ingestPropertyExport(db, propertyExport(TRACE), {
-    properties: testPropertyIngest(db, false).capture,
-  });
-  await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
-  assert.deepEqual(await listTraceProperties(PROJECT_ID, db), []);
-  assert.deepEqual(await spanValues(client, TRACE), { [ROOT]: null, [CHILD]: null });
-  assert.deepEqual((await summary(client, TRACE))?.properties, {});
-  await client.close();
-});

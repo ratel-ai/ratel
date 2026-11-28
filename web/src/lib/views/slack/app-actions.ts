@@ -13,7 +13,6 @@ export interface SlackAppAccessDeps {
   findOrganization(
     slug: string,
   ): Promise<{ organization: Organization; role: OrgRole; user: { externalId: string } } | null>;
-  enabled(subject: { organizationId: string; actor: string }): Promise<boolean>;
   /** The edition supplies the app: nobody configures one. */
   editionOwned(): boolean;
 }
@@ -71,8 +70,7 @@ export async function slackAppAdmin(
   if (deps.editionOwned()) return null;
   const scope = await deps.findOrganization(orgSlug);
   if (scope?.role !== "admin") return null;
-  const subject = { organizationId: scope.organization.id, actor: scope.user.externalId };
-  return (await deps.enabled(subject)) ? subject : null;
+  return { organizationId: scope.organization.id, actor: scope.user.externalId };
 }
 
 function text(raw: unknown): string {

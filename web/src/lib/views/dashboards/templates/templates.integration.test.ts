@@ -59,8 +59,6 @@ function deps(over: Partial<DashboardActionDeps> = {}): DashboardActionDeps {
       project: { id: projectId },
       organization: { id: ORG },
     }),
-    enabled: async () => true,
-    features: async () => ({ customMonitoring: true }),
     scorers: async () => [],
     isRestricted: async () => false,
     templates: templateActionDeps(db),

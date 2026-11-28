@@ -138,24 +138,6 @@ test("a body that does not decode is refused, not queued", async () => {
   assert.deepEqual(await h.queueRows(), []);
 });
 
-test("flag off: the batches are queued as sent, with one flag lookup for the organization", async () => {
-  const h = await setup({ enabled: false });
-  const sent = exportJson(ADDRESS);
-  for (let batch = 0; batch < 5; batch++) {
-    assert.equal((await handleTracesRequest(post(sent), h.route)).status, 202);
-  }
-  const rows = await h.queueRows();
-  assert.equal(rows.length, 5);
-  for (const row of rows) {
-    assert.deepEqual(Buffer.from(row.body), sent);
-    assert.deepEqual(row.context, { appendOnly: false });
-  }
-  await h.drain();
-  assert.deepEqual(h.asked, [ORGANIZATION_ID], "accepting and persisting share one lookup");
-  assert.equal(h.namesRead(), 0);
-  assert.deepEqual(await h.place(), { geo_country: null, geo_region: null });
-});
-
 test("an edit keeps every other field of an export", () => {
   for (const transport of ["json", "protobuf"] as const) {
     const sent = exportJson(ADDRESS);
@@ -164,15 +146,10 @@ test("an edit keeps every other field of an export", () => {
   }
 });
 
-async function setup(over: Partial<Omit<GeoIngestDeps, "enabled">> & { enabled?: boolean } = {}) {
+async function setup(over: Partial<GeoIngestDeps> = {}) {
   const { client, db } = await setupDb();
-  const asked: (string | undefined)[] = [];
   let names = 0;
   const geo = createGeoIngest({
-    enabled: async ({ organizationId }) => {
-      asked.push(organizationId);
-      return over.enabled ?? true;
-    },
     attributes:
       over.attributes ??
       (async () => {
@@ -226,7 +203,6 @@ async function setup(over: Partial<Omit<GeoIngestDeps, "enabled">> & { enabled?:
   return {
     client,
     route,
-    asked,
     namesRead: () => names,
     drain: () =>
       drainIngestBatches(

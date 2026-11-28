@@ -7,7 +7,6 @@ import { listDashboards } from "@/lib/views/dashboards/store";
 import { definitionSummary, hasVerdict } from "@/lib/views/scorers/format";
 import { loadScorerPicker } from "@/lib/views/scorers/picker";
 import { getScorer, latestScores, scorerSummaries, scorerTrend } from "@/lib/views/scorers/store";
-import { dashboardsEnabled } from "../../dashboards/context";
 import { resolveScorersPage } from "../context";
 import { loadTaskOptions } from "../tasks";
 
@@ -45,7 +44,7 @@ export default async function ScorerPage({
     scorerTrend(projectId, scorer.id, new Date(`${days[0]}T00:00:00Z`)),
     scorerSummaries(projectId, new Date(now.getTime() - 7 * DAY_MS)),
     latestScores(projectId, scorer.id, LATEST),
-    dashboardsEnabled(projectId).then((on) => (on ? listDashboards(projectId) : null)),
+    listDashboards(projectId),
     scorer.tasks?.length ? loadTaskOptions(projectId, scorer.tasks) : [],
     loadScorerPicker(projectId, now),
   ]);
@@ -54,7 +53,7 @@ export default async function ScorerPage({
     <ScorerPickerProvider projectId={projectId} data={picker}>
       <ScorerDetail
         projectId={projectId}
-        dashboards={dashboards?.map(({ id, name }) => ({ id, name })) ?? null}
+        dashboards={dashboards.map(({ id, name }) => ({ id, name }))}
         scorer={{
           id: scorer.id,
           name: scorer.name,

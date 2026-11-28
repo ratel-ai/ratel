@@ -5,11 +5,7 @@ import {
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import {
-  type MetricFeatures,
-  metricOffered,
-  type QueryScope,
-} from "@/lib/synthesis/metrics/catalog";
+import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { type GroupedResult, runGrouped, topGroupValues } from "@/lib/synthesis/metrics/groups";
 import { QueryError, runQuery } from "@/lib/synthesis/metrics/query";
 import { textToRun } from "@/lib/views/dashboards/metric-rql";
@@ -20,7 +16,7 @@ import type {
   WidgetRefusal,
   WidgetResult,
 } from "@/lib/views/dashboards/types";
-import { isMetricChart, queryMetric } from "@/lib/views/dashboards/widget";
+import { isMetricChart } from "@/lib/views/dashboards/widget";
 // What these modules own is read through what they register.
 import "@/lib/views/scorers/metrics";
 import "@/lib/views/dashboards/clusters";
@@ -118,7 +114,7 @@ function refusedOrThrow(error: unknown): WidgetRefusal {
   throw error;
 }
 
-/** Every widget's numbers, in order. One that is broken, failed, waits for a scorer, or whose switch is off, is null. */
+/** Every widget's numbers, in order. One that is broken, failed or waits for a scorer is null. */
 export async function loadWidgets(
   projectId: string,
   widgets: readonly (
@@ -126,7 +122,6 @@ export async function loadWidgets(
     | Pick<BrokenWidget, "problem">
   )[],
   scope: QueryScope,
-  features: MetricFeatures,
   load: Load = (project, widget, at) => loadWidget(project, widget, at),
 ): Promise<(WidgetResult | null)[]> {
   const results: (WidgetResult | null)[] = new Array(widgets.length).fill(null);
@@ -134,8 +129,6 @@ export async function loadWidgets(
     if ("problem" in widget || widget.missingScorer) return [];
     const query = parseQuery(widget.query);
     if (!query.ok) return [];
-    const metric = queryMetric(query.query);
-    if (metric && !metricOffered(metric, features)) return [];
     return [{ index, widget, sql: query.query.kind === "sql" }];
   });
   // Kind sql in its own lane, as wide as the RQL gate: a second reader waits for places, not fails.

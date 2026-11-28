@@ -13,7 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({ focusedConsole: true, customMonitoring: true });
+const operations = assembleOperations({ focusedConsole: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -223,10 +223,10 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["get_dashboard", false],
   ["change_dashboard", true],
   ["import_dashboard", true],
-  // RQL over trace data (RTL-325), behind customMonitoring.
+  // RQL over trace data (RTL-325).
   ["describe_rql_schema", false],
   ["run_rql", false],
-  // Ask in words: drafts widgets and saves none, behind customMonitoring.
+  // Ask in words: drafts widgets and saves none.
   ["draft_widgets", false],
   ["suggest_prompts", false],
 ];
