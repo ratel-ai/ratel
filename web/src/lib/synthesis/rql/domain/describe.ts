@@ -39,7 +39,7 @@ const RULES = [
   `A query gives at most ${RQL_LIMITS.maxLimit} rows. With no LIMIT it gives ${RQL_LIMITS.defaultLimit}.`,
   `A query has at most ${RQL_LIMITS.maxTextChars} characters, ${RQL_LIMITS.maxSelectItems} output columns (each column of * counts), ${RQL_LIMITS.maxListItems} items in one list and ${RQL_LIMITS.maxExpressionDepth} levels of nesting.`,
   `A cell longer than ${RQL_LIMITS.maxCellChars} characters is cut, and the rows stop at ${RQL_LIMITS.maxResultBytes / 1_000_000} MB of JSON. Either cut marks the result truncated: select fewer or shorter columns.`,
-  `A project runs at most ${RQL_LIMITS.parallelQueriesPerProject} queries at the same time. One more gives rql_busy: run it again when one ends.`,
+  `run_rql runs at most ${RQL_LIMITS.parallelQueriesPerProject} queries of a project at the same time. One more gives rql_busy: run it again when one ends.`,
   "There are no joins, subqueries, UNION, WITH, CASE, window functions, casts or Postgres operators. Each table copies the trace columns that a question needs.",
   "Write text in single quotes. Compare a timestamp with an ISO 8601 text, for example '2026-11-01T00:00:00Z'.",
   "Read a span attribute with attributes['key']: the value is text. Test a list with contains(list, 'value'). Group by each value of a list with each(list).",

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_SQL_TEXT, QUERY_VERSION, type SqlQuery } from "@/lib/contracts/query";
 import { RQL_POOL_MAX } from "@/lib/platform/db/rql-pool";
+import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { QueryError, runQuery } from "@/lib/synthesis/metrics/query";
 import { createPgRqlExecutor, FETCH_ROWS, type RqlPool } from "../adapters/pg-executor";
 import {
@@ -12,9 +13,9 @@ import {
   type RqlCompiled,
 } from "../compile";
 import { RQL_TABLES } from "../domain/catalog";
-import type { RqlExecution, RqlExecutor } from "../ports/executor";
+import { RqlBusyError, type RqlExecution, type RqlExecutor } from "../ports/executor";
 import { sqlQueryRunner } from "../query";
-import { createRqlGate, runRql } from "../run";
+import { createRqlGate, RQL_PLACES_PER_PROJECT, runRql } from "../run";
 
 /**
  * What one query can cost: its output columns, its cells, its bytes, the time of its compile and
@@ -211,38 +212,113 @@ test("a stored sql text over the cap gives a clear error at run, not a crash", a
 
 // Major 3: the connections.
 
-test("project B is answered while project A holds its parallelQueriesPerProject places", async () => {
-  assert.ok(RQL_POOL_MAX > RQL_LIMITS.parallelQueriesPerProject, "the pool outlasts one project");
+/**
+ * The RQL pool of this server as a fake: `RQL_POOL_MAX` connections for every project, a run past
+ * them is `RqlBusyError` (the connect timeout). A console or `run_rql` run of project A holds its
+ * connection until `release`; any other run (project B, an alert rule) answers at once.
+ */
+function poolOfEight() {
+  let open = 0;
+  let most = 0;
+  const runs: RqlExecution[] = [];
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const { executor: fake, runs } = executor(async (run) => {
-    if (run.projectId === A) await held;
-    return [["t"]];
-  });
-  const gate = createRqlGate();
-  const runner = sqlQueryRunner({ run: { ...quiet, executor: fake, gate } });
-  const query = (text: string): SqlQuery => ({
-    version: QUERY_VERSION,
-    kind: "sql",
-    text,
-    rqlVersion: RQL_VERSION,
-  });
-  const slow = Array.from({ length: RQL_LIMITS.parallelQueriesPerProject }, () =>
-    runner(A, query("select trace_id from traces"), SCOPE, NO_DB),
+  const value: RqlExecutor = {
+    async execute(run) {
+      if (open >= RQL_POOL_MAX)
+        throw new RqlBusyError(new Error("timeout exceeded when trying to connect"));
+      open += 1;
+      most = Math.max(most, open);
+      runs.push(run);
+      try {
+        if (run.projectId === A && run.timeoutMs !== RQL_LIMITS.alertTimeoutMs) await held;
+        return [["t"]];
+      } finally {
+        open -= 1;
+      }
+    },
+  };
+  return { executor: value, runs, release: () => release(), open: () => open, most: () => most };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+/**
+ * Project A fills every place of its console and `run_rql` paths, through the gates of this
+ * process, and one more query of each path waits. What is left of the pool is what B and the
+ * alert rules get.
+ */
+async function projectAHoldsItsPlaces() {
+  const pool = poolOfEight();
+  const runner = sqlQueryRunner({ run: { ...quiet, executor: pool.executor } });
+  const read = (projectId: string, scope: QueryScope, text = "select trace_id from traces") =>
+    runner(
+      projectId,
+      { version: QUERY_VERSION, kind: "sql", text, rqlVersion: RQL_VERSION },
+      scope,
+      NO_DB,
+    );
+  const agent = { ...SCOPE, purpose: "agent" as const };
+  const held = [
+    ...Array.from({ length: RQL_LIMITS.parallelConsoleQueriesPerProject + 1 }, () =>
+      read(A, SCOPE),
+    ),
+    ...Array.from({ length: RQL_LIMITS.parallelQueriesPerProject + 1 }, () => read(A, agent)),
+  ];
+  await settle();
+  const own = RQL_LIMITS.parallelConsoleQueriesPerProject + RQL_LIMITS.parallelQueriesPerProject;
+  assert.equal(pool.open(), own, "A holds 4 console and 2 run_rql connections, no more");
+  const done = async () => {
+    pool.release();
+    await Promise.all(held);
+  };
+  return { pool, read, done };
+}
+
+test("no project can hold every RQL connection: the places of its paths are fewer than the pool", () => {
+  assert.equal(RQL_POOL_MAX, 8);
+  assert.equal(RQL_PLACES_PER_PROJECT, 7);
+  assert.equal(
+    RQL_PLACES_PER_PROJECT,
+    RQL_LIMITS.parallelConsoleQueriesPerProject +
+      RQL_LIMITS.parallelQueriesPerProject +
+      RQL_LIMITS.parallelAlertQueriesPerProject,
   );
-  // A's next query is refused before its compile: a text that does not parse is still busy.
-  await assert.rejects(
-    runner(A, query("select from from from"), SCOPE, NO_DB),
-    (error: unknown) => error instanceof QueryError && error.detail?.code === "rql_busy",
-  );
-  const answer = await runner(B, query("select trace_id from traces"), SCOPE, NO_DB);
+  assert.ok(RQL_POOL_MAX > RQL_PLACES_PER_PROJECT, "the pool outlasts one project");
+});
+
+test("project B is answered while project A holds its 4 console and 2 run_rql places, on a pool of 8", async () => {
+  const { pool, read, done } = await projectAHoldsItsPlaces();
+  const answer = await read(B, SCOPE);
   assert.equal(answer.kind, "sql");
   assert.deepEqual(answer.kind === "sql" && answer.rows, [["t"]]);
-  assert.equal(runs.filter(({ projectId }) => projectId === B).length, 1);
-  release();
-  await Promise.all(slow);
+  const agentAnswer = await read(B, { ...SCOPE, purpose: "agent" });
+  assert.equal(agentAnswer.kind, "sql");
+  assert.equal(pool.runs.filter(({ projectId }) => projectId === B).length, 2);
+  await done();
+  assert.ok(pool.most() < RQL_POOL_MAX, "the pool never ran out");
+});
+
+test("an alert rule of project A still evaluates while A holds its console and run_rql places", async () => {
+  const { pool, read, done } = await projectAHoldsItsPlaces();
+  // A's rule and B's widget at the same time: they take the last two connections of the pool.
+  const [rule, other] = await Promise.all([
+    read(A, { ...SCOPE, purpose: "alert" }, "select count(*) from traces"),
+    read(B, SCOPE),
+  ]);
+  assert.equal(rule.kind, "sql");
+  assert.equal(other.kind, "sql");
+  assert.ok(
+    pool.runs.some(
+      ({ projectId, timeoutMs }) => projectId === A && timeoutMs === RQL_LIMITS.alertTimeoutMs,
+    ),
+    "the rule ran with the alert timeout",
+  );
+  assert.equal(pool.open(), 6, "A's console and run_rql places are still held");
+  await done();
+  assert.ok(pool.most() <= RQL_POOL_MAX, "the pool never ran out");
 });
 
 test("a connect timeout of the pool gives rql_busy, not the setup error", async () => {
@@ -271,6 +347,7 @@ test("describe_rql_schema gives the new bounds in its limits and its rules", () 
   assert.equal(limits.maxCellChars, 2000);
   assert.equal(limits.maxResultBytes, 1_000_000);
   assert.equal(limits.parallelQueriesPerProject, 2);
+  assert.equal(limits.parallelConsoleQueriesPerProject, 4);
   const text = rules.join("\n");
   for (const value of ["4000 characters", "50 output columns", "2000 characters", "1 MB"]) {
     assert.ok(text.includes(value), value);

@@ -113,15 +113,19 @@ the compiled SQL with its params and the one at `limitParam` (the `LIMIT`) repla
   grant on a base table: a read of `public.*` is `rql_permission_denied`.
 - The transaction is read-only and the role has no write grant: a write is refused.
 - `statement_timeout` is `RQL_LIMITS.timeoutMs`: a slow query is `rql_timeout`.
-- The gate: `RQL_LIMITS.parallelQueriesPerProject` (2) queries of one project at a time, in one
-  process. Kind `sql` takes the place before the compile, so a busy project costs no parse, and
+- The gates: one per path of a project, in one process. The console (the metric widgets of a
+  dashboard, Explore, an alert preview, `get_dashboard` and `query_monitoring`) takes `rqlConsoleGate`
+  (`RQL_LIMITS.parallelConsoleQueriesPerProject`, 4 queries of one project at a time). An agent's
+  `run_rql` (`scope.purpose: "agent"`) takes `rqlAgentGate` (`RQL_LIMITS.parallelQueriesPerProject`,
+  2). Kind `sql` takes the place before the compile, so a busy project costs no parse, and
   waits for it up to `RQL_LIMITS.gateWaitMs` (5 s), in order: a dashboard of more queries than
   the cap waits. None free in that time is `rql_busy`, and never reaches the database. An alert rule
   read by the evaluator (`scope.purpose: "alert"`) takes `rqlAlertGate`
   (`RQL_LIMITS.parallelAlertQueriesPerProject`, one query per project) and
-  `RQL_LIMITS.alertTimeoutMs` (2 s) instead. A preview of the alert form stays on the interactive gate. The pool has `RQL_POOL_MAX` (8)
-  connections for all projects, more than one project may hold, so another project still gets
-  its answer. A run that waits past the connect timeout of the pool is `rql_busy` too.
+  `RQL_LIMITS.alertTimeoutMs` (2 s) instead. A preview of the alert form stays on the console gate. The pool has `RQL_POOL_MAX` (8)
+  connections for all projects, more than the places of one project on all its paths
+  (`RQL_PLACES_PER_PROJECT`: 4 + 2 + 1 = 7; `run.ts` refuses to load when the pool is not larger),
+  so another project still gets its answer (`tests/cost-bounds.test.ts`). A run that waits past the connect timeout of the pool is `rql_busy` too.
 
 `rows` are arrays in the order of `columns` (not records: the RQL names can repeat). An integer
 or a number is a JS number (pg gives `bigint` and `numeric` as strings), a timestamp is an ISO

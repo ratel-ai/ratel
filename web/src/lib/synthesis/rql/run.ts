@@ -1,6 +1,6 @@
 import type { Tracer } from "@opentelemetry/api";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
-import { getRqlPool } from "@/lib/platform/db/rql-pool";
+import { getRqlPool, RQL_POOL_MAX } from "@/lib/platform/db/rql-pool";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { createPgRqlExecutor } from "./adapters/pg-executor";
 import type { RqlTableName } from "./domain/catalog";
@@ -49,8 +49,29 @@ export interface RqlRunDeps {
   tracer?: Tracer;
 }
 
-/** One gate per process: the parallel cap holds across every caller of `runRql`. */
-export const rqlProcessGate = createRqlGate();
+/**
+ * The places one project can hold on the RQL pool, on all its paths together: its console, its
+ * agents' `run_rql` and its alert rules. Fewer than the connections of the pool, so one project
+ * never holds every connection and another project still gets its answer.
+ */
+export const RQL_PLACES_PER_PROJECT =
+  RQL_LIMITS.parallelConsoleQueriesPerProject +
+  RQL_LIMITS.parallelQueriesPerProject +
+  RQL_LIMITS.parallelAlertQueriesPerProject;
+if (RQL_PLACES_PER_PROJECT >= RQL_POOL_MAX) {
+  throw new Error(
+    `One project can hold ${RQL_PLACES_PER_PROJECT} RQL queries, and the RQL pool has ${RQL_POOL_MAX} connections: give the pool more.`,
+  );
+}
+
+/**
+ * The gate of an agent's `run_rql`, one per process. It is also the gate of a direct `runRql`
+ * that names none: the smallest cap of the interactive paths.
+ */
+export const rqlAgentGate = createRqlGate(RQL_LIMITS.parallelQueriesPerProject);
+
+/** The gate of the console (dashboards, Explore, an alert preview, `get_dashboard`, `query_monitoring`), one per process. */
+export const rqlConsoleGate = createRqlGate(RQL_LIMITS.parallelConsoleQueriesPerProject);
 
 /**
  * The gate of a caller that holds the place of the project already: it entered the gate before
@@ -76,7 +97,7 @@ export async function runRql(
       const result = await executeCompiled(compiled, {
         projectId: options.projectId,
         executor,
-        gate: deps.gate ?? rqlProcessGate,
+        gate: deps.gate ?? rqlAgentGate,
         timeoutMs: deps.timeoutMs ?? RQL_LIMITS.timeoutMs,
       });
       const observation: RqlRunObservation = {

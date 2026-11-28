@@ -5,7 +5,10 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import type { DispatchSuccess } from "@/lib/mcp/dispatch";
 import { assembleOperations } from "@/lib/mcp/operations";
 import { DAY_MS } from "@/lib/mcp/windows";
+import { metricSeams } from "@/lib/synthesis/metrics/query";
 import { describeRqlSchema, RQL_LIMITS, RQL_VERSION } from "@/lib/synthesis/rql/compile";
+import type { RqlExecution } from "@/lib/synthesis/rql/ports/executor";
+import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
 import { dashboardReadOperations, EXAMPLES } from "./dashboards";
 import { customMonitoringForCaller, rqlOperations } from "./rql";
 import {
@@ -111,6 +114,47 @@ test("run_rql refuses the hostile queries of the review with a code and a fix", 
   const long = await m.call("run_rql", { text: `select '${"a".repeat(RQL_LIMITS.maxTextChars)}'` });
   assert.ok(!long.ok);
   assert.match(JSON.stringify(long), /4000|4,000/);
+});
+
+test("run_rql stops at 2 parallel queries of a project, and a console read keeps its own 4", async () => {
+  const seam = metricSeams.sql;
+  const runs: RqlExecution[] = [];
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  // The gates of this process, on an executor that holds each query until the release.
+  metricSeams.sql = sqlQueryRunner({
+    run: {
+      executor: { execute: async (run) => (runs.push(run), await held, [["t", 1, false]]) },
+      observe: async () => {},
+    },
+  });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+  try {
+    const agent = Array.from({ length: RQL_LIMITS.parallelQueriesPerProject + 1 }, () =>
+      m.call("run_rql", { text: TRACES }),
+    );
+    await settle();
+    assert.equal(runs.length, RQL_LIMITS.parallelQueriesPerProject, "the third run_rql waits");
+    // A console read of the same project is not behind the agent's places.
+    const console = Array.from({ length: RQL_LIMITS.parallelConsoleQueriesPerProject + 1 }, () =>
+      m.call("query_monitoring", { query: SQL_QUERY }),
+    );
+    await settle();
+    assert.equal(
+      runs.length,
+      RQL_LIMITS.parallelQueriesPerProject + RQL_LIMITS.parallelConsoleQueriesPerProject,
+      "the fifth console read waits",
+    );
+    release();
+    for (const result of await Promise.all([...agent, ...console])) {
+      assert.ok(result.ok, JSON.stringify(result));
+    }
+  } finally {
+    release();
+    metricSeams.sql = seam;
+  }
 });
 
 test("run_rql reads the window it is given, and refuses a window over the most RQL reads", async () => {

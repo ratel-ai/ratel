@@ -29,8 +29,8 @@ import { RQL_LIMITS } from "@/lib/synthesis/rql/compile";
 
 /** Widgets read at once: a full dashboard must not take the whole connection pool. */
 const CONCURRENCY = 4;
-/** Widgets of kind sql read at once: no more than the RQL gate gives one project. */
-const SQL_CONCURRENCY = RQL_LIMITS.parallelQueriesPerProject;
+/** Widgets of kind sql read at once: no more than the console's RQL gate gives one project. */
+const SQL_CONCURRENCY = RQL_LIMITS.parallelConsoleQueriesPerProject;
 
 type Load = (
   projectId: string,

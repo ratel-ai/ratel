@@ -112,9 +112,12 @@ query has none). The bounds are in `domain/limits.ts`.
 the text, the compiler refuses a text over 4000 characters, a second statement after a `;`, a
 list over 100 items and an expression over 200 levels deep. It refuses more than 50 output
 columns (each column of `*` counts). The runner reads the rows through a cursor, cuts each cell
-at 2000 characters and stops the rows at 1 MB of JSON; a cut marks the result `truncated`. A
-project runs at most 2 queries at the same time, and the RQL pool has 8 connections, so one
-project cannot hold every connection. Kind `sql` takes the place of the project before the
+at 2000 characters and stops the rows at 1 MB of JSON; a cut marks the result `truncated`. Each
+path of a project has its own gate: the console (the metric widgets of a dashboard, Explore and
+`get_dashboard`) runs at most 4 queries at the same time, an agent's `run_rql` at most 2, and
+the alert rules at most 1, with a timeout of 2 seconds. The RQL pool has 8 connections, more than
+the 7 places of one project on all its paths, so one project cannot hold every connection and
+another project still gets its answer. Kind `sql` takes the place of the project before the
 compile. A run that waits past the connect timeout of the pool is `rql_busy`.
 
 **Wall 2: the database.** The compiled SQL reads only the views `rql.events`, `rql.traces`,

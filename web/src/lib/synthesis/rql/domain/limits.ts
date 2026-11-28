@@ -33,8 +33,16 @@ export const RQL_LIMITS = Object.freeze({
   maxResultBytes: 1_000_000,
   /** Postgres stops a query that runs longer (`statement_timeout`). */
   timeoutMs: 10_000,
-  /** The queries one project can run at the same time. One more waits for a place, then is refused. */
+  /**
+   * The queries of an agent (`run_rql`) one project can run at the same time, on their own gate.
+   * One more waits for a place, then is refused.
+   */
   parallelQueriesPerProject: 2,
+  /**
+   * The console queries one project can run at the same time, on their own gate: the metric
+   * widgets of a dashboard, Explore, an alert preview, `get_dashboard` and `query_monitoring`.
+   */
+  parallelConsoleQueriesPerProject: 4,
   /** The alert queries one project can run at the same time, on their own gate. */
   parallelAlertQueriesPerProject: 1,
   /** How long a query waits for a place of its project before `rql_busy`. */

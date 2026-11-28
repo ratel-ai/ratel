@@ -10,8 +10,9 @@ import {
   placeHeld,
   type RqlGate,
   type RqlRunDeps,
+  rqlAgentGate,
   rqlAlertGate,
-  rqlProcessGate,
+  rqlConsoleGate,
   runRql,
 } from "./run";
 
@@ -20,17 +21,24 @@ import {
  * file fills on import. It has no flag check: each caller of `runQuery` is behind
  * `customMonitoring` already (`query_monitoring`, `run_rql`, the dashboards, Explore and the alerts).
  * The text is compiled at every run, so a saved query is checked again at load against the RQL of
- * today. The place of the project in the gate is taken before the compile: a query waits up to
- * `gateWaitMs` for one, and is refused before its text costs a parse when none comes free. An
- * alert rule (`scope.purpose`) takes the alert gate and the alert timeout instead. The window of
+ * today. The place of the project in the gate of its path is taken before the compile: a query
+ * waits up to `gateWaitMs` for one, and is refused before its text costs a parse when none comes
+ * free. Each path has its gate (`scope.purpose`): the console (`parallelConsoleQueriesPerProject`),
+ * an agent's `run_rql` (`parallelQueriesPerProject`), and an alert rule, which takes the alert
+ * timeout too (`parallelAlertQueriesPerProject`). The window of
  * the scope is the window of the query, up to `consoleMaxWindowDays`, and by known time when the
  * scope says so; a time condition in the text narrows it. The filter of the scope keeps the rows whose trace matches
  * (`domain/page-filter.ts`). Every refusal is a `QueryError` with the code, the message and the fix of RQL.
  */
 
 export interface SqlQueryDeps {
-  /** The runner's executor, gate, timeout and observer: the RQL pool's by default. */
+  /**
+   * The runner's executor, timeout and observer: the RQL pool's by default. Its gate is the
+   * console's: `rqlConsoleGate` by default.
+   */
   run: Partial<RqlRunDeps>;
+  /** The gate of an agent's `run_rql` (`scope.purpose`): `rqlAgentGate` by default. */
+  agentGate: RqlGate;
   /** The gate of alert rules (`scope.purpose`): `rqlAlertGate` by default. */
   alertGate: RqlGate;
   /** The RQL version of this build. A test gives a later one to reach the path of older queries. */
@@ -48,18 +56,19 @@ export function sqlQueryRunner(deps: Partial<SqlQueryDeps> = {}): SqlRunner {
   const {
     run = {},
     rqlVersion = RQL_VERSION,
+    agentGate = rqlAgentGate,
     alertGate = rqlAlertGate,
     properties = (projectId) => loadStoredPropertyNames(projectId),
   } = deps;
   return (projectId, query, scope) =>
-    runSqlQuery(projectId, query, scope, { run, rqlVersion, alertGate, properties });
+    runSqlQuery(projectId, query, scope, { run, rqlVersion, agentGate, alertGate, properties });
 }
 
 async function runSqlQuery(
   projectId: string,
   query: SqlQuery,
   scope: QueryScope,
-  { run, rqlVersion, alertGate, properties }: SqlQueryDeps,
+  { run, rqlVersion, agentGate, alertGate, properties }: SqlQueryDeps,
 ): Promise<SqlResult> {
   if (query.rqlVersion > rqlVersion)
     throw new QueryError(
@@ -67,15 +76,18 @@ async function runSqlQuery(
       { code: "rql_version", fix: `Write the query in RQL version ${rqlVersion}.` },
     );
   const alert = scope.purpose === "alert";
+  const path = {
+    alert: { gate: alertGate, max: RQL_LIMITS.parallelAlertQueriesPerProject },
+    agent: { gate: agentGate, max: RQL_LIMITS.parallelQueriesPerProject },
+    console: {
+      gate: run.gate ?? rqlConsoleGate,
+      max: RQL_LIMITS.parallelConsoleQueriesPerProject,
+    },
+  }[scope.purpose ?? "console"];
   // A place waits up to `gateWaitMs`, in order: a dashboard of more queries than the cap waits.
-  const leave = await (alert ? alertGate : (run.gate ?? rqlProcessGate)).wait(
-    projectId,
-    RQL_LIMITS.gateWaitMs,
-  );
+  const leave = await path.gate.wait(projectId, RQL_LIMITS.gateWaitMs);
   if (!leave) {
-    const { code, message, fix } = busyError(
-      alert ? RQL_LIMITS.parallelAlertQueriesPerProject : RQL_LIMITS.parallelQueriesPerProject,
-    );
+    const { code, message, fix } = busyError(path.max);
     throw new QueryError(message, { code, fix });
   }
   try {
