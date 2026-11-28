@@ -210,7 +210,7 @@ test("a key starts a run of one eval with a matrix, and reads it with its eval, 
     [{ model: "small" }, { model: "large" }],
   );
   assert.equal(read.body.run.variants.length, 2);
-  assert.match(read.body.run.rule, /mean of the scores of its variants/);
+  assert.match(read.body.run.rule, /over all the valid trials of the run/);
   const one = await json(handleEvalByKey("Refunds", deps()));
   assert.equal(one.body.runs[0].experimentId, started.body.experimentId);
   assert.deepEqual(one.body.runs[0].params, { depth: 2 });

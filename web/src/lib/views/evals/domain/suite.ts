@@ -63,9 +63,9 @@ export type EvalDelta =
 export type VariantScore = { variant: Variant | null; score: EvalScore };
 export type RunScore = { score: number | null; rule: string; variants: VariantScore[] };
 
-/** How the score of a run of one eval comes from its variants. */
+/** How the score of a run of one eval comes from its trials. */
 export const RUN_SCORE_RULE =
-  "The score of a run is the mean of the scores of its variants. A variant scores as an eval: the mean of its scorer pass rates. A run with no matrix has one variant.";
+  "The score of a run is the mean of its scorer pass rates over all the valid trials of the run. A matrix run pools the trials of its variants. Each variant also has its own score, from its own trials.";
 
 export const LEGACY_GROUP = "All cases";
 /** The key of the group of a run from before evals had definitions. */
@@ -77,8 +77,10 @@ export function evalScores(run: ScoredRun): EvalScore[] {
 }
 
 /**
- * The score of a run of one eval: the score of each variant (its own trials), and their mean
- * (`RUN_SCORE_RULE`).
+ * The score of a run of one eval (`RUN_SCORE_RULE`): the mean of the scorer pass rates over all
+ * the valid trials of the run, the same value as its entry of `evalScores`. Each variant keeps the
+ * score of its own trials. The score of the run is not their mean: a variant with few valid trials
+ * would count as much as one with many.
  */
 export function runScore(run: ScoredRun): RunScore {
   const variants = run.experiment.variants ?? [];
@@ -92,7 +94,7 @@ export function runScore(run: ScoredRun): RunScore {
           }).map((score) => ({ variant, score })),
         );
   return {
-    score: mean(scores.map(({ score }) => score.score)),
+    score: mean(evalScores(run).map(({ score }) => score)),
     rule: RUN_SCORE_RULE,
     variants: scores,
   };
