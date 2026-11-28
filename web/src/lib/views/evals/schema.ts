@@ -18,7 +18,7 @@ import type { CaseContent, CaseScorer, EarlierTurn } from "./domain/case";
 import type { FrozenCase, TrialToolCall } from "./domain/experiment";
 import type { ScorerResult, ScorerSnapshot } from "./domain/score";
 
-/** The tables of evals (the `evals` flag). */
+/** The tables of evals. */
 
 /** A case: its name and its labels. What it checks is in its versions. */
 export const evalCases = pgTable(

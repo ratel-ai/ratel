@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { EvalsView } from "@/components/console/evals/EvalsView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { composition } from "@/lib/composition/ports";
@@ -11,7 +11,6 @@ import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-b
 import { createDrizzleCaseStore } from "@/lib/views/evals/adapters/drizzle-case-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
 import { emptyCounts } from "@/lib/views/evals/domain/experiment";
-import { evalsEnabledForProject } from "@/lib/views/evals/gate";
 import { caseRow, experimentRow, readyVersions } from "@/lib/views/evals/page-model";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
 
@@ -21,11 +20,9 @@ export const metadata = { title: "Evals" };
 const EXPERIMENTS = 20;
 const VERSIONS = 50;
 
-/** The project's eval cases and experiments (the `evals` flag). */
+/** The project's eval cases and experiments. */
 export default async function EvalsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
-  // Next renders a page next to its layout: the layout's 404 does not stop this data.
-  if (!(await evalsEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Evals">

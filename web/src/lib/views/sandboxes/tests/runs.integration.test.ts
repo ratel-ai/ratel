@@ -321,8 +321,6 @@ test("the run token only sends traces of its project, while the run is active", 
   const token = t.envOf(run.instanceRef ?? "", run.id).RATEL_API_KEY ?? "";
   const noKey = async () => null;
   const lookup = withRunTokens(noKey, {
-    offForAll: () => false,
-    enabled: async () => true,
     runs: () => t.runs,
   });
   const ask = (scope: (typeof API_KEY_SCOPES)[number]) =>

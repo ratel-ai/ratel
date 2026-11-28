@@ -4,7 +4,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { createMcpRouteHandler } from "@/lib/mcp/route-handler";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 
-/** What a client is told exists, with the one flag `evals` on and off for it (decision `one-flag`). */
+/** With the `evals` flag removed, every client is told the sandbox and eval tools exist. */
 
 const auth: McpAuthContext = {
   kind: "api-key",
@@ -14,20 +14,14 @@ const auth: McpAuthContext = {
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
-test("off, the server lists no sandbox_* and no evals_* tool", async () => {
-  const names = await listedTools(false);
-  assert.ok(names.length > 0);
-  assert.deepEqual(names.filter(isGated), []);
-});
-
-test("on, the one flag lists the sandbox tools and the eval tools together", async () => {
-  const names = await listedTools(true);
+test("the server lists the sandbox tools and the eval tools with no flag", async () => {
+  const names = await listedTools();
   for (const name of ["sandbox_list", "sandbox_get_version", "sandbox_run", "sandbox_get_run"])
     assert.ok(names.includes(name), name);
   assert.ok(names.some((name) => name.startsWith("evals_")));
 });
 
-async function listedTools(evals: boolean): Promise<string[]> {
+async function listedTools(): Promise<string[]> {
   const limiter = () => createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 });
   const handler = createMcpRouteHandler({
     authenticate: async () => ({ ok: true, auth }),
@@ -38,7 +32,6 @@ async function listedTools(evals: boolean): Promise<string[]> {
     launchAccess: async () => true,
     mcpApps: async () => false,
     focusedConsole: async () => false,
-    evals: async () => evals,
   });
   const response = await handler(
     new Request("https://cloud.ratel.sh/api/mcp", {
@@ -49,8 +42,4 @@ async function listedTools(evals: boolean): Promise<string[]> {
   );
   const body = (await response.json()) as { result: { tools: { name: string }[] } };
   return body.result.tools.map((tool) => tool.name);
-}
-
-function isGated(name: string): boolean {
-  return name.startsWith("sandbox_") || name.startsWith("evals_");
 }

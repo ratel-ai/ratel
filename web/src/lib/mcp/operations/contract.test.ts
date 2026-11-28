@@ -13,11 +13,7 @@ import { OPERATION_DOMAINS } from "@/lib/mcp/registry";
  * the read-or-write decision to be made deliberately and reviewed, instead of
  * slipping in because nobody thought about it.
  */
-const operations = assembleOperations({
-  focusedConsole: true,
-  customMonitoring: true,
-  evals: true,
-});
+const operations = assembleOperations({ focusedConsole: true, customMonitoring: true });
 
 test("ids are unique, snake_case, and stable-looking", () => {
   const ids = operations.map((operation) => operation.id);
@@ -232,12 +228,12 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // RQL over trace data (RTL-325), behind customMonitoring.
   ["describe_rql_schema", false],
   ["run_rql", false],
-  // Ratel sandbox (decision `mcp-surface`), behind the `evals` flag. sandbox_run starts a VM run.
+  // Ratel sandbox (decision `mcp-surface`). sandbox_run starts a VM run.
   ["sandbox_list", false],
   ["sandbox_get_version", false],
   ["sandbox_run", true],
   ["sandbox_get_run", false],
-  // Evals on Ratel sandbox (decision `mcp-surface`), behind the `evals` flag.
+  // Evals on Ratel sandbox (decision `mcp-surface`).
   ["evals_list_cases", false],
   ["evals_get_case", false],
   ["evals_create_case", true],

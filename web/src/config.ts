@@ -82,7 +82,6 @@ const FLAG_ENV = {
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
   customMonitoring: "FF_CUSTOM_MONITORING",
-  evals: "FF_EVALS",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */

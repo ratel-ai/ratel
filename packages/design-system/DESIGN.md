@@ -27,8 +27,8 @@ Every UI change in the platform, in both editions, follows this document and is 
 
 ## Information architecture
 
-At most 10 project items in the rail's list, and 14 with `customMonitoring` (the edition's own come
-on top), under stage headings; the list scrolls when they do not fit. MCP is not in the list: it sits in
+At most 12 project items in the rail's list (Evals and Ratel sandbox included), and 15 with
+`customMonitoring` (the edition's own come on top), under stage headings; the list scrolls when they do not fit. MCP is not in the list: it sits in
 the rail's footer and does not count. Nothing "Soon"; one home per concept and per
 editable field; items the edition lacks are not rendered; moved pages redirect.
 

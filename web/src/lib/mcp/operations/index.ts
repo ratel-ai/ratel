@@ -61,11 +61,6 @@ export interface AssembleOptions {
   focusedConsole?: boolean;
   /** List the RQL tools too (`customMonitoring`). Off, they do not exist. */
   customMonitoring?: boolean;
-  /**
-   * List the Ratel sandbox tools and the eval tools (`evals` flag of the caller, one flag for
-   * both). Off, they do not exist.
-   */
-  evals?: boolean;
 }
 
 /**
@@ -104,7 +99,8 @@ export function assembleOperations(
     ...joinsOperations(),
     ...playgroundOperations(),
     ...shipOperations(),
-    ...(options.evals ? [...sandboxOperations(), ...evalsOperations()] : []),
+    ...sandboxOperations(),
+    ...evalsOperations(),
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),

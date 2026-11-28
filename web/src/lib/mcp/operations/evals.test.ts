@@ -12,7 +12,7 @@ import type { SandboxRun } from "@/lib/views/sandboxes";
 import { type EvalsOperationDeps, evalsOperations } from "./evals";
 
 /**
- * The eval tools, through dispatch with fake module calls: the flag, the project, the refusals of
+ * The eval tools, through dispatch with fake module calls: the project, the refusals of
  * the module with their reasons, and results that show inputs and outputs first.
  */
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -172,7 +172,6 @@ function sandboxRun(overrides: Partial<SandboxRun> = {}): SandboxRun {
 function fakeDeps(overrides: Partial<EvalsOperationDeps> = {}): EvalsOperationDeps {
   const experiments = [experiment(), baseline];
   return {
-    enabled: async () => true,
     listCases: async () => [evalCase()],
     getCase: async (projectId, id) => (projectId === PROJECT && id === CASE ? evalCase() : null),
     createCase: async (input) => ({
@@ -278,15 +277,11 @@ const PARAMS: Record<string, Record<string, unknown>> = {
 };
 const IDS = Object.keys(PARAMS);
 
-// — Listing, flag and scope ————————————————————————————————————————————————————
+// — Listing and scope —————————————————————————————————————————————————————————
 
-test("evals: the tools are listed only when the flag is on for the caller", () => {
-  const on = assembleOperations({ evals: true }).map((operation) => operation.id);
-  const off = assembleOperations({ evals: false }).map((operation) => operation.id);
-  for (const id of IDS) {
-    assert.ok(on.includes(id), `${id} is listed with the flag on`);
-    assert.ok(!off.includes(id), `${id} is not listed with the flag off`);
-  }
+test("evals: the tools are listed", () => {
+  const ids = assembleOperations().map((operation) => operation.id);
+  for (const id of IDS) assert.ok(ids.includes(id), `${id} is listed`);
 });
 
 test("evals: create, approve, start and pin mutate; the rest only read", () => {
@@ -302,12 +297,6 @@ test("evals: create, approve, start and pin mutate; the rest only read", () => {
 });
 
 for (const id of IDS) {
-  test(`evals: ${id} refuses a project with the flag off`, async () => {
-    const result = failure(await call(id, PARAMS[id] ?? {}, { enabled: async () => false }));
-    assert.equal(result.error, "forbidden");
-    assert.equal(result.reason, "evals_off");
-  });
-
   test(`evals: ${id} refuses another project than the one of the key`, async () => {
     const result = failure(await call(id, { ...PARAMS[id], projectId: OTHER_PROJECT }));
     assert.equal(result.error, "forbidden");

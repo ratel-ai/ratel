@@ -7,7 +7,6 @@ import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
 import type { ConsoleAccessDeps } from "./console-access";
-import { sandboxesEnabledForProject } from "./gate";
 import { runDeps } from "./run-deps";
 import type { RunsApiDeps } from "./runs-api";
 import type { SecretsApiDeps } from "./secrets-api";
@@ -16,7 +15,6 @@ import type { SecretsApiDeps } from "./secrets-api";
 export const consoleAccess: ConsoleAccessDeps = {
   getSession: getSessionContext,
   findProjectScope,
-  enabled: (projectId) => sandboxesEnabledForProject(projectId),
   isRestricted: isRestrictedBySupportSession,
 };
 

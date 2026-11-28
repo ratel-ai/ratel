@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveConfig } from "@/config";
 import { createInMemoryUsageLimits } from "@/lib/contracts/usage-limits.fake";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
@@ -11,7 +10,6 @@ import { createDrizzleSecretStore } from "../adapters/drizzle-secret-store";
 import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
 import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { sandboxRunSchema } from "../domain/run";
-import { sandboxesEnabledForProject, sandboxesOffForAll } from "../gate";
 import { ProviderRefused } from "../ports/sandbox-provider";
 import type { RunDeps } from "../runs";
 import {
@@ -42,12 +40,10 @@ const KEYS: Record<string, { projectId: string; scopes: string[] }> = {
   push: { projectId: PROJECT_ID, scopes: ["sandboxes:write"] },
   other: { projectId: OTHER_PROJECT_ID, scopes: ["*"] },
 };
-const ON = resolveConfig({ env: { FF_EVALS: "1" } });
 
 type Over = {
   key?: string;
   scope?: typeof RUN | typeof READ;
-  on?: boolean;
   limits?: Parameters<typeof createInMemoryUsageLimits>[0];
 };
 
@@ -85,8 +81,7 @@ async function setup() {
     return id;
   };
   const pending: Array<Promise<void>> = [];
-  const deps = ({ key = "full", scope = RUN, on = true, limits }: Over = {}) => {
-    const config = on ? ON : resolveConfig();
+  const deps = ({ key = "full", scope = RUN, limits }: Over = {}) => {
     const runDeps: RunDeps = {
       runs: createDrizzleRunStore(db),
       vms: createDrizzleVmStore(db),
@@ -102,7 +97,6 @@ async function setup() {
       },
     };
     return {
-      offForAll: () => sandboxesOffForAll({ config, port: undefined, edition: "Ratel OSS" }),
       authenticate: () =>
         resolveProjectFromBearer(
           new Request("http://x", { headers: { authorization: `Bearer ${key}` } }),
@@ -119,8 +113,6 @@ async function setup() {
             touchApiKey: async () => {},
           },
         ),
-      enabled: (projectId) =>
-        sandboxesEnabledForProject(projectId, { config, port: undefined, edition: "Ratel OSS" }),
       organizationIdOf: async () => ORGANIZATION_ID,
       versions: () => versions,
       runDeps: () => runDeps,
@@ -264,7 +256,7 @@ test("a refusal over a limit is the flat api-error that names the limit", async 
   assert.equal(answer.body.limit, "sandbox_vm_starts_per_day");
 });
 
-test("the routes need their scope, and answer 404 with the flag off", async () => {
+test("the routes need their scope", async () => {
   const t = await setup();
   const versionId = await t.push();
   assert.equal(RUN, "sandboxes:run");
@@ -273,7 +265,4 @@ test("the routes need their scope, and answer 404 with the flag off", async () =
   assert.equal((await t.start({ versionId, input: 1 }, { key: "push" })).status, 403);
   const started = await t.start({ versionId, input: 1 });
   assert.equal((await t.get(started.body.runId, { key: "read" })).status, 200);
-  assert.equal((await t.start({ versionId, input: 1 }, { on: false })).status, 404);
-  assert.equal((await t.get(started.body.runId, { on: false })).status, 404);
-  assert.equal((await t.start({ versionId, input: 1 }, { on: false, key: "bad" })).status, 404);
 });

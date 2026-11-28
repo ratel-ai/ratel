@@ -236,7 +236,6 @@ async function setup(provider: SandboxProvider, work: string) {
     organizationIdOf: async () => ORGANIZATION_ID,
     callbackUrl: () => "http://127.0.0.1:9",
     sealingKey: () => ({ ok: true, key: KEY }),
-    enabled: async () => true,
     now: () => new Date(),
     every: () => () => {},
   };

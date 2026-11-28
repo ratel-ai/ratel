@@ -96,9 +96,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   focusedConsole = false,
-  sandboxPage = false,
   customMonitoring = false,
-  evalsPage = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -118,12 +116,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
   focusedConsole?: boolean;
-  /** `sandboxes` on for the shown organization: Ratel sandbox before Catalog and Settings. */
-  sandboxPage?: boolean;
   /** `customMonitoring` on for the shown organization: Dashboards, Explore and Alerts in Monitor. */
   customMonitoring?: boolean;
-  /** `evals` on for the shown organization: Evals before Ratel sandbox. */
-  evalsPage?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -421,8 +415,6 @@ export function consoleNav({
           entityPages,
           focusedConsole,
           customMonitoring,
-          sandboxPage,
-          evalsPage,
         })
       : core),
     ...additions.map((item) => ({
@@ -451,14 +443,10 @@ function stageRailNav(
     entityPages,
     focusedConsole,
     customMonitoring,
-    sandboxPage,
-    evalsPage,
   }: {
     entityPages: boolean;
     focusedConsole: boolean;
     customMonitoring: boolean;
-    sandboxPage: boolean;
-    evalsPage: boolean;
   },
 ): NavItem[] {
   const pick = (id: string): NavItem => {
@@ -551,30 +539,22 @@ function stageRailNav(
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
-    ...(evalsPage
-      ? [
-          {
-            id: "evals",
-            label: "Evals",
-            href: `${root}/evals`,
-            icon: "improvements" as const,
-            keywords: ["evals", "cases", "experiments", "trials"],
-            section: "settings" as const,
-          },
-        ]
-      : []),
-    ...(sandboxPage
-      ? [
-          {
-            id: "sandbox",
-            label: "Ratel sandbox",
-            href: `${root}/sandbox`,
-            icon: "apis" as const,
-            keywords: ["sandbox", "push", "versions", "secrets", "run"],
-            section: "settings" as const,
-          },
-        ]
-      : []),
+    {
+      id: "evals",
+      label: "Evals",
+      href: `${root}/evals`,
+      icon: "scorers" as const,
+      keywords: ["evals", "cases", "experiments", "trials"],
+      section: "settings" as const,
+    },
+    {
+      id: "sandbox",
+      label: "Ratel sandbox",
+      href: `${root}/sandbox`,
+      icon: "apis" as const,
+      keywords: ["sandbox", "push", "versions", "secrets", "run"],
+      section: "settings" as const,
+    },
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("mcp-setup"),

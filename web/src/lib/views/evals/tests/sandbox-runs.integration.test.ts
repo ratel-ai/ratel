@@ -86,7 +86,6 @@ async function setup(agent: AgentScript = {}) {
     cases,
     experiments,
     sandboxes: {
-      enabled: async () => true,
       listVersions: async () => [summary],
       getVersion: async () => summary,
       startRun: (versionId, input, options) => startRun(versionId, input, options, runDeps(more)),

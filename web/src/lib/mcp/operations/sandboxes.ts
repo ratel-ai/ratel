@@ -19,7 +19,6 @@ import {
   type SandboxVersionDetail,
   type StartRunOptions,
   type StartRunResult,
-  sandboxesEnabledForProject,
   sandboxRunStatus,
   startRun,
 } from "@/lib/views/sandboxes";
@@ -27,14 +26,12 @@ import {
 /**
  * The Ratel sandbox tools (decision `mcp-surface`): find a pushed version of an agent, read how to
  * call it, run it with an input and read the output. They call only the public interface of
- * `views/sandboxes`. They are listed only for a caller with the `evals` flag (one flag for the
- * sandbox and the evals), and each call checks the flag for its project again.
+ * `views/sandboxes`.
  *
  * A call is stateless and must answer in 60 seconds. So `sandbox_run` waits a short time for the
  * result, then returns the run id and a hint to poll `sandbox_get_run`.
  */
 export interface SandboxOperationDeps {
-  enabled(projectId: string): Promise<boolean>;
   /** The newest first. */
   listVersions(projectId: string, limit: number): Promise<SandboxVersionDetail[]>;
   getVersion(projectId: string, versionId: string): Promise<SandboxVersionDetail | null>;
@@ -63,7 +60,6 @@ const VERSIONS_PER_SANDBOX = 5;
 const ACTIVE = new Set(["queued", "running"]);
 
 const defaultDeps: SandboxOperationDeps = {
-  enabled: (projectId) => sandboxesEnabledForProject(projectId),
   listVersions: listSandboxVersionDetails,
   getVersion: getSandboxVersionDetail,
   newestReady: newestReadySandboxVersion,
@@ -94,7 +90,6 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       apiKeyScope: "sandboxes:read",
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        await requireSandboxes(deps, ctx.projectId);
         const versions = await deps.listVersions(ctx.projectId, VERSIONS_READ + 1);
         const read = capRows(versions, VERSIONS_READ);
         const sandboxes = groupByName(read.rows);
@@ -120,7 +115,6 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
       apiKeyScope: "sandboxes:read",
       params: z.object({ ...projectScoped, versionId: versionIdParam }),
       async execute(ctx, params) {
-        await requireSandboxes(deps, ctx.projectId);
         const version = await deps.getVersion(ctx.projectId, params.versionId);
         if (!version) throw notFound("sandbox version");
         const view = versionView(version);
@@ -168,7 +162,6 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
           ),
       }),
       async execute(ctx, params) {
-        await requireSandboxes(deps, ctx.projectId);
         const version = await findVersion(deps, ctx.projectId, params);
         refuseUndeclared(version, params.params ?? {});
         const organizationId =
@@ -201,7 +194,6 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
         runId: uuidParam().describe("The id of a run. sandbox_run gives it."),
       }),
       async execute(ctx, params) {
-        await requireSandboxes(deps, ctx.projectId);
         const run = await deps.getRun(ctx.projectId, params.runId);
         if (!run) throw notFound("sandbox run");
         return runResult(run, await deps.mayReadContent(ctx));
@@ -211,13 +203,6 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
 }
 
 // — Helpers ——————————————————————————————————————————————————————————————————
-
-async function requireSandboxes(deps: SandboxOperationDeps, projectId: string): Promise<void> {
-  if (await deps.enabled(projectId)) return;
-  throw new McpOperationError("forbidden", "Ratel sandbox is not on for this project.", {
-    reason: "sandboxes_off",
-  });
-}
 
 function groupByName(versions: readonly SandboxVersionDetail[]) {
   const byName = new Map<string, SandboxVersionDetail[]>();

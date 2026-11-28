@@ -11,9 +11,7 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
-import { evalsOrganizationIds } from "@/lib/views/evals/gate";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
-import { sandboxOrganizationIds } from "@/lib/views/sandboxes/gate";
 
 /** The console's rail and page, with its data resolved on the server. */
 export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children: ReactNode }) {
@@ -30,19 +28,12 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   // Every organization the reader belongs to and their projects: the frame picks the one shown.
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
-  const [
-    entityPagesOrganizations,
-    focusedConsoleOrganizations,
-    customMonitoringOrganizations,
-    sandboxOrganizations,
-    evalsOrganizations,
-  ] = await Promise.all([
-    entityPagesOrganizationIds(organizations),
-    focusedConsoleOrganizationIds(organizations),
-    customMonitoringOrganizationIds(organizations),
-    sandboxOrganizationIds(organizations),
-    evalsOrganizationIds(organizations),
-  ]);
+  const [entityPagesOrganizations, focusedConsoleOrganizations, customMonitoringOrganizations] =
+    await Promise.all([
+      entityPagesOrganizationIds(organizations),
+      focusedConsoleOrganizationIds(organizations),
+      customMonitoringOrganizationIds(organizations),
+    ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -73,8 +64,6 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           entityPagesOrganizations,
           focusedConsoleOrganizations,
           customMonitoringOrganizations,
-          sandboxOrganizations,
-          evalsOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {

@@ -14,10 +14,7 @@ import type { VersionStore } from "./ports/version-store";
  * of its key. A stored version has no route that edits it.
  */
 export type PushApiDeps = {
-  /** True when no project of the deployment can have the flag: the route then answers 404 first. */
-  offForAll: () => boolean;
   authenticate: () => Promise<ResolvedApiKeyProject>;
-  enabled: (projectId: string) => Promise<boolean>;
   organizationIdOf: (projectId: string) => Promise<string | null>;
   versions: () => VersionStore;
   bundles: () => BundleStore;
@@ -143,11 +140,9 @@ async function forProject(
   operation: string,
   work: (project: Project) => Promise<Response>,
 ): Promise<Response> {
-  if (deps.offForAll()) return notFound();
   const resolved = await deps.authenticate();
   if (!resolved.ok) return resolved.response;
   const { projectId, apiKeyId } = resolved;
-  if (!(await deps.enabled(projectId))) return notFound();
   return withFeatureSpan("sandboxes", operation, () => work({ projectId, apiKeyId }), {
     attributes: { "project.id": projectId },
   });

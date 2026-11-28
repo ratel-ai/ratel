@@ -9,7 +9,7 @@ import { type SandboxOperationDeps, sandboxOperations } from "./sandboxes";
 
 /**
  * The sandbox tools, through dispatch with fake module calls. They pin what an agent needs to call
- * a version without a second guess: the flag, the project, the declared params, and a run result
+ * a version without a second guess: the project, the declared params, and a run result
  * that shows the input and the output first.
  */
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -104,7 +104,6 @@ function run(overrides: Partial<SandboxRun> = {}): SandboxRun {
 
 function fakeDeps(overrides: Partial<SandboxOperationDeps> = {}): SandboxOperationDeps {
   return {
-    enabled: async () => true,
     listVersions: async (projectId) => (projectId === PROJECT ? [version()] : []),
     getVersion: async (projectId, id) =>
       projectId === PROJECT && id === VERSION ? version() : null,
@@ -149,22 +148,11 @@ const PARAMS: Record<string, Record<string, unknown>> = {
   sandbox_get_run: { runId: RUN },
 };
 
-// — Listing and flag ——————————————————————————————————————————————————————————
+// — Listing and scope —————————————————————————————————————————————————————————
 
-test("sandboxes: the tools are listed only when the one flag evals is on for the caller", () => {
-  const on = assembleOperations({ evals: true }).map((operation) => operation.id);
-  const off = assembleOperations({ evals: false }).map((operation) => operation.id);
-  for (const id of IDS) {
-    assert.ok(on.includes(id), `${id} is listed with the flag on`);
-    assert.ok(!off.includes(id), `${id} is not listed with the flag off`);
-  }
-  assert.ok(
-    on.some((id) => id.startsWith("evals_")),
-    "the eval tools come with the same flag",
-  );
-  for (const ids of [off, assembleOperations().map((operation) => operation.id)]) {
-    assert.ok(!ids.some((id) => id.startsWith("sandbox_") || id.startsWith("evals_")));
-  }
+test("sandboxes: the tools are listed", () => {
+  const ids = assembleOperations().map((operation) => operation.id);
+  for (const id of IDS) assert.ok(ids.includes(id), `${id} is listed`);
 });
 
 test("sandboxes: only sandbox_run mutates, and read-only assembly drops it", () => {
@@ -172,26 +160,11 @@ test("sandboxes: only sandbox_run mutates, and read-only assembly drops it", () 
     .filter((operation) => operation.mutates)
     .map((operation) => operation.id);
   assert.deepEqual(mutating, ["sandbox_run"]);
-  const readOnly = assembleOperations({ evals: true, includeWrites: false });
+  const readOnly = assembleOperations({ includeWrites: false });
   assert.ok(!readOnly.some((operation) => operation.id === "sandbox_run"));
 });
 
 for (const id of IDS) {
-  test(`sandboxes: ${id} refuses a project with the flag off`, async () => {
-    const asked: string[] = [];
-    const result = failure(
-      await call(id, PARAMS[id] ?? {}, {
-        enabled: async (projectId) => {
-          asked.push(projectId);
-          return false;
-        },
-      }),
-    );
-    assert.equal(result.error, "forbidden");
-    assert.match(result.message, /Ratel sandbox is not on for this project/);
-    assert.deepEqual(asked, [PROJECT]);
-  });
-
   test(`sandboxes: ${id} refuses another project than the one of the key`, async () => {
     const result = failure(await call(id, { ...PARAMS[id], projectId: OTHER_PROJECT }));
     assert.equal(result.error, "forbidden");

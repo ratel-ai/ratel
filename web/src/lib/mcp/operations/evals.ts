@@ -50,7 +50,6 @@ import {
   type StartExperimentResult,
   startExperiment,
 } from "@/lib/views/evals/experiments";
-import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
 import type { ApproveResult, NewCase } from "@/lib/views/evals/ports/case-store";
 import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
@@ -59,15 +58,13 @@ import { getRun, type SandboxRun } from "@/lib/views/sandboxes";
  * The eval tools (decision `mcp-surface`): save a sandbox run as a case, approve it, start an eval
  * run (an experiment) against a sandbox version, read it, and compare it with a baseline. Ids start
  * with `evals_`: `run_eval`, `get_eval`, `get_experiment` and `create_experiment` are taken by the
- * improvement loop. They are listed only for a caller with the `evals` flag, and each call checks
- * the flag for its project again.
+ * improvement loop.
  *
  * An eval run takes minutes. `evals_start_run` returns its id at once, with a hint to poll
  * `evals_get_run`. Captured text (inputs, outputs, judge reasons) follows the content rule of
  * `content-access.ts`: an API key reads it only with the content permission and the project opt-in.
  */
 export interface EvalsOperationDeps {
-  enabled(projectId: string): Promise<boolean>;
   /** The newest first. */
   listCases(projectId: string): Promise<EvalCase[]>;
   getCase(projectId: string, caseId: string): Promise<EvalCase | null>;
@@ -114,7 +111,6 @@ const TEXT_CHARS = 2_000;
 const INPUT_CHARS = 1_000;
 
 const defaultDeps: EvalsOperationDeps = {
-  enabled: (projectId) => evalsEnabledForProject(projectId),
   listCases: (projectId) => createDrizzleCaseStore(getDb()).list(projectId),
   getCase: (projectId, caseId) => createDrizzleCaseStore(getDb()).get(projectId, caseId),
   createCase: (input) => createDrizzleCaseStore(getDb()).create(input),
@@ -190,7 +186,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        await requireEvals(deps, ctx.projectId);
         const read = capRows(await deps.listCases(ctx.projectId), CASES_SHOWN);
         const cases = read.rows.map((evalCase) => ({
           caseId: evalCase.id,
@@ -223,7 +218,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped, caseId: caseIdParam }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const evalCase = await deps.getCase(ctx.projectId, params.caseId);
         if (!evalCase) throw notFound("eval case");
         const readable = await deps.mayReadContent(ctx);
@@ -285,7 +279,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .describe("The scorers. A trial passes when every gating scorer passes."),
       }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const source = params.sandboxRunId
           ? await runSource(deps, ctx.projectId, params.sandboxRunId)
           : null;
@@ -339,7 +332,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:write",
       params: z.object({ ...projectScoped, caseId: caseIdParam }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const evalCase = await deps.getCase(ctx.projectId, params.caseId);
         if (!evalCase) throw notFound("eval case");
         const draft = draftVersion(evalCase);
@@ -407,7 +399,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .describe("Values for the params that the sandbox version declares."),
       }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const organizationId = ctx.organizationId ?? (await deps.organizationIdOf(ctx.projectId));
         if (!organizationId) throw notFound("project");
         const result = await deps.startExperiment(
@@ -446,7 +437,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        await requireEvals(deps, ctx.projectId);
         const [experiments, baseline] = await Promise.all([
           deps.listExperiments(ctx.projectId, LIST_LIMIT),
           deps.getBaseline(ctx.projectId),
@@ -480,7 +470,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:read",
       params: z.object({ ...projectScoped, runId: runIdParam }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const experiment = await waitForEnd(
           deps,
           ctx.projectId,
@@ -520,7 +509,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         trialId: uuidParam().describe("The id of a trial. evals_get_run gives the trial ids."),
       }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const experiment = await deps.getExperiment(ctx.projectId, params.runId);
         const trial =
           experiment && (await deps.trials(experiment.id)).find(({ id }) => id === params.trialId);
@@ -572,7 +560,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           .describe("The eval run to compare with. Omit it to use the pinned baseline."),
       }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const compared = params.baselineRunId
           ? await compareTwo(deps, ctx.projectId, params.runId, params.baselineRunId)
           : await pinnedComparison(deps, ctx.projectId, params.runId);
@@ -600,7 +587,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       apiKeyScope: "evals:write",
       params: z.object({ ...projectScoped, runId: runIdParam }),
       async execute(ctx, params) {
-        await requireEvals(deps, ctx.projectId);
         const result = await deps.pinBaseline(ctx.projectId, params.runId, requester(ctx.auth));
         if (!result.ok) {
           if (result.reason === "not_found") throw notFound("eval run");
@@ -618,17 +604,6 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
   ];
 }
 
-/** Whether the eval tools are listed for a caller. A failed decision hides them. */
-export async function evalsForCaller(auth: McpAuthContext): Promise<boolean> {
-  try {
-    if (auth.kind === "api-key") return await evalsEnabledForProject(auth.projectId);
-    const organizations = auth.memberships.map(({ organizationId }) => ({ id: organizationId }));
-    return (await evalsOrganizationIds(organizations)).length > 0;
-  } catch {
-    return false;
-  }
-}
-
 // — Helpers ——————————————————————————————————————————————————————————————————
 
 type Compared = {
@@ -639,13 +614,6 @@ type Compared = {
   baselineTrials: Trial[];
   candidateTrials: Trial[];
 };
-
-async function requireEvals(deps: EvalsOperationDeps, projectId: string): Promise<void> {
-  if (await deps.enabled(projectId)) return;
-  throw new McpOperationError("forbidden", "Evals are not on for this project.", {
-    reason: "evals_off",
-  });
-}
 
 /** Waits a short time for a running eval run to end. A call is limited to 60 seconds. */
 async function waitForEnd(

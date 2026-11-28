@@ -17,7 +17,6 @@ import { createDrizzleRetentionStore } from "./adapters/drizzle-retention-store"
 import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
 import { createDrizzleVmStore } from "./adapters/drizzle-vm-store";
 import { sandboxDeploymentId, sandboxProvider } from "./adapters/provider-from-env";
-import { sandboxesEnabledForProject } from "./gate";
 import { BUILD_STOPPED_MS, runImageBuild, STOPPED_REASON } from "./image-build-job";
 import { runDeps } from "./run-deps";
 import { sweepRuns } from "./run-sweep";
@@ -56,7 +55,6 @@ export function createSandboxesRegistration(
             (await getOrganizationByProjectId(projectId))?.id ?? null,
           callbackUrl: () => getConfig().sandboxes.callbackUrl ?? publicBaseUrl(),
           sealingKey: () => sealedSecretsKey(),
-          enabled: (projectId) => sandboxesEnabledForProject(projectId),
           now: () => new Date(),
           every: (ms, beat) => {
             const timer = setInterval(beat, ms);

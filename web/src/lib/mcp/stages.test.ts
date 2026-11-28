@@ -6,7 +6,7 @@ import { isLineageStage } from "@/lib/views/lineage/types";
 
 const published = [
   "whoami",
-  ...assembleOperations({ focusedConsole: true, customMonitoring: true, evals: true }).map(
+  ...assembleOperations({ focusedConsole: true, customMonitoring: true }).map(
     (operation) => operation.id,
   ),
 ];

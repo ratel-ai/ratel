@@ -54,6 +54,8 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "intents", href: `/project/${P1}/intents` },
       { id: "improvements", href: `/project/${P1}/improvement` },
       { id: "ship", href: `/project/${P1}/ship` },
+      { id: "evals", href: `/project/${P1}/evals` },
+      { id: "sandbox", href: `/project/${P1}/sandbox` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
       { id: "mcp-setup", href: `/project/${P1}/mcp-setup` },
       { id: "settings", href: `/project/${P1}/settings` },
@@ -164,6 +166,8 @@ test("outside a project, the organization rail lists its projects page", () => {
       "intents",
       "improvements",
       "ship",
+      "evals",
+      "sandbox",
       "catalog",
       "mcp-setup",
       "settings",
@@ -182,7 +186,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 11);
+  assert.equal(withProject.length, 13);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -206,6 +210,8 @@ test("the OSS composition adds no destination", () => {
       "intents",
       "improvements",
       "ship",
+      "evals",
+      "sandbox",
       "catalog",
       "mcp-setup",
       "settings",
@@ -246,6 +252,8 @@ test("an edition's project group sits between the core pages and Settings, under
       "group:ship:ship:Ship",
       "group:apis:project-models/embeddings:APIs",
       "group:apis:project-models/tool-picker:",
+      "settings:evals:",
+      "settings:sandbox:",
       "settings:catalog:",
       "footer:mcp-setup:",
       "settings:settings:",
@@ -300,6 +308,8 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
       "group:insights:intents:",
       "group:improve:improvements:Improve",
       "group:ship:ship:Ship",
+      "settings:evals:",
+      "settings:sandbox:",
       "settings:catalog:",
       "settings:group-apis:",
       "footer:mcp-setup:",
@@ -347,7 +357,7 @@ test("the Cloud edition's rail matches upstream's: the APIs row in setup, Member
   const project = consoleNav({ projectId: P1, additions: [], projectGroups: cloud.projectNav });
   assert.deepEqual(
     project.filter(({ section }) => section === "settings").map(({ id }) => id),
-    ["catalog", "group-apis", "settings"],
+    ["evals", "sandbox", "catalog", "group-apis", "settings"],
   );
   assert.deepEqual(
     project.filter(({ section }) => section === "footer").map(({ id }) => id),
@@ -407,6 +417,8 @@ test("Settings sits in a section of its own in both rails, MCP in the footer, th
       "group:insights:intents",
       "group:improve:improvements",
       "group:ship:ship",
+      "settings:evals",
+      "settings:sandbox",
       "settings:catalog",
       "footer:mcp-setup",
       "settings:settings",
@@ -478,11 +490,11 @@ test("Dashboards, Explore, Scorers and Alerts are Monitor items only with custom
       ],
     );
     assert.equal(on.find(({ id }) => id === "overview")?.children, undefined);
-    // DESIGN.md's budget: at most 10 items in the list, and 13 with customMonitoring. The
+    // DESIGN.md's budget: at most 12 items in the list, and 15 with customMonitoring. The
     // footer's MCP does not count. No item lists scorers.
     const list = (items: typeof on) => items.filter(({ section }) => section !== "footer");
-    assert.ok(list(off).length <= 10);
-    assert.ok(list(on).length <= 13);
+    assert.ok(list(off).length <= 12);
+    assert.ok(list(on).length <= 15);
     assert.equal(on.length, off.length + 3);
     assert.equal(
       on.some(({ id }) => id === "scorers"),
@@ -601,6 +613,8 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Quality|/project/${P1}/quality`,
       `Project|Adaptive ranking|/project/${P1}/improvement/adaptive-ranking`,
       `Project|Ship|/project/${P1}/ship`,
+      `Project|Evals|/project/${P1}/evals`,
+      `Project|Ratel sandbox|/project/${P1}/sandbox`,
       `Project|Catalog|/project/${P1}/catalogs`,
       `Project|Tools|/project/${P1}/catalogs/tools`,
       `Project|Skills|/project/${P1}/catalogs/skills`,
@@ -727,6 +741,8 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "intents:i",
       "improvements:",
       "ship:l",
+      "evals:",
+      "sandbox:",
       "catalog:c",
       "mcp-setup:",
       "settings:s",
@@ -773,6 +789,8 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
       "project-models/x|group:apis|APIs",
+      "evals|settings|",
+      "sandbox|settings|",
       "catalog|settings|",
       "mcp-setup|footer|",
       "settings|settings|",
@@ -839,6 +857,8 @@ test("focusedConsole on: Self-corrections is an insight and Agent health has no 
       "self-corrections|group:insights|",
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
+      "evals|settings|",
+      "sandbox|settings|",
       "catalog|settings|",
       "mcp-setup|footer|",
       "settings|settings|",
@@ -930,6 +950,8 @@ test("railParts splits a rail into the scrolling list and the pinned footer, in 
       "intents",
       "improvements",
       "ship",
+      "evals",
+      "sandbox",
       "catalog",
       "settings",
       "edition:/admin",

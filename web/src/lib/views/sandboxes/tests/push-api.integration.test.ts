@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { resolveConfig } from "@/config";
 import { createInMemoryUsageLimits } from "@/lib/contracts/usage-limits.fake";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
@@ -14,7 +13,6 @@ import { createDrizzleVersionStore } from "../adapters/drizzle-version-store";
 import { createDrizzleVmStore } from "../adapters/drizzle-vm-store";
 import { createLocalBundleStore } from "../adapters/local-bundle-store";
 import { snapshotName } from "../domain/snapshot-name";
-import { sandboxesEnabledForProject, sandboxesOffForAll } from "../gate";
 import { runImageBuild } from "../image-build-job";
 import { ProviderRefused } from "../ports/sandbox-provider";
 import {
@@ -49,14 +47,12 @@ const KEYS: Record<string, { projectId: string; scopes: string[] }> = {
   ingest: { projectId: PROJECT_ID, scopes: ["ingest:traces"] },
   other: { projectId: OTHER_PROJECT_ID, scopes: ["*"] },
 };
-const ON = resolveConfig({ env: { FF_EVALS: "1" } });
 const GET = new Request("http://10.0.0.7:3000/x");
 
 type Over = {
   key?: string;
   scope?: typeof WRITE | typeof READ;
   limits?: Parameters<typeof createInMemoryUsageLimits>[0];
-  on?: boolean;
   provider?: boolean;
   origin?: string | null;
 };
@@ -88,7 +84,6 @@ async function setup() {
         organizationIdOf: async () => ORGANIZATION_ID,
         callbackUrl: () => "https://ratel.example",
         sealingKey: () => ({ ok: true, key: SEALING }),
-        enabled: async () => true,
         now: () => new Date(),
         every: () => () => {},
       },
@@ -97,14 +92,11 @@ async function setup() {
     key = "full",
     scope = WRITE,
     limits,
-    on = true,
     provider = true,
     origin = "https://ratel.example",
   }: Over = {}) => {
     const usage = createInMemoryUsageLimits(limits);
-    const config = on ? ON : resolveConfig();
     return {
-      offForAll: () => sandboxesOffForAll({ config, port: undefined, edition: "Ratel OSS" }),
       authenticate: () =>
         resolveProjectFromBearer(
           new Request("http://x", { headers: { authorization: `Bearer ${key}` } }),
@@ -121,8 +113,6 @@ async function setup() {
             touchApiKey: async () => {},
           },
         ),
-      enabled: (projectId) =>
-        sandboxesEnabledForProject(projectId, { config, port: undefined, edition: "Ratel OSS" }),
       organizationIdOf: async () => ORGANIZATION_ID,
       versions: () => createDrizzleVersionStore(db),
       bundles: () => bundles,
@@ -463,25 +453,6 @@ test("a body that is not a push is refused", async () => {
   const t = await setup();
   for (const body of [null, {}, { ...input(), git: { commit: "main", dirty: false } }]) {
     assert.equal((await t.create({}, body)).status, 400);
-  }
-});
-
-test("with the flag off every route answers 404, with and without a key", async () => {
-  const t = await setup();
-  const { versionId } = await t.push();
-  for (const key of ["full", "unknown"]) {
-    const off = { on: false, key };
-    const answers = [
-      await t.create(off),
-      await t.upload(versionId, BUNDLE, off),
-      await t.finalize(versionId, off),
-      await t.get(versionId, off),
-      await t.list(off),
-    ];
-    assert.deepEqual(
-      answers.map((response) => response.status),
-      [404, 404, 404, 404, 404],
-    );
   }
 });
 

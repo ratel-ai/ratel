@@ -43,7 +43,6 @@ export type ImageBuildDeps = SecretValuesDeps & {
   organizationIdOf: (projectId: string) => Promise<string | null>;
   /** The address at which a container reaches this deployment. */
   callbackUrl: () => string;
-  enabled: (projectId: string) => Promise<boolean>;
   now: () => Date;
   /** Calls `beat` again and again until the returned function is called. */
   every: (ms: number, beat: () => void) => () => void;
@@ -57,7 +56,6 @@ export const BUILD_STOPPED_MS = 5 * 60_000;
 /** A little more than the provider's own limits: a call that never answers must not hold the lane. */
 export const BUILD_DEADLINE_MS = 40 * 60_000;
 export const NOT_CONFIGURED_REASON = "Ratel sandbox is not configured on this deployment.";
-export const OFF_REASON = "Ratel sandbox is off for this project.";
 export const STOPPED_REASON = "The build was interrupted. Push again.";
 const TOO_LONG_REASON = "The build took too long. Push again.";
 const SERVICE_REASON = "The build service did not work. Push again.";
@@ -91,10 +89,8 @@ export async function runImageBuild(
   deps: ImageBuildDeps,
 ): Promise<{ status: string }> {
   const { versionId } = payloadSchema.parse(payload);
-  const enabled = await deps.enabled(projectId);
-  if (!enabled || !deps.provider) {
-    const reason = enabled ? NOT_CONFIGURED_REASON : OFF_REASON;
-    await deps.builds.leaveUnbuilt(projectId, versionId, reason);
+  if (!deps.provider) {
+    await deps.builds.leaveUnbuilt(projectId, versionId, NOT_CONFIGURED_REASON);
     return { status: "unbuilt" };
   }
   const version = await deps.builds.claim(projectId, versionId, deps.now());

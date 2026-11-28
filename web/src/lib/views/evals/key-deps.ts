@@ -5,7 +5,6 @@ import type { BaselineKeyDeps } from "./baseline-api";
 import { baselineApiDeps } from "./baseline-deps";
 import { experimentsApiDeps } from "./experiment-deps";
 import type { KeyAccess, KeyDeps } from "./experiments-api";
-import { evalsEnabledForProject, evalsOffForAll } from "./gate";
 
 /** The routes of a project key, over the real key and database. */
 export function keyExperimentDeps(request: Request, scope: ApiKeyScope): KeyDeps {
@@ -18,9 +17,7 @@ export function keyBaselineDeps(request: Request, scope: ApiKeyScope): BaselineK
 
 function keyAccess(request: Request, scope: ApiKeyScope): KeyAccess {
   return {
-    offForAll: () => evalsOffForAll(),
     authenticate: () => resolveProjectFromBearer(request, scope),
-    enabled: (projectId) => evalsEnabledForProject(projectId),
     organizationIdOf: async (projectId) =>
       (await getOrganizationByProjectId(projectId))?.id ?? null,
   };

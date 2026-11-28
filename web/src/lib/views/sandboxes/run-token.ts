@@ -1,20 +1,15 @@
 import { getDb } from "@/lib/platform/db/client";
 import type { ApiKey } from "@/lib/platform/projects/schema";
 import { createDrizzleRunStore } from "./adapters/drizzle-run-store";
-import { sandboxesEnabledForProject, sandboxesOffForAll } from "./gate";
 import type { RunStore } from "./ports/run-store";
 
 type FindKey = (hash: string) => Promise<ApiKey | null>;
 
 export type RunTokenDeps = {
-  offForAll: () => boolean;
-  enabled: (projectId: string) => Promise<boolean>;
   runs: () => Pick<RunStore, "findByTokenHash">;
 };
 
 const defaultDeps: RunTokenDeps = {
-  offForAll: () => sandboxesOffForAll(),
-  enabled: (projectId) => sandboxesEnabledForProject(projectId),
   runs: () => createDrizzleRunStore(getDb()),
 };
 
@@ -25,9 +20,9 @@ const defaultDeps: RunTokenDeps = {
 export function withRunTokens(findKey: FindKey, deps: RunTokenDeps = defaultDeps): FindKey {
   return async (hash) => {
     const key = await findKey(hash);
-    if (key || deps.offForAll()) return key;
+    if (key) return key;
     const run = await deps.runs().findByTokenHash(hash);
-    if (!run || !(await deps.enabled(run.projectId))) return null;
+    if (!run) return null;
     return {
       id: run.id,
       projectId: run.projectId,

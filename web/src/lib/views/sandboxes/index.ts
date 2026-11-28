@@ -10,7 +10,6 @@ export type { RatelYaml } from "./domain/config";
 export type { SmokeResult } from "./domain/contract";
 export type { RunStatus, SandboxRun, ToolFixture } from "./domain/run";
 export { apiStatus as sandboxRunStatus } from "./domain/run";
-export { sandboxesEnabledForProject, sandboxOrganizationIds } from "./gate";
 export type { StartRunOptions, StartRunResult } from "./runs";
 
 /** A version as another module reads it. */

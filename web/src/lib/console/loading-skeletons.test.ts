@@ -78,6 +78,14 @@ const ROUTES: Array<{ route: string; expected: ReactElement }> = [
     expected: createElement(ProjectRouteSkeleton, { variant: "detail" }),
   },
   {
+    route: "project/[projectId]/evals",
+    expected: createElement(ProjectRouteSkeleton, { variant: "detail" }),
+  },
+  {
+    route: "project/[projectId]/sandbox",
+    expected: createElement(ProjectRouteSkeleton, { variant: "detail" }),
+  },
+  {
     route: "org/[orgSlug]/mcp",
     expected: createElement(OrgSkeleton, { variant: "integrations" }),
   },

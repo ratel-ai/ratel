@@ -79,7 +79,6 @@ async function setup() {
     cases,
     experiments,
     sandboxes: {
-      enabled: async () => true,
       listVersions: async () => versions,
       getVersion: async (projectId, id) =>
         versions.find((version) => version.id === id && version.projectId === projectId) ?? null,
@@ -451,8 +450,6 @@ test("refusals of a start", async () => {
   assert.equal(await start(VERSION.id), "not_ready");
   t.setVersions([{ ...VERSION, id: OTHER_PROJECT_ID, status: "failed" }, VERSION]);
   assert.equal(await start(), "ok");
-  t.deps.sandboxes.enabled = async () => false;
-  assert.equal(await start(), "sandboxes_off");
 });
 
 const request = (body: unknown) =>
@@ -464,12 +461,10 @@ function keyDeps(t: Awaited<ReturnType<typeof setup>>, over: Partial<KeyDeps> = 
     advance: () => {},
     track: async () => {},
     publicUrl: (path) => `https://ratel.test${path}`,
-    offForAll: () => false,
     authenticate: async () =>
       ({ ok: true, projectId: PROJECT_ID, apiKeyId: "k1" }) as Awaited<
         ReturnType<KeyDeps["authenticate"]>
       >,
-    enabled: async () => true,
     organizationIdOf: async () => ORGANIZATION_ID,
     ...over,
   };
@@ -563,16 +558,6 @@ test("a key with no scope gets 403, and a key of another project gets no data", 
   assert.equal((await handleGetByKey("nope", keyDeps(t))).status, 404);
 });
 
-test("with the flag off the routes answer 404", async () => {
-  const t = await setup();
-  for (const off of [{ offForAll: () => true }, { enabled: async () => false }]) {
-    const deps = keyDeps(t, off);
-    assert.equal((await handleStartByKey(request({}), deps)).status, 404);
-    assert.equal((await handleGetByKey(VERSION.id, deps)).status, 404);
-    assert.equal((await handleListByKey(deps)).status, 404);
-  }
-});
-
 test("a member starts an experiment, and a support session cannot", async () => {
   const t = await setup();
   await t.approvedCase("one");
@@ -584,7 +569,6 @@ test("a member starts an experiment, and a support session cannot", async () => 
       organization: { id: ORGANIZATION_ID },
       role: "member",
     }),
-    enabled: async () => true,
     isRestricted: async () => false,
     ...over,
   });
@@ -596,7 +580,6 @@ test("a member starts an experiment, and a support session cannot", async () => 
   const experiment = await t.deps.experiments.get(PROJECT_ID, experimentId);
   assert.deepEqual([experiment?.startedBy, experiment?.trialsPerCase], ["user_1", 3]);
   assert.equal((await post(deps({ isRestricted: async () => true }))).status, 403);
-  assert.equal((await post(deps({ enabled: async () => false }))).status, 404);
   assert.equal((await t.table("eval_experiments")).length, 1);
 });
 
@@ -616,17 +599,6 @@ test("the drain gives each project a turn, and a project has a limit of running 
     for (const { id } of page) seen.add(id);
   }
   assert.equal(seen.size, MAX_RUNNING_EXPERIMENTS, "no experiment waits for an older one");
-});
-
-test("with the evals flag off no trial starts", async () => {
-  const t = await setup();
-  await t.approvedCase("one");
-  const experiment = await t.start();
-  t.deps.sandboxes.enabled = async () => false;
-  assert.equal((await t.step(experiment)).started, 0);
-  assert.equal(t.started.length, 0);
-  t.deps.sandboxes.enabled = async () => true;
-  assert.equal((await t.step(experiment)).started, 3);
 });
 
 test("a step ends at its deadline, and the next one goes on", async () => {

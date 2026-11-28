@@ -28,10 +28,7 @@ export type ExperimentsApiDeps = {
 
 /** Who may call the routes of a project key. */
 export type KeyAccess = {
-  /** True when no project of the deployment can have the flag: the route then answers 404 first. */
-  offForAll: () => boolean;
   authenticate: () => Promise<ResolvedApiKeyProject>;
-  enabled: (projectId: string) => Promise<boolean>;
   organizationIdOf: (projectId: string) => Promise<string | null>;
 };
 
@@ -47,7 +44,6 @@ const startSchema = z.object({
   params: z.record(z.string(), z.unknown()).default({}),
 });
 const STATUS: Record<StartRefusal, number> = {
-  sandboxes_off: 409,
   not_found: 404,
   not_ready: 409,
   no_cases: 409,
@@ -163,11 +159,9 @@ export async function forKey(
   operation: string,
   work: (subject: UsageSubject, apiKeyId: string) => Promise<Response>,
 ): Promise<Response> {
-  if (deps.offForAll()) return notFound();
   const resolved = await deps.authenticate();
   if (!resolved.ok) return resolved.response;
   const { projectId, apiKeyId } = resolved;
-  if (!(await deps.enabled(projectId))) return notFound();
   const organizationId = await deps.organizationIdOf(projectId);
   if (!organizationId) return notFound();
   return withFeatureSpan("evals", operation, () => work({ projectId, organizationId }, apiKeyId), {
