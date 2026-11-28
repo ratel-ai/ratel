@@ -2,7 +2,12 @@ import { sql } from "drizzle-orm";
 import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import type { getDb } from "@/lib/platform/db/client";
 import type { RqlTableName } from "@/lib/synthesis/rql/compile";
-import type { DashboardTemplate, TemplateNeed } from "@/lib/views/dashboards/templates/types";
+import { DASHBOARD_TEMPLATES } from "@/lib/views/dashboards/templates";
+import type {
+  DashboardTemplate,
+  TemplateCard,
+  TemplateNeed,
+} from "@/lib/views/dashboards/templates/types";
 
 /**
  * Whether a project has the data of a template, from cheap facts: one indexed probe per kind of
@@ -45,6 +50,17 @@ export function templateData(template: DashboardTemplate, facts: TemplateFacts):
     return reason ? [reason] : [];
   });
   return { has: missing.length === 0, missing };
+}
+
+/** The gallery's cards, in its order, for the facts of one project. */
+export function templateCards(facts: TemplateFacts): TemplateCard[] {
+  return DASHBOARD_TEMPLATES.map((template) => ({
+    id: template.id,
+    name: template.name,
+    description: template.description,
+    property: template.property,
+    ...templateData(template, facts),
+  }));
 }
 
 /** The facts of one project: one query of probes, the property names and the scorers. */

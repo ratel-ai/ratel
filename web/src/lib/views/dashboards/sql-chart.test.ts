@@ -5,6 +5,7 @@ import type { SqlResult } from "@/lib/synthesis/metrics/query";
 import {
   drawnChart,
   formAsMetric,
+  hasNoValue,
   scrollsInCard,
   sqlAsMetric,
 } from "@/lib/views/dashboards/sql-chart";
@@ -264,4 +265,24 @@ test("a card scrolls a list of bars and a table inside it; a time chart keeps it
   // A metric's own line and bar draw over time.
   assert.equal(scrollsInCard("bar", { kind: "metric" }), false);
   assert.equal(scrollsInCard("number", null), true);
+});
+
+test("rows with no value are an empty result: no rows, or one row of nulls of an aggregate", () => {
+  assert.equal(hasNoValue(table([["n", "number"]], [])), true);
+  // An average over no row is one row with null: nothing to draw.
+  assert.equal(hasNoValue(table([["cost_per_user", "number"]], [[null]])), true);
+  assert.equal(
+    hasNoValue(
+      table(
+        [
+          ["day", "timestamp"],
+          ["n", "number"],
+        ],
+        [[H1, null]],
+      ),
+    ),
+    true,
+  );
+  assert.equal(hasNoValue(table([["n", "integer"]], [[0]])), false, "0 is a value");
+  assert.equal(hasNoValue(table([["id", "text"]], [["t1"]])), false, "a row of text is a value");
 });

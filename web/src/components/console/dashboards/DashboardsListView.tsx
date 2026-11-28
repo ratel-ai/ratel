@@ -11,6 +11,7 @@ import { useState } from "react";
 import { formatInteger, formatRelativeTime, MISSING } from "@/lib/synthesis/traces/v2/format";
 import { BUILT_BY_ASK_PARAM } from "@/lib/views/ask/outcome";
 import { dashboardHref } from "@/lib/views/dashboards/links";
+import type { TemplateCard } from "@/lib/views/dashboards/templates/types";
 import { CreateDashboardDialog } from "./CreateDashboardDialog";
 import { ImportDialog } from "./ImportDialog";
 import { useDashboardAction } from "./use-dashboard-action";
@@ -29,23 +30,35 @@ export function DashboardsListView({
   now,
   dashboards,
   ask = false,
+  templates = [],
+  properties = [],
 }: {
   projectId: string;
   now: string;
   dashboards: readonly DashboardRow[];
   /** This deployment can draft widgets from words: Create dashboard can build one. */
   ask?: boolean;
+  /** The template gallery of Create dashboard, with whether the project has each one's data. */
+  templates?: readonly TemplateCard[];
+  /** The project's indexed trace properties, for the template By customer. */
+  properties?: readonly string[];
 }) {
   const router = useRouter();
   const { change, saving } = useDashboardAction(projectId);
   const [naming, setNaming] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  async function create(input: { action: "create"; name: string } | { action: "create-starter" }) {
+  async function create(
+    input:
+      | { action: "create"; name: string }
+      | { action: "create-starter" }
+      | { action: "create-template"; template: string; property?: string },
+  ): Promise<boolean> {
     const id = await change(input);
-    if (!id) return;
+    if (!id) return false;
     setNaming(false);
     router.push(dashboardHref(projectId, id));
+    return true;
   }
 
   const importButton = (
@@ -149,6 +162,11 @@ export function DashboardsListView({
         ask={ask}
         saving={saving}
         onCreateBlank={(name) => void create({ action: "create", name })}
+        templates={templates}
+        properties={properties}
+        onCreateTemplate={(template, property) =>
+          create({ action: "create-template", template, ...(property ? { property } : {}) })
+        }
         onBuilt={(id, askId) =>
           router.push(
             `${dashboardHref(projectId, id)}?${new URLSearchParams({ [BUILT_BY_ASK_PARAM]: askId })}`,

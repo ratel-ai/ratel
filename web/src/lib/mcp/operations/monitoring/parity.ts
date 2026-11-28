@@ -60,6 +60,7 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "lib/views/dashboards/templates/index.ts#getTemplate": "list_dashboard_templates",
   "lib/views/dashboards/templates/index.ts#templateDashboard": "import_dashboard",
   "lib/views/dashboards/templates/data.ts#templateData": "list_dashboard_templates",
+  "lib/views/dashboards/templates/data.ts#templateCards": "list_dashboard_templates",
   "lib/views/dashboards/templates/data.ts#loadTemplateFacts": "list_dashboard_templates",
   "lib/views/dashboards/templates/data.ts#loadDataProbes": "list_dashboard_templates",
   "lib/views/slack/connection-actions.ts#readChannels": "list_slack_channels",

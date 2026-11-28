@@ -9,6 +9,7 @@ import { chartModel } from "@/lib/views/dashboards/chart-model";
 import {
   chartChoices,
   drawnChart,
+  hasNoValue,
   sqlAsCategories,
   sqlAsMetric,
   sqlNumber,
@@ -36,12 +37,14 @@ export function SqlBody({
   label: string;
   fill: boolean;
 }) {
-  if (result.rows.length === 0)
+  if (hasNoValue(result))
     return (
       <EmptyState
         icon={Table2}
-        title="No rows in this time range"
-        description="Try a longer range, or change the query."
+        title={
+          result.rows.length === 0 ? "No rows in this time range" : "No data in this time range"
+        }
+        description="Nothing in this range has a value for this widget. Try a longer range, fewer filters, or change the query."
       />
     );
   const reason = chartChoices(result)[chart];
