@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   compacted as compactedItems,
   GRID_COLUMNS,
+  GRID_GAP_PX,
+  GRID_ROW_PX,
   type GridItem,
   inReadingOrder as itemsInReadingOrder,
   MAX_GRID_HEIGHT,
@@ -54,6 +56,11 @@ export function compacted<W extends Placed>(widgets: readonly W[], first?: strin
 /** The size a new widget of a chart has. */
 export function defaultSize(chart: WidgetChart): Pick<GridPosition, "w" | "h"> {
   return chart === "step_flow" ? STEP_FLOW_SIZE : DEFAULT_SIZE;
+}
+
+/** The height in pixels of a card of `h` grid rows, as the grid draws it. */
+export function cardHeightPx(h: number): number {
+  return h * GRID_ROW_PX + (h - 1) * GRID_GAP_PX;
 }
 
 /** The first free place for a widget, left to right and top to bottom. */

@@ -11,6 +11,7 @@ import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { resolveTraceRange, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
+import { askConfigured } from "@/lib/views/ask/model";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { filtersProblem, shownFilters } from "@/lib/views/dashboards/filters";
 import { ADD_SCORER_PARAM } from "@/lib/views/dashboards/links";
@@ -88,6 +89,7 @@ export default async function ScopedDashboardPage({
             alerts={alerts}
             overview={overview}
             readOnly={readOnly}
+            ask={askConfigured()}
             draft={added ? scorerWidget(added) : null}
             projectId={scope.project.id}
             dashboard={{

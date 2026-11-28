@@ -95,6 +95,7 @@ import {
 import { explorePanelHref } from "@/lib/views/explore/links";
 import { ExpandedWidget } from "./ExpandedWidget";
 import { NameDialog } from "./NameDialog";
+import { NewWidgetDialog } from "./NewWidgetDialog";
 import { useDashboardAction } from "./use-dashboard-action";
 import { previewKey } from "./use-widget-preview";
 import { BrokenWidgetBody, WidgetCardBody } from "./WidgetCardBody";
@@ -117,6 +118,7 @@ export function DashboardView({
   timeWindow,
   alerts,
   draft,
+  ask = false,
   overview = false,
   readOnly = false,
   startEditing = false,
@@ -134,6 +136,8 @@ export function DashboardView({
   alerts: boolean;
   /** A widget to start adding as the page opens, from a scorer's page. */
   draft: WidgetInput | null;
+  /** This deployment can draft widgets from words: the new widget dialog has its ask field. */
+  ask?: boolean;
   /** The Overview takes widgets of dashboards (`focusedConsole`). */
   overview?: boolean;
   /** A support session: a widget opens with its properties, and nothing saves. */
@@ -148,6 +152,8 @@ export function DashboardView({
   const { change, saving } = useDashboardAction(projectId);
   // A scorer's page starts a new widget from it: taken once, so the next new one starts clean.
   const [start, setStart] = useState(draft);
+  // The new widget dialog: open from any state of the page, never in a support session.
+  const [adding, setAdding] = useState(draft !== null && !readOnly);
   // The address this page pushed to expand a widget: Close goes Back to the grid while it is current.
   const pushed = useRef<string | null>(null);
   // The card to give the focus to once the grid is back.
@@ -192,12 +198,9 @@ export function DashboardView({
     expandedId && expandedId !== NEW_WIDGET_ID
       ? placed.find((widget): widget is Widget => widget.id === expandedId && !isBroken(widget))
       : undefined;
-  const expanded: { id: string | null; widget: WidgetInput } | null =
-    expandedId === NEW_WIDGET_ID
-      ? { id: null, widget: start ?? NEW_WIDGET }
-      : expandedStored
-        ? { id: expandedStored.id, widget: inputOf(expandedStored) }
-        : null;
+  const expanded: { id: string; widget: WidgetInput } | null = expandedStored
+    ? { id: expandedStored.id, widget: inputOf(expandedStored) }
+    : null;
 
   // The numbers the page came with, for the open widget: one Map while they stay the same, so its
   // preview does not start again at each render.
@@ -209,17 +212,21 @@ export function DashboardView({
     [servedKey, servedResult],
   );
 
-  // A draft from a scorer's page opens as a new widget, in place of its own parameter.
+  // A draft from a scorer's page opens in the new widget dialog; its parameter leaves the address.
+  // An older link to a new widget opens the dialog too.
   useEffect(() => {
-    if (!draft) return;
     const params = new URLSearchParams(window.location.search);
+    const legacy = expandedOf(window.location.search) === NEW_WIDGET_ID;
+    if (!draft && !legacy) return;
     params.delete(ADD_SCORER_PARAM);
-    window.history.replaceState(
-      null,
-      "",
-      `${pathname}${withExpanded(`?${params}`, NEW_WIDGET_ID)}`,
-    );
-  }, [draft, pathname]);
+    if (legacy && !readOnly) setAdding(true);
+    window.history.replaceState(null, "", `${pathname}${withExpanded(`?${params}`, null)}`);
+  }, [draft, pathname, readOnly]);
+
+  /** Opens the new widget dialog. */
+  function add() {
+    if (!readOnly) setAdding(true);
+  }
 
   /** Expands a widget in place, or a new one: a new entry of the history, the page as it is. */
   function expand(id: string) {
@@ -258,12 +265,15 @@ export function DashboardView({
 
   async function save(widget: WidgetInput) {
     const id = expanded?.id;
-    const saved = await change(
-      id
-        ? { action: "edit-widget", dashboardId, widgetId: id, widget }
-        : { action: "add-widget", dashboardId, widget },
-    );
-    if (saved) collapse();
+    if (!id) return;
+    if (await change({ action: "edit-widget", dashboardId, widgetId: id, widget })) collapse();
+  }
+
+  /** The dialog's widget, at the end of the grid. */
+  async function addWidget(widget: WidgetInput): Promise<boolean> {
+    const added = await change({ action: "add-widget", dashboardId, widget });
+    if (added) setStart(null);
+    return Boolean(added);
   }
 
   /** The new places show at once; a refused one goes back. */
@@ -382,10 +392,12 @@ export function DashboardView({
         doneId={DONE_ID}
         onLeave={leave}
       >
-        <Button id={ADD_ID} aria-label="Add widget" size="sm" onClick={() => expand(NEW_WIDGET_ID)}>
-          <Plus aria-hidden />
-          <span className="max-sm:hidden">Add widget</span>
-        </Button>
+        {readOnly ? null : (
+          <Button id={ADD_ID} aria-label="Add widget" size="sm" onClick={add}>
+            <Plus aria-hidden />
+            <span className="max-sm:hidden">Widget</span>
+          </Button>
+        )}
       </EditModeBar>
       <InertHeader editing={arranging}>
         <PageHeader
@@ -423,6 +435,12 @@ export function DashboardView({
                   </MenuItem>
                 </MenuContent>
               </Menu>
+              {readOnly ? null : (
+                <Button data-add-widget="" aria-label="Add widget" size="sm" onClick={add}>
+                  <Plus aria-hidden />
+                  Widget
+                </Button>
+              )}
               {widgets.length > 0 ? (
                 <Button
                   id={EDIT_ID}
@@ -499,10 +517,9 @@ export function DashboardView({
         ) : expanded ? (
           <ExpandedWidget
             // A new open starts from the stored widget.
-            key={expanded.id ?? NEW_WIDGET_ID}
+            key={expanded.id}
             projectId={projectId}
             initial={expanded.widget}
-            isNew={expanded.id === null}
             served={served}
             facets={facets}
             range={timeWindow}
@@ -518,15 +535,13 @@ export function DashboardView({
             title="No widgets yet"
             description="Add a chart of any metric, a flow, a step flow, a funnel, a cluster view or a map."
             action={
-              <Button
-                data-add-widget=""
-                variant="primary"
-                size="sm"
-                onClick={() => expand(NEW_WIDGET_ID)}
-              >
-                <Plus className="size-3.5" aria-hidden />
-                Add widget
-              </Button>
+              // A support session reads the dashboard and adds nothing.
+              readOnly ? undefined : (
+                <Button variant="primary" size="sm" onClick={add}>
+                  <Plus className="size-3.5" aria-hidden />
+                  Add widget
+                </Button>
+              )
             }
           />
         ) : (
@@ -657,6 +672,23 @@ export function DashboardView({
       <span className="sr-only" aria-live="polite">
         {said}
       </span>
+      <NewWidgetDialog
+        open={adding}
+        onOpenChange={(open) => {
+          setAdding(open);
+          if (!open) setStart(null);
+        }}
+        projectId={projectId}
+        dashboardId={dashboardId}
+        start={start ?? NEW_WIDGET}
+        startChosen={start !== null}
+        ask={ask}
+        facets={facets}
+        range={timeWindow}
+        filters={filters}
+        saving={saving}
+        onSave={addWidget}
+      />
       <NameDialog
         open={renaming}
         onOpenChange={setRenaming}

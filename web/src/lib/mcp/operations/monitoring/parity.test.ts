@@ -32,12 +32,7 @@ test("each console action of these modules has an MCP operation", () => {
 });
 
 test("each operation without a console action exists, says why, and is no action's operation", () => {
-  assert.deepEqual(Object.keys(MCP_ONLY).sort(), [
-    "describe_rql_schema",
-    "draft_widgets",
-    "run_rql",
-    "suggest_prompts",
-  ]);
+  assert.deepEqual(Object.keys(MCP_ONLY).sort(), ["describe_rql_schema", "run_rql"]);
   const covering = new Set(Object.values(PARITY).filter((covered) => typeof covered === "string"));
   for (const [id, why] of Object.entries(MCP_ONLY)) {
     assert.ok(operations.has(id), `${id} is no operation`);

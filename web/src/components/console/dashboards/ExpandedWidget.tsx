@@ -24,7 +24,6 @@ import { WidgetFields } from "./WidgetFields";
 export function ExpandedWidget({
   projectId,
   initial,
-  isNew,
   served,
   facets,
   range,
@@ -35,9 +34,8 @@ export function ExpandedWidget({
   onClose,
 }: {
   projectId: string;
-  /** The widget as stored, or what a new one starts from. */
+  /** The widget as stored. */
   initial: WidgetInput;
-  isNew: boolean;
   /** The numbers the page came with: an unchanged widget draws them without a new read. */
   served?: ServedResults;
   facets: TraceFilterBarFacets;
@@ -91,7 +89,7 @@ export function ExpandedWidget({
             tabIndex={-1}
             className="min-w-0 flex-1 truncate text-base font-semibold text-fg outline-none focus:outline-none focus-visible:outline-none"
           >
-            {isNew ? `New widget: ${title}` : title}
+            {title}
           </h2>
           {readOnly ? (
             <p className="text-xs text-fg-subtle">Read only in a support session</p>
@@ -100,14 +98,8 @@ export function ExpandedWidget({
               <Button type="button" variant="ghost" size="sm" onClick={close}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                loading={saving}
-                disabled={!isNew && !dirty}
-              >
-                {isNew ? "Add widget" : "Save"}
+              <Button type="submit" variant="primary" size="sm" loading={saving} disabled={!dirty}>
+                Save
               </Button>
             </>
           )}
