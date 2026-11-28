@@ -90,6 +90,23 @@ export const TRACE_SESSION_ID = sql`(array_agg(s.session_id order by ${CANONICAL
           filter (where s.session_id is not null))[1]`;
 export const TRACE_END_USER_ID = sql`(array_agg(s.end_user_id order by ${CANONICAL})
           filter (where s.end_user_id is not null))[1]`;
+/**
+ * The CTE `trace_properties`: each trace's trace property values (RTL-395), per key the first
+ * span value in canonical order, so the root's value wins. Reads the traces of the CTE
+ * `changed (project_id, trace_id)`.
+ */
+export const TRACE_PROPERTIES = sql`trace_properties as (
+      select p.project_id, p.trace_id, jsonb_object_agg(p.key, p.value) as properties
+      from (
+        select distinct on (s.project_id, s.trace_id, e.key) s.project_id, s.trace_id, e.key, e.value
+        from otel_spans s
+        join changed c on c.project_id = s.project_id and c.trace_id = s.trace_id
+        cross join lateral jsonb_each(s.properties) e
+        where s.properties is not null
+        order by s.project_id, s.trace_id, e.key, ${CANONICAL}
+      ) p
+      group by p.project_id, p.trace_id
+    )`;
 const EPOCH = "1970-01-01 00:00:00+00";
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_INTERVAL_MS = 2_000_000_000;
@@ -272,12 +289,13 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       join changed c
         on c.project_id = s.project_id and c.trace_id = s.trace_id
       group by s.project_id, s.trace_id
-    )
+    ),
+    ${TRACE_PROPERTIES}
     insert into otel_trace_summaries (
       project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
       models, tools, service_name, environment, agents, mcp_servers, root_error, geo_country, geo_region,
-      session_id, end_user_id
+      session_id, end_user_id, properties
     )
     select
       r.project_id,
@@ -300,10 +318,13 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       a.geo_country,
       a.geo_region,
       a.session_id,
-      a.end_user_id
+      a.end_user_id,
+      coalesce(tp.properties, '{}'::jsonb)
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
+    left join trace_properties tp
+      on tp.project_id = r.project_id and tp.trace_id = r.trace_id
     on conflict (project_id, trace_id) do update set
       started_at = excluded.started_at,
       duration_ms = excluded.duration_ms,
@@ -323,7 +344,8 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       geo_country = excluded.geo_country,
       geo_region = excluded.geo_region,
       session_id = excluded.session_id,
-      end_user_id = excluded.end_user_id
+      end_user_id = excluded.end_user_id,
+      properties = excluded.properties
   `);
 }
 

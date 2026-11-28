@@ -6,10 +6,11 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { GeoAttributesSection } from "./GeoAttributesSection";
 import { ModelPricingSection } from "./ModelPricingSection";
 import { ProjectNameForm } from "./ProjectNameForm";
+import { TracePropertiesSection } from "./TracePropertiesSection";
 
 /**
  * Settings > General: the project's name, its model prices, the session replay content opt-in, the
- * location attributes and, as `children`, the edition's own sections.
+ * location attributes, the trace properties and, as `children`, the edition's own sections.
  */
 export async function GeneralSettings({
   projectId,
@@ -33,6 +34,7 @@ export async function GeneralSettings({
       <ModelPricingSection projectId={project.id} role={scope.role} />
       <ContentOptInSection projectId={project.id} role={scope.role} />
       <GeoAttributesSection scope={scope} />
+      <TracePropertiesSection scope={scope} />
       {children}
     </PageBody>
   );

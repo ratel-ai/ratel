@@ -4,6 +4,7 @@ import {
   boolean,
   doublePrecision,
   index,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -72,6 +73,13 @@ export const otelTraceSummaries = pgTable(
     // value in canonical order (the root first). Null when no span has one.
     sessionId: text("session_id"),
     endUserId: text("end_user_id"),
+    // RTL-395: the trace's value of each indexed trace property (`lib/ingest/properties`),
+    // the first span value in canonical order (the root first), as text. A standard property
+    // with a column above (user, session, environment, model, service) is never here. ADR-0012.
+    properties: jsonb("properties")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -101,6 +109,8 @@ export const otelTraceSummaries = pgTable(
     // The agent and MCP server filters (`agents && $1`).
     index("otel_trace_summaries_agents_idx").using("gin", t.agents),
     index("otel_trace_summaries_mcp_servers_idx").using("gin", t.mcpServers),
+    // RTL-395: the one shared index of every project's property values (`properties @> $1`).
+    index("otel_trace_summaries_properties_idx").using("gin", t.properties.op("jsonb_path_ops")),
   ],
 );
 

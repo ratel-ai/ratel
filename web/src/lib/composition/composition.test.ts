@@ -268,6 +268,7 @@ describe("registry root", () => {
       "craft_tools",
       "draft_fix",
       "explore_tool_usage",
+      "fill_trace_properties",
       "fold_intent_graph",
       "label_workflows",
       "match_quality_run",

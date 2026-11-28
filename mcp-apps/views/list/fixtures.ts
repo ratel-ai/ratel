@@ -31,6 +31,7 @@ import {
   tasks,
   tasksResult,
   traceDetail,
+  traceProperties,
   traces,
 } from "../../harness/data";
 import { okResult, type ViewFixture, type ViewFixtures } from "../../shell/types";
@@ -443,6 +444,16 @@ const fixtures: ViewFixtures = {
       result: okResult(locationAttributes("app.request.", 4)),
     },
     { tool: "get_location_attributes", input, result: okResult({ attributes: {}, rows: [] }) },
+  ),
+  ...scenarios(
+    "list_trace_properties",
+    { tool: "list_trace_properties", input, result: okResult(traceProperties(8)) },
+    { tool: "list_trace_properties", input, result: okResult(traceProperties(40)) },
+    {
+      tool: "list_trace_properties",
+      input,
+      result: okResult({ summary: "No trace property yet", count: 0, rows: [], href: "/p" }),
+    },
   ),
   ...scenarios(
     "list_dashboards",

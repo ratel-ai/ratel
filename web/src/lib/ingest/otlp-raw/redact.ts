@@ -120,7 +120,8 @@ function isContentFreeKey(key: string): boolean {
   );
 }
 
-function isCredentialKey(key: string): boolean {
+/** A key that names a credential: auth headers, cookies, API keys, tokens, passwords, the command line. */
+export function isCredentialKey(key: string): boolean {
   const lower = key.toLowerCase();
   if (CREDENTIAL_KEYS.has(lower)) return true;
   return CREDENTIAL_NAME.test(normalizedName(lower.slice(lower.lastIndexOf(".") + 1)));

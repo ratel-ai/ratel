@@ -78,6 +78,8 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   list_slack_channels: "monitor",
   get_location_attributes: "monitor",
   change_location_attributes: "monitor",
+  list_trace_properties: "monitor",
+  change_trace_property: "monitor",
   describe_monitoring_schema: null,
   query_monitoring: "monitor",
   list_dashboards: "monitor",

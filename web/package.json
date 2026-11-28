@@ -30,6 +30,7 @@
     "backfill:costs": "tsx scripts/backfill-costs.ts",
     "backfill:entity-dimensions": "tsx scripts/backfill-entity-dimensions.ts",
     "backfill:session-user-ids": "tsx scripts/backfill-session-user-ids.ts",
+    "backfill:trace-properties": "tsx scripts/backfill-trace-properties.ts",
     "traces:backfill-filters": "tsx scripts/backfill-trace-summary-filters.ts"
   },
   "dependencies": {

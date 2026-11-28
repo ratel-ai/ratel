@@ -42,6 +42,9 @@ import type { DecodedSpan } from "./types";
 /** Optional monthly-event counter; the entitlements port owns the real one. */
 type IncrementEventUsage = (organizationId: string, n: number) => Promise<void>;
 
+/** Each span's trace property values, by span id. */
+type SpanPropertyValues = ReadonlyMap<string, Readonly<Record<string, string>>>;
+
 /**
  * Store decoded OTLP spans under a project: the half of trace ingest that
  * comes after authentication and decoding. `/v1/traces` calls it for every
@@ -132,6 +135,15 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
     organization: PersistSpansContext["organization"],
     spans: readonly DecodedSpan[],
   ) => Promise<{ addressed: boolean }>;
+  /**
+   * The trace properties (`lib/ingest/properties`): records the key names of the batch, and
+   * returns the values of the project's indexed properties for each span. Absent, none.
+   */
+  properties?: (
+    projectId: string,
+    organization: PersistSpansContext["organization"],
+    spans: readonly DecodedSpan[],
+  ) => Promise<SpanPropertyValues>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -462,8 +474,9 @@ async function storeDecodedSpans(
 
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
+  const properties = await spanProperties(spans, projectId, organization, deps);
   try {
-    const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices, dimensions });
+    const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices, dimensions, properties });
     if (spanRows.length > 0) {
       if (spanConflict === "update") {
         await deps.insertOtelSpans(projectId, spanRows, undefined, { onConflict: "update" });
@@ -529,6 +542,26 @@ function spansByTrace(spans: readonly DecodedSpan[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const { traceId } of spans) counts.set(traceId, (counts.get(traceId) ?? 0) + 1);
   return counts;
+}
+
+/**
+ * The batch's trace property values. Fails open: a failure stores the spans without values, and
+ * the next export records the keys again.
+ */
+async function spanProperties(
+  spans: DecodedSpan[],
+  projectId: string,
+  organization: Organization | null,
+  deps: PersistSpansDeps,
+): Promise<SpanPropertyValues | undefined> {
+  if (!deps.properties) return undefined;
+  try {
+    return await deps.properties(projectId, organization, spans);
+  } catch (err) {
+    deps.logError("trace property capture failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+    return undefined;
+  }
 }
 
 /**

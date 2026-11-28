@@ -1,5 +1,8 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
+import { FILL_TRACE_PROPERTIES_JOB, fillPayloadNames } from "@/lib/ingest/properties/fill";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
+import { getDb } from "@/lib/platform/db/client";
+import { backfillTraceProperties } from "./property-backfill";
 import {
   pruneExpiredOtelLogs,
   pruneExpiredOtelSpans,
@@ -98,6 +101,14 @@ const retention = retentionSteps();
 // Upstream's order: the raw prune runs first, then spans and logs are pruned before the refresh,
 // summaries after it.
 export const tracesRegistration: Registration = {
+  jobs: {
+    // RTL-395: the stored traces of the raw store's window get a newly indexed property's values.
+    [FILL_TRACE_PROPERTIES_JOB]: (job) => {
+      const names = fillPayloadNames(job.payload);
+      if (names.length === 0) return Promise.resolve({ skipped: "no property names" });
+      return backfillTraceProperties(getDb(), { projectId: job.projectId, names, apply: true });
+    },
+  },
   drainSteps: [
     otlpRawPruneStep(),
     retention.spans,

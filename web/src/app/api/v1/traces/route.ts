@@ -12,6 +12,7 @@ import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
+import { propertyIngest } from "@/lib/ingest/properties/ingest";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
@@ -86,6 +87,8 @@ async function handlePost(req: Request) {
     locate: geoIngest.locate,
     // The same before a batch is queued, so that no address waits in the queue.
     redact: geoIngest.redact,
+    // The trace property keys of the batch, and the values of the indexed ones (customMonitoring).
+    properties: propertyIngest.capture,
     // The project's own prices, read once per batch (RC-482).
     modelPricing: {
       loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),

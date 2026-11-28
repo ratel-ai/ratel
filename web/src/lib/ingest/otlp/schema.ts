@@ -203,6 +203,10 @@ export const otelSpans = pgTable(
     // written before AOBS-7.
     events: jsonb("events").$type<StoredSpanEvent[]>(),
     links: jsonb("links").$type<StoredSpanLink[]>(),
+    // RTL-395: the values of the project's indexed trace properties on this span
+    // (`lib/ingest/properties`), resolved up its ancestors and resource. Null when
+    // it has none. The summary sweep takes each property's value from the root first.
+    properties: jsonb("properties").$type<Record<string, string>>(),
   },
   (t) => [
     // The entity pages: an agent's or an MCP server's spans, newest first.
