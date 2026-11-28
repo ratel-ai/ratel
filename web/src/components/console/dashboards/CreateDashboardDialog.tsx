@@ -8,15 +8,18 @@ import {
   askSuggestionsAction,
   buildDashboardAction,
 } from "@/app/(console)/project/[projectId]/dashboards/ask-actions";
+import type { TemplateCard } from "@/lib/views/dashboards/templates/types";
 import { MAX_DASHBOARD_NAME } from "@/lib/views/dashboards/types";
 import { AskField } from "./AskField";
+import { TemplateGallery } from "./TemplateGallery";
 
 /**
  * Create a dashboard: a title, and what it should show (decision `ask-no-confirm`). `Create blank`
  * makes it empty, as before. `Build dashboard` drafts the widgets and makes the dashboard of the
  * good ones at once, then opens it: no step asks to confirm them. The dashboard names the widgets
- * that were left out. Without a model key the words field is hidden and the dialog makes a blank
- * dashboard.
+ * that were left out. `Start from a template` makes the dashboard of a template with its name and
+ * opens it: the title is not needed for it. Without a model key the words field is hidden, and the
+ * gallery and `Create blank` stay.
  */
 
 export function CreateDashboardDialog({
@@ -44,9 +47,24 @@ interface FormProps {
   onCreateBlank: (name: string) => void;
   /** Opens the dashboard a build made, with the ask that made it. */
   onBuilt: (dashboardId: string, askId: string) => void;
+  /** The gallery's cards, with whether the project has each one's data. */
+  templates: readonly TemplateCard[];
+  /** The project's indexed trace properties, for By customer. */
+  properties: readonly string[];
+  /** Makes the dashboard of a template and opens it: true when it was made. */
+  onCreateTemplate: (template: string, property?: string) => Promise<boolean>;
 }
 
-function CreateForm({ projectId, ask, saving, onCreateBlank, onBuilt }: FormProps) {
+function CreateForm({
+  projectId,
+  ask,
+  saving,
+  onCreateBlank,
+  onBuilt,
+  templates,
+  properties,
+  onCreateTemplate,
+}: FormProps) {
   const formId = useId();
   const [title, setTitle] = useState("");
   const [words, setWords] = useState("");
@@ -134,7 +152,10 @@ function CreateForm({ projectId, ask, saving, onCreateBlank, onBuilt }: FormProp
           else blank();
         }}
       >
-        <Field label="Title">
+        <Field
+          label="Title"
+          description="A template takes its own name: no title is needed for it."
+        >
           {(control) => (
             <Input
               {...control}
@@ -166,6 +187,15 @@ function CreateForm({ projectId, ask, saving, onCreateBlank, onBuilt }: FormProp
           <p role="status" className="text-xs text-fg-subtle">
             {problem}
           </p>
+        ) : null}
+        {templates.length > 0 ? (
+          <TemplateGallery
+            projectId={projectId}
+            templates={templates}
+            properties={properties}
+            disabled={busy}
+            onCreate={onCreateTemplate}
+          />
         ) : null}
       </form>
     </DialogContent>

@@ -49,6 +49,22 @@ export function sqlResultNotes(result: SqlResult): string[] {
   ];
 }
 
+/**
+ * Whether the rows hold nothing to draw: no row, or rows whose number columns are all null (an
+ * average over no row gives one row of null). A widget shows an empty state in words for them.
+ * Rows with a text column or a 0 hold a value.
+ */
+export function hasNoValue(result: Pick<SqlResult, "columns" | "rows">): boolean {
+  if (result.rows.length === 0) return true;
+  const numbers = indexesOf(result as SqlResult, (type) => NUMERIC_TYPES.includes(type));
+  const others = indexesOf(
+    result as SqlResult,
+    (type) => type !== "timestamp" && !NUMERIC_TYPES.includes(type),
+  );
+  if (numbers.length === 0 || others.length > 0) return false;
+  return result.rows.every((row) => numbers.every((index) => row[index] === null));
+}
+
 /** The rows as a metric result for `MetricChart`, or null when they are a table. */
 export function sqlAsMetric(result: SqlResult, frame?: SqlChartFrame): MetricResult | null {
   const times = indexesOf(result, (type) => type === "timestamp");

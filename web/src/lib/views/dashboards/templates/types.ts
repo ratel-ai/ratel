@@ -37,3 +37,15 @@ export type DashboardTemplate = TemplateBase &
     | { property: false; widgets: readonly TemplateWidget[] }
     | { property: true; widgets: (property: string) => readonly TemplateWidget[] }
   );
+
+/** A template as a card of the gallery: what it shows, and whether the project has its data. */
+export interface TemplateCard {
+  id: string;
+  name: string;
+  description: string;
+  /** It takes an indexed trace property first (By customer). */
+  property: boolean;
+  has: boolean;
+  /** Why not, one line per missing need: "No scores yet". */
+  missing: string[];
+}
