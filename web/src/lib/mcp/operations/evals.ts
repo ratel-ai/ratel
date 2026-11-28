@@ -808,7 +808,8 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             index: trial.index,
             state: trial.state,
             result: trial.result,
-            reason: trial.reason,
+            // The reason of a failed trial is the error text of the agent: captured content.
+            reason: readable || trial.result === "invalid" ? trial.reason : null,
             output: evidence?.output ?? null,
             toolCalls: evidence?.toolCalls ?? [],
             scorers: trial.scorers.map((scorer) => scorerView(scorer, readable)),
