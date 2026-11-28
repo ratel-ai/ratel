@@ -5,18 +5,23 @@ import { Field } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import { SegmentedControl } from "@ratel/design-system/tabs";
 import { useState } from "react";
+import { PropertyBlockNote } from "@/components/console/properties/PropertyBlockNote";
+import { usePropertyChoices } from "@/components/console/properties/PropertyChoicesProvider";
+import { PropertyFilterFields } from "@/components/console/properties/PropertyFilterFields";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
-import {
-  type Dimension,
-  MAX_DIMENSIONS,
-  type MetricForm,
-  metricQuery,
-  type SqlQuery,
-} from "@/lib/contracts/query";
+import { MAX_DIMENSIONS, type MetricForm, metricQuery, type SqlQuery } from "@/lib/contracts/query";
 import { getMetric } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import { type DashboardRange, rangeWindow } from "@/lib/views/dashboards/links";
 import { formBucket, metricAsRql } from "@/lib/views/dashboards/metric-rql";
+import {
+  dimensionOfValue,
+  dimensionValue,
+  type PropertyBlock,
+  propertyBlock,
+  propertyOfValue,
+  propertyOptions,
+} from "@/lib/views/dashboards/properties";
 import { chartChoices } from "@/lib/views/dashboards/sql-chart";
 import {
   METRIC_CHARTS,
@@ -77,6 +82,8 @@ export function MetricRqlFields({
   onText: (text: string) => void;
 }) {
   const scorers = useScorers();
+  const { projectId, choices } = usePropertyChoices();
+  const [blocked, setBlocked] = useState<{ index: number; block: PropertyBlock } | null>(null);
   const { form } = query;
   const [last, setLast] = useState<MetricForm>(form ?? FIRST_FORM);
   const [reset, setReset] = useState<QueryChange | null>(null);
@@ -93,44 +100,59 @@ export function MetricRqlFields({
     if (!form && change.measure) setReset(change);
     else apply(change);
   };
-  const setDimension = (index: number, value: string) =>
+  const setDimension = (index: number, value: string) => {
+    // A property that is not indexed is not picked: the tooltip says why, with the fix.
+    const property = propertyOfValue(value);
+    const block = property === undefined ? null : propertyBlock(projectId, choices, property);
+    setBlocked(block ? { index, block } : null);
+    if (block) return;
     choose({
       dimensions:
         value === NO_GROUP
           ? shown.dimensions.toSpliced(index, 1)
-          : shown.dimensions.toSpliced(index, 1, value as Dimension),
+          : shown.dimensions.toSpliced(index, 1, dimensionOfValue(value)),
     });
+  };
+  const taken = shown.dimensions.map(dimensionValue);
   const groupable = groupBy && (metric?.dimensions.length ?? 0) > 0 && Boolean(form);
-  const choices = groupBy ? Math.min(MAX_DIMENSIONS, shown.dimensions.length + 1) : 0;
+  const groupChoices = groupBy ? Math.min(MAX_DIMENSIONS, shown.dimensions.length + 1) : 0;
 
   return (
     <>
       <MetricFields query={shown} custom={!form} onChange={choose}>
-        {Array.from({ length: choices }, (_, index) => (
+        {Array.from({ length: groupChoices }, (_, index) => (
           <Field
             // biome-ignore lint/suspicious/noArrayIndexKey: a choice is its position.
             key={index}
             label={index === 0 ? "Group by" : "And by"}
             className="min-w-40 flex-1"
           >
-            {(control) => (
-              <Select
-                {...control}
-                className="w-full"
-                disabled={!groupable}
-                options={[
-                  { value: NO_GROUP, label: "No grouping" },
-                  ...(metric?.dimensions ?? [])
-                    .filter(
-                      (value) =>
-                        !shown.dimensions.includes(value) || value === shown.dimensions[index],
-                    )
-                    .map((value) => ({ value, label: dimensionLabel(value) })),
-                ]}
-                value={shown.dimensions[index] ?? NO_GROUP}
-                onValueChange={(value) => setDimension(index, String(value))}
-              />
-            )}
+            {(control) => {
+              const own = taken[index];
+              const others = taken.filter((value) => value !== own);
+              return (
+                <div className="flex flex-col">
+                  <Select
+                    {...control}
+                    className="w-full"
+                    disabled={!groupable}
+                    options={[
+                      { value: NO_GROUP, label: "No grouping" },
+                      ...(metric?.dimensions ?? [])
+                        .filter((value) => !others.includes(value))
+                        .map((value) => ({ value, label: dimensionLabel(value) })),
+                      // A property groups a measure a trace filter applies to.
+                      ...(metric?.filterable ? propertyOptions(choices, others) : []),
+                    ]}
+                    value={own ?? NO_GROUP}
+                    onValueChange={(value) => setDimension(index, String(value))}
+                  />
+                  {blocked?.index === index ? (
+                    <PropertyBlockNote block={blocked.block} onClose={() => setBlocked(null)} />
+                  ) : null}
+                </div>
+              );
+            }}
           </Field>
         ))}
       </MetricFields>
@@ -146,11 +168,17 @@ export function MetricRqlFields({
         }}
       />
       {form && metric?.filterable ? (
-        <QueryFilter
-          filter={queryFilter(query)}
-          facets={facets}
-          onChange={(next) => apply({ filter: next(queryFilter(query)) })}
-        />
+        <>
+          <QueryFilter
+            filter={queryFilter(query)}
+            facets={facets}
+            onChange={(next) => apply({ filter: next(queryFilter(query)) })}
+          />
+          <PropertyFilterFields
+            filter={queryFilter(query)}
+            onChange={(next) => apply({ filter: next(queryFilter(query)) })}
+          />
+        </>
       ) : null}
       <ConfirmDialog
         open={reset !== null}

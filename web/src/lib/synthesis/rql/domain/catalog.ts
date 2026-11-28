@@ -16,7 +16,11 @@ export const RQL_TABLE_NAMES = [
 ] as const;
 export type RqlTableName = (typeof RQL_TABLE_NAMES)[number];
 
-/** The value types of RQL. `text_list` is a list of text; `attributes` is a map of text keys. */
+/**
+ * The value types of RQL. `text_list` is a list of text; `attributes` is a map of text keys.
+ * `properties` is the map of the trace properties a project indexes: it is read one key at a time,
+ * `properties['key']`, and never as a whole.
+ */
 export type RqlType =
   | "text"
   | "integer"
@@ -24,7 +28,8 @@ export type RqlType =
   | "boolean"
   | "timestamp"
   | "text_list"
-  | "attributes";
+  | "attributes"
+  | "properties";
 
 export interface RqlColumn {
   name: string;
@@ -107,6 +112,21 @@ const AGENTS: RqlColumn = {
   name: "agents",
   type: "text_list",
   description: "The distinct agents of the trace's spans. Use contains(agents, 'name').",
+};
+/** The trace properties (ADR-0012): only the indexed ones are read, one key at a time. */
+const PROPERTIES: RqlColumn = {
+  name: "properties",
+  type: "properties",
+  description:
+    "The trace properties the project indexes. Read one with properties['name']: the value is text (null when the trace has none). describe_rql_schema lists the indexed names.",
+};
+/** The tasks of the trace (RTL-397): a trace can be a step of runs of more than one. */
+const TASKS: RqlColumn = {
+  name: "tasks",
+  type: "text_list",
+  description:
+    "The ids of the tasks (Agent health workflows, list_tasks) the trace ran in. Use contains(tasks, 'id'); each(tasks) groups by task.",
+  hints: ["task", "task_id", "workflow_id"],
 };
 const MCP_SERVERS: RqlColumn = {
   name: "mcp_servers",
@@ -245,6 +265,11 @@ export const RQL_TABLES: readonly RqlTable[] = [
         type: "attributes",
         description: "The span attributes that Ratel keeps. Read one with attributes['key'].",
       },
+      {
+        ...PROPERTIES,
+        description:
+          "The trace properties the project indexes, as the span holds them (its own value, else its parent's, else its resource's). Read one with properties['name'].",
+      },
     ],
   },
   {
@@ -292,6 +317,8 @@ export const RQL_TABLES: readonly RqlTable[] = [
           "When Ratel last wrote the totals of the trace. A window by known time applies to this column.",
         hints: ["updated_at"],
       },
+      PROPERTIES,
+      TASKS,
     ],
   },
   {
@@ -367,6 +394,8 @@ export const RQL_TABLES: readonly RqlTable[] = [
         type: "number",
         description: "The cost of the trace in US dollars (null when the trace is gone).",
       },
+      PROPERTIES,
+      TASKS,
     ],
   },
   {
@@ -564,9 +593,19 @@ export const RQL_FUNCTIONS: readonly RqlFunction[] = [
     name: "contains",
     signature: "contains(text_list, text)",
     returns: "boolean",
-    description: "True when the list has the value (models, tools, agents, mcp_servers).",
+    description: "True when the list has the value (models, tools, agents, mcp_servers, tasks).",
     aggregate: false,
     example: "select count(*) from traces where contains(models, 'gpt-4o')",
+  },
+  {
+    name: "properties",
+    signature: "properties['name']",
+    returns: "text",
+    description:
+      "The value of one indexed trace property, as text (null when the trace has none). A property that is not indexed is refused: index it in project settings. user, session, environment, model and service are columns: read user_id, session_id, environment, models and service_name.",
+    aggregate: false,
+    example:
+      "select properties['organization'] as organization, count(*) as traces from traces group by organization order by traces desc",
   },
   {
     name: "attributes",

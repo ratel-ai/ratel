@@ -177,6 +177,8 @@ export const traceTurnSteps = pgTable(
   (t) => [
     uniqueIndex("trace_turn_steps_turn_ordinal_idx").on(t.turnId, t.ordinal),
     index("trace_turn_steps_project_target_idx").on(t.projectId, t.targetType, t.targetId),
+    // The turns a trace's events are steps of: the tasks of a trace in RQL (migration 0065).
+    index("trace_turn_steps_project_event_idx").on(t.projectId, t.traceEventId),
   ],
 );
 

@@ -196,6 +196,8 @@ function childrenOf(expr: CheckedExpr): CheckedExpr[] {
       return [expr.list, expr.value];
     case "attribute":
       return [expr.target, expr.key];
+    case "property":
+      return [expr.key];
     case "coalesce":
       return expr.args;
     case "binary":
@@ -245,6 +247,8 @@ function printExpr(expr: CheckedExpr, params: Params): string {
       return `${eachAlias(expr.column)}."v"`;
     case "attribute":
       return `(${print(expr.target)} ->> ${print(expr.key)})`;
+    case "property":
+      return `(${quote("properties")} ->> ${print(expr.key)})`;
     case "binary": {
       const left = expr.op === "/" ? `${print(expr.left)}::double precision` : print(expr.left);
       return `(${left} ${BINARY_SQL[expr.op]} ${print(expr.right)})`;

@@ -31,13 +31,17 @@ export type RqlErrorCode =
   | "invalid_window"
   | "query_too_long"
   | "too_many_columns"
-  | "too_many_items";
+  | "too_many_items"
+  | "property_not_indexed"
+  | "property_is_column";
 
 export interface RqlError {
   code: RqlErrorCode;
   message: string;
   fix: string;
   at?: Span;
+  /** The trace property a refusal is about (`property_not_indexed`), for a link to its settings. */
+  property?: string;
 }
 
 /** Thrown inside the checker and caught by `compileParsed`; never leaves the module. */

@@ -73,6 +73,16 @@ months of a 1,000,000-trace project reads every row of the window in both design
 jsonb): that bound comes from the rows read, not from the design, and the reads run under the
 statement timeout of their pool.
 
+**Reads (RTL-396).** The metric form, the query object and RQL read only an indexed property: a
+filter is `properties` of a trace filter (any of the values of each name), a group-by is
+`{ "property": "<name>" }`, and RQL is `properties['name']` (ADR-0011). A property that is not
+indexed is refused with its name and the fix, not answered with no rows. The console lists a
+detected one off, with a tooltip that links to it in Settings > General > Trace properties, or to
+the upgrade page when the plan does not index properties of the project's own. The value picker
+offers the 50 most frequent values of each indexed property in the range, in one bounded query.
+RQL reads `->>` through the `security_barrier` views, so the GIN index serves the console's other
+filters and pages, not RQL.
+
 **No runtime DDL.** The column and the GIN index exist once for every project (migration `0063`);
 a newly indexed key needs no index and no schema change.
 

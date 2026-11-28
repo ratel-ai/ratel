@@ -6,9 +6,12 @@ import {
   type MeasureId,
   type MetricQuery,
   parseQuery,
+  propertyOf,
   type Query,
+  queryProperties,
 } from "@/lib/contracts/query";
 import { CONTEXT_SOURCES } from "@/lib/ingest/context";
+import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import { getDb } from "@/lib/platform/db/client";
 import {
   getMetric,
@@ -25,8 +28,13 @@ import { type FlowResult, runFlow } from "@/lib/synthesis/metrics/flow";
 import type { FunnelResult } from "@/lib/synthesis/metrics/funnel";
 import { type GeographyResult, runGeography } from "@/lib/synthesis/metrics/geography";
 import { runStepFlow, type StepFlowResult } from "@/lib/synthesis/metrics/step-flow";
+import { notIndexed } from "@/lib/synthesis/rql/domain/properties";
 import { clausesOf, withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
-import { type TraceFilter, traceFilterCondition } from "@/lib/synthesis/traces/trace-filters";
+import {
+  type TraceFilter,
+  traceFilterCondition,
+  traceTasks,
+} from "@/lib/synthesis/traces/trace-filters";
 
 export type MetricsDb = Pick<ReturnType<typeof getDb>, "execute">;
 
@@ -39,7 +47,13 @@ export class QueryError extends Error {
 
   constructor(
     message: string,
-    readonly detail?: { code: string; fix: string; at?: { start: number; end: number } },
+    readonly detail?: {
+      code: string;
+      fix: string;
+      at?: { start: number; end: number };
+      /** The trace property the refusal is about. */
+      property?: string;
+    },
   ) {
     super(message);
   }
@@ -153,7 +167,19 @@ export const SUMMARY_GROUPS = {
   agent: { column: sql`s.agents`, array: true, filtered: (f) => f.agents },
   service: { column: sql`s.service_name`, array: false, filtered: (f) => f.services },
   environment: { column: sql`s.environment`, array: false, filtered: (f) => f.environments },
+  user: { column: sql`s.end_user_id`, array: false },
+  session: { column: sql`s.session_id`, array: false },
+  task: { column: traceTasks(sql`s`), array: true },
 } as const satisfies Partial<Record<Dimension, MetricGroup>>;
+
+/** A group of one trace property: the value of the summary `s`, as text. */
+function propertyGroup(name: string): MetricGroup {
+  return {
+    column: sql`(s.properties ->> ${name}::text)`,
+    array: false,
+    filtered: (filter) => filter.properties?.[name],
+  };
+}
 
 const SOURCES: Record<"traces" | "context", MetricSourceQuery> = {
   traces: {
@@ -211,7 +237,28 @@ export async function runQuery<Q extends Query>(
   scope: QueryScope,
   db: MetricsDb = getDb(),
 ): Promise<ResultOf<Q>> {
-  return (await runParsed(projectId, checkedQuery(query, scope), scope, db)) as ResultOf<Q>;
+  const checked = checkedQuery(query, scope);
+  await refuseUnindexed(projectId, [checked, { filters: scope.filter }], db);
+  return (await runParsed(projectId, checked, scope, db)) as ResultOf<Q>;
+}
+
+/**
+ * A filter or a group-by of a trace property that is not indexed is refused, with its name and the
+ * fix: it has no stored values, so it would keep no trace and say nothing of why. RQL text is
+ * checked by its compiler (kind `sql`).
+ */
+async function refuseUnindexed(
+  projectId: string,
+  parts: readonly object[],
+  db: MetricsDb,
+): Promise<void> {
+  const named = [...new Set(parts.flatMap(queryProperties))];
+  if (named.length === 0) return;
+  const properties = await loadStoredPropertyNames(projectId, db);
+  const missing = named.find((name) => !properties.indexed.includes(name));
+  if (missing === undefined) return;
+  const { code, message, fix } = notIndexed(missing, properties);
+  throw new QueryError(message, { code, fix, property: missing });
 }
 
 function runParsed(
@@ -318,7 +365,13 @@ function metricSql(
   scope: QueryScope,
 ): SQL {
   const source = sourceOf(metric);
-  const groups = query.dimensions.map((dimension) => source?.groups[dimension]);
+  const groups = query.dimensions.map((dimension) => {
+    const property = propertyOf(dimension);
+    // The contract lets a property group a filterable measure only: its source has the summary `s`.
+    return property === undefined
+      ? source?.groups[dimension as Dimension]
+      : propertyGroup(property);
+  });
   return aggregateSql(projectId, { filters: query.filters, metric, aggregation }, scope, groups, {
     bucket,
     limit: METRIC_GROUP_LIMIT,

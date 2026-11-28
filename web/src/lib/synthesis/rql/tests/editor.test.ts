@@ -105,3 +105,36 @@ test("nothing the compiler refuses: no Postgres function, nothing in a string or
   // While typing a word, without asking, only a word starts a list.
   assert.equal(rqlCompletions("select count(*) ", 16, false), null);
 });
+
+test("inside properties[' the editor offers the project's properties: the detected ones off", () => {
+  const data = rqlEditorData({ indexed: ["organization", "plan"], detected: ["tenant"] });
+  assert.deepEqual(data.properties, { indexed: ["organization", "plan"], detected: ["tenant"] });
+  // The catalog part stays the static one.
+  assert.deepEqual(data.tables, rqlEditorData().tables);
+  const text = "select count(*) from traces where properties['pl";
+  const found = rqlCompletions(text, text.length, false, data);
+  assert.equal(found?.from, text.length - 2);
+  assert.deepEqual(
+    found?.options.map(({ label, disabled }) => [label, Boolean(disabled)]),
+    [
+      ["organization", false],
+      ["plan", false],
+      ["tenant", true],
+    ],
+  );
+  const tenant = found?.options.find(({ label }) => label === "tenant");
+  assert.match(tenant?.detail ?? "", /not indexed/);
+  assert.match(tenant?.info ?? "", /index it in project settings/i);
+  // Right after the quote, and with a space before the bracket.
+  assert.equal(rqlCompletions("select properties [ '", 21, false, data)?.options.length, 3);
+  // Another string is still not completed, nor attributes['.
+  assert.equal(rqlCompletions("select attributes['pl", 21, true, data), null);
+  // No property: nothing to offer.
+  assert.equal(rqlCompletions("select properties['", 19, true), null);
+});
+
+test("the editor offers tasks on traces and scores (RTL-397)", () => {
+  for (const table of ["traces", "scores"])
+    assert.ok((labels(`select | from ${table}`) ?? []).includes("tasks"), table);
+  assert.ok(!(labels("select | from events") ?? []).includes("tasks"));
+});

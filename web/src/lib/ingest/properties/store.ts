@@ -114,6 +114,32 @@ export async function loadIndexedProperties(
   return new Set(rows.map((row) => row.name));
 }
 
+/** The names of a project's properties that `properties` holds, by state: the most seen first. */
+export interface StoredPropertyNames {
+  indexed: string[];
+  detected: string[];
+}
+
+/**
+ * The names a query can read through `properties`, by state: RQL, the query object and the metric
+ * form read them. A standard property that is a summary column is not one of them. One statement.
+ */
+export async function loadStoredPropertyNames(
+  projectId: string,
+  db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
+): Promise<StoredPropertyNames> {
+  const result = await db.execute(sql`
+    select name, state from trace_property_keys
+    where project_id = ${projectId}::uuid
+    order by seen_count desc, name`);
+  const names: StoredPropertyNames = { indexed: [], detected: [] };
+  for (const row of rowsOf<{ name: string; state: PropertyState }>(result)) {
+    if (standardProperty(row.name)?.column) continue;
+    names[row.state === "indexed" ? "indexed" : "detected"].push(row.name);
+  }
+  return names;
+}
+
 /**
  * Every property of a project: the indexed ones first, then the most seen. What the settings
  * section, the MCP tools and the filters of the later pages list.
@@ -195,6 +221,10 @@ export async function clearIndexedAt(
     .update(tracePropertyKeys)
     .set({ indexedAt: null })
     .where(and(eq(tracePropertyKeys.projectId, projectId), eq(tracePropertyKeys.name, name)));
+}
+
+function rowsOf<T>(result: unknown): T[] {
+  return ((result as { rows?: T[] }).rows ?? result) as T[];
 }
 
 function shown(row: Omit<TraceProperty, "column">): TraceProperty {

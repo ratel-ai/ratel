@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FlagSubject } from "@/lib/contracts/feature-flags";
 import { MAX_SQL_TEXT, QUERY_VERSION, type SqlQuery } from "@/lib/contracts/query";
+import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import {
   defaultMonitoringDeps,
@@ -41,16 +42,21 @@ export function rqlOperations(deps: MonitoringDeps = defaultMonitoringDeps): Mcp
       domain: "observability",
       title: "Describe the RQL schema",
       description:
-        "Gives RQL (Ratel Query Language), the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users, prompts), their columns, the functions, the operators, the limits, the rules and example queries. Call it before run_rql.",
+        "Gives RQL (Ratel Query Language), the read-only query language over trace data. It lists the tables (events, traces, scores, sessions, users, prompts), their columns, the functions, the operators, the limits, the rules, example queries, and the trace properties of the project: the indexed ones, which properties['name'] reads, and apart the detected ones. Call it before run_rql.",
       keywords: ["rql schema", "rql tables", "query language"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        await requireMonitoring(deps, ctx);
+        const { projectId } = await requireMonitoring(deps, ctx);
+        // The caller's project only: its indexed properties, and apart the detected ones.
+        const properties = await loadStoredPropertyNames(projectId, deps.db());
         return {
-          data: describeRqlSchema(),
-          hint: "run_rql runs one query. Use only these tables, columns and functions.",
+          data: describeRqlSchema(properties),
+          hint:
+            properties.detected.length > 0
+              ? "run_rql runs one query. Use only these tables, columns, functions and indexed properties. A detected property must be indexed first: change_trace_property (index) or the project settings."
+              : "run_rql runs one query. Use only these tables, columns and functions.",
         };
       },
     }),

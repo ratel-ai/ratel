@@ -23,6 +23,11 @@ export interface TraceFilter {
   status?: "failed" | "ok";
   minCostUsd?: number;
   minTokens?: number;
+  /**
+   * Indexed trace properties (ADR-0012), by name: one of the values of each name. A name that is
+   * not indexed has no stored values, so it keeps no trace: `runQuery` refuses it first.
+   */
+  properties?: Readonly<Record<string, readonly string[]>>;
   /** More clauses that must match too, also on the same property. */
   and?: readonly TraceFilter[];
 }
@@ -44,6 +49,8 @@ export interface TraceFilterWindow {
   until?: Date;
 }
 
+/** How a turn of the OTLP lane names its trace: `otlp:<trace id>`. */
+const OTLP_KEY = "otlp:";
 /** Values offered per property: the most frequent in the window. */
 export const TRACE_FILTER_FACET_LIMIT = 50;
 export const EMPTY_TRACE_FILTER_FACETS: TraceFilterFacets = {
@@ -77,6 +84,7 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
         : null,
     minCostUsd !== null ? sql`s.cost_usd >= ${minCostUsd}` : null,
     minTokens !== null ? sql`s.input_tokens + s.output_tokens >= ${minTokens}` : null,
+    ...Object.entries(filter.properties ?? {}).map(([name, values]) => propertyIn(name, values)),
     ...(filter.and ?? []).map(traceFilterCondition),
   ].filter((part): part is SQL => part !== null);
   return parts.length > 0 ? sql.join(parts, sql` and `) : null;
@@ -97,6 +105,26 @@ export function traceFilterMatch(
   if (!condition) return null;
   return sql`exists (select 1 from otel_trace_summaries s
     where s.project_id = ${projectId} and s.trace_id = ${traceId} and ${condition})`;
+}
+
+/**
+ * The ids of the tasks the trace of the summary row `alias` ran in, sorted: the same runs as the
+ * task filter, read per row, as the column `tasks` of the RQL views (migration 0065) reads them. A
+ * row with no summary (a score whose trace is gone) has none.
+ */
+export function traceTasks(alias: SQL): SQL {
+  return sql`array(
+    select x.workflow_id from (
+      select tt.workflow_id from trace_turns tt
+      where tt.project_id = ${alias}.project_id and tt.turn_key = ${OTLP_KEY}::text || ${alias}.trace_id
+        and tt.workflow_id is not null
+      union
+      select tt.workflow_id from trace_events e
+      join trace_turn_steps st on st.project_id = e.project_id and st.trace_event_id = e.id
+      join trace_turns tt on tt.project_id = st.project_id and tt.id = st.turn_id
+      where e.project_id = ${alias}.project_id and e.trace_id = ${alias}.trace_id
+        and tt.workflow_id is not null
+    ) x order by x.workflow_id)::text[]`;
 }
 
 /** Each property's values in the window, most traces first: one query on the rollup. */
@@ -170,6 +198,16 @@ export function traceFacetsQuery(
       from counted
     )
     select facet, value, count from ranked where rank <= ${limit} order by facet, rank`;
+}
+
+/** One of the values of a property: a containment the GIN index of `properties` answers. */
+function propertyIn(name: string, values: readonly string[]): SQL | null {
+  const list = cleanValues(values);
+  if (list.length === 0) return null;
+  const each = list.map(
+    (value) => sql`s.properties @> jsonb_build_object(${name}::text, ${value}::text)`,
+  );
+  return each.length === 1 ? each[0] : sql`(${sql.join(each, sql` or `)})`;
 }
 
 function anyOf(column: SQL, values: readonly string[] | undefined): SQL | null {

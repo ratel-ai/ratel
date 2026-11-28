@@ -1,18 +1,33 @@
 "use client";
 
-import { autocompletion, type CompletionContext, completionKeymap } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  type Completion,
+  type CompletionContext,
+  completionKeymap,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { SQLDialect } from "@codemirror/lang-sql";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorState, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, keymap, placeholder } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { useEffect, useRef } from "react";
-import { RQL_KEYWORDS, rqlCompletions, rqlEditorData } from "@/lib/synthesis/rql/domain/editor";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PropertyBlockNote } from "@/components/console/properties/PropertyBlockNote";
+import { usePropertyChoices } from "@/components/console/properties/PropertyChoicesProvider";
+import {
+  RQL_KEYWORDS,
+  type RqlEditorData,
+  rqlCompletions,
+  rqlEditorData,
+} from "@/lib/synthesis/rql/domain/editor";
+import { type PropertyBlock, propertyBlock } from "@/lib/views/dashboards/properties";
 
 /**
- * The RQL field with highlighting and completion, from the compiler's catalog. Loaded only where
- * the field is shown (`SqlFields` imports it on demand); the plain text area stands in until then.
+ * The RQL field with highlighting and completion, from the compiler's catalog and the project's
+ * trace properties. Loaded only where the field is shown (`SqlFields` imports it on demand); the
+ * plain text area stands in until then. A property that is not indexed is offered off: picking it
+ * writes nothing and shows why, with the link that fixes it.
  */
 
 const DATA = rqlEditorData();
@@ -76,6 +91,7 @@ const THEME = EditorView.theme({
     backgroundColor: "var(--color-selected)",
     color: "var(--color-fg)",
   },
+  ".cm-rql-off, .cm-rql-off .cm-completionDetail": { color: "var(--color-fg-faint)" },
   ".cm-completionDetail": { color: "var(--color-fg-subtle)", fontStyle: "normal" },
   ".cm-completionInfo": { maxWidth: "20rem", padding: "0.375rem 0.5rem" },
 });
@@ -100,9 +116,24 @@ const errorMark = StateField.define({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-function complete(context: CompletionContext) {
-  const found = rqlCompletions(context.state.doc.toString(), context.pos, context.explicit);
-  return found ? { ...found, validFor: /^[\w ]*$/ } : null;
+/** The completions at the cursor; a property that is not indexed calls `blocked` instead of writing. */
+function completer(data: () => Pick<RqlEditorData, "properties">, blocked: (name: string) => void) {
+  return (context: CompletionContext) => {
+    const found = rqlCompletions(
+      context.state.doc.toString(),
+      context.pos,
+      context.explicit,
+      data(),
+    );
+    if (!found) return null;
+    const options = found.options.map(
+      ({ disabled, ...option }): Completion =>
+        disabled ? { ...option, boost: -1, apply: () => blocked(option.label) } : option,
+    );
+    // A property name can hold any character but a quote; a word of the query, letters and spaces.
+    const inName = context.state.sliceDoc(found.from - 1, found.from) === "'";
+    return { ...found, options, validFor: inName ? /^[^'\n]*$/ : /^[\w ]*$/ };
+  };
 }
 
 export function RqlEditor({
@@ -125,9 +156,21 @@ export function RqlEditor({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  // The latest callbacks, read by the editor made once.
-  const latest = useRef({ onChange, onRun });
-  latest.current = { onChange, onRun };
+  const { projectId, choices } = usePropertyChoices();
+  const [block, setBlock] = useState<PropertyBlock | null>(null);
+  const data = useMemo(
+    () =>
+      rqlEditorData({
+        indexed: choices.indexed.map(({ name }) => name),
+        detected: choices.detected.map(({ name }) => name),
+      }),
+    [choices],
+  );
+  // The latest callbacks and properties, read by the editor made once.
+  const latest = useRef({ onChange, onRun, data });
+  latest.current = { onChange, onRun, data };
+  const blocked = useRef((name: string) => setBlock(propertyBlock(projectId, choices, name)));
+  blocked.current = (name: string) => setBlock(propertyBlock(projectId, choices, name));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: the editor is made once; a new text comes through the effect below.
   useEffect(() => {
@@ -152,7 +195,17 @@ export function RqlEditor({
           ]),
           RQL_DIALECT.language,
           syntaxHighlighting(HIGHLIGHT),
-          autocompletion({ override: [complete], icons: true }),
+          autocompletion({
+            override: [
+              completer(
+                () => latest.current.data,
+                (name) => blocked.current(name),
+              ),
+            ],
+            icons: true,
+            // A property that is not indexed is shown off.
+            optionClass: (option) => (option.boost === -1 ? "cm-rql-off" : ""),
+          }),
           // The text length cap: a change past it does not happen.
           EditorState.transactionFilter.of((transaction) =>
             transaction.docChanged && transaction.newDoc.length > maxLength ? [] : transaction,
@@ -194,6 +247,10 @@ export function RqlEditor({
     view.current?.dispatch({ effects: setError.of(errorAt) });
   }, [errorAt]);
 
+  // A new text closes the note of a property that is not indexed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the note follows the text.
+  useEffect(() => setBlock(null), [value]);
+
   // The label and note of the field reach the editor's text box.
   useEffect(() => {
     const content = view.current?.contentDOM;
@@ -215,5 +272,10 @@ export function RqlEditor({
     }
   }, [control]);
 
-  return <div ref={host} data-rql-editor="" />;
+  return (
+    <div>
+      <div ref={host} data-rql-editor="" />
+      {block ? <PropertyBlockNote block={block} onClose={() => setBlock(null)} /> : null}
+    </div>
+  );
 }

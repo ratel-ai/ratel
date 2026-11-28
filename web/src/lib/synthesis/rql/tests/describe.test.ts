@@ -65,7 +65,7 @@ test("each example of the description and of its functions compiles", () => {
     ...schema.examples.map((example) => example.rql),
     ...schema.functions.map((fn) => fn.example),
   ]) {
-    const result = compileRql(query, { now: NOW });
+    const result = compileRql(query, { now: NOW, properties: { indexed: ["organization"] } });
     assert.ok(result.ok, `${query}: ${result.ok ? "" : result.error.message}`);
   }
 });
@@ -74,4 +74,18 @@ test("the description is the same value on each call, and is plain JSON", () => 
   const schema = describeRqlSchema();
   assert.deepEqual(describeRqlSchema(), schema);
   assert.deepEqual(JSON.parse(JSON.stringify(schema)), schema);
+});
+
+test("with the project's properties, the description lists the indexed ones and, apart, the detected ones", () => {
+  const schema = describeRqlSchema({
+    indexed: ["organization", "plan"],
+    detected: ["tenant"],
+  });
+  assert.deepEqual(schema.properties?.indexed, ["organization", "plan"]);
+  assert.deepEqual(schema.properties?.detected, ["tenant"]);
+  assert.match(schema.properties?.note ?? "", /index it in project settings/i);
+  assert.match(schema.properties?.note ?? "", /user_id/);
+  assert.ok(schema.rules.some((rule) => rule.includes("properties['")));
+  // The catalog alone has no project data.
+  assert.equal(describeRqlSchema().properties, undefined);
 });

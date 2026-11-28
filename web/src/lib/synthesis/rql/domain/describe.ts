@@ -8,6 +8,7 @@ import {
   type RqlType,
 } from "./catalog";
 import { RQL_LIMITS, type RqlLimits } from "./limits";
+import { PROPERTY_SETTINGS, type RqlProperties } from "./properties";
 
 /** What `describe_rql_schema` gives an agent: the catalog, the limits, the rules and examples. */
 export interface RqlSchemaDescription {
@@ -25,6 +26,8 @@ export interface RqlSchemaDescription {
   limits: RqlLimits;
   rules: string[];
   examples: { question: string; rql: string }[];
+  /** The trace properties of the caller's project, when the caller gave them. */
+  properties?: { indexed: string[]; detected: string[]; note: string };
 }
 
 const RULES = [
@@ -40,6 +43,7 @@ const RULES = [
   "There are no joins, subqueries, UNION, WITH, CASE, window functions, casts or Postgres operators. Each table copies the trace columns that a question needs.",
   "Write text in single quotes. Compare a timestamp with an ISO 8601 text, for example '2026-11-01T00:00:00Z'.",
   "Read a span attribute with attributes['key']: the value is text. Test a list with contains(list, 'value'). Group by each value of a list with each(list).",
+  "Read an indexed trace property with properties['name'] on traces, events or scores: the value is text. A property that is not indexed is refused. user, session, environment, model and service are columns: user_id, session_id, environment, models, service_name.",
   "A share is rate(condition). coalesce(sum(x), 0) gives 0 for a sum of no rows.",
   "GROUP BY and ORDER BY can name a select alias or a position. HAVING can name an alias. WHERE cannot.",
 ];
@@ -83,8 +87,13 @@ const EXAMPLES: { question: string; rql: string }[] = [
   },
 ];
 
-/** The schema description of the catalog. Pure: the same value on each call. */
-export function describeRqlSchema(): RqlSchemaDescription {
+const PROPERTIES_NOTE = `properties['name'] reads the indexed names only. A detected name has no stored values: index it in project settings (${PROPERTY_SETTINGS}) first. user, session, environment, model and service are columns, not properties: user_id, session_id, environment, models and service_name.`;
+
+/**
+ * The schema description of the catalog. Pure: the same value on each call. With the project's
+ * properties, it lists the indexed names and, apart, the detected ones.
+ */
+export function describeRqlSchema(properties?: RqlProperties): RqlSchemaDescription {
   return {
     language: "rql",
     version: RQL_VERSION,
@@ -99,5 +108,14 @@ export function describeRqlSchema(): RqlSchemaDescription {
     limits: { ...RQL_LIMITS },
     rules: [...RULES],
     examples: EXAMPLES.map((example) => ({ ...example })),
+    ...(properties
+      ? {
+          properties: {
+            indexed: [...properties.indexed],
+            detected: [...(properties.detected ?? [])],
+            note: PROPERTIES_NOTE,
+          },
+        }
+      : {}),
   };
 }

@@ -12,7 +12,7 @@ import {
   textToRun,
 } from "@/lib/views/dashboards/metric-rql";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
-import { chartChoices } from "@/lib/views/dashboards/sql-chart";
+import { chartChoices, formAsMetric } from "@/lib/views/dashboards/sql-chart";
 import { readWidgets, writeWidgets } from "@/lib/views/dashboards/stored-widget";
 import { fitWidget, formOf, formWidget, sqlWidgetQuery } from "@/lib/views/dashboards/widget";
 
@@ -293,4 +293,79 @@ test("an old metric whose RQL text would pass the limit stays as stored, a broke
   // The same refusal at the boundary: an import or an MCP change of it is refused with the reason.
   const parsed = parseWidget({ title: "", query: long, chart: "line" }, ON);
   assert.ok(!parsed.ok && /4,000 characters/.test(parsed.error));
+});
+
+test("a property of the form is properties['name'] in the text: its filter, its group, its column", () => {
+  const form = formOf(
+    metricQuery("latency", "p95", {
+      dimensions: [{ property: "org.id" }, "user"],
+      filters: {
+        properties: { plan: ["pro", "o'brien"] },
+        and: [{ properties: { "org.id": ["a"] } }],
+      },
+    }),
+  );
+  assert.equal(
+    metricAsRql(form, "table", "day"),
+    [
+      "select properties['org.id'] as org_id, user_id, p95(duration_ms) as value",
+      "from traces",
+      "where properties['org.id'] is not null",
+      "  and user_id is not null",
+      "  and properties['plan'] in ('pro', 'o''brien')",
+      "  and properties['org.id'] in ('a')",
+      "group by properties['org.id'], user_id",
+      "order by value desc",
+      "limit 1000",
+    ].join("\n"),
+  );
+  const scores = formOf(
+    metricQuery("scorer_count", "count", {
+      dimensions: [{ property: "plan" }, "session"],
+    }),
+  );
+  assert.match(metricAsRql(scores, "line", "hour"), /properties\['plan'\] as plan, session_id/);
+  // The name of the column is no reserved word and no other output's; GROUP BY names the value.
+  const named = formOf(
+    metricQuery("trace_count", "count", {
+      dimensions: [{ property: "trace_id" }, { property: "trace-id" }],
+    }),
+  );
+  assert.match(
+    metricAsRql(named, "table", "day"),
+    /properties\['trace_id'\] as trace_id, properties\['trace-id'\] as trace_id_property,[\s\S]*group by properties\['trace_id'\], properties\['trace-id'\]/,
+  );
+  const reserved = formOf(
+    metricQuery("trace_count", "count", {
+      dimensions: [{ property: "order" }, { property: "9x" }],
+    }),
+  );
+  assert.match(
+    metricAsRql(reserved, "table", "day"),
+    /properties\['order'\] as order_property, properties\['9x'\] as property_9x/,
+  );
+});
+
+test("a group of tasks reads as the task's name where the page knows it (RTL-397)", () => {
+  const form = formOf(metricQuery("trace_count", "count", { dimensions: ["task"] }));
+  const result: SqlResult = {
+    kind: "sql",
+    columns: [
+      { name: "task", type: "text" },
+      { name: "value", type: "integer" },
+    ],
+    rows: [
+      ["wf-1", 3],
+      ["wf-gone", 1],
+    ],
+    truncated: false,
+  };
+  const window = { since: new Date("2026-11-01"), until: new Date("2026-11-02") };
+  const drawn = formAsMetric(result, form, "table", window, {
+    taskNames: { "wf-1": "Track a delivery" },
+  });
+  assert.deepEqual(
+    drawn.series.map(({ groups }) => groups[0]),
+    [{ value: "wf-1", label: "Track a delivery" }, { value: "wf-gone" }],
+  );
 });

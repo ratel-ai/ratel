@@ -1,8 +1,10 @@
 import type { SqlQuery } from "@/lib/contracts/query";
+import { loadStoredPropertyNames } from "@/lib/ingest/properties/store";
 import type { QueryScope } from "@/lib/synthesis/metrics/catalog";
 import { metricSeams, QueryError, type SqlResult } from "@/lib/synthesis/metrics/query";
 import { compileRql, RQL_VERSION } from "./compile";
 import { RQL_LIMITS } from "./domain/limits";
+import type { RqlProperties } from "./domain/properties";
 import {
   busyError,
   placeHeld,
@@ -33,6 +35,8 @@ export interface SqlQueryDeps {
   alertGate: RqlGate;
   /** The RQL version of this build. A test gives a later one to reach the path of older queries. */
   rqlVersion: number;
+  /** The project's trace properties: read only for a text that names `properties`. */
+  properties: (projectId: string) => Promise<RqlProperties>;
 }
 
 type SqlRunner = NonNullable<typeof metricSeams.sql>;
@@ -41,16 +45,21 @@ metricSeams.sql = sqlQueryRunner();
 
 /** The runner of kind `sql`. */
 export function sqlQueryRunner(deps: Partial<SqlQueryDeps> = {}): SqlRunner {
-  const { run = {}, rqlVersion = RQL_VERSION, alertGate = rqlAlertGate } = deps;
+  const {
+    run = {},
+    rqlVersion = RQL_VERSION,
+    alertGate = rqlAlertGate,
+    properties = (projectId) => loadStoredPropertyNames(projectId),
+  } = deps;
   return (projectId, query, scope) =>
-    runSqlQuery(projectId, query, scope, { run, rqlVersion, alertGate });
+    runSqlQuery(projectId, query, scope, { run, rqlVersion, alertGate, properties });
 }
 
 async function runSqlQuery(
   projectId: string,
   query: SqlQuery,
   scope: QueryScope,
-  { run, rqlVersion, alertGate }: SqlQueryDeps,
+  { run, rqlVersion, alertGate, properties }: SqlQueryDeps,
 ): Promise<SqlResult> {
   if (query.rqlVersion > rqlVersion)
     throw new QueryError(
@@ -70,7 +79,10 @@ async function runSqlQuery(
     throw new QueryError(message, { code, fix });
   }
   try {
+    // A text that names no property costs no read of them.
+    const named = /properties/i.test(query.text) ? await properties(projectId) : undefined;
     const compiled = compileRql(query.text, {
+      ...(named ? { properties: named } : {}),
       now: scope.until,
       // The window of the page, by known time for an alert rule, as the metric form reads it.
       window: { from: scope.since, to: scope.until, ...(scope.by ? { by: scope.by } : {}) },
@@ -81,13 +93,18 @@ async function runSqlQuery(
       ...(scope.filter ? { filter: scope.filter } : {}),
     });
     if (!compiled.ok) {
-      const { code, message, fix, at } = compiled.error;
+      const { code, message, fix, at, property } = compiled.error;
       throw new QueryError(
         query.rqlVersion < rqlVersion
           ? `The query was written for RQL version ${query.rqlVersion}, and no longer compiles in version ${rqlVersion}: ${message}`
           : message,
         // Where in the text: the field marks it.
-        { code, fix, ...(at ? { at: { start: at.start, end: at.end } } : {}) },
+        {
+          code,
+          fix,
+          ...(at ? { at: { start: at.start, end: at.end } } : {}),
+          ...(property ? { property } : {}),
+        },
       );
     }
     const timeoutMs = alert

@@ -135,9 +135,11 @@ export function QueryFilter({
         onSearchChange={(next) =>
           onChange((current) => {
             const search = searchFromTraceFilter(current);
-            return traceFilterFromSearch(typeof next === "function" ? next(search) : next, {
+            const edited = traceFilterFromSearch(typeof next === "function" ? next(search) : next, {
               entities: true,
             });
+            // The bar has no trace properties: their part of the filter stays as it was.
+            return current.properties ? { ...edited, properties: current.properties } : edited;
           })
         }
       />

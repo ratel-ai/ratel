@@ -6,7 +6,8 @@ import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { ConfirmDialog } from "@ratel/design-system/dialog";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
-import { useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { changeTracePropertyAction } from "@/app/(console)/project/[projectId]/settings/property-actions";
 import type { TracePropertyChange } from "@/lib/ingest/properties/actions";
 import type { TraceProperty } from "@/lib/ingest/properties/store";
@@ -14,7 +15,8 @@ import type { TraceProperty } from "@/lib/ingest/properties/store";
 /**
  * The project's trace properties (RTL-395): the standard ones Ratel indexes by itself, and the
  * keys of the user's own it detected. An admin indexes a detected key, stops an indexed one, and
- * erases the values of a stopped one. Members see the table read-only.
+ * erases the values of a stopped one. Members see the table read-only. `?property=<name>` (the link
+ * of a form's property that is not indexed, RTL-396) opens the table on that property.
  */
 
 export function TracePropertiesTable({
@@ -29,6 +31,12 @@ export function TracePropertiesTable({
   const [error, setError] = useState<string | null>(null);
   const [erasing, setErasing] = useState<TraceProperty | null>(null);
   const [pending, startTransition] = useTransition();
+  const asked = useSearchParams().get("property");
+  const focused = rows.find((row) => row.name === asked) ?? null;
+  const here = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) here.current?.scrollIntoView({ block: "start" });
+  }, [focused]);
 
   function change(request: TracePropertyChange, done: string) {
     setError(null);
@@ -135,12 +143,33 @@ export function TracePropertiesTable({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={here} className="flex flex-col gap-3">
       <p className="text-ui text-fg-muted">
         Ratel stores the key names your traces carry. It stores the values of the standard
         properties by itself, and the values of a property of your own only after you index it.
         Indexing your own properties is on paid plans, up to 20 per project.
       </p>
+      {focused && focused.state === "detected" ? (
+        <Callout tone="info" title={`${focused.name} is not indexed`}>
+          <span className="flex flex-wrap items-center gap-2">
+            Index it to filter and group your metrics by it.
+            {canChange ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pending}
+                onClick={() =>
+                  change({ action: "index", name: focused.name }, `${focused.name} is indexed`)
+                }
+              >
+                Index {focused.name}
+              </Button>
+            ) : (
+              " An organization admin can index it."
+            )}
+          </span>
+        </Callout>
+      ) : null}
       {error ? (
         <Callout tone="danger" title="Couldn't change the property">
           {error}
@@ -152,6 +181,7 @@ export function TracePropertiesTable({
           columns={columns}
           rows={rows}
           rowKey={(row) => row.name}
+          selectedKey={focused?.name ?? null}
           empty={
             <EmptyState
               title="No trace properties yet"
