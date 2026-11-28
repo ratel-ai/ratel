@@ -110,6 +110,7 @@ export const SERVER_EVENT_NAMES = [
   "sandbox_version_pushed",
   "sandbox_run_started",
   "eval_case_created",
+  "eval_dataset_created",
   "eval_created",
   "eval_experiment_started",
   "eval_experiment_finished",

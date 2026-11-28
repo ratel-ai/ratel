@@ -75,6 +75,7 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
             eq(evalCases.projectId, projectId),
             isNull(evalCases.resolvedTurnId),
             eq(evalCases.runOnly, false),
+            isNull(evalCases.removedAt),
             ofEval,
           ),
         )
@@ -100,7 +101,14 @@ export function createDrizzleCaseStore(db: Db): CaseStore {
         const [found] = await tx
           .select({ id: evalCases.id })
           .from(evalCases)
-          .where(and(eq(evalCases.projectId, projectId), eq(evalCases.id, caseId)))
+          .where(
+            and(
+              eq(evalCases.projectId, projectId),
+              eq(evalCases.id, caseId),
+              // A removed row is not edited: it is not a row of its dataset any more.
+              isNull(evalCases.removedAt),
+            ),
+          )
           .for("update");
         if (!found) return "not_found";
         const [newest] = await tx

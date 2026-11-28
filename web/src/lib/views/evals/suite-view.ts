@@ -21,8 +21,8 @@ import {
 } from "./domain/suite";
 
 /**
- * The read models of a run as a suite (decision `suite-table`): one row for each eval, one eval
- * with its cases, and one trial next to the baseline trial of the same row. Plain data: the pages,
+ * The read models of a run as a suite (decision `suite-table`): one row for each eval, and one
+ * trial next to the baseline trial of the same row. Plain data: the pages,
  * the API and the MCP operations show it.
  */
 
@@ -48,22 +48,6 @@ export type SuiteTable = {
   scorerColumns: string[];
   rows: SuiteRow[];
 };
-
-export type CaseScoreRow = {
-  caseId: string;
-  name: string;
-  versionId: string;
-  number: number;
-  status: CaseStatus;
-  counts: Counts;
-  scorers: ScorerScore[];
-  /** The change of the case in the run verdict. Null when the runs are not compared. */
-  change: CaseChange | null;
-  /** The same case in the baseline run. Null when it is not there. */
-  baseline: { status: CaseStatus; counts: Counts; scorers: ScorerScore[] } | null;
-};
-
-export type EvalDetail = { row: SuiteRow; cases: CaseScoreRow[] };
 
 export type PairedTrial = {
   caseId: string;
@@ -96,42 +80,10 @@ export function suiteTable(candidate: Compared, baseline: Compared | null): Suit
   };
 }
 
-/** One eval of the run (`deltaKey`): its row, and each case with a breakdown for each scorer. */
-export function evalDetail(
-  candidate: Compared,
-  baseline: Compared | null,
-  key: string,
-): EvalDetail | null {
-  const row = suiteTable(candidate, baseline).rows.find((one) => deltaKey(one) === key);
-  if (!row) return null;
-  const other = otherRun(candidate, baseline);
-  const before = new Map(
-    other ? caseScores(other, key).map(({ frozen, score }) => [frozen.caseId, score]) : [],
-  );
-  const compared = other ? compare(other, candidate) : null;
-  const changes = new Map(
-    compared?.ok ? compared.cases.map(({ caseId, change }) => [caseId, change]) : [],
-  );
-  const cases = caseScores(candidate, key).map(({ frozen, score }): CaseScoreRow => {
-    const old = before.get(frozen.caseId);
-    return {
-      caseId: frozen.caseId,
-      name: frozen.name,
-      versionId: frozen.versionId,
-      number: frozen.number,
-      status: statusOf(score.counts),
-      counts: score.counts,
-      scorers: score.scorers,
-      change: changes.get(frozen.caseId) ?? null,
-      baseline: old
-        ? { status: statusOf(old.counts), counts: old.counts, scorers: old.scorers }
-        : null,
-    };
-  });
-  return { row, cases };
-}
-
-/** One trial of the run, next to the trial of the same case and index in the baseline run. */
+/**
+ * One trial of the run, next to the trial of the same row, variant and index in the baseline run.
+ * The variant of the baseline is the one with the same params, else its first.
+ */
 export function pairedTrial(
   candidate: Compared,
   baseline: Compared | null,
@@ -144,17 +96,24 @@ export function pairedTrial(
   if (!trial || !frozen) return null;
   const other = otherRun(candidate, baseline);
   const old = other?.experiment.caseVersions.find(({ caseId }) => caseId === frozen.caseId);
+  const params = JSON.stringify(
+    candidate.experiment.variants.find(({ index }) => index === trial.variant)?.params ?? {},
+  );
+  const variant =
+    other?.experiment.variants.find((one) => JSON.stringify(one.params) === params)?.index ?? 0;
   const oldTrials = old
-    ? (other?.trials ?? []).filter(({ caseVersionId }) => caseVersionId === old.versionId)
+    ? (other?.trials ?? []).filter(
+        (one) => one.caseVersionId === old.versionId && (one.variant ?? 0) === variant,
+      )
     : [];
   const pair = pairedTrials(oldTrials, [trial]).find(({ index }) => index === trial.index);
   return {
     caseId: frozen.caseId,
     caseName: frozen.name,
-    evalId: frozen.evalId ?? null,
+    evalId: frozen.evalId ?? candidate.experiment.evalId ?? null,
     trial,
     baselineTrial: pair?.baseline ?? null,
-    baselineId: old ? (other?.experiment.id ?? null) : null,
+    baselineId: pair?.baseline ? (other?.experiment.id ?? null) : null,
   };
 }
 

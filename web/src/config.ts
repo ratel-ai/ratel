@@ -527,7 +527,7 @@ const CONFIG_SCHEMA = schema({
      * only: refused in production and in the Cloud composition). Unset: `boat` when its key is set.
      */
     provider: optional("SANDBOX_PROVIDER", z.preprocess(lower, z.enum(["boat", "local-docker"]))),
-    /** The API key of the VM service. With none, Ratel sandbox shows "not configured". */
+    /** The API key of the VM service. With none, Sandboxes shows "not configured". */
     boatApiKey: optional("BOAT_API_KEY", configured, { sensitive: true }),
     /** The base URL of the API of the VM service. */
     boatApiUrl: setting("BOAT_API_URL", trimmed, D.sandboxes.boatApiUrl),

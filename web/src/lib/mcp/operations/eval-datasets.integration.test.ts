@@ -11,6 +11,7 @@ import {
   content,
   createEvalsDb,
   fakeLibrary,
+  fakeTraceSource,
   NO_REFUND,
   PROJECT_ID,
 } from "@/lib/views/evals/tests/support";
@@ -24,6 +25,8 @@ const IDS = [
   "evals_get_dataset",
   "evals_create_dataset",
   "evals_add_dataset_row",
+  "evals_remove_dataset_row",
+  "evals_preview_dataset",
   "evals_list_scorers",
   "evals_get_history",
 ];
@@ -70,6 +73,8 @@ async function setup(over: Partial<EvalDatasetsDeps> = {}) {
           } as unknown as SandboxRun)
         : null,
     mayReadContent: async () => true,
+    traces: () => fakeTraceSource(),
+    now: () => new Date(),
     ...over,
   };
   const call = (id: string, params: Record<string, unknown>, key: McpAuthContext = auth) =>
@@ -92,7 +97,7 @@ function failure(result: Awaited<ReturnType<typeof dispatchOperation>>) {
   return result as Extract<typeof result, { ok: false }>;
 }
 
-test("the dataset tools are listed only with the evals flag, and only the create and add tools mutate", () => {
+test("the dataset tools are listed only with the evals flag, and only the create, add and remove tools mutate", () => {
   const on = assembleOperations({ evals: true });
   const off = assembleOperations({ evals: false }).map(({ id }) => id);
   for (const id of IDS) {
@@ -104,7 +109,7 @@ test("the dataset tools are listed only with the evals flag, and only the create
   }
   assert.deepEqual(
     on.filter(({ id, mutates }) => IDS.includes(id) && mutates).map(({ id }) => id),
-    ["evals_create_dataset", "evals_add_dataset_row"],
+    ["evals_create_dataset", "evals_add_dataset_row", "evals_remove_dataset_row"],
   );
   for (const operation of on.filter(({ id }) => IDS.includes(id))) {
     assert.ok(operation.description.length <= 400, `${operation.id} has a short description`);
@@ -224,4 +229,56 @@ test("the scorer library, the runs of an eval, and the refusals of the flag and 
   const { call: off } = await setup({ enabled: async () => false });
   const flag = failure(await off("evals_list_datasets", {}));
   assert.deepEqual([flag.error, flag.reason], ["forbidden", "evals_off"]);
+});
+
+test("a row is removed from a fixed dataset of the project, and a query has no row", async () => {
+  const { call } = await setup();
+  await call("evals_create_dataset", { name: "Typed" });
+  const added = ok(
+    await call("evals_add_dataset_row", { dataset: "Typed", name: "One", values: { order: "A1" } }),
+  ).data as { rowId: string };
+  const removed = ok(
+    await call("evals_remove_dataset_row", { dataset: "Typed", rowId: added.rowId }),
+  );
+  assert.deepEqual((removed.data as { rowId: string }).rowId, added.rowId);
+  const read = ok(await call("evals_get_dataset", { dataset: "Typed" })).data as {
+    rows: unknown[];
+  };
+  assert.equal(read.rows.length, 0);
+  const again = failure(
+    await call("evals_remove_dataset_row", { dataset: "Typed", rowId: added.rowId }),
+  );
+  assert.equal(again.error, "not_found");
+  await call("evals_create_dataset", { name: "Last", kind: "last_traces", limit: 5 });
+  const query = failure(
+    await call("evals_remove_dataset_row", { dataset: "Last", rowId: added.rowId }),
+  );
+  assert.equal(query.error, "conflict");
+});
+
+test("a preview reads a query now, with the content rule of the key", async () => {
+  const turns = new Map([
+    [TURN, { ask: "refund A200", messages: [], toolCalls: [], conversation: null }],
+  ]);
+  const { call } = await setup({
+    traces: () =>
+      fakeTraceSource({
+        lastTurns: async () => [TURN],
+        loadTurn: async (_, id) => turns.get(id) ?? null,
+      }),
+  });
+  const preview = ok(await call("evals_preview_dataset", { kind: "last_traces", limit: 5 }))
+    .data as {
+    ok: boolean;
+    found: number;
+  };
+  assert.equal(preview.ok, true);
+  assert.equal(preview.found, 1);
+  const bad = failure(await call("evals_preview_dataset", { kind: "rql" }));
+  assert.equal(bad.error, "invalid_params");
+  const { call: closedCall } = await setup({ mayReadContent: async () => false });
+  const closed = ok(await closedCall("evals_preview_dataset", { kind: "last_traces" })).data as {
+    reason: string;
+  };
+  assert.equal(closed.reason, "no_content_access");
 });

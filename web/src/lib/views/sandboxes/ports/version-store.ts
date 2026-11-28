@@ -15,8 +15,12 @@ export interface VersionStore {
     check: (today: number) => Promise<UsageCheck>,
   ): Promise<{ ok: true; version: SandboxVersion } | UsageRefusal>;
   get(projectId: string, versionId: string): Promise<SandboxVersion | null>;
-  /** The newest first. */
-  list(projectId: string, limit: number): Promise<SandboxVersion[]>;
+  /** The newest first. `sandboxName`: only the versions of that sandbox. */
+  list(
+    projectId: string,
+    limit: number,
+    options?: { sandboxName?: string },
+  ): Promise<SandboxVersion[]>;
   /** The newest `ready` version of the sandbox with this name. */
   newestReady(projectId: string, name: string): Promise<SandboxVersion | null>;
   /** `uploading` to `uploaded`. False when the version has another status. */

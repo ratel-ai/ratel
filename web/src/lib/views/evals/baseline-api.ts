@@ -183,7 +183,8 @@ function comparisonView(
   baselineId: string | null,
   deps: BaselineApiDeps,
 ) {
-  const page = `${urlOf(candidate.experiment, deps)}/compare`;
+  // The runs table of the eval shows each delta against its baseline.
+  const page = urlOf(candidate.experiment, deps);
   return {
     v: 1 as const,
     verdict: made.verdict,
@@ -207,7 +208,7 @@ function baselineView(projectId: string, baseline: Baseline, deps: BaselineApiDe
   return {
     evalId,
     experimentId,
-    url: urlOf({ projectId, id: experimentId }, deps),
+    url: urlOf({ projectId, id: experimentId, evalId }, deps),
     pinnedBy,
     pinnedAt: pinnedAt.toISOString(),
   };

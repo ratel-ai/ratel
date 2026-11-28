@@ -1,350 +1,338 @@
 "use client";
 
-import { Badge, type Tone } from "@ratel/design-system/badge";
+import { Badge } from "@ratel/design-system/badge";
 import { Button } from "@ratel/design-system/button";
-import { buttonVariants } from "@ratel/design-system/button-variants";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
-import { Field, Input, Textarea } from "@ratel/design-system/input";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
-import { Section } from "@ratel/design-system/section";
-import { Callout, EmptyState } from "@ratel/design-system/states";
+import { EmptyState } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
-import { ListChecks } from "lucide-react";
+import { Tooltip } from "@ratel/design-system/tooltip";
+import { FlaskConical, Pin } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { CaseChange } from "@/lib/views/evals/domain/compare";
-import type { EvalScorer } from "@/lib/views/evals/domain/eval";
-import type { TrialResult } from "@/lib/views/evals/domain/score";
-import { caseHref, evalHref, evalsHref, suiteHref } from "@/lib/views/evals/paths";
-import type { DatasetRow, EvalPageModel } from "@/lib/views/evals/suite-page";
-import { ScorerFields } from "./ScorerFields";
-import { Delta, percent } from "./SuiteView";
-
-const CHANGE: Record<CaseChange, { label: string; tone: Tone }> = {
-  regressed: { label: "Regressed", tone: "danger" },
-  improved: { label: "Improved", tone: "success" },
-  inconclusive: { label: "Inconclusive", tone: "warning" },
-  added: { label: "New", tone: "info" },
-  removed: { label: "Removed", tone: "info" },
-  excluded: { label: "Other scorers", tone: "warning" },
-  unchanged: { label: "Unchanged", tone: "neutral" },
-};
-const RESULT: Record<TrialResult, Tone> = { pass: "success", fail: "danger", invalid: "warning" };
+import { formatRelativeTime } from "@/lib/synthesis/traces/v2/format";
+import type { RunDefaults } from "@/lib/views/evals/eval-form";
+import type { EvalPageModel, EvalRunView } from "@/lib/views/evals/eval-page";
+import { paramsText } from "@/lib/views/evals/eval-page";
+import type { DialogData, EditDraft } from "@/lib/views/evals/pages-load";
+import { evalsHref } from "@/lib/views/evals/paths";
+import { percent, points } from "@/lib/views/evals/score-chart";
+import { EvalDialog } from "./EvalDialog";
+import { RunDialog } from "./RunDialog";
+import { evalsApi, send } from "./request";
+import { ScoreChart } from "./ScoreChart";
 
 /**
- * One eval (level 2): its definition, where the scorers are edited, and its dataset as a grid with
- * the output of the run, the expected output and a column for each scorer. A new eval has only
- * the definition.
+ * One eval (decision `runs-per-eval`): what it runs, how each scorer moved over its runs, then
+ * every run with what it used, its score and its delta against the pinned baseline. "New run"
+ * starts a run with the defaults or with changes for that run only; "Edit" changes the eval.
  */
-export function EvalView({ model, canEdit }: { model: EvalPageModel | NewEval; canEdit: boolean }) {
-  const isNew = !("id" in model);
+export function EvalView({
+  model,
+  dialog,
+  defaults,
+  edit,
+  canEdit,
+  now,
+}: {
+  model: EvalPageModel;
+  dialog: DialogData;
+  defaults: RunDefaults;
+  edit: EditDraft;
+  canEdit: boolean;
+  now: string;
+}) {
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const { definition } = model;
   return (
     <Page>
       <PageHeader
-        title={isNew ? "New eval" : model.name}
+        title={model.name}
         crumbs={[{ label: "Evals", href: evalsHref(model.projectId) }]}
         actions={
-          !isNew && canEdit ? (
-            <Link
-              href={`${caseHref(model.projectId, "new")}?eval=${model.id}`}
-              className={buttonVariants({ variant: "secondary" })}
-            >
-              New case
-            </Link>
+          canEdit ? (
+            <>
+              <Button onClick={() => setEditing(true)}>Edit</Button>
+              <Button variant="primary" onClick={() => setRunning(true)}>
+                New run
+              </Button>
+            </>
           ) : null
         }
       />
-      <PageBody>
-        <Definition model={model} canEdit={canEdit} />
-        {isNew ? null : <Dataset model={model} />}
+      <PageBody wide>
+        <dl className="grid gap-x-8 gap-y-3 rounded-lg border border-line bg-raised px-4 py-3 text-ui sm:grid-cols-2 xl:grid-cols-4">
+          <Term label="Dataset">
+            <Link href={definition.dataset.href} className="text-fg hover:underline">
+              {definition.dataset.name}
+            </Link>
+            {definition.dataset.kindLabel ? (
+              <span className="text-fg-subtle"> · {definition.dataset.kindLabel}</span>
+            ) : null}
+          </Term>
+          <Term label="Runtime">{definition.runtime.text}</Term>
+          <Term label="Scorers">
+            {definition.scorers.length === 0
+              ? "None"
+              : definition.scorers.map((scorer) => scorer.name).join(", ")}
+          </Term>
+          <Term label="Trials and params">
+            {definition.trials} {definition.trials === 1 ? "trial" : "trials"} of each row
+            {definition.combinations > 0
+              ? ` · matrix (${definition.combinations})`
+              : Object.keys(definition.params).length > 0
+                ? ` · ${paramsText(definition.params)}`
+                : ""}
+          </Term>
+        </dl>
+        <ScoreChart
+          chart={model.chart}
+          label={`Pass rate of each scorer of ${model.name}`}
+          emptyTitle="No run yet"
+          emptyDescription="A line shows how each scorer moves over the runs. Start a run with New run."
+        />
+        <RunsTable model={model} canEdit={canEdit} now={now} onOpen={(href) => router.push(href)} />
       </PageBody>
+      {canEdit ? (
+        <>
+          <RunDialog
+            key={running ? "run-open" : "run-closed"}
+            projectId={model.projectId}
+            evalId={model.evalId}
+            evalName={model.name}
+            defaults={defaults}
+            dialog={dialog}
+            open={running}
+            onOpenChange={setRunning}
+          />
+          <EvalDialog
+            key={editing ? "edit-open" : "edit-closed"}
+            projectId={model.projectId}
+            dialog={dialog}
+            edit={edit}
+            open={editing}
+            onOpenChange={setEditing}
+          />
+        </>
+      ) : null}
     </Page>
   );
 }
 
-/** What the page of a new eval knows. */
-export type NewEval = { projectId: string };
+function Term({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <dt className="text-xs text-fg-subtle">{label}</dt>
+      <dd className="min-w-0 truncate text-fg">{children}</dd>
+    </div>
+  );
+}
 
-function Definition({ model, canEdit }: { model: EvalPageModel | NewEval; canEdit: boolean }) {
+function RunsTable({
+  model,
+  canEdit,
+  now,
+  onOpen,
+}: {
+  model: EvalPageModel;
+  canEdit: boolean;
+  now: string;
+  onOpen: (href: string) => void;
+}) {
   const router = useRouter();
-  const existing = "id" in model ? model : null;
-  const [name, setName] = useState(existing?.name ?? "");
-  const [taskId, setTaskId] = useState(existing?.taskId ?? "");
-  const [sandboxName, setSandboxName] = useState(existing?.version.sandboxName ?? "");
-  const [params, setParams] = useState(JSON.stringify(existing?.version.params ?? {}, null, 2));
-  const [trials, setTrials] = useState(String(existing?.version.trials ?? 3));
-  const [scorers, setScorers] = useState<EvalScorer[]>(existing?.version.scorers ?? []);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-
-  async function save() {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(params || "{}");
-    } catch {
-      return setProblem("The params must be a JSON object.");
+  const [pending, setPending] = useState<string | null>(null);
+  async function baseline(run: EvalRunView) {
+    setPending(run.runId);
+    const path = `${evalsApi(model.projectId)}/baseline`;
+    const answer = run.isBaseline
+      ? await send("DELETE", `${path}?experimentId=${run.runId}`)
+      : await send("PUT", path, { experimentId: run.runId });
+    setPending(null);
+    if (!answer.ok) {
+      toast({ title: "The baseline did not change.", description: answer.message, tone: "danger" });
+      return;
     }
-    setPending(true);
-    setProblem(null);
-    const base = `/api/projects/${model.projectId}/evals/definitions`;
-    const body = {
-      name,
-      taskId: taskId.trim() || null,
-      content: {
-        sandboxName: sandboxName.trim() || null,
-        params: parsed,
-        trials: Number(trials),
-        scorers,
-      },
-      ...(existing ? { base: existing.version.id } : {}),
-    };
-    try {
-      const response = await fetch(existing ? `${base}/${existing.id}` : base, {
-        method: existing ? "PUT" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const answer = (await response.json()) as {
-        evalId?: string;
-        number?: number;
-        message?: string;
-      };
-      if (response.ok && answer.evalId) {
-        toast({ title: `Version ${answer.number} of the eval is saved`, tone: "success" });
-        if (!existing) return router.replace(evalHref(model.projectId, answer.evalId));
-        router.refresh();
-      } else {
-        setProblem(answer.message ?? "The eval was not saved. Try again.");
-      }
-    } catch {
-      setProblem("The eval was not saved. Try again.");
-    }
-    setPending(false);
+    toast({
+      title: run.isBaseline ? "Baseline unpinned." : "Pinned as the baseline.",
+      tone: "success",
+    });
+    router.refresh();
   }
-
-  return (
-    <Section
-      title="Definition"
-      description={
-        existing
-          ? `Version ${existing.version.number}. A save with other content makes a new version: a run keeps the version that it started with.`
-          : "The scorers score each case of the eval. A trial passes when each gating scorer passes."
-      }
-      actions={
-        canEdit ? (
-          <Button variant="primary" onClick={save} loading={pending}>
-            {existing ? "Save the eval" : "Create the eval"}
-          </Button>
-        ) : null
-      }
-    >
-      {problem ? (
-        <Callout tone="danger" title="Not saved">
-          {problem}
-        </Callout>
-      ) : null}
-      <div className="grid max-w-3xl gap-4 md:grid-cols-2">
-        <Field label="Name">
-          {(control) => (
-            <Input
-              {...control}
-              value={name}
-              maxLength={100}
-              disabled={!canEdit}
-              onChange={(event) => setName(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label="Task (its id, optional)">
-          {(control) => (
-            <Input
-              {...control}
-              value={taskId}
-              disabled={!canEdit}
-              onChange={(event) => setTaskId(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label="Sandbox (empty: the sandbox of the run)">
-          {(control) => (
-            <Input
-              {...control}
-              value={sandboxName}
-              disabled={!canEdit}
-              onChange={(event) => setSandboxName(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label="Trials for each case">
-          {(control) => (
-            <Input
-              {...control}
-              type="number"
-              min={1}
-              max={20}
-              value={trials}
-              disabled={!canEdit}
-              onChange={(event) => setTrials(event.target.value)}
-            />
-          )}
-        </Field>
-        <Field label="Default params (JSON)" className="md:col-span-2">
-          {(control) => (
-            <Textarea
-              {...control}
-              rows={3}
-              value={params}
-              spellCheck={false}
-              className="font-mono"
-              disabled={!canEdit}
-              onChange={(event) => setParams(event.target.value)}
-            />
-          )}
-        </Field>
-      </div>
-      <ScorerFields scorers={scorers} onChange={setScorers} canEdit={canEdit} />
-    </Section>
-  );
-}
-
-function Dataset({ model }: { model: EvalPageModel }) {
-  const router = useRouter();
-  const scorerNames = model.version.scorers.map(({ name }) => name);
-  return (
-    <Section
-      title="Dataset"
-      description={
-        model.runId
-          ? "Each row is a case: its input, what the agent answered in the run, the expected output, and each scorer."
-          : "Each row is a case. Run the suite to see the outputs and the scores."
-      }
-      actions={
-        model.run ? (
-          <div className="flex items-center gap-3 text-ui">
-            <span>
-              Score <strong className="tabular-nums">{percent(model.run.score)}</strong>
-            </span>
-            {model.run.delta !== null ? <Delta value={model.run.delta} /> : null}
-            <Link
-              href={suiteHref(model.projectId, model.runId)}
-              className="text-accent-fg underline-offset-2 hover:underline"
-            >
-              The suite table
-            </Link>
-          </div>
-        ) : null
-      }
-    >
-      {model.run?.deltaReason ? (
-        <Callout tone="warning" title="No delta for this eval">
-          {model.run.deltaReason}
-        </Callout>
-      ) : null}
-      {model.dataset.length === 0 ? (
-        <EmptyState
-          icon={ListChecks}
-          title="No case yet"
-          description="Save a trace turn or a sandbox run as an eval case, or make a new case."
-        />
-      ) : (
-        <DataTable
-          caption="Cases of the eval"
-          columns={datasetColumns(model, scorerNames)}
-          rows={model.dataset}
-          rowKey={(row) => row.caseId}
-          onRowOpen={(row) => router.push(caseHref(model.projectId, row.caseId))}
-          className="[&_table]:table-fixed"
-        />
-      )}
-    </Section>
-  );
-}
-
-function datasetColumns(model: EvalPageModel, scorerNames: string[]): Column<DatasetRow>[] {
-  return [
+  const columns: Column<EvalRunView>[] = [
     {
-      id: "case",
-      header: "Case",
-      width: "12rem",
-      cell: (row) => (
-        <div className="flex flex-col gap-1">
-          <Link
-            href={caseHref(model.projectId, row.caseId)}
-            className="font-medium text-fg hover:underline"
-          >
-            {row.name}
+      id: "run",
+      header: "Run",
+      width: "13rem",
+      cell: (run) => (
+        <span className="flex flex-col">
+          <Link href={run.href} className="truncate font-medium text-fg hover:underline">
+            {run.name ?? formatRelativeTime(run.at, now)}
           </Link>
-          {row.version ? <span className="text-xs text-fg-subtle">v{row.version}</span> : null}
-        </div>
+          <span className="text-xs text-fg-subtle" title={run.at}>
+            {run.name ? formatRelativeTime(run.at, now) : run.at.slice(0, 16).replace("T", " ")}
+            {run.state === "running" ? " · running" : ""}
+            {run.changed.length > 0 ? ` · changed: ${run.changed.join(", ")}` : ""}
+          </span>
+        </span>
       ),
     },
-    { id: "input", header: "Input", cell: (row) => <Clip text={row.input} /> },
     {
-      id: "output",
-      header: "Output",
-      cell: (row) =>
-        row.output ? <Clip text={row.output} /> : <span className="text-fg-subtle">—</span>,
+      id: "dataset",
+      header: "Dataset",
+      width: "12rem",
+      hiddenBelow: "md",
+      cell: (run) => (
+        <span className="flex flex-col">
+          {run.dataset.href ? (
+            <Link href={run.dataset.href} className="truncate text-fg hover:underline">
+              {run.dataset.name}
+            </Link>
+          ) : (
+            <span className="truncate text-fg">{run.dataset.name}</span>
+          )}
+          <span className="text-xs whitespace-nowrap text-fg-subtle">
+            {run.dataset.rows} frozen {run.dataset.rows === 1 ? "row" : "rows"}
+          </span>
+        </span>
+      ),
     },
     {
-      id: "expected",
-      header: "Expected",
+      id: "runtime",
+      header: "Runtime",
+      width: "11rem",
       hiddenBelow: "lg",
-      cell: (row) =>
-        row.expectedOutput ? (
-          <Clip text={row.expectedOutput} />
+      cell: (run) => (
+        <span className="flex flex-col">
+          <span className="truncate text-fg">{run.runtime.sandboxName}</span>
+          <code className="font-mono text-xs text-fg-subtle">
+            {run.runtime.commit || run.runtime.versionId.slice(0, 8)}
+          </code>
+        </span>
+      ),
+    },
+    {
+      id: "scorers",
+      header: "Scorers",
+      width: "6rem",
+      hiddenBelow: "lg",
+      cell: (run) => (
+        <Tooltip content={run.scorers.join(", ") || "No scorer"}>
+          <span className="tabular-nums text-fg-muted">{run.scorers.length}</span>
+        </Tooltip>
+      ),
+    },
+    {
+      id: "params",
+      header: "Params",
+      width: "11rem",
+      hiddenBelow: "md",
+      cell: (run) => (
+        <span className="block truncate text-fg-muted" title={run.params}>
+          {run.params}
+        </span>
+      ),
+    },
+    {
+      id: "score",
+      header: "Score",
+      width: "6rem",
+      align: "right",
+      cell: (run) =>
+        run.score === null ? (
+          <span className="text-fg-faint">No score</span>
         ) : (
-          <span className="text-fg-subtle">—</span>
+          <span className="tabular-nums">{percent(run.score)}</span>
         ),
     },
-    ...scorerNames.map(
-      (name): Column<DatasetRow> => ({
-        id: `scorer:${name}`,
-        header: name,
-        align: "right",
-        width: "7rem",
-        hiddenBelow: "md",
-        cell: (row) => {
-          const cell = row.scorers[name];
-          return cell ? (
-            <span
-              className="tabular-nums"
-              title={`${cell.pass} of ${cell.rated} scored trials passed`}
-            >
-              {percent(cell.passRate)}
-            </span>
-          ) : (
-            <span className="text-fg-subtle">—</span>
-          );
-        },
-      }),
-    ),
     {
-      id: "change",
-      header: "Δ baseline",
-      width: "8rem",
-      cell: (row) =>
-        row.change ? (
-          <Badge tone={CHANGE[row.change].tone}>{CHANGE[row.change].label}</Badge>
-        ) : null,
+      id: "delta",
+      header: "Against baseline",
+      width: "9rem",
+      align: "right",
+      cell: (run) =>
+        run.isBaseline ? (
+          <Badge tone="neutral">
+            <Pin className="size-3" aria-hidden /> Baseline
+          </Badge>
+        ) : run.delta !== null ? (
+          <span
+            className={
+              run.delta > 0
+                ? "text-success tabular-nums"
+                : run.delta < 0
+                  ? "text-danger tabular-nums"
+                  : "text-fg-muted tabular-nums"
+            }
+          >
+            {run.delta > 0 ? "▲ " : run.delta < 0 ? "▼ " : ""}
+            {points(run.delta)}
+          </span>
+        ) : run.deltaNote ? (
+          <Tooltip content={run.deltaNote}>
+            <span className="text-fg-subtle">No delta</span>
+          </Tooltip>
+        ) : (
+          <span className="text-fg-faint">No baseline</span>
+        ),
     },
     {
-      id: "trials",
-      header: "Trials",
-      width: "9rem",
-      cell: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.trials.map((trial) => (
-            <Link key={trial.id} href={trial.href} aria-label={`Trial ${trial.index + 1}`}>
-              <Badge tone={trial.result ? RESULT[trial.result] : "info"}>{trial.index + 1}</Badge>
-            </Link>
-          ))}
-        </div>
+      id: "invalid",
+      header: "Invalid",
+      width: "5rem",
+      align: "right",
+      hiddenBelow: "sm",
+      cell: (run) => (
+        <span
+          className={run.invalid > 0 ? "text-warning tabular-nums" : "text-fg-faint tabular-nums"}
+        >
+          {run.invalid}
+        </span>
       ),
     },
+    ...(canEdit
+      ? [
+          {
+            id: "pin",
+            header: <span className="sr-only">Baseline</span>,
+            width: "7rem",
+            cell: (run: EvalRunView) =>
+              run.isBaseline || run.canPin ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={pending === run.runId}
+                  onClick={() => baseline(run)}
+                >
+                  {run.isBaseline ? "Unpin" : "Pin"}
+                </Button>
+              ) : null,
+          },
+        ]
+      : []),
   ];
-}
-
-function Clip({ text }: { text: string }) {
-  return <span className="line-clamp-2 font-mono text-xs break-all text-fg-muted">{text}</span>;
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="runs-heading">
+      <h2 id="runs-heading" className="text-sm font-semibold text-fg">
+        Runs
+      </h2>
+      <DataTable
+        caption={`Runs of ${model.name}`}
+        columns={columns}
+        rows={model.runs}
+        rowKey={(run) => run.runId}
+        onRowOpen={(run) => onOpen(run.href)}
+        empty={
+          <EmptyState
+            icon={FlaskConical}
+            title="No run yet"
+            description="New run starts one with the defaults of the eval, or with changes for that run."
+          />
+        }
+      />
+      <p className="text-xs text-fg-subtle">{model.rule}</p>
+    </section>
+  );
 }

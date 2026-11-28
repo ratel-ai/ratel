@@ -259,6 +259,11 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["evals_add_dataset_row", true],
   ["evals_list_scorers", false],
   ["evals_get_history", false],
+  // The Datasets and Evals pages (RP-460): remove a row, preview a query, edit an eval, unpin.
+  ["evals_remove_dataset_row", true],
+  ["evals_preview_dataset", false],
+  ["evals_edit", true],
+  ["evals_unpin_baseline", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {
@@ -298,6 +303,10 @@ const EXPECTED_API_KEY_SCOPES: Readonly<Record<string, string>> = {
   evals_add_dataset_row: "evals:write",
   evals_list_scorers: "evals:read",
   evals_get_history: "evals:read",
+  evals_remove_dataset_row: "evals:write",
+  evals_preview_dataset: "evals:read",
+  evals_edit: "evals:write",
+  evals_unpin_baseline: "evals:write",
 };
 
 test("feature tools ask the API-key scope of their REST route", () => {

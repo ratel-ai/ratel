@@ -5,7 +5,10 @@ import { sealedSecretsKey } from "@/lib/platform/sealed-secrets";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
-import { createDrizzleSecretStore } from "./adapters/drizzle-secret-store";
+import {
+  createDrizzleDeclaredSecrets,
+  createDrizzleSecretStore,
+} from "./adapters/drizzle-secret-store";
 import type { ConsoleAccessDeps } from "./console-access";
 import { sandboxesEnabledForProject } from "./gate";
 import { runDeps } from "./run-deps";
@@ -24,6 +27,8 @@ export const secretsApiDeps: SecretsApiDeps = {
   ...consoleAccess,
   secrets: () => createDrizzleSecretStore(getDb()),
   sealingKey: () => sealedSecretsKey(),
+  declaredSecrets: (projectId, sandboxName) =>
+    createDrizzleDeclaredSecrets(getDb())(projectId, sandboxName),
 };
 
 export const runsApiDeps: RunsApiDeps = {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { evalDetail, pairedTrial, suiteTable } from "../suite-view";
+import { pairedTrial, suiteTable } from "../suite-view";
 import { POLITE, run } from "./runs";
 import { NO_REFUND } from "./support";
 
@@ -41,26 +41,6 @@ test("with no baseline, or against itself, the table has no delta and no verdict
   }
 });
 
-test("an eval opens its cases with a breakdown for each scorer, next to the baseline", () => {
-  const detail = evalDetail(NEXT, BASE, "refunds");
-  assert.ok(detail);
-  assert.equal(detail.row.name, "refunds");
-  assert.deepEqual(
-    detail.cases.map(({ caseId, status, scorers, baseline }) => [
-      caseId,
-      status,
-      scorers.map(({ name, pass, fail, passRate }) => [name, pass, fail, passRate]),
-      baseline?.status,
-    ]),
-    [
-      ["a", "pass", [["No refund", 2, 0, 1]], "fail"],
-      ["b", "pass", [["No refund", 1, 0, 1]], "pass"],
-    ],
-  );
-  assert.equal(evalDetail(NEXT, BASE, "nope"), null);
-  assert.equal(evalDetail(NEXT, null, "refunds")?.cases[0]?.baseline, null);
-});
-
 test("a trial opens next to the baseline trial of the same row and index", () => {
   const paired = pairedTrial(NEXT, BASE, "next-a-t1");
   assert.ok(paired);
@@ -77,4 +57,24 @@ test("a trial opens next to the baseline trial of the same row and index", () =>
 test("a trial of the baseline run itself has no baseline trial", () => {
   const paired = pairedTrial(BASE, BASE, "base-a-t1");
   assert.deepEqual([paired?.baselineTrial, paired?.baselineId], [null, null]);
+});
+
+test("a trial of a matrix run pairs with the baseline variant of the same params", () => {
+  const candidate = run("next", { refunds: { cases: { a: ["pass"] } } });
+  const base = run("base", { refunds: { cases: { a: ["fail"] } } });
+  candidate.experiment.variants = [
+    { index: 0, params: { model: "sonnet" } },
+    { index: 1, params: { model: "haiku" } },
+  ];
+  base.experiment.variants = [
+    { index: 0, params: { model: "haiku" } },
+    { index: 1, params: { model: "sonnet" } },
+  ];
+  const [own] = candidate.trials;
+  const [old] = base.trials;
+  assert.ok(own && old);
+  candidate.trials.push({ ...own, id: "next-haiku", variant: 1 });
+  base.trials.push({ ...old, id: "base-sonnet", variant: 1 });
+  assert.equal(pairedTrial(candidate, base, "next-haiku")?.baselineTrial?.id, old.id);
+  assert.equal(pairedTrial(candidate, base, own.id)?.baselineTrial?.id, "base-sonnet");
 });

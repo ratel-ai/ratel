@@ -75,6 +75,7 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
             ),
             isNull(evalCases.resolvedTurnId),
             eq(evalCases.runOnly, false),
+            isNull(evalCases.removedAt),
           ),
         )
         .groupBy(evalCases.datasetId);
@@ -131,10 +132,40 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
             eq(evalCases.datasetId, datasetId),
             isNull(evalCases.resolvedTurnId),
             eq(evalCases.runOnly, false),
+            isNull(evalCases.removedAt),
           ),
         )
         .orderBy(desc(evalCases.createdAt), desc(evalCases.id));
       return withVersions(db, rows);
+    },
+
+    removeRow(projectId, datasetId, rowId, now) {
+      return db.transaction(async (tx) => {
+        const [dataset] = await tx
+          .select({ kind: evalDatasets.kind })
+          .from(evalDatasets)
+          .where(and(eq(evalDatasets.projectId, projectId), eq(evalDatasets.id, datasetId)))
+          .for("update");
+        if (!dataset) return "not_found";
+        if (dataset.kind !== "fixed") return "not_fixed";
+        const removed = await tx
+          .update(evalCases)
+          .set({ removedAt: now })
+          .where(
+            and(
+              eq(evalCases.projectId, projectId),
+              eq(evalCases.datasetId, datasetId),
+              eq(evalCases.id, rowId),
+              isNull(evalCases.resolvedTurnId),
+              eq(evalCases.runOnly, false),
+              isNull(evalCases.removedAt),
+            ),
+          )
+          .returning({ id: evalCases.id });
+        if (removed.length === 0) return "not_found";
+        await tx.update(evalDatasets).set({ updatedAt: now }).where(eq(evalDatasets.id, datasetId));
+        return "removed";
+      });
     },
 
     keepResolved(projectId, datasetId, resolved, createdBy) {

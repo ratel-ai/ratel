@@ -16,16 +16,18 @@ import {
   listSandboxVersionDetails,
   newestReadySandboxVersion,
   type SandboxRun,
+  type SandboxSecretSource,
   type SandboxVersionDetail,
   type StartRunOptions,
   type StartRunResult,
   sandboxesEnabledForProject,
   sandboxRunStatus,
+  sandboxSecretSources,
   startRun,
 } from "@/lib/views/sandboxes";
 
 /**
- * The Ratel sandbox tools (decision `mcp-surface`): find a pushed version of an agent, read how to
+ * The Sandboxes tools (decision `mcp-surface`): find a pushed version of an agent, read how to
  * call it, run it with an input and read the output. They call only the public interface of
  * `views/sandboxes`. They are listed only for a caller with the `evals` flag (one flag for the
  * sandbox and the evals), and each call checks the flag for its project again.
@@ -47,6 +49,12 @@ export interface SandboxOperationDeps {
   now(): number;
   /** The content rule of `content-access.ts`: run inputs, outputs and logs are captured text. */
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
+  /** Where the value of each declared secret comes from. Never a value. */
+  secretSources(
+    projectId: string,
+    sandboxName: string,
+    names: readonly string[],
+  ): Promise<Array<{ name: string; source: SandboxSecretSource }>>;
 }
 
 /** How long `sandbox_run` waits for the result. It stays far below the 60 second limit of a call. */
@@ -73,6 +81,7 @@ const defaultDeps: SandboxOperationDeps = {
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now: () => Date.now(),
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
+  secretSources: sandboxSecretSources,
 };
 
 const versionIdParam = uuidParam().describe(
@@ -85,9 +94,9 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_list",
       domain: "sandboxes",
-      title: "List Ratel sandboxes",
+      title: "List sandboxes",
       description:
-        "Use this tool to find the agents that you pushed to Ratel sandbox. It returns each sandbox name and its newest versions with their status. It also returns the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
+        "Use this tool to find the agents that you pushed to Ratel (the sandboxes). It returns each sandbox name and its newest versions with their status. It also returns the newest ready version id. Use that id with sandbox_get_version or sandbox_run.",
       keywords: ["sandbox", "pushed agents", "sandbox versions"],
       scope: "project",
       mutates: false,
@@ -111,9 +120,9 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_get_version",
       domain: "sandboxes",
-      title: "Read a Ratel sandbox version",
+      title: "Read a sandbox version",
       description:
-        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options. It also returns the tools with their modes.",
+        "Use this tool before sandbox_run to read how to call a version. It returns the status, the input example and schema, and the smoke check result. It also returns the declared params with their types and options, the tools with their modes, and the declared secrets with their source: sandbox, project or missing. It never returns a secret value.",
       keywords: ["sandbox", "declared params", "input example", "smoke check"],
       scope: "project",
       mutates: false,
@@ -123,21 +132,31 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
         await requireSandboxes(deps, ctx.projectId);
         const version = await deps.getVersion(ctx.projectId, params.versionId);
         if (!version) throw notFound("sandbox version");
-        const view = versionView(version);
+        const secrets = await deps.secretSources(
+          ctx.projectId,
+          version.name,
+          version.config.secrets ?? [],
+        );
+        const view = { ...versionView(version), secrets };
+        const missing = secrets
+          .filter(({ source }) => source === "missing")
+          .map(({ name }) => name);
         return {
           data: view,
           ...(view.smoke?.logs.truncated ? { truncated: true } : {}),
           hint:
-            version.status === "ready"
-              ? `Call sandbox_run with versionId "${version.id}", an input like input.example, and only the params in params.`
-              : `This version is ${version.status}. Only a ready version runs. Call sandbox_list to find a ready version.`,
+            version.status !== "ready"
+              ? `This version is ${version.status}. Only a ready version runs. Call sandbox_list to find a ready version.`
+              : missing.length > 0
+                ? `A run is refused until these secrets are set for the sandbox or the project on the Sandboxes page: ${missing.join(", ")}.`
+                : `Call sandbox_run with versionId "${version.id}", an input like input.example, and only the params in params.`,
         };
       },
     }),
     defineOperation({
       id: "sandbox_run",
       domain: "sandboxes",
-      title: "Run a Ratel sandbox version",
+      title: "Run a sandbox version",
       description:
         "Use this tool to run a ready sandbox version with one input. This tool changes data: it starts a VM run. It waits up to 25 seconds. It returns the run id and the status. A complete run also has the input, the output and the tool calls. For a run that is not complete, call sandbox_get_run.",
       keywords: ["sandbox", "run agent", "try an input"],
@@ -189,7 +208,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
     defineOperation({
       id: "sandbox_get_run",
       domain: "sandboxes",
-      title: "Read a Ratel sandbox run",
+      title: "Read a sandbox run",
       description:
         "Use this tool to read a sandbox run after sandbox_run returns its run id. It returns the status, the input, the output and the params. It also returns the tool calls, the error of a failed run and the end of the container logs.",
       keywords: ["sandbox", "run result", "container logs"],
@@ -214,7 +233,7 @@ export function sandboxOperations(deps: SandboxOperationDeps = defaultDeps): Mcp
 
 async function requireSandboxes(deps: SandboxOperationDeps, projectId: string): Promise<void> {
   if (await deps.enabled(projectId)) return;
-  throw new McpOperationError("forbidden", "Ratel sandbox is not on for this project.", {
+  throw new McpOperationError("forbidden", "Sandboxes are not on for this project.", {
     reason: "sandboxes_off",
   });
 }

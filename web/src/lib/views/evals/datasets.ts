@@ -5,6 +5,7 @@ import {
   type ResolvedRow,
 } from "./domain/dataset";
 import { caseFromTurn } from "./domain/from-turn";
+import { preview } from "./page-model";
 import type { TraceSource } from "./ports/trace-source";
 
 export type ResolveRefusal =
@@ -42,22 +43,15 @@ export async function resolveDataset(
   source: TraceSource,
   caller: ContentCaller,
 ): Promise<ResolveResult> {
-  if (!isQueryKind(query)) return refused("not_a_query", "A fixed dataset holds its rows.");
-  if (!caller.mayCopyContent) {
+  if (isQueryKind(query) && !caller.mayCopyContent) {
     return refused(
       "no_content_access",
       "The rows come from captured text, and this caller may not copy it. An API key needs the content permission, and the project must let Ratel read captured text (Settings).",
     );
   }
-  if (!(await source.readContent(projectId))) {
-    return refused(
-      "no_content_access",
-      "This project does not let Ratel read captured text, so no row can be built from its traces. An admin can change it in Settings.",
-    );
-  }
-  const found = await turnsOf(projectId, query, source);
+  const found = await findTurns(projectId, query, source);
   if (!found.ok) return found;
-  const turnIds = [...new Set(found.turnIds)].slice(0, query.limit);
+  const { turnIds } = found;
   const readOnly = await source.readOnlyTools(projectId);
   const rows: Array<ResolvedRow | null> = new Array(turnIds.length).fill(null);
   await inParallel(turnIds, async (turnId, index) => {
@@ -70,6 +64,59 @@ export async function resolveDataset(
     return refused("no_rows", "The query found no turn with a captured input.");
   }
   return { ok: true, rows: kept };
+}
+
+/** The rows that a preview shows. */
+export const PREVIEW_ROWS = 10;
+
+export type PreviewRow = { turnId: string; input: string | null };
+export type PreviewResult =
+  | { ok: true; found: number; rows: PreviewRow[] }
+  | { ok: false; reason: ResolveRefusal; message: string };
+
+/**
+ * What a query dataset resolves to now, as a run would find it: the number of turns found (a turn
+ * with no captured input is left out when a run freezes them) and the first rows with their input,
+ * cut. It reads `PREVIEW_ROWS` turns only and freezes nothing. The refusals are the ones of a run.
+ */
+export async function previewDataset(
+  projectId: string,
+  query: DatasetQuery,
+  source: TraceSource,
+): Promise<PreviewResult> {
+  const found = await findTurns(projectId, query, source);
+  if (!found.ok) return found;
+  const first = found.turnIds.slice(0, PREVIEW_ROWS);
+  const readOnly = await source.readOnlyTools(projectId);
+  const rows: Array<PreviewRow | null> = new Array(first.length).fill(null);
+  await inParallel(first, async (turnId, index) => {
+    const turn = await source.loadTurn(projectId, turnId);
+    const made = turn && caseFromTurn(turn, readOnly);
+    if (made) rows[index] = { turnId, input: preview(made.content.input) };
+  });
+  return { ok: true, found: found.turnIds.length, rows: rows.filter((row) => row !== null) };
+}
+
+/** The distinct turns of a query, at most its limit, in order. The content rule comes first. */
+async function findTurns(
+  projectId: string,
+  query: DatasetQuery,
+  source: TraceSource,
+): Promise<{ ok: true; turnIds: string[] } | Extract<ResolveResult, { ok: false }>> {
+  if (!isQueryKind(query)) return refused("not_a_query", "A fixed dataset holds its rows.");
+  if (!(await source.readContent(projectId))) {
+    return refused(
+      "no_content_access",
+      "This project does not let Ratel read captured text, so no row can be built from its traces. An admin can change it in Settings.",
+    );
+  }
+  const found = await turnsOf(projectId, query, source);
+  if (!found.ok) return found;
+  const turnIds = [...new Set(found.turnIds)].slice(0, query.limit);
+  if (turnIds.length === 0) {
+    return refused("no_rows", "The query found no turn with a captured input.");
+  }
+  return { ok: true, turnIds };
 }
 
 async function turnsOf(

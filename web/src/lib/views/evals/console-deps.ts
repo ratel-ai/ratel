@@ -7,10 +7,10 @@ import { trackServerEvent } from "@/lib/platform/telemetry";
 import { listSandboxVersions } from "@/lib/views/sandboxes";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
 import { createTaskLinks } from "./adapters/task-links";
 import type { CasesApiDeps } from "./cases-api";
-import type { EvalsApiDeps } from "./evals-api";
 import { evalsEnabledForProject } from "./gate";
 import { loadTurnContent } from "./turn-content";
 
@@ -27,6 +27,7 @@ export const casesApiDeps: CasesApiDeps = {
   cases: () => createDrizzleCaseStore(getDb()),
   evals: () => createDrizzleEvalStore(getDb()),
   taskLinks: () => createTaskLinks(),
+  datasets: () => createDrizzleDatasetStore(getDb()),
   readContent: (projectId) => contentOptIn(projectId),
   loadTurn: loadTurnContent,
   readOnlyTools,
@@ -52,9 +53,3 @@ export async function readOnlyTools(projectId: string): Promise<ReadonlySet<stri
   }
   return new Set([...newest].flatMap(([name, sideEffect]) => (sideEffect ? [] : [name])));
 }
-
-export const evalsApiDeps: EvalsApiDeps = {
-  ...evalsAccess,
-  evals: () => createDrizzleEvalStore(getDb()),
-  now: () => new Date(),
-};

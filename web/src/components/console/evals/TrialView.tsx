@@ -9,45 +9,53 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SessionTimeline } from "@/components/console/session-replay/SessionTimeline";
 import { TraceView } from "@/components/console/traces/TraceView";
-import { evalHref, evalsHref, experimentHref } from "@/lib/views/evals/paths";
-import type { TrialPageModel, TrialSide } from "@/lib/views/evals/suite-page";
+import type { TrialSide } from "@/lib/views/evals/pages-load";
+import { evalHref, evalsHref, runHref } from "@/lib/views/evals/paths";
 import type { TrialViews } from "@/lib/views/evals/trial-views";
 import { TrialPanel } from "./TrialPanel";
 
 /**
- * One trial (level 4), next to the trial of the same row and index in the baseline run: the
- * output, the tool calls, the scorer reasons and the logs, then a tab with the trace view and a
- * tab with the session replay of each.
+ * One trial, next to the trial of the same row, variant and number in the pinned baseline run of
+ * the eval: the output, the tool calls, the scorer reasons and the logs, then a tab with the trace
+ * view and a tab with the session replay of each.
  */
 export function TrialView({
-  model,
+  projectId,
+  evalId,
+  evalName,
+  caseName,
+  candidate,
+  baseline,
   views,
   baselineViews,
 }: {
-  model: TrialPageModel;
+  projectId: string;
+  evalId: string;
+  evalName: string;
+  caseName: string;
+  candidate: TrialSide;
+  baseline: TrialSide | null;
   views: TrialViews;
   baselineViews: TrialViews | null;
 }) {
-  const { projectId, candidate, baseline } = model;
   const crumbs = [
     { label: "Evals", href: evalsHref(projectId) },
-    ...(model.evalId
-      ? [{ label: "Eval", href: evalHref(projectId, model.evalId, candidate.runId) }]
-      : []),
+    { label: evalName, href: evalHref(projectId, evalId) },
+    { label: "Run", href: runHref(projectId, evalId, candidate.runId) },
   ];
   return (
     <Page>
       <PageHeader
-        title={`${model.caseName} · trial ${candidate.trial.index + 1}`}
-        description="This run on the left, the pinned baseline on the right: the same case and the same trial number."
+        title={`${caseName} · trial ${candidate.trial.index + 1}`}
+        description="This run on the left, the pinned baseline on the right: the same row, variant and trial number."
         crumbs={crumbs}
       />
       <PageBody wide>
         <Pair
-          left={<Side projectId={projectId} side={candidate} title="This run" />}
+          left={<Side projectId={projectId} evalId={evalId} side={candidate} title="This run" />}
           right={
             baseline ? (
-              <Side projectId={projectId} side={baseline} title="Baseline" />
+              <Side projectId={projectId} evalId={evalId} side={baseline} title="Baseline" />
             ) : (
               <NoBaseline />
             )
@@ -97,14 +105,24 @@ function Pair({ left, right }: { left: ReactNode; right: ReactNode }) {
   );
 }
 
-function Side({ projectId, side, title }: { projectId: string; side: TrialSide; title: string }) {
+function Side({
+  projectId,
+  evalId,
+  side,
+  title,
+}: {
+  projectId: string;
+  evalId: string;
+  side: TrialSide;
+  title: string;
+}) {
   return (
     <Section
       title={title}
       actions={
         <Link
-          href={experimentHref(projectId, side.runId)}
-          className="text-ui text-accent-fg underline-offset-2 hover:underline"
+          href={runHref(projectId, evalId, side.runId)}
+          className="text-ui text-accent-mark underline-offset-2 hover:underline"
         >
           Open the run
         </Link>
@@ -143,7 +161,7 @@ function ReplayTab({ projectId, views }: { projectId: string; views: TrialViews 
       {views.sessionId ? (
         <Link
           href={`/project/${projectId}/sessions/${views.sessionId}`}
-          className="text-ui text-accent-fg underline-offset-2 hover:underline"
+          className="text-ui text-accent-mark underline-offset-2 hover:underline"
         >
           Open the session
         </Link>
@@ -158,7 +176,7 @@ function NoBaseline() {
     <EmptyState
       icon={Waypoints}
       title="No baseline trial"
-      description="The pinned baseline has no trial of this case with this number, or no run is pinned."
+      description="The eval has no pinned baseline, or the baseline has no trial of this row with this number."
     />
   );
 }

@@ -438,7 +438,10 @@ async function startedView(experiment: Experiment, subject: UsageSubject, deps: 
     eval: experiment.evalVersions[0]?.name ?? null,
     experimentId: experiment.id,
     state: experiment.state,
-    url: urlOf({ projectId: subject.projectId, id: experiment.id }, deps),
+    url: urlOf(
+      { projectId: subject.projectId, id: experiment.id, evalId: experiment.evalId },
+      deps,
+    ),
   };
 }
 

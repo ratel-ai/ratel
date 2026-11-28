@@ -54,6 +54,16 @@ export interface DatasetStore {
     rows: readonly NewRow[],
     createdBy: string,
   ): Promise<EvalCase[] | "not_found">;
+  /**
+   * Removes a row from a fixed dataset. Its versions stay, so the runs that froze them still read
+   * them. `not_found`: no such row in the dataset of the project, or removed already.
+   */
+  removeRow(
+    projectId: string,
+    datasetId: string,
+    rowId: string,
+    now: Date,
+  ): Promise<"removed" | "not_found" | "not_fixed">;
   /** The rows of a fixed dataset, the newest first. No row that a query resolved or a run added. */
   rows(projectId: string, datasetId: string): Promise<EvalCase[]>;
   /**

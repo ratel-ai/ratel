@@ -43,12 +43,14 @@ export interface RunStore {
   /** Removes a `queued` run that did not get a VM. */
   discard(runId: string): Promise<void>;
   get(projectId: string, runId: string): Promise<SandboxRun | null>;
-  /** The newest first. */
-  /** The newest first. `excludeEvalTrials`: only the runs that a person or a key started. */
+  /**
+   * The newest first. `excludeEvalTrials`: only the runs that a person or a key started.
+   * `sandboxName`: only the runs of the versions of that sandbox.
+   */
   list(
     projectId: string,
     limit: number,
-    options?: { excludeEvalTrials?: boolean },
+    options?: { excludeEvalTrials?: boolean; sandboxName?: string },
   ): Promise<SandboxRun[]>;
   /** The run of a token, while the run is `queued` or `running`. */
   findByTokenHash(tokenHash: string): Promise<{ id: string; projectId: string } | null>;

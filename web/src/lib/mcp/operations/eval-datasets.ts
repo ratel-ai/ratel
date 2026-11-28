@@ -7,10 +7,12 @@ import { defineOperation, type McpOperation, type OperationContext } from "@/lib
 import { capRows } from "@/lib/mcp/serialize";
 import { getDb } from "@/lib/platform/db/client";
 import { storable } from "@/lib/platform/storable";
+import { previewQuery, removeDatasetRow } from "@/lib/views/evals/actions";
 import { createDrizzleBaselineStore } from "@/lib/views/evals/adapters/drizzle-baseline-store";
 import { createDrizzleDatasetStore } from "@/lib/views/evals/adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle-experiment-store";
+import { createTraceSource } from "@/lib/views/evals/adapters/trace-source";
 import type { Compared } from "@/lib/views/evals/baseline";
 import { readOnlyTools } from "@/lib/views/evals/console-deps";
 import { currentVersion as currentRow } from "@/lib/views/evals/domain/case";
@@ -28,6 +30,7 @@ import { datasetsView, evalHistory, withPinnedRuns } from "@/lib/views/evals/his
 import type { DatasetStore, NewRow } from "@/lib/views/evals/ports/dataset-store";
 import type { EvalStore } from "@/lib/views/evals/ports/eval-store";
 import type { ScorerLibrary } from "@/lib/views/evals/ports/scorer-library";
+import type { TraceSource } from "@/lib/views/evals/ports/trace-source";
 import { rowOfSandboxRun } from "@/lib/views/evals/sandbox-rows";
 import { listScorerLibrary } from "@/lib/views/evals/scorer-library";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
@@ -56,6 +59,9 @@ export interface EvalDatasetsDeps {
   ): Promise<{ content: NewRowContent; sourceOutput: string | null } | null>;
   getSandboxRun(projectId: string, runId: string): Promise<SandboxRun | null>;
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
+  /** The traces, tasks and RQL that a query dataset reads. */
+  traces(): TraceSource;
+  now(): Date;
 }
 
 type NewRowContent = Extract<NewRow, { kind: "trace" }>["content"];
@@ -93,6 +99,8 @@ const defaultDeps: EvalDatasetsDeps = {
   },
   getSandboxRun: getRun,
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
+  traces: () => createTraceSource(getDb(), { readOnlyTools, now: () => new Date() }),
+  now: () => new Date(),
 };
 
 const datasetParam = z
@@ -297,6 +305,95 @@ export function evalDatasetsOperations(deps: EvalDatasetsDeps = defaultDeps): Mc
         return {
           data: { rowId: made?.id ?? null, name: made?.name ?? row.name, datasetId: dataset.id },
           hint: "The row counts in the next run of each eval that uses this dataset.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "evals_remove_dataset_row",
+      domain: "evals",
+      title: "Remove a row from a dataset",
+      description:
+        "Use this tool to remove one row from a fixed dataset. This tool changes data: the next runs do not read the row. The runs that read it keep their copy. It returns the removed row id.",
+      keywords: ["evals", "dataset row", "remove row"],
+      scope: "project",
+      mutates: true,
+      apiKeyScope: "evals:write",
+      params: z.object({
+        ...projectScoped,
+        dataset: datasetParam,
+        rowId: uuidParam().describe("The id of a row. evals_get_dataset gives the row ids."),
+      }),
+      async execute(ctx, params) {
+        await requireEvals(deps, ctx.projectId);
+        const dataset = await findDataset(deps, ctx.projectId, params.dataset);
+        if (!dataset) throw notFound("dataset");
+        const removed = await removeDatasetRow(ctx.projectId, dataset.id, params.rowId, {
+          datasets: deps.datasets(),
+          now: deps.now,
+        });
+        if (!removed.ok) {
+          if (removed.reason === "not_found") throw notFound("row of the dataset");
+          throw new McpOperationError("conflict", removed.message, { reason: removed.reason });
+        }
+        return {
+          data: { rowId: params.rowId, datasetId: dataset.id },
+          hint: "The next run of each eval that uses this dataset reads one row less.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "evals_preview_dataset",
+      domain: "evals",
+      title: "Preview a query dataset",
+      description:
+        "Use this tool to see what a query dataset reads now, before a run freezes it. Give a dataset, or a kind with its settings. Nothing is saved. It returns the number of turns found and the first rows with their input, which is captured text: the key and the project must allow it.",
+      keywords: ["evals", "dataset preview", "rql dataset", "last traces"],
+      scope: "project",
+      mutates: false,
+      apiKeyScope: "evals:read",
+      params: z.object({
+        ...projectScoped,
+        dataset: datasetParam.optional().describe("A query dataset (name or id). Or give a kind."),
+        kind: z.enum(["last_traces", "task_traces", "rql", "auto"]).optional(),
+        limit: z.number().int().min(1).max(MAX_ROW_LIMIT).optional(),
+        taskId: z.string().trim().min(1).max(200).optional(),
+        text: z.string().trim().min(1).max(20_000).optional().describe("The RQL text of kind rql."),
+      }),
+      async execute(ctx, params) {
+        await requireEvals(deps, ctx.projectId);
+        let query: z.output<typeof datasetQuerySchema>;
+        if (params.dataset !== undefined) {
+          const dataset = await findDataset(deps, ctx.projectId, params.dataset);
+          if (!dataset) throw notFound("dataset");
+          query = dataset.query;
+        } else {
+          const parsed = datasetQuerySchema.safeParse({
+            kind: params.kind,
+            ...(params.limit === undefined ? {} : { limit: params.limit }),
+            ...(params.taskId === undefined ? {} : { taskId: params.taskId }),
+            ...(params.text === undefined ? {} : { text: params.text }),
+          });
+          if (!parsed.success) {
+            const message = parsed.error.issues[0]?.message ?? "Give a dataset or a kind.";
+            throw invalidParams(message, [{ path: "kind", message }]);
+          }
+          query = parsed.data;
+        }
+        const preview = await previewQuery(
+          ctx.projectId,
+          { by: requester(ctx.auth), mayReadContent: await deps.mayReadContent(ctx) },
+          query,
+          { traces: deps.traces() },
+        );
+        if (!preview.ok) {
+          return {
+            data: { ok: false, reason: preview.reason, message: preview.message },
+            hint: preview.message,
+          };
+        }
+        return {
+          data: preview,
+          hint: `A run would read up to ${preview.found} turns now, and freeze the rows that it finds.`,
         };
       },
     }),

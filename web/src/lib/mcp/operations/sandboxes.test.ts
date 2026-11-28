@@ -115,6 +115,8 @@ function fakeDeps(overrides: Partial<SandboxOperationDeps> = {}): SandboxOperati
     sleep: async () => {},
     now: () => 0,
     mayReadContent: async () => true,
+    secretSources: async (_projectId, _sandboxName, names) =>
+      names.map((name) => ({ name, source: "project" as const })),
     ...overrides,
   };
 }
@@ -188,7 +190,7 @@ for (const id of IDS) {
       }),
     );
     assert.equal(result.error, "forbidden");
-    assert.match(result.message, /Ratel sandbox is not on for this project/);
+    assert.match(result.message, /Sandboxes are not on for this project/);
     assert.deepEqual(asked, [PROJECT]);
   });
 
@@ -277,6 +279,32 @@ test("sandbox_get_version: returns the input example, the declared params and th
   ]);
   assert.equal(result.data.smoke.ok, true);
   assert.match(result.hint ?? "", /sandbox_run/);
+});
+
+test("sandbox_get_version: gives each declared secret with its source, never a value, and names the missing ones in the hint", async () => {
+  const asked: unknown[] = [];
+  const result = ok<{ secrets: Array<{ name: string; source: string }> }>(
+    await call(
+      "sandbox_get_version",
+      { versionId: VERSION },
+      {
+        secretSources: async (projectId, sandboxName, names) => {
+          asked.push([projectId, sandboxName, names]);
+          return [
+            { name: "OPENAI_API_KEY", source: "sandbox" },
+            { name: "SEARCH_KEY", source: "missing" },
+          ];
+        },
+      },
+    ),
+  );
+  assert.deepEqual(result.data.secrets, [
+    { name: "OPENAI_API_KEY", source: "sandbox" },
+    { name: "SEARCH_KEY", source: "missing" },
+  ]);
+  assert.equal(asked.length, 1);
+  assert.equal((asked[0] as unknown[])[1], "support-agent");
+  assert.match(result.hint ?? "", /SEARCH_KEY/);
 });
 
 test("sandbox_get_version: a version of another project is not_found", async () => {
@@ -541,4 +569,12 @@ test("sandbox_get_run: a large output keeps a preview and is marked truncated", 
   assert.equal(typeof result.data.output, "string");
   assert.ok((result.data.output as string).length < 10_000);
   assert.equal(result.truncated, true);
+});
+
+test("no tool text says Ratel sandbox as the name of the area, or names the provider", () => {
+  const text = JSON.stringify(
+    sandboxOperations(fakeDeps()).map(({ id, title, description }) => ({ id, title, description })),
+  );
+  assert.doesNotMatch(text, /Ratel sandbox/i);
+  assert.doesNotMatch(text, /boat/i);
 });

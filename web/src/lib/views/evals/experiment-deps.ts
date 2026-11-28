@@ -11,6 +11,7 @@ import {
   startRun,
 } from "@/lib/views/sandboxes";
 import { listScorers } from "@/lib/views/scorers/store";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
 import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
@@ -18,11 +19,15 @@ import { createDrizzleExperimentStore } from "./adapters/drizzle-experiment-stor
 import { createTraceSource } from "./adapters/trace-source";
 import { pinnedRun } from "./baseline";
 import { baselineDeps } from "./baseline-deps";
+import type { ConsoleApiDeps } from "./console-api";
 import { evalsAccess, readOnlyTools } from "./console-deps";
 import type { Experiment } from "./domain/experiment";
+import { caseFromTurn } from "./domain/from-turn";
 import { advanceExperiment, type ExperimentDeps } from "./experiments";
 import type { ConsoleDeps, ExperimentsApiDeps } from "./experiments-api";
 import { judgeDeps } from "./judge-deps";
+import { recentTurns } from "./recent-turns";
+import { loadTurnContent } from "./turn-content";
 
 /** Experiments over the real database, sandboxes and judge. */
 export function experimentDeps(): ExperimentDeps {
@@ -89,3 +94,35 @@ export const experimentsApiDeps: ExperimentsApiDeps = {
 };
 
 export const consoleExperimentDeps: ConsoleDeps = { ...experimentsApiDeps, ...evalsAccess };
+
+/** The session routes of the Datasets and Evals pages, over the real stores and session. */
+export const consoleApiDeps: ConsoleApiDeps = {
+  ...evalsAccess,
+  actions: () => ({
+    ...experimentDeps(),
+    datasets: createDrizzleDatasetStore(getDb()),
+    evals: createDrizzleEvalStore(getDb()),
+    turnRow,
+  }),
+  readContent: (projectId) => contentOptIn(projectId),
+  recentTurns: (projectId, readContent) =>
+    recentTurns(projectId, {
+      db: getDb(),
+      readContent,
+      loadAsk: async (id, turnId) => (await loadTurnContent(id, turnId))?.ask ?? null,
+    }),
+  advance: experimentsApiDeps.advance,
+  track: (event, { externalId, projectId, organizationId }, fields) =>
+    trackServerEvent(
+      event,
+      { externalId, projectId, orgId: organizationId },
+      { object_action: event, surface: "console", ...fields },
+    ),
+  now: () => new Date(),
+};
+
+/** A row from a trace turn of the project: its frozen input, earlier messages and fixtures. */
+export async function turnRow(projectId: string, turnId: string) {
+  const turn = await loadTurnContent(projectId, turnId);
+  return turn ? caseFromTurn(turn, await readOnlyTools(projectId)) : null;
+}

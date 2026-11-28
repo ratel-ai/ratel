@@ -28,7 +28,8 @@ Every UI change in the platform, in both editions, follows this document and is 
 ## Information architecture
 
 At most 10 project items in the rail's list, and 14 with `customMonitoring` (the edition's own come
-on top), under stage headings; the list scrolls when they do not fit. MCP is not in the list: it sits in
+on top), under stage headings; the list scrolls when they do not fit. With `evals` on, three more
+come before Catalog: Evals, Datasets and Sandboxes, so at most 13, and 17 with `customMonitoring`. MCP is not in the list: it sits in
 the rail's footer and does not count. Nothing "Soon"; one home per concept and per
 editable field; items the edition lacks are not rendered; moved pages redirect.
 
@@ -41,6 +42,9 @@ editable field; items the edition lacks are not rendered; moved pages redirect.
 | Intents | What do people want, and what next? | All intents, Flows, Map |
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
 | MCP (rail footer) | How do I connect an agent to Ratel? | The organization's MCP connection guide, the key choice on this project |
+| Evals (`evals`) | How are my evals doing? | A chart of the score of each eval over its runs, then the evals; one eval has its runs |
+| Datasets (`evals`) | What inputs do my evals run? | The datasets; one dataset has its rows, or its query |
+| Sandboxes (`evals`) | What agents can an eval run? | The pushed sandboxes; one sandbox has its Playground |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
 
 With `customMonitoring` on, Monitor has three more items, in this order: Overview, Dashboards, Explore, Agent health,
@@ -302,7 +306,11 @@ Intents, then Tasks, then Issues and Self-corrections, then Fixes: one word per 
 | **Self-correction** | The agent retried, switched tools, gave up or apologized | `RotateCcw` | Agent health › Self-corrections |
 | **Fix** | A concrete change that resolves an issue | `Hammer` | Improvements › Fixes |
 | **Alert** | A metric with a threshold that sends a message when it fires and when it recovers | `Bell` | Alerts |
-| **Scorer** | A check, or a question a model answers, that gives each matching trace one score | | Picked where it is used (dashboards, alerts, a task's scoring) |
+| **Scorer** | A check, or a question a model answers, that gives each matching trace one score | | Picked where it is used (dashboards, alerts, a task's scoring, an eval) |
+| **Dataset** | The inputs that an eval runs: rows that you keep, or a query of your traces | `Table2` | Datasets |
+| **Eval** | A dataset run on a runtime (a sandbox) and scored by scorers | `FlaskConical` | Evals |
+| **Run** | One run of an eval: the rows it froze, its variants and trials, its score | | An eval's page |
+| **Baseline** | The run of an eval that the other runs compare with | | An eval's page |
 
 An intent opens onto **What they ask for**, then **Ways people ask it**. Nouns appear as pins
 with their icon, and every page links to its neighbours.
@@ -315,6 +323,9 @@ with their icon, and every page links to its neighbours.
 | Invoked, seen in traces | "Seen it run" |
 | BM25 / embeddings ranking | "Keyword match" / "Semantic match" |
 | Arm (served / shadow) | "Variant" (current / comparison) |
+| Eval experiment, suite run | "Run" (of an eval) |
+| Eval case | "Row" of a dataset ("Save as eval case" keeps its name) |
+| Matrix combination | "Variant" of a run |
 | Shadow ranking, calibration | "Experiment", "comparison" |
 | Jaccard@k, overlap / top-1 agreement | "Agreement" / "Same first pick" |
 | Recall@k, nDCG, MRR | Behind "Details" only |

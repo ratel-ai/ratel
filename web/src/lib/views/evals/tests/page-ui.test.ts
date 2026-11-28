@@ -3,55 +3,36 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
-import { CaseEditor } from "@/components/console/evals/CaseEditor";
-import { ExperimentView } from "@/components/console/evals/ExperimentView";
+import { DatasetsList } from "@/components/console/evals/DatasetsList";
+import { DatasetView } from "@/components/console/evals/DatasetView";
+import { EvalDialog } from "@/components/console/evals/EvalDialog";
+import { EvalsList } from "@/components/console/evals/EvalsList";
+import { RunView } from "@/components/console/evals/RunView";
 import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
-import { SuiteView } from "@/components/console/evals/SuiteView";
+import { ScoreChart } from "@/components/console/evals/ScoreChart";
 import { TrialPanel } from "@/components/console/evals/TrialPanel";
 import { resolveConfig } from "@/config";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
-import type { CaseVersion } from "../domain/case";
-import type { Experiment, Trial } from "../domain/experiment";
+import type { Trial } from "../domain/experiment";
 import { pairedTrials } from "../domain/paired-trials";
 import { evalsEnabledForProject, evalsOffForAll, evalsOrganizationIds } from "../gate";
-import {
-  type CaseEditorModel,
-  type CaseVersionView,
-  experimentPageModel,
-  PREVIEW_CHARS,
-  readyVersions,
-} from "../page-model";
-import { suitePageModel } from "../suite-page";
-import { POLITE, run } from "./runs";
-import { content, NO_REFUND } from "./support";
+import type { DialogData } from "../pages-load";
+import { runPageModel } from "../run-page";
+import { scoreChart } from "../score-chart";
+import { run } from "./runs";
 
-const NOW = "2026-11-25T10:00:00.000Z";
-const version = (over: Partial<CaseVersionView> = {}): CaseVersionView => ({
-  ...content(),
-  id: "v1",
-  caseId: "c1",
-  number: 1,
-  sourceTurnId: "t1",
-  sourceOutput: "Refunded.",
-  updatedAt: NOW,
-  ...over,
-});
-const model = (over: Partial<CaseEditorModel> = {}): CaseEditorModel => ({
-  projectId: PROJECT_ID,
-  canEdit: true,
-  id: "c1",
-  name: "Late refund",
-  labels: ["task: refunds"],
-  evalId: "e1",
-  evals: [{ id: "e1", name: "Refunds", scorers: [NO_REFUND] }],
-  current: version(),
-  ...over,
-});
+const NOW = "2026-11-27T10:00:00.000Z";
 const labels = (evalsPage: boolean) =>
   flattenNav(consoleNav({ projectId: PROJECT_ID, additions: [], evalsPage })).map(
     ({ label }) => label,
   );
+const DIALOG: DialogData = {
+  sandboxes: [{ name: "support-demo", versions: [{ id: "v1", label: "abc1234", params: [] }] }],
+  library: [],
+  datasets: [],
+  tasks: [],
+};
 
 test("evals are off by default, and FF_EVALS=1 turns them on", async () => {
   assert.equal(await evalsEnabledForProject("p1", { config: resolveConfig() }), false);
@@ -61,26 +42,11 @@ test("evals are off by default, and FF_EVALS=1 turns them on", async () => {
   assert.deepEqual(await evalsOrganizationIds([{ id: "o1" }], { config }), ["o1"]);
 });
 
-test("the rail has Evals only with the flag on", () => {
-  assert.ok(labels(true).includes("Evals"));
-  assert.ok(!labels(false).includes("Evals"));
-});
-
-test("the editor of a case shows the version that counts, and saves a new version", () => {
-  const html = render(
-    createElement(CaseEditor, { model: model({ current: version({ id: "v2", number: 2 }) }) }),
-  );
-  const text = visibleText(html);
-  assert.match(text, /Version 2 counts in eval runs\. A save adds a new version\./);
-  assert.match(text, /Save/);
-  assert.doesNotMatch(text, /draft|approve/i);
-  assert.match(text, /No refund \(gating\): tools is not refund_order/);
-  assert.match(html, /traces\/turns\/t1/);
-});
-
-test("a support session sees no action", () => {
-  const html = render(createElement(CaseEditor, { model: model({ canEdit: false }) }));
-  assert.doesNotMatch(html, /<button[^>]*>Save<\/button>/);
+test("the rail has Evals and Datasets only with the flag on", () => {
+  for (const label of ["Evals", "Datasets"]) {
+    assert.ok(labels(true).includes(label), label);
+    assert.ok(!labels(false).includes(label), label);
+  }
 });
 
 test("the turn page shows the action behind the flag, and the pages are under the gated layout", () => {
@@ -122,6 +88,231 @@ test("save as eval case is one button on the turn page and on the run panel; the
   assert.match(panel, /<SaveAsEvalCase\b[\s\S]*traceId: run\.traceId/);
 });
 
+test("the Evals page is a chart and a table of four columns, with New eval and a filter", () => {
+  const chart = scoreChart([
+    {
+      key: "e1",
+      label: "Refunds",
+      points: [
+        { runId: "r1", at: "2026-11-27T09:00:00Z", value: 0.5 },
+        { runId: "r2", at: "2026-11-27T10:00:00Z", value: 0.75 },
+      ],
+    },
+  ]);
+  const html = render(
+    createElement(EvalsList, {
+      model: {
+        projectId: PROJECT_ID,
+        chart,
+        rows: [
+          {
+            evalId: "e1",
+            name: "Refunds",
+            href: `/project/${PROJECT_ID}/evals/e1`,
+            cases: "12",
+            scorers: 2,
+            baselineScore: 0.5,
+            slot: 0,
+          },
+        ],
+      },
+      dialog: DIALOG,
+      canEdit: true,
+      openNew: false,
+    }),
+  );
+  const text = visibleText(html);
+  for (const header of ["Name", "Cases", "Scorers", "Baseline score"])
+    assert.ok(text.includes(header), header);
+  assert.match(text, /New eval/);
+  assert.match(html, /Filter evals/);
+  assert.match(text, /Refunds\s+75%/, "the legend names the line with its newest score");
+  for (const gone of ["Run suite", "Start run", "Cases of", "Experiments"]) {
+    assert.ok(!text.includes(gone), `${gone} is not on the Evals page`);
+  }
+  // A support session sees no action.
+  const readOnly = visibleText(
+    render(
+      createElement(EvalsList, {
+        model: { projectId: PROJECT_ID, chart, rows: [] },
+        dialog: DIALOG,
+        canEdit: false,
+        openNew: false,
+      }),
+    ),
+  );
+  assert.doesNotMatch(readOnly, /New eval/);
+});
+
+test("a chart with no run says so, and one run says that a line starts with the second", () => {
+  const none = visibleText(
+    render(
+      createElement(ScoreChart, {
+        chart: scoreChart([{ key: "e", label: "E", points: [] }]),
+        label: "Score",
+        emptyTitle: "No run yet",
+        emptyDescription: "Start a run.",
+      }),
+    ),
+  );
+  assert.match(none, /No run yet\s+Start a run\./);
+  const one = visibleText(
+    render(
+      createElement(ScoreChart, {
+        chart: scoreChart([{ key: "e", label: "E", points: [{ runId: "r", at: NOW, value: 1 }] }]),
+        label: "Score",
+        emptyTitle: "No run yet",
+        emptyDescription: "Start a run.",
+      }),
+    ),
+  );
+  assert.match(one, /100%\s+50%\s+0%/, "the axis runs from 0 to 100%");
+  assert.match(one, /One run so far/);
+});
+
+test("New eval marks Production agent as coming soon, and it cannot be chosen", () => {
+  const html = render(
+    createElement(EvalDialog, {
+      projectId: PROJECT_ID,
+      dialog: DIALOG,
+      open: true,
+      onOpenChange: () => {},
+    }),
+  );
+  // The dialog renders in a portal: the markup is empty on the server. The rule is in the form.
+  assert.equal(typeof html, "string");
+  const source = readFileSync(
+    fileURLToPath(new URL("../../../../components/console/evals/EvalDialog.tsx", import.meta.url)),
+    "utf8",
+  );
+  assert.match(source, /label: "Production agent",[\s\S]*?disabled: true,[\s\S]*?Coming soon/);
+});
+
+test("the Datasets page and a dataset: kinds, rows, trace links and the frozen-rows note", () => {
+  const list = visibleText(
+    render(
+      createElement(DatasetsList, {
+        model: {
+          projectId: PROJECT_ID,
+          rows: [
+            {
+              datasetId: "d1",
+              name: "Refund asks",
+              kind: "fixed",
+              kindLabel: "Fixed rows",
+              size: "2 rows",
+              rql: false,
+              updatedAt: NOW,
+              usedBy: [{ evalId: "e1", name: "Refunds", href: "/x" }],
+            },
+          ],
+        },
+        tasks: [],
+        canEdit: true,
+        now: NOW,
+      }),
+    ),
+  );
+  for (const header of ["Name", "Kind", "Cases or query", "Updated", "Used by", "New dataset"]) {
+    assert.ok(list.includes(header), header);
+  }
+  const base = {
+    projectId: PROJECT_ID,
+    datasetId: "d1",
+    name: "Refund asks",
+    description: null,
+    usedBy: [],
+    updatedAt: NOW,
+    contentWithheld: false,
+  };
+  const fixed = render(
+    createElement(DatasetView, {
+      model: {
+        ...base,
+        kind: "fixed",
+        kindLabel: "Fixed rows",
+        query: null,
+        rows: [
+          {
+            rowId: "r1",
+            name: "Turn a1111111",
+            kind: "trace",
+            input: '{"message":"refund A200"}',
+            expectedOutput: null,
+            traceHref: `/project/${PROJECT_ID}/traces/turns/t1`,
+            version: 1,
+            updatedAt: NOW,
+          },
+        ],
+      },
+      tasks: [],
+      canEdit: true,
+      now: NOW,
+    }),
+  );
+  assert.match(fixed, new RegExp(`/project/${PROJECT_ID}/traces/turns/t1`));
+  assert.match(visibleText(fixed), /Add rows/);
+  assert.match(fixed, /Remove Turn a1111111/);
+  const query = visibleText(
+    render(
+      createElement(DatasetView, {
+        model: {
+          ...base,
+          kind: "rql",
+          kindLabel: "RQL query",
+          query: {
+            words: "Up to 20 traces of an RQL query",
+            rql: "SELECT trace_id FROM traces",
+            limit: 20,
+            taskId: null,
+          },
+          rows: [],
+        },
+        tasks: [],
+        canEdit: true,
+        now: NOW,
+      }),
+    ),
+  );
+  assert.match(query, /A run freezes the rows/);
+  assert.match(query, /SELECT trace_id FROM traces/);
+  assert.match(query, /Preview/);
+  assert.doesNotMatch(query, /Add rows/);
+});
+
+test("a matrix run shows its variants side by side, with their params in the header", () => {
+  const made = run("r1", { e1: { cases: { a: ["pass"] } } });
+  made.experiment.evalId = "e1";
+  made.experiment.variants = [
+    { index: 0, params: { model: "sonnet" } },
+    { index: 1, params: { model: "haiku" } },
+  ];
+  const [first] = made.trials;
+  assert.ok(first);
+  made.trials.push({ ...first, id: "second", variant: 1, result: "fail" });
+  const html = render(
+    createElement(RunView, {
+      evalName: "Refunds",
+      model: runPageModel({
+        projectId: PROJECT_ID,
+        evalId: "e1",
+        experiment: made.experiment,
+        trials: made.trials,
+        versions: [],
+        outputs: new Map(),
+      }),
+    }),
+  );
+  const text = visibleText(html);
+  assert.match(text, /model=sonnet[\s\S]*model=haiku/);
+  assert.equal(
+    (html.match(/>Output and trials</g) ?? []).length,
+    2,
+    "one output column for each variant",
+  );
+  assert.match(html, /\/evals\/e1\/runs\/r1\/trials\/second/);
+});
+
 const gridTrial = (over: Partial<Trial>): Trial => ({
   id: crypto.randomUUID(),
   experimentId: "e1",
@@ -146,151 +337,6 @@ const NO_REFUND_FAIL = {
   status: "fail" as const,
   reason: "tools ne refund_order: the value is there.",
 };
-const gridExperiment: Experiment = {
-  id: "e1",
-  projectId: PROJECT_ID,
-  organizationId: "o1",
-  evalId: null,
-  datasetId: null,
-  variants: [],
-  changes: {},
-  name: "Refunds with the new prompt",
-  labelFilter: "refunds",
-  sandboxVersionId: "sv1",
-  sandboxName: "support-demo",
-  gitCommit: "b".repeat(40),
-  gitDirty: false,
-  params: { tone: "formal", offerRefund: true },
-  trialsPerCase: 3,
-  evalVersions: [],
-  caseVersions: [
-    { caseId: "c1", versionId: "v1", number: 2, name: "Late refund" },
-    { caseId: "c2", versionId: "v2", number: 1, name: "Status" },
-  ],
-  scorerSnapshots: {
-    v1: [{ ...NO_REFUND, hash: "h" }],
-    v2: [
-      { ...NO_REFUND, hash: "h" },
-      {
-        id: "j",
-        name: "Polite",
-        gating: false,
-        definition: { kind: "judge", config: { prompt: "Polite?", output: "boolean" } },
-        hash: "j",
-      },
-    ],
-  },
-  startedBy: "u",
-  state: "completed",
-  createdAt: new Date(NOW),
-  finishedAt: new Date(NOW),
-};
-const gridTrials = (): { trials: Trial[]; outputs: Map<string, string> } => {
-  const trials = [
-    gridTrial({ id: "t1", scorers: [{ ...NO_REFUND_FAIL, status: "pass", reason: "ok" }] }),
-    gridTrial({ id: "t2", index: 1, result: "fail", scorers: [NO_REFUND_FAIL], costUsd: 0.03 }),
-    gridTrial({
-      id: "t3",
-      index: 2,
-      result: "invalid",
-      reason: "timed_out: no result",
-      traceId: null,
-      costUsd: null,
-      durationMs: null,
-    }),
-    gridTrial({ id: "t4", caseVersionId: "v2", result: null, state: "running", costUsd: null }),
-  ];
-  return {
-    trials,
-    outputs: new Map([
-      ["t1", "It is refunded."],
-      ["t2", "x".repeat(400)],
-    ]),
-  };
-};
-
-test("the grid rows hold the input, the outputs, the expected output and raw scorer counts", () => {
-  const { trials, outputs } = gridTrials();
-  const versions = [
-    { ...version(), id: "v1", input: { message: "refund A200" }, expectedOutput: "Refunded." },
-  ] as unknown as CaseVersion[];
-  const model = experimentPageModel(gridExperiment, trials, { versions, outputs });
-  assert.deepEqual(model.scorers, [
-    { name: "No refund", gating: true },
-    { name: "Polite", gating: false },
-  ]);
-  assert.equal(model.name, "Refunds with the new prompt");
-  assert.equal(model.labelFilter, "refunds");
-  assert.equal(model.costUsd, 0.04);
-  const [late, status] = model.rows;
-  assert.equal(late?.input, '{"message":"refund A200"}');
-  assert.equal(late?.expectedOutput, "Refunded.");
-  assert.deepEqual(late?.scorerCounts, { "No refund": { pass: 1, fail: 1, notScored: 0 } });
-  assert.deepEqual(late?.counts, { pass: 1, fail: 1, invalid: 1, open: 0 });
-  assert.equal(late?.durationMs, 900);
-  assert.equal(late?.costUsd, 0.04);
-  assert.deepEqual(
-    late?.trials.map(({ output }) => output?.length ?? null),
-    ["It is refunded.".length, PREVIEW_CHARS, null],
-  );
-  // A case version that is gone keeps its row, with empty text.
-  assert.equal(status?.input, "");
-  assert.equal(status?.expectedOutput, null);
-  assert.deepEqual(status?.scorerCounts, {});
-  assert.equal(status?.costUsd, null);
-});
-
-test("the experiment page is a grid: an invalid trial shows its reason and no pass or fail", () => {
-  const { trials, outputs } = gridTrials();
-  const versions = [
-    { ...version(), id: "v1", input: { message: "refund A200" }, expectedOutput: "Refunded." },
-  ] as unknown as CaseVersion[];
-  const model = experimentPageModel(gridExperiment, trials, { versions, outputs });
-  const html = render(
-    createElement(ExperimentView, { model, baseline: "none", canEdit: true, now: NOW }),
-  );
-  const text = visibleText(html);
-  for (const part of [
-    "Refunds with the new prompt",
-    "support-demo",
-    "sv1",
-    "bbbbbbbbbbbb",
-    "tone=formal",
-    "offerRefund=true",
-    "refunds",
-    "Late refund",
-    "refund A200",
-    "It is refunded.",
-    "Refunded.",
-    "No refund",
-    "1 pass",
-    "1 fail",
-    "Running…",
-  ]) {
-    assert.ok(text.includes(part), part);
-  }
-  assert.ok(html.includes("<table"), "a grid");
-  // Trial 3 of the first row is invalid: the row shows its reason, with no pass or fail mark.
-  const invalid = experimentPageModel(
-    gridExperiment,
-    trials.map((trial) => (trial.id === "t3" ? trial : { ...trial, caseVersionId: "v2" })),
-    { versions, outputs },
-  );
-  const invalidText = visibleText(
-    render(
-      createElement(ExperimentView, {
-        model: invalid,
-        baseline: "none",
-        canEdit: true,
-        now: NOW,
-      }),
-    ),
-  );
-  const row = invalidText.slice(invalidText.indexOf("Late refund"), invalidText.indexOf("Status"));
-  assert.match(row, /Invalid\s+timed_out: no result/);
-  assert.doesNotMatch(row, /\b(pass|fail)\b/i);
-});
-
 test("a trial of the side panel shows its scorers with reasons, and a link to its trace", () => {
   const html = render(
     createElement(TrialPanel, {
@@ -304,61 +350,6 @@ test("a trial of the side panel shows its scorers with reasons, and a link to it
   assert.match(text, /No refund\s*gating\s*tools ne refund_order/);
   assert.match(text, /Logs/);
   assert.match(html, new RegExp(`traces/${"c".repeat(32)}`));
-});
-
-test("the suite table: a row for each eval, scorer columns, the delta, the invalid count and the verdict line", () => {
-  const version = (id: string, status: "ready" | "failed") => ({
-    id,
-    projectId: PROJECT_ID,
-    sandboxId: "s",
-    name: "support-demo",
-    git: { commit: "b".repeat(40), dirty: false },
-    status,
-    createdAt: new Date(),
-    tools: [],
-    params: [],
-  });
-  const versions = readyVersions([version("1", "failed"), version("2", "ready")]);
-  assert.deepEqual(
-    versions.map(({ id }) => id),
-    ["2"],
-  );
-  const BASE = run("base", { refunds: { cases: { a: ["fail", "pass"] } } });
-  const NEXT = run("next", {
-    refunds: { cases: { a: ["pass", "invalid"] } },
-    status: { scorers: [NO_REFUND, POLITE], cases: { s: ["pass"] } },
-  });
-  const model = suitePageModel({
-    projectId: PROJECT_ID,
-    evals: [suiteEval("refunds"), suiteEval("status")],
-    cases: [],
-    runs: [],
-    run: NEXT,
-    baseline: BASE,
-  });
-  const view = (canEdit: boolean) =>
-    visibleText(
-      render(
-        createElement(SuiteView, {
-          model,
-          canEdit,
-          versions,
-          experiments: [],
-          baseline: "other",
-          now: NOW,
-        }),
-      ),
-    );
-  const text = view(true);
-  for (const header of ["Eval", "Score", "No refund", "Polite", "Δ baseline", "Invalid"]) {
-    assert.ok(text.includes(header), header);
-  }
-  assert.match(text, /Improved/);
-  assert.doesNotMatch(text, /Improved\s*Improved:/, "the badge says the verdict one time");
-  assert.match(text, /\+50 pts/);
-  assert.match(text, /New eval/);
-  assert.match(text, /Run suite/);
-  assert.doesNotMatch(view(false), /Run suite|New eval/);
 });
 
 test("the trials of a case are paired by index, with gaps and with one side", () => {
@@ -375,49 +366,3 @@ test("the trials of a case are paired by index, with gaps and with one side", ()
   assert.deepEqual(ids(pairedTrials(null, [trial("c0", 0)])), [[0, undefined, "c0"]]);
   assert.deepEqual(ids(pairedTrials([trial("b0", 0)], null)), [[0, "b0", undefined]]);
 });
-
-test("a completed run can be pinned, and opens its deltas when another one is the baseline", () => {
-  const { experiment, trials } = run("b", { refunds: { cases: { one: ["pass"] } } });
-  const text = (baseline: "this" | "other" | "none", canEdit = true) =>
-    visibleText(
-      render(
-        createElement(ExperimentView, {
-          model: experimentPageModel(experiment, trials),
-          baseline,
-          canEdit,
-          now: NOW,
-        }),
-      ),
-    );
-  assert.match(text("none"), /Pin as baseline/);
-  assert.doesNotMatch(text("none"), /Deltas against the baseline/);
-  assert.match(text("other"), /Pin as baseline\s*Deltas against the baseline/);
-  assert.match(text("this"), /Unpin baseline/);
-  assert.doesNotMatch(text("other", false), /Pin as baseline/);
-});
-
-function suiteEval(id: string) {
-  return {
-    id,
-    projectId: PROJECT_ID,
-    name: id,
-    taskId: null,
-    createdAt: new Date(0),
-    versions: [
-      {
-        datasetId: id,
-        sandboxVersionId: null,
-        matrix: {},
-        sandboxName: null,
-        params: {},
-        trials: 3,
-        scorers: [NO_REFUND],
-        id: `${id}-v1`,
-        evalId: id,
-        number: 1,
-        createdBy: "u",
-        createdAt: new Date(0),
-      },
-    ],
-  };
-}

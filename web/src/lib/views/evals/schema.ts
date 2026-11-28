@@ -112,6 +112,9 @@ export const evalCases = pgTable(
     resolvedTurnId: uuid("resolved_turn_id"),
     // A row that one run added for itself: it is not a row of the dataset.
     runOnly: boolean("run_only").notNull().default(false),
+    // A row that a person removed from its fixed dataset. Its versions stay: the runs that froze
+    // them still read them. A removed row is not a row of the dataset.
+    removedAt: timestamp("removed_at", { withTimezone: true }),
     name: text("name").notNull(),
     // Plain text. A label for a task or an intent refers to no row.
     labels: text("labels").array().notNull().default(sql`'{}'::text[]`),

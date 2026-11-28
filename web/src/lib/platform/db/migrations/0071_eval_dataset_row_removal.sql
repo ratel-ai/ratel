@@ -1,0 +1,1 @@
+ALTER TABLE "eval_cases" ADD COLUMN "removed_at" timestamp with time zone;

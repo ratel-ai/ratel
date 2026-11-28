@@ -16,6 +16,7 @@ import { MAX_SANDBOX_NAME_CHARS } from "./domain/eval";
 import { type Experiment, MAX_TRIALS } from "./domain/experiment";
 import { experimentView } from "./experiment-view";
 import { type ExperimentDeps, type StartRefusal, startExperiment } from "./experiments";
+import { experimentHref, runHref } from "./paths";
 import { suiteTable } from "./suite-view";
 
 /**
@@ -242,11 +243,19 @@ export function mayCopyContent(policy: ApiKeyPolicy): boolean {
   return policy.allows("content:read");
 }
 
+/**
+ * The page of a run: in its eval. A suite run from before (or a caller that does not know the eval)
+ * gets the old address, which leads on.
+ */
 export function urlOf(
-  { projectId, id }: Pick<Experiment, "projectId" | "id">,
+  {
+    projectId,
+    id,
+    evalId = null,
+  }: Pick<Experiment, "projectId" | "id"> & Partial<Pick<Experiment, "evalId">>,
   deps: Pick<ExperimentsApiDeps, "publicUrl">,
 ): string {
-  return deps.publicUrl(`/project/${projectId}/evals/experiments/${id}`);
+  return deps.publicUrl(evalId ? runHref(projectId, evalId, id) : experimentHref(projectId, id));
 }
 
 export async function readJson(request: Request): Promise<unknown> {
