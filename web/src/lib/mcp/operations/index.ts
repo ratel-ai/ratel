@@ -9,6 +9,7 @@ import {
   editionRegistrations,
   placeEditionOperations,
 } from "@/lib/mcp/operations/edition";
+import { evalsOperations } from "@/lib/mcp/operations/evals";
 import { experimentOperations } from "@/lib/mcp/operations/experiments";
 import { healthOperations } from "@/lib/mcp/operations/health";
 import { improvementOperations } from "@/lib/mcp/operations/improvement";
@@ -41,6 +42,7 @@ import { playgroundOperations } from "@/lib/mcp/operations/playground";
 import { qualityOperations } from "@/lib/mcp/operations/quality";
 import { rankingOperations } from "@/lib/mcp/operations/ranking";
 import { runsOperations } from "@/lib/mcp/operations/runs";
+import { sandboxOperations } from "@/lib/mcp/operations/sandboxes";
 import { scopeOperations } from "@/lib/mcp/operations/scope";
 import { shipOperations } from "@/lib/mcp/operations/ship";
 import {
@@ -59,6 +61,11 @@ export interface AssembleOptions {
   focusedConsole?: boolean;
   /** List the RQL tools too (`customMonitoring`). Off, they do not exist. */
   customMonitoring?: boolean;
+  /**
+   * List the Ratel sandbox tools and the eval tools (`evals` flag of the caller, one flag for
+   * both). Off, they do not exist.
+   */
+  evals?: boolean;
 }
 
 /**
@@ -97,6 +104,7 @@ export function assembleOperations(
     ...joinsOperations(),
     ...playgroundOperations(),
     ...shipOperations(),
+    ...(options.evals ? [...sandboxOperations(), ...evalsOperations()] : []),
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),
