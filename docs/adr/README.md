@@ -17,6 +17,7 @@ history holds the earlier records and how they changed.
 | [0010](0010-kafka-ingest.md) | A worker stores the telemetry that a gateway put on Kafka, with `INGEST_QUEUE=kafka` |
 | [0011](0011-rql-query-language.md) | RQL (Ratel Query Language): a neutral read-only query language, behind two walls (0010 is kept for the model vendors record of PR #442) |
 | [0012](0012-trace-properties-storage.md) | Trace properties: key names per project, values in one jsonb column with one shared GIN index |
+| [0013](0013-clusters-property-filter.md) | Clusters: filter and split the stored analysis by a trace property through the turn link (Proposed) |
 
 The SDK decisions (engine, retrieval, bindings, adapters, rankers, releases) belong to
 [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), where that code lives.
