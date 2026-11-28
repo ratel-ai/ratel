@@ -102,7 +102,8 @@ export function runScore(run: ScoredRun): RunScore {
 
 /**
  * The delta of a run of one eval against its baseline run: the run score minus the baseline run
- * score. No value, with the reason, when the eval is not in the baseline or its scorers differ.
+ * score, the same value as its entry of `evalDeltas`. No value, with the reason, when the eval is
+ * not in the baseline or its scorers differ.
  */
 export function runDelta(baseline: ScoredRun, candidate: ScoredRun): EvalDelta {
   const [key] = evalGroups(candidate.experiment).map((group) => group.key);
@@ -243,14 +244,17 @@ function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
   };
 }
 
-/** The score delta is the mean delta of the scorers rated on both sides. */
+/**
+ * The score delta is the score of the candidate minus the score of the baseline: the one rule of
+ * each delta (`runDelta` too). Each scorer has its own delta, when both sides rated it.
+ */
 function deltaOf(baseline: EvalScore, candidate: EvalScore): EvalDelta {
   const before = new Map(baseline.scorers.map((scorer) => [pairKey(scorer), scorer]));
   const scorers = candidate.scorers.map((scorer) => ({
     scorerId: scorer.scorerId,
     delta: minus(scorer.passRate, before.get(pairKey(scorer))?.passRate ?? null),
   }));
-  return { ok: true, score: mean(scorers.map(({ delta }) => delta)), scorers };
+  return { ok: true, score: minus(candidate.score, baseline.score), scorers };
 }
 
 function sideOf(group: Group, run: ScoredRun) {

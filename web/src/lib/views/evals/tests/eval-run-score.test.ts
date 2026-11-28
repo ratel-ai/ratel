@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { combinations, evalContentSchema, MAX_COMBINATIONS } from "../domain/eval";
 import type { Experiment, Trial } from "../domain/experiment";
 import { snapshotOf } from "../domain/score";
-import { evalScores, RUN_SCORE_RULE, runDelta, runScore } from "../domain/suite";
+import { evalDeltas, evalScores, RUN_SCORE_RULE, runDelta, runScore } from "../domain/suite";
 import { NO_REFUND } from "./support";
 
 const POLITE = { ...NO_REFUND, id: "polite", name: "Polite", gating: false };
@@ -84,6 +84,27 @@ test("a matrix run has one score: the scorer pass rates over all its valid trial
     [1, 0],
   );
   assert.match(score.rule, /all the valid trials/);
+});
+
+test("a run has one delta: its score minus the baseline score, also when a scorer is not rated on one side", () => {
+  // Baseline: A pass, B not scored (score 1). Candidate: A pass, B fail (score 0.5).
+  const baseline = run("base", [["pass"]], [NO_REFUND, POLITE]);
+  const [trial] = baseline.trials;
+  if (trial) trial.scorers = trial.scorers.filter(({ scorerId }) => scorerId !== POLITE.id);
+  const candidate = run("next", [["pass"]], [NO_REFUND, POLITE]);
+  const polite = candidate.trials[0]?.scorers.find(({ scorerId }) => scorerId === POLITE.id);
+  if (polite) polite.status = "fail";
+
+  const ofRun = runDelta(baseline, candidate);
+  const ofEval = evalDeltas(baseline, candidate).get("e1");
+  assert.ok(ofRun.ok && ofEval?.ok);
+  assert.equal(ofRun.score, -0.5);
+  assert.equal(ofEval.score, -0.5);
+  // Each scorer keeps its own delta: none for a scorer that one side did not rate.
+  assert.deepEqual(ofEval.scorers, [
+    { scorerId: NO_REFUND.id, delta: 0 },
+    { scorerId: POLITE.id, delta: null },
+  ]);
 });
 
 test("the delta of a run is its score minus the baseline score", () => {
