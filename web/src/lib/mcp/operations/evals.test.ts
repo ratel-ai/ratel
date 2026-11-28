@@ -789,6 +789,40 @@ test("evals_start_run: a key with mcp:write but without evals:write is refused",
   assert.match(result.message, /evals:write/);
 });
 
+test("evals_start_run: tells the run start if the key may copy captured text, and a refused copy is forbidden", async () => {
+  const seen: boolean[] = [];
+  const startRuns: EvalsOperationDeps["startRuns"] = async (_subject, start) => {
+    seen.push(start.mayCopyContent);
+    return start.mayCopyContent
+      ? {
+          ok: true,
+          runs: [
+            {
+              eval: "Refunds",
+              evalId: EVAL,
+              ok: true,
+              experiment: experiment({ state: "running", finishedAt: null }),
+              note: null,
+            },
+          ],
+        }
+      : { ok: false, reason: "no_content_access", message: "This caller may not copy it." };
+  };
+  const as = (scopes: string[]) =>
+    dispatchOperation(
+      "evals_start_run",
+      { eval: "Refunds" },
+      {
+        registry: buildRegistry(evalsOperations(fakeDeps({ startRuns }))),
+        auth: { ...auth, scopes } as McpAuthContext,
+      },
+    );
+  const refused = failure(await as(["mcp:write", "evals:write"]));
+  assert.deepEqual([refused.error, refused.reason], ["forbidden", "no_content_access"]);
+  ok(await as(["mcp:write", "evals:write", "content:read"]));
+  assert.deepEqual(seen, [false, true]);
+});
+
 test("evals_get_run: withholds inputs and outputs without content access, and still says to call again", async () => {
   const result = ok<{
     cases: Array<{ input: unknown; trials: Array<{ output: unknown }> }>;

@@ -6,6 +6,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import {
   CONTENT_WITHHELD_HINT,
+  credentialMayReadContent,
   defaultContentAccessDeps,
   mayReadContent,
 } from "@/lib/mcp/operations/content-access";
@@ -109,7 +110,14 @@ export interface EvalsOperationDeps {
   /** A run of one eval, or one run for each eval (or for the evals named). */
   startRuns(
     subject: UsageSubject,
-    start: { eval?: string; evals?: string[]; startedBy: string; changes: EvalRunChanges },
+    start: {
+      eval?: string;
+      evals?: string[];
+      startedBy: string;
+      /** May the caller copy captured text into the run? A query dataset needs it. */
+      mayCopyContent: boolean;
+      changes: EvalRunChanges;
+    },
   ): Promise<{ ok: true; runs: EachRunPart[] } | Extract<StartExperimentResult, { ok: false }>>;
   /**
    * Drives a new eval run in this process until it closes, so an agent does not wait for the
@@ -165,15 +173,19 @@ const defaultDeps: EvalsOperationDeps = {
   createCases: (inputs) => createDrizzleCaseStore(getDb()).createAll(inputs),
   getEvalByName: (projectId, name) => createDrizzleEvalStore(getDb()).getByName(projectId, name),
   createEval: (input) => createDrizzleEvalStore(getDb()).create(input),
-  startRuns: async (subject, { eval: one, evals, startedBy, changes }) => {
+  startRuns: async (subject, { eval: one, evals, startedBy, mayCopyContent, changes }) => {
     if (one === undefined) {
       return startEachEvalRun(
         subject,
-        { ...(evals ? { evals } : {}), startedBy, changes },
+        { ...(evals ? { evals } : {}), startedBy, mayCopyContent, changes },
         experimentDeps(),
       );
     }
-    const result = await startEvalRun(subject, { eval: one, startedBy, changes }, experimentDeps());
+    const result = await startEvalRun(
+      subject,
+      { eval: one, startedBy, mayCopyContent, changes },
+      experimentDeps(),
+    );
     if (!result.ok) return result;
     const { experiment } = result;
     const name = experiment.evalVersions[0]?.name ?? one;
@@ -655,6 +667,9 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             ...(params.eval ? { eval: params.eval } : {}),
             ...(params.evals ? { evals: params.evals } : {}),
             startedBy: requester(ctx.auth),
+            // A query dataset copies captured text into the run. The run start refuses it for a
+            // key with no `content:read` scope, and reads the opt-in of the project itself.
+            mayCopyContent: credentialMayReadContent(ctx.auth),
             changes,
           },
         );
