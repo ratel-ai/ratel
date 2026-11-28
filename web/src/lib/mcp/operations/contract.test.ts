@@ -225,6 +225,8 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // RQL over trace data (RTL-325), behind customMonitoring.
   ["describe_rql_schema", false],
   ["run_rql", false],
+  // Ask in words: drafts widgets and saves none, behind customMonitoring.
+  ["draft_widgets", false],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {
