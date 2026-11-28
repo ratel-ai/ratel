@@ -117,6 +117,7 @@ async function setup() {
     client,
     provider,
     versions,
+    builds,
     push,
     makeReady,
     pushReady,
@@ -283,6 +284,25 @@ test("a project delete leaves orphan snapshots, and the sweep deletes them", asy
     assert.equal(t.provider.snapshots.has(snapshotName(DEPLOYMENT, id)), false);
   assert.ok(t.provider.snapshots.has(snapshotName(DEPLOYMENT, kept)));
   assert.ok(t.provider.snapshots.has(snapshotName(DEPLOYMENT, preparing)));
+});
+
+test("a build that stopped after the snapshot save leaves a failed version, and the sweep deletes its snapshot", async () => {
+  const t = await setup();
+  const stopped = await t.push();
+  await t.versions.markUploaded(PROJECT_ID, stopped);
+  await t.builds.claim(PROJECT_ID, stopped, new Date());
+  // The worker saved the snapshot, then stopped before the smoke check ended.
+  t.provider.snapshots.set(snapshotName(DEPLOYMENT, stopped), new Map());
+  const later = new Date(Date.now() + 60_000);
+  assert.equal(await t.builds.failStopped(later, "The build stopped.", later), 1);
+  const kept = await t.pushReady();
+
+  const swept = await t.sweep();
+
+  assert.equal(swept.orphanSnapshots, 1);
+  assert.equal(t.provider.snapshots.has(snapshotName(DEPLOYMENT, stopped)), false);
+  assert.ok(t.provider.snapshots.has(snapshotName(DEPLOYMENT, kept)));
+  assert.equal((await t.read(stopped)).status, "failed");
 });
 
 test("the orphan sweep does not touch a snapshot of another deployment or with an old name", async () => {

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import type { RetentionStore } from "../ports/retention-store";
 import { sandboxes, sandboxRuns, sandboxVersions, sandboxVms } from "../schema";
@@ -101,12 +101,14 @@ export function createDrizzleRetentionStore(db: Db): RetentionStore {
         .where(and(eq(sandboxVersions.id, versionId), eq(sandboxVersions.status, "retired")));
     },
 
-    async existing(versionIds) {
+    async snapshotHolders(versionIds) {
       if (versionIds.length === 0) return new Set();
       const rows = await db
         .select({ id: sandboxVersions.id })
         .from(sandboxVersions)
-        .where(inArray(sandboxVersions.id, [...versionIds]));
+        .where(
+          and(inArray(sandboxVersions.id, [...versionIds]), ne(sandboxVersions.status, "failed")),
+        );
       return new Set(rows.map((row) => row.id));
     },
   };

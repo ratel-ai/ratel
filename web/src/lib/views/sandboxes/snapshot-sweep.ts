@@ -12,7 +12,7 @@ import type { SandboxProvider } from "./ports/sandbox-provider";
  *   it). Each other ready version is retired first, then its snapshot is deleted. A retired
  *   version never runs again.
  * - orphans: a snapshot of this deployment whose version row is gone (a project or an organization
- *   delete cascades the rows) is deleted.
+ *   delete cascades the rows) or `failed` (the build worker stopped after the save) is deleted.
  * Only a snapshot with a name of this deployment is ever deleted (`domain/snapshot-name.ts`): other
  * deployments can share the account. A snapshot with the old name `rv-<version id>` carries no
  * deployment, so it is never deleted here, and its version is never retired.
@@ -108,7 +108,10 @@ async function deleteRetiredSnapshots(
   }
 }
 
-/** Deletes the snapshots of this deployment whose version row is gone. */
+/**
+ * Deletes the snapshots of this deployment whose version row is gone or `failed`. A build whose
+ * worker stopped after the snapshot save leaves a failed version with a snapshot.
+ */
 async function deleteOrphans(
   provider: SandboxProvider,
   deps: SnapshotSweepDeps,
@@ -119,8 +122,8 @@ async function deleteOrphans(
     ({ snapshotRef, versionId }) => snapshotVersionId(deps.deploymentId, snapshotRef) === versionId,
   );
   if (listed.length === 0) return;
-  const known = await deps.store.existing(listed.map(({ versionId }) => versionId));
-  const orphans = listed.filter(({ versionId }) => !known.has(versionId)).slice(0, DELETE_LIMIT);
+  const holders = await deps.store.snapshotHolders(listed.map(({ versionId }) => versionId));
+  const orphans = listed.filter(({ versionId }) => !holders.has(versionId)).slice(0, DELETE_LIMIT);
   for (const { snapshotRef, versionId } of orphans) {
     try {
       await provider.deleteSnapshot(snapshotRef);
