@@ -15,6 +15,8 @@ Dashboards and alerts both call it. Kind `sql` (RQL text) runs here too, through
 | `funnel.ts` | the funnel kind, pure: how many steps a trace passed. `views/scorers/funnel` reads the traces and fills `metricSeams.funnel`, because it needs the check engine and the scorer results |
 | `clusters.ts` | the shape of the clusters kind's answer; `views/dashboards/clusters` fills `metricSeams.clusters` |
 | `query.ts` (kind `sql`) | `SqlResult`: the columns with their RQL types, the rows as arrays, `truncated`. `synthesis/rql/query` fills `metricSeams.sql` on import, and checks the RQL version |
+| `groups.ts` | a group-by of the flow, step flow, funnel and geography kinds (RTL-398): `topGroupValues` (one bounded query on the summaries: the values of the most traces in the window under the query's and the page's filters, a task by `traceTasks`, the traces without a value as one group, and how many values there are), `runGrouped` (each value's query, `GroupedResult` with the values left out; the small queries of one project take a place in a gate of the process, `GROUP_QUERIES_PER_PROJECT` = 2, whatever widget or tool asks, and a failed one is null) |
+| `group-query.ts` | `groupQuery`: the query of one value, one more clause (its value, `withoutProperties` or `without` for none) and no group-by; safe for the browser |
 | `geography.ts` | the geography kind: a measure by country, or by region of one country, from the codes on `otel_trace_summaries` |
 | `trace-fixture.ts` | test data: spans as ingest stores them, with their summaries |
 

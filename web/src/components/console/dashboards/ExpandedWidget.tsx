@@ -136,6 +136,7 @@ export function ExpandedWidget({
                   result={preview.result}
                   range={range}
                   filters={filters}
+                  expanded
                 />
               ) : (
                 <p role="status" className="text-sm text-danger">

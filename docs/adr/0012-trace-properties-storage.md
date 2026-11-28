@@ -98,6 +98,12 @@ person indexes it. With the flag off, ingest records and stores none of it. A pe
 property in Settings > General > Trace properties, or with `change_trace_property` (a column-backed
 standard property is a core trace field and cannot be stopped), and erases its stored values there.
 
+A flow, step flow, funnel or map widget groups by one property, a task, a user or a session as
+small multiples (RTL-398): one bounded query gives the values of the most traces, then each value's
+chart is the same query with the value as one more filter, at most 12 of them, and the traces without
+a value are one group. No other query engine reads the properties. The small queries of one project
+run at most two at a time in a process, each under the widget's own read timeout.
+
 ## Consequences
 
 - One shared GIN index grows with the values of every project; a key with very many distinct

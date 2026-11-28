@@ -1,5 +1,6 @@
 import { type MetricQuery, QUERY_KINDS, type Query, type SqlQuery } from "@/lib/contracts/query";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
+import type { GroupedResult } from "@/lib/synthesis/metrics/groups";
 import type { QueryResult } from "@/lib/synthesis/metrics/query";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
@@ -27,8 +28,8 @@ export interface WidgetRefusal {
   property?: string;
 }
 
-/** What a widget shows: its numbers, or the refusal of its RQL text. */
-export type WidgetResult = QueryResult | WidgetRefusal;
+/** What a widget shows: its numbers, one small result per value of its group-by, or a refusal. */
+export type WidgetResult = QueryResult | GroupedResult | WidgetRefusal;
 
 /**
  * How a metric widget (RQL) is drawn: the rows decide which ones fit (`sql-chart.ts`). Each other

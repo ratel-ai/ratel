@@ -1,4 +1,4 @@
-import { parseQuery } from "@/lib/contracts/query";
+import { isGrouped, parseQuery, type Query } from "@/lib/contracts/query";
 import {
   type BoundReadDb,
   supplementaryReadTimeoutMs,
@@ -10,6 +10,7 @@ import {
   metricOffered,
   type QueryScope,
 } from "@/lib/synthesis/metrics/catalog";
+import { type GroupedResult, runGrouped, topGroupValues } from "@/lib/synthesis/metrics/groups";
 import { QueryError, runQuery } from "@/lib/synthesis/metrics/query";
 import { textToRun } from "@/lib/views/dashboards/metric-rql";
 import type {
@@ -67,12 +68,48 @@ export const loadWidget = (
         distinctId: `project:${projectId}`,
         fallback: null,
         load: () =>
-          withStatementTimeout(
-            // A filter on a property that is not indexed says so, as on a widget of kind sql.
-            (db) => runQuery(projectId, widget.query, scope, db).catch(refusedOrThrow),
-            { operation: "dashboard_widget", timeoutMs: supplementaryReadTimeoutMs(), db },
-          ),
+          isGrouped(widget.query)
+            ? runGroupedQuery(projectId, widget.query, scope, { db }).catch(refusedOrThrow)
+            : withStatementTimeout(
+                // A filter on a property that is not indexed says so, as on a widget of kind sql.
+                (db) => runQuery(projectId, widget.query, scope, db).catch(refusedOrThrow),
+                { operation: "dashboard_widget", timeoutMs: supplementaryReadTimeoutMs(), db },
+              ),
       });
+
+/**
+ * A query with a group-by (RTL-398): the values of the most traces, then the query of each value,
+ * every read under the widget's timeout of its own, and the small queries of the project through
+ * the gate of `runGrouped`. A value whose read fails shows no numbers; the others still do. A
+ * refusal of the query (a property that is not indexed) is thrown, as `runQuery` throws it.
+ */
+export function runGroupedQuery(
+  projectId: string,
+  query: Query,
+  scope: QueryScope,
+  {
+    operation = "dashboard_widget",
+    db,
+  }: {
+    /** Who reads, in the logs and the timeout's span. */
+    operation?: string;
+    /** Another database than the pool's, in tests. */
+    db?: BoundReadDb;
+  } = {},
+): Promise<GroupedResult> {
+  const bounded = { operation, timeoutMs: supplementaryReadTimeoutMs(), db };
+  return runGrouped(projectId, query, {
+    values: () =>
+      withStatementTimeout((db) => topGroupValues(projectId, query, scope, db), bounded),
+    run: (small) =>
+      loadOrFallback({
+        operation,
+        distinctId: `project:${projectId}`,
+        fallback: null,
+        load: () => withStatementTimeout((db) => runQuery(projectId, small, scope, db), bounded),
+      }),
+  });
+}
 
 /** The refusal of a query the person can fix (its code and the fix); any other error goes on. */
 function refusedOrThrow(error: unknown): WidgetRefusal {

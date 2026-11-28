@@ -9,6 +9,7 @@ import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
 import { inReadingOrder } from "@/lib/views/dashboards/layout";
 import type { ToolSuccess } from "../../shell/state";
 import { ClustersTable } from "./clusters-table";
+import { GroupsTable, type ViewGroups } from "./groups-table";
 import {
   type DashboardModel,
   type DashboardText,
@@ -94,6 +95,8 @@ function Body({ item, model }: { item: ViewWidget; model: DashboardModel }) {
   // The console's own drawings of them are the Intents map's: this view links to it.
   if (item.result?.kind === "clusters")
     return <ClustersTable projectId={model.projectId} result={item.result as DashboardClusters} />;
+  // A small chart per value does not fit a cell of a view: the values and their numbers do.
+  if (item.result?.kind === "grouped") return <GroupsTable result={item.result as ViewGroups} />;
   return (
     <WidgetBody
       projectId={model.projectId}

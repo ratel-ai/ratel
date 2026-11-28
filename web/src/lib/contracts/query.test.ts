@@ -398,3 +398,49 @@ test("a metric takes users, sessions and tasks, and groups by task (RTL-397)", (
     }).ok,
   );
 });
+
+test("flow, step flow, funnel and map group by one property, task, user or session (RTL-398)", () => {
+  const funnel = {
+    version: 1,
+    kind: "funnel",
+    steps: [
+      { name: "a", condition: { type: "no_error" } },
+      { name: "b", condition: { type: "no_error" } },
+    ],
+  };
+  const kinds = [
+    flowQuery("tool"),
+    stepFlowQuery("tool"),
+    funnel,
+    geographyQuery("trace_count", "count"),
+  ];
+  for (const query of kinds) {
+    for (const groupBy of ["task", "user", "session", { property: "plan" }])
+      assert.ok(parseQuery({ ...query, groupBy }).ok, `${query.kind} ${JSON.stringify(groupBy)}`);
+    assert.ok(parseQuery({ ...query, groupBy: "user", groupLimit: 12 }).ok, query.kind);
+    for (const wrong of [
+      { groupBy: "model" },
+      { groupBy: { property: "" } },
+      { groupBy: "user", groupLimit: 13 },
+      { groupBy: "user", groupLimit: 0 },
+      { groupLimit: 6 },
+    ])
+      assert.ok(!parseQuery({ ...query, ...wrong }).ok, `${query.kind} ${JSON.stringify(wrong)}`);
+  }
+  assert.ok(!parseQuery({ ...BASE, groupBy: "user" }).ok, "a metric groups by its dimensions");
+  assert.ok(!parseQuery({ version: 1, kind: "clusters", view: "asks", groupBy: "user" }).ok);
+  assert.deepEqual(queryProperties({ ...flowQuery("tool"), groupBy: { property: "plan" } }), [
+    "plan",
+  ]);
+  assert.ok(
+    portableQuerySchema.safeParse({ ...flowQuery("tool"), groupBy: { property: "plan" } }).success,
+  );
+});
+
+test("a filter of the kinds names a user, a session or a task the trace has none of (RTL-398)", () => {
+  const filters = { without: ["user", "session", "task"], and: [{ without: ["task"] }] };
+  for (const query of [flowQuery("tool"), stepFlowQuery("tool")])
+    assert.ok(parseQuery({ ...query, filters }).ok, query.kind);
+  assert.ok(!parseQuery({ ...flowQuery("tool"), filters: { without: ["model"] } }).ok);
+  assert.ok(!parseQuery({ ...BASE, filters: { without: ["user"] } }).ok, "a metric has no without");
+});

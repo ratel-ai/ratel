@@ -52,6 +52,7 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "lib/views/dashboards/actions.ts#changeDashboard": "change_dashboard",
   "lib/views/dashboards/data.ts#loadWidget": "query_monitoring",
   "lib/views/dashboards/data.ts#loadWidgets": "get_dashboard",
+  "lib/views/dashboards/data.ts#runGroupedQuery": "query_monitoring",
   "lib/views/dashboards/document.ts#exportDashboard": "get_dashboard",
   "lib/views/dashboards/document.ts#importDashboard": "import_dashboard",
   "lib/views/slack/connection-actions.ts#readChannels": "list_slack_channels",

@@ -277,6 +277,33 @@ export const FAULTS: Readonly<Record<string, ViewWidget>> = {
   failed: { ...KINDS.line, id: "failed", layout: { x: 8, y: 0, w: 4, h: 6 }, result: null },
 };
 
+/** A funnel by plan (RTL-398): each value with its traces and its numbers in one line. */
+const funnelOf = (count: number) => ({
+  kind: "funnel",
+  steps: [
+    { name: "Found the order", count, conversion: null },
+    { name: "Refunded", count: Math.round(count * 0.6), conversion: 0.6 },
+  ],
+  sample: { matched: count, read: count },
+});
+export const GROUPED: ViewWidget = item(
+  "grouped",
+  "Funnel by plan",
+  "funnel",
+  { ...KINDS.funnel.widget?.query, groupBy: { property: "plan" }, groupLimit: 3 },
+  {
+    kind: "grouped",
+    by: { property: "plan" },
+    leftOut: 2,
+    groups: [
+      { value: "pro", traces: 210, summary: "Found the order 210 > Refunded 126" },
+      { value: "free", traces: 160, summary: "Found the order 160 > Refunded 96" },
+      { value: null, traces: 50, summary: "Found the order 50 > Refunded 30" },
+    ].map((group) => ({ ...group, result: funnelOf(group.traces) })),
+  },
+  [0, 0, 12, 8],
+);
+
 const window = { since: "2026-10-13T00:00:00.000Z", until: "2026-11-12T00:00:00.000Z" };
 const HREF = "/project/11111111-1111-4111-8111-111111111111/dashboards/d1";
 
@@ -349,6 +376,28 @@ const fixtures: ViewFixtures = {
           range: { preset: "custom", from: "2026-10-13", to: "2026-11-12" },
           filters: {},
           widgets: [{ ...KINDS.line, id: "query", layout: { x: 0, y: 0, w: 12, h: 8 } }],
+        },
+      },
+    ),
+  },
+  "query_monitoring · grouped": {
+    tool: "query_monitoring",
+    result: okResult(
+      {
+        name: GROUPED.name,
+        summary: "By plan: pro (210 traces): Found the order 210 > Refunded 126",
+        result: {},
+      },
+      {
+        window,
+        view: {
+          kind: "dashboard",
+          projectId: "11111111-1111-4111-8111-111111111111",
+          name: "Query",
+          href: EXPLORE,
+          range: { preset: "custom", from: "2026-10-13", to: "2026-11-12" },
+          filters: {},
+          widgets: [{ ...GROUPED, id: "query" }],
         },
       },
     ),
