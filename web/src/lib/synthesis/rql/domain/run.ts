@@ -90,12 +90,11 @@ export async function executeCompiled(
   }
 }
 
-/** The error of a project that runs `parallelQueriesPerProject` queries already. */
-export function busyError(): RqlRunError {
-  const max = RQL_LIMITS.parallelQueriesPerProject;
+/** The error of a project that runs its most queries already: `max` is the cap of the gate it asked. */
+export function busyError(max: number = RQL_LIMITS.parallelQueriesPerProject): RqlRunError {
   return {
     code: "rql_busy",
-    message: `This project already runs ${max} queries at the same time.`,
+    message: `This project already runs ${max} ${max === 1 ? "query" : "queries"} at the same time.`,
     fix: "Wait until one of them ends, then run the query again.",
   };
 }

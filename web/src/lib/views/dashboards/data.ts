@@ -17,9 +17,13 @@ import { queryMetric } from "@/lib/views/dashboards/widget";
 import "@/lib/views/scorers/metrics";
 import "@/lib/views/dashboards/clusters";
 import "@/lib/synthesis/rql/query";
+import { RQL_LIMITS } from "@/lib/synthesis/rql/compile";
 
 /** Widgets read at once: a full dashboard must not take the whole connection pool. */
 const CONCURRENCY = 4;
+/** Widgets of kind sql read at once: no more than the RQL gate gives one project. */
+const SQL_CONCURRENCY = RQL_LIMITS.parallelQueriesPerProject;
+const DAY_MS = 86_400_000;
 
 type Load = (
   projectId: string,
@@ -65,20 +69,35 @@ export async function loadWidgets(
   load: Load = (project, widget, at) => loadWidget(project, widget, at),
 ): Promise<(WidgetResult | null)[]> {
   const results: (WidgetResult | null)[] = new Array(widgets.length).fill(null);
-  let next = 0;
-  const worker = async () => {
-    while (next < widgets.length) {
-      const index = next++;
-      const widget = widgets[index];
-      if ("problem" in widget || widget.missingScorer) continue;
-      const query = parseQuery(widget.query);
-      if (!query.ok) continue;
-      const metric = queryMetric(query.query);
-      if (metric && !metricOffered(metric, features)) continue;
-      results[index] = await load(projectId, widget, scope);
-    }
+  const readable = widgets.flatMap((widget, index) => {
+    if ("problem" in widget || widget.missingScorer) return [];
+    const query = parseQuery(widget.query);
+    if (!query.ok) return [];
+    const metric = queryMetric(query.query);
+    if (metric && !metricOffered(metric, features)) return [];
+    return [{ index, widget, sql: query.query.kind === "sql" }];
+  });
+  // Kind sql in its own lane, as wide as the RQL gate: a second reader waits for places, not fails.
+  const lane = async (items: typeof readable, width: number) => {
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length) {
+        const { index, widget } = items[next++];
+        results[index] = await load(projectId, widget, scope);
+      }
+    };
+    await Promise.all(Array.from({ length: width }, worker));
   };
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  await Promise.all([
+    lane(
+      readable.filter((item) => !item.sql),
+      CONCURRENCY,
+    ),
+    lane(
+      readable.filter((item) => item.sql),
+      SQL_CONCURRENCY,
+    ),
+  ]);
   return results;
 }
 
@@ -89,8 +108,15 @@ async function loadSqlWidget(
   db: BoundReadDb | undefined,
 ): Promise<WidgetResult | null> {
   try {
+    // A range longer than RQL reads runs on its last days, and the result says so.
+    const longest = RQL_LIMITS.maxWindowDays * DAY_MS;
+    const clamped = scope.until.getTime() - scope.since.getTime() > longest;
+    const window = clamped ? { ...scope, since: new Date(scope.until.getTime() - longest) } : scope;
     // The runner of kind sql reads through the RQL pool: `db` is only the contract's argument.
-    return await runQuery(projectId, query, scope, db);
+    const result = await runQuery(projectId, query, window, db);
+    return clamped && result.kind === "sql"
+      ? { ...result, clampedToDays: RQL_LIMITS.maxWindowDays }
+      : result;
   } catch (error) {
     if (error instanceof QueryError && error.detail)
       return { kind: "refused", message: error.message, ...error.detail };

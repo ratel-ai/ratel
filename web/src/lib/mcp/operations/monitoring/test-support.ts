@@ -8,10 +8,10 @@ import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { metricSeams, runQuery } from "@/lib/synthesis/metrics/query";
-import type { RqlPool } from "@/lib/synthesis/rql/adapters/pg-executor";
 import { createPgRqlExecutor } from "@/lib/synthesis/rql/adapters/pg-executor";
 import { sqlQueryRunner } from "@/lib/synthesis/rql/query";
 import { createRqlGate } from "@/lib/synthesis/rql/run";
+import { pglitePoolOf } from "@/lib/synthesis/rql/tests/test-support";
 import type { SealedDestination } from "@/lib/views/alerts/destinations";
 import { loadWidget } from "@/lib/views/dashboards/data";
 // What these modules own is read through what they register.
@@ -167,17 +167,8 @@ export function insertTrace(client: PGlite, traceId: string, durationMs = 100, f
  * check: the tools check `customMonitoring` of the caller (`set.on`) before it.
  */
 function runRqlOn(client: PGlite) {
-  const pool: RqlPool = {
-    async connect() {
-      return {
-        async query({ text, values, rowMode }) {
-          const result = await client.query(text, values ?? [], rowMode ? { rowMode } : {});
-          return { rows: result.rows as unknown[] };
-        },
-        release: () => {},
-      };
-    },
-  };
+  // PGlite has one connection: an RQL transaction waits for the one before it.
+  const pool = pglitePoolOf(client);
   metricSeams.sql = sqlQueryRunner({
     run: { executor: createPgRqlExecutor(pool), gate: createRqlGate(), observe: async () => {} },
   });

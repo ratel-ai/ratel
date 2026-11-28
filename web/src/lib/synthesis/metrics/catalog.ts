@@ -55,6 +55,11 @@ export interface QueryScope extends QueryWindow {
    * known (alerts). A trace is known when its summary was last written, a result when it was stored.
    */
   by?: "started" | "known";
+  /**
+   * Who reads. An alert rule's query of kind sql takes the reserved RQL path: a gate of its own
+   * and a shorter timeout (`RQL_LIMITS.alertTimeoutMs`), so a busy dashboard never fails a rule.
+   */
+  purpose?: "alert";
 }
 
 /** The groups kept in a grouped result. */

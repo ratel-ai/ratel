@@ -5,6 +5,7 @@ import { getMetric, type MetricUnit } from "@/lib/synthesis/metrics/catalog";
 import type { QueryResult, SqlResult } from "@/lib/synthesis/metrics/query";
 import { formatMetric } from "@/lib/views/dashboards/chart-model";
 import type { DashboardClusters } from "@/lib/views/dashboards/clusters";
+import { sqlResultNotes } from "@/lib/views/dashboards/sql-chart";
 import type { WidgetResult } from "@/lib/views/dashboards/types";
 import { measuresOne } from "@/lib/views/dashboards/widget";
 
@@ -154,12 +155,17 @@ export function headline(query: Query, result: WidgetResult | null): string {
 }
 
 /** "2 rows of 2 columns: model, cost." The words of a table, for a host that draws nothing. */
-export function tableSummary({ columns, rows, truncated }: SqlResult): string {
+export function tableSummary(result: SqlResult): string {
+  const { columns, rows } = result;
   const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-  if (rows.length === 0) return `No row. The query has ${plural(columns.length, "column")}.`;
+  // The notes the console shows under the widget, in the same words.
+  const notes = sqlResultNotes(result)
+    .map((note) => ` ${note}`)
+    .join("");
+  if (rows.length === 0)
+    return `No row. The query has ${plural(columns.length, "column")}.${notes}`;
   const names = columns.map(({ name }) => name).join(", ");
-  const cut = truncated ? " The query had more rows than its limit: these are the first ones." : "";
-  return `${plural(rows.length, "row")} of ${plural(columns.length, "column")}: ${names}.${cut}`;
+  return `${plural(rows.length, "row")} of ${plural(columns.length, "column")}: ${names}.${notes}`;
 }
 
 /** "2 scorers: Fast; Polite." */

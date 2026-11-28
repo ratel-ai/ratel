@@ -78,8 +78,16 @@ export interface SqlResult {
   columns: { name: string; type: string }[];
   /** Arrays in the order of `columns`. A number is a JS number, a timestamp an ISO string. */
   rows: unknown[][];
-  /** The query had more rows than its limit: `rows` holds the first ones. */
+  /**
+   * The result is not whole: more rows than the limit, a cell cut, or the rows stopped at the byte
+   * cap of RQL. `rows` holds the first ones.
+   */
   truncated: boolean;
+  /**
+   * The range was longer than RQL reads (`RQL_LIMITS.maxWindowDays`): the rows are of its last
+   * this many days only. A stored widget on a long range sets it.
+   */
+  clampedToDays?: number;
 }
 
 export type QueryResult =

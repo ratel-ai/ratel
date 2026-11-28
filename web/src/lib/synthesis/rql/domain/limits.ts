@@ -18,6 +18,8 @@ export const RQL_LIMITS = Object.freeze({
   maxSelectItems: 50,
   /** The most items of one list (IN, GROUP BY, ORDER BY, function arguments). */
   maxListItems: 100,
+  /** The longest output column name (an alias), in characters. */
+  maxAliasChars: 64,
   /** The deepest nesting of an expression. */
   maxExpressionDepth: 200,
   /** The longest text of one cell, in characters. A longer cell is cut, and the result is marked truncated. */
@@ -26,8 +28,17 @@ export const RQL_LIMITS = Object.freeze({
   maxResultBytes: 1_000_000,
   /** Postgres stops a query that runs longer (`statement_timeout`). */
   timeoutMs: 10_000,
-  /** The queries one project can run at the same time. The runner refuses one more. */
+  /** The queries one project can run at the same time. One more waits for a place, then is refused. */
   parallelQueriesPerProject: 2,
+  /** The alert queries one project can run at the same time, on their own gate. */
+  parallelAlertQueriesPerProject: 1,
+  /** How long a query waits for a place of its project before `rql_busy`. */
+  gateWaitMs: 5_000,
+  /**
+   * The timeout of an alert rule's query. Alert queries take a gate of their own, one per project
+   * at a time, so a dashboard never makes a rule fail, and a slow rule holds its tick for this long.
+   */
+  alertTimeoutMs: 2_000,
 });
 
 export type RqlLimits = typeof RQL_LIMITS;

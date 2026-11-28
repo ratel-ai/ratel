@@ -17,9 +17,9 @@ widgets on a grid. A widget is one query object
 | `stored-widget.ts` | `readWidgets`, `writeWidgets`: each stored item passes the widget schema again; one that fails is a broken entry with its title and the reason, and goes back as it was |
 | `starter.ts` | the four widgets of "Start from the traces overview" |
 | `store.ts` | the reads and writes; a widget change locks its row |
-| `data.ts` | `loadWidget`, `loadWidgets`: the numbers, a few reads at a time, each bounded; a failed one, or one whose switch is off, is null; kind `sql` runs on the RQL path and gives a refusal as `WidgetRefusal` |
-| `edit-as-sql.ts` | `metricAsRql`: the RQL text that gives a metric widget's numbers (`Edit as SQL`), or why it has none yet (a rate, a context metric, a group-by on a list); safe for the browser |
-| `sql-chart.ts` | `sqlAsMetric`: the rows of an RQL query as a chart's series, or null for a table; safe for the browser |
+| `data.ts` | `loadWidget`, `loadWidgets`: the numbers, a few reads at a time, each bounded; a failed one, or one whose switch is off, is null; kind `sql` runs on the RQL path, in a lane as wide as the RQL gate of a project (2), and gives a refusal as `WidgetRefusal`. On a range longer than RQL reads it runs on the last 30 days and sets `clampedToDays` |
+| `edit-as-sql.ts` | `metricAsRql`: the RQL text that gives a metric widget's numbers (`Edit as SQL`), or why it has none yet (a rate, a context metric, a group-by on a list); buckets newest first, so a cut drops the oldest; numbers in plain digits. `sqlRangeProblem`: the reason `Edit as SQL` is off over 30 days (the console and MCP `query_monitoring` as sql). `EDIT_AS_SQL_NOTE`: what differs from the form; safe for the browser |
+| `sql-chart.ts` | `sqlAsMetric`: the rows of an RQL query as a chart's series, or null for a table. `sqlResultNotes`: the truncated and the clamped notes, shown under a chart as under a table; safe for the browser |
 | `chart-model.ts` | what a chart draws: six color slots by group name, "Other", the scale, the axis labels and the number formats |
 | `flow-model.ts` | what the flow widget draws: a column per step, one color per name |
 | `step-flow-model.ts` | what the step flow widget draws: a lane of cards per step, as many as fit, with the Health map's ribbons (`views/health/flow-journey-layout`); unfolding a bucket or Later is view state |

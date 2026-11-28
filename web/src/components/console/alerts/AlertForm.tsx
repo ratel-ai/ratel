@@ -20,6 +20,7 @@ import { getMetric } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import {
   alertWindowText,
+  METRIC_TO_SQL_WARNING,
   thresholdFrom,
   thresholdInput,
   thresholdUnit,
@@ -83,6 +84,8 @@ export function AlertForm({
   const scorers = useScorers();
   const [query, setQuery] = useState<AlertQuery>(() => startQuery(rule?.query ?? start));
   const [name, setName] = useState(rule?.name ?? "");
+  /** The Watch switch made RQL text of a metric: the form says how its number differs. */
+  const [converted, setConverted] = useState(false);
   const [operator, setOperator] = useState<AlertOperator>(rule?.operator ?? "above");
   // The number of RQL text has no unit: it is compared as it is.
   const unit = (query.kind === "metric" && getMetric(query.measures[0].measure)?.unit) || "count";
@@ -153,10 +156,16 @@ export function AlertForm({
               value={query.kind === "sql" ? "sql" : "form"}
               onValueChange={(mode) => {
                 setThresholdText("");
+                setConverted(mode === "sql" && query.kind === "metric");
                 setQuery(mode === "sql" ? sqlOf(query) : DEFAULT_QUERY);
               }}
             />
           </Choice>
+          {query.kind === "sql" && converted ? (
+            <Callout tone="warning" title="Not the same number as the metric">
+              {METRIC_TO_SQL_WARNING}
+            </Callout>
+          ) : null}
           {query.kind === "sql" ? (
             <SqlFields
               query={query}
@@ -326,7 +335,10 @@ function startQuery(query: AlertQuery | null): AlertQuery {
   return query && parseQuery(query).ok ? query : DEFAULT_QUERY;
 }
 
-/** The RQL text of the metric, when it has one: the alert keeps watching the same number. */
+/**
+ * The RQL text of the metric, when it has one. It is close to the metric, not the same number
+ * (`METRIC_TO_SQL_WARNING`): the form shows the warning after the switch.
+ */
 function sqlOf(query: AlertQuery): AlertQuery {
   if (query.kind === "sql") return query;
   const rql = metricAsRql({ title: "", chart: "number", query }, "hour");

@@ -290,6 +290,14 @@ function checkItems(select: ParsedSelect, scope: Scope): CheckedItem[] {
       }
       continue;
     }
+    if (column.alias && column.alias.length > RQL_LIMITS.maxAliasChars) {
+      fail(
+        "syntax_error",
+        `An output name has ${column.alias.length} characters. RQL reads at most ${RQL_LIMITS.maxAliasChars}.`,
+        `Give the column a shorter name after AS, of ${RQL_LIMITS.maxAliasChars} characters or less.`,
+        column.at,
+      );
+    }
     const expr = checkExpr(column.expr, scope);
     items.push({
       expr,
