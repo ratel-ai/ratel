@@ -82,6 +82,10 @@ the upgrade page when the plan does not index properties of the project's own. T
 offers the 50 most frequent values of each indexed property in the range, in one bounded query.
 RQL reads `->>` through the `security_barrier` views, so the GIN index serves the console's other
 filters and pages, not RQL.
+The Flow, Step flow, Funnel and Map kinds and the page filter of a dashboard and of Explore take
+the same filter (RTL-397). The absence of a property (`withoutProperties`, a group-by's "no value")
+is `properties ->> 'k' is null`: the index cannot answer it, so it reads the project's rows in the
+window, as a group-by does.
 
 **No runtime DDL.** The column and the GIN index exist once for every project (migration `0063`);
 a newly indexed key needs no index and no schema change.

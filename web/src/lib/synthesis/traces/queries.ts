@@ -141,6 +141,8 @@ export interface TraceFacetOptions extends TraceFacetFilters, AgentDimensionFilt
 export interface TraceFacetValue {
   value: string;
   count: number;
+  /** What a person reads for an id (a task's name). The value when absent. */
+  label?: string;
 }
 
 export type TraceFacets = Record<TraceFacetKey, TraceFacetValue[]>;

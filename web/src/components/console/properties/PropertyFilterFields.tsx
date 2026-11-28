@@ -17,15 +17,19 @@ import { usePropertyChoices } from "./PropertyChoicesProvider";
  * The property part of a trace filter (RTL-396): pick a trace property, then one of its most
  * frequent values in the range; values of one property are alternatives, properties combine. A
  * detected property is listed off: picking it shows why, with the link that fixes it. Nothing
- * shows while the project has no property. The Flow, Step flow, Funnel and Map forms can use it
- * as it is: it edits `filter.properties` and nothing else.
+ * shows while the project has no property. It edits `filter.properties` and nothing else. In a
+ * filter bar (`QueryFilter`, the page filter of a dashboard and of Explore) the bar shows the
+ * chosen values as its chips, so the fields show only the pickers (`chips={false}`).
  */
 export function PropertyFilterFields({
   filter,
   onChange,
+  chips = true,
 }: {
   filter: TraceFilter;
   onChange: (next: (current: TraceFilter) => TraceFilter) => void;
+  /** Lists the chosen values with a remove button each. Off where a filter bar lists them. */
+  chips?: boolean;
 }) {
   const { projectId, choices } = usePropertyChoices();
   const [picked, setPicked] = useState<string | null>(null);
@@ -81,7 +85,7 @@ export function PropertyFilterFields({
           />
         ) : null}
       </div>
-      {active.length > 0 ? (
+      {chips && active.length > 0 ? (
         <ul className="flex flex-wrap gap-1.5" aria-label="Trace property filters">
           {active.map(([name, kept]) => (
             <li

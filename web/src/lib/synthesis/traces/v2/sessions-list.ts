@@ -146,7 +146,7 @@ export function sessionListPageQuery(
   limit: number,
   traces?: TraceFilter,
 ): SQL {
-  const matches = traceFilterCondition(traces);
+  const matches = traceFilterCondition(projectId, traces);
   // Failed sessions are found once per page: closed turns with an error step,
   // plus OTLP turns whose trace has an error span (by `otlp:<trace id>` on
   // `trace_turns_project_turn_key_idx`), not one lookup per walked turn.

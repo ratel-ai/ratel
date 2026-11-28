@@ -17,9 +17,9 @@ import { loadTaskOptions } from "../scorers/tasks";
 import { loadFormProperties } from "./property-data";
 
 /**
- * What the widget fields offer: the filter values of the range, the scorer picker (null while
- * scorers are off), the trace properties with their values, and the project's task names by id
- * (RTL-397, while custom monitoring is on) for a widget grouped by task.
+ * What the widget fields offer: the filter values of the range (with the project's tasks by name,
+ * RTL-397, while custom monitoring is on), the scorer picker (null while scorers are off), and the
+ * trace properties with their values.
  */
 export async function loadWidgetForm(
   projectId: string,
@@ -57,8 +57,9 @@ export async function loadWidgetForm(
         })
       : [],
   ]);
+  const task = tasks.map(({ id, name }) => ({ value: id, label: name, count: 0 }));
   return {
-    facets,
+    facets: task.length > 0 ? { ...facets, task } : facets,
     scorers,
     properties,
     taskNames: Object.fromEntries(tasks.map(({ id, name }) => [id, name])),

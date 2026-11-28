@@ -55,6 +55,23 @@
             "minLength": 1,
             "maxLength": 2000
           }
+        },
+        "properties": {
+          "description": "Indexed trace properties, by name: a trace matches one of the values of each name. list_trace_properties gives the names.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -411,6 +428,36 @@
                           "maxLength": 2000
                         }
                       },
+                      "users": {
+                        "description": "End users (user_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "sessions": {
+                        "description": "Sessions (session_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "tasks": {
+                        "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
                       "status": {
                         "type": "string",
                         "enum": [
@@ -441,6 +488,16 @@
                             "minLength": 1,
                             "maxLength": 2000
                           }
+                        }
+                      },
+                      "withoutProperties": {
+                        "description": "Indexed trace properties, by name, that the trace has no value of.",
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
                         }
                       },
                       "and": {
@@ -503,6 +560,36 @@
                                 "maxLength": 2000
                               }
                             },
+                            "users": {
+                              "description": "End users (user_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "sessions": {
+                              "description": "Sessions (session_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "tasks": {
+                              "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
                             "status": {
                               "type": "string",
                               "enum": [
@@ -533,6 +620,16 @@
                                   "minLength": 1,
                                   "maxLength": 2000
                                 }
+                              }
+                            },
+                            "withoutProperties": {
+                              "description": "Indexed trace properties, by name, that the trace has no value of.",
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
                               }
                             }
                           },
@@ -676,6 +773,36 @@
                           "maxLength": 2000
                         }
                       },
+                      "users": {
+                        "description": "End users (user_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "sessions": {
+                        "description": "Sessions (session_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "tasks": {
+                        "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
                       "status": {
                         "type": "string",
                         "enum": [
@@ -706,6 +833,16 @@
                             "minLength": 1,
                             "maxLength": 2000
                           }
+                        }
+                      },
+                      "withoutProperties": {
+                        "description": "Indexed trace properties, by name, that the trace has no value of.",
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
                         }
                       },
                       "and": {
@@ -768,6 +905,36 @@
                                 "maxLength": 2000
                               }
                             },
+                            "users": {
+                              "description": "End users (user_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "sessions": {
+                              "description": "Sessions (session_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "tasks": {
+                              "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
                             "status": {
                               "type": "string",
                               "enum": [
@@ -798,6 +965,16 @@
                                   "minLength": 1,
                                   "maxLength": 2000
                                 }
+                              }
+                            },
+                            "withoutProperties": {
+                              "description": "Indexed trace properties, by name, that the trace has no value of.",
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
                               }
                             }
                           },
@@ -934,6 +1111,36 @@
                           "maxLength": 2000
                         }
                       },
+                      "users": {
+                        "description": "End users (user_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "sessions": {
+                        "description": "Sessions (session_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "tasks": {
+                        "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
                       "status": {
                         "type": "string",
                         "enum": [
@@ -964,6 +1171,16 @@
                             "minLength": 1,
                             "maxLength": 2000
                           }
+                        }
+                      },
+                      "withoutProperties": {
+                        "description": "Indexed trace properties, by name, that the trace has no value of.",
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
                         }
                       },
                       "and": {
@@ -1026,6 +1243,36 @@
                                 "maxLength": 2000
                               }
                             },
+                            "users": {
+                              "description": "End users (user_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "sessions": {
+                              "description": "Sessions (session_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "tasks": {
+                              "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
                             "status": {
                               "type": "string",
                               "enum": [
@@ -1056,6 +1303,16 @@
                                   "minLength": 1,
                                   "maxLength": 2000
                                 }
+                              }
+                            },
+                            "withoutProperties": {
+                              "description": "Indexed trace properties, by name, that the trace has no value of.",
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
                               }
                             }
                           },
@@ -1314,6 +1571,36 @@
                           "maxLength": 2000
                         }
                       },
+                      "users": {
+                        "description": "End users (user_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "sessions": {
+                        "description": "Sessions (session_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "tasks": {
+                        "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
                       "status": {
                         "type": "string",
                         "enum": [
@@ -1344,6 +1631,16 @@
                             "minLength": 1,
                             "maxLength": 2000
                           }
+                        }
+                      },
+                      "withoutProperties": {
+                        "description": "Indexed trace properties, by name, that the trace has no value of.",
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
                         }
                       },
                       "and": {
@@ -1406,6 +1703,36 @@
                                 "maxLength": 2000
                               }
                             },
+                            "users": {
+                              "description": "End users (user_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "sessions": {
+                              "description": "Sessions (session_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "tasks": {
+                              "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
                             "status": {
                               "type": "string",
                               "enum": [
@@ -1436,6 +1763,16 @@
                                   "minLength": 1,
                                   "maxLength": 2000
                                 }
+                              }
+                            },
+                            "withoutProperties": {
+                              "description": "Indexed trace properties, by name, that the trace has no value of.",
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
                               }
                             }
                           },
@@ -1818,6 +2155,36 @@
                           "maxLength": 2000
                         }
                       },
+                      "users": {
+                        "description": "End users (user_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "sessions": {
+                        "description": "Sessions (session_id): one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "tasks": {
+                        "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                        "maxItems": 1000,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
                       "status": {
                         "type": "string",
                         "enum": [
@@ -1848,6 +2215,16 @@
                             "minLength": 1,
                             "maxLength": 2000
                           }
+                        }
+                      },
+                      "withoutProperties": {
+                        "description": "Indexed trace properties, by name, that the trace has no value of.",
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
                         }
                       },
                       "and": {
@@ -1910,6 +2287,36 @@
                                 "maxLength": 2000
                               }
                             },
+                            "users": {
+                              "description": "End users (user_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "sessions": {
+                              "description": "Sessions (session_id): one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
+                            "tasks": {
+                              "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                              "maxItems": 1000,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              }
+                            },
                             "status": {
                               "type": "string",
                               "enum": [
@@ -1940,6 +2347,16 @@
                                   "minLength": 1,
                                   "maxLength": 2000
                                 }
+                              }
+                            },
+                            "withoutProperties": {
+                              "description": "Indexed trace properties, by name, that the trace has no value of.",
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 100
                               }
                             }
                           },
@@ -2307,6 +2724,36 @@
                               "maxLength": 2000
                             }
                           },
+                          "users": {
+                            "description": "End users (user_id): one of them.",
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "sessions": {
+                            "description": "Sessions (session_id): one of them.",
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
+                          "tasks": {
+                            "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                            "maxItems": 1000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 2000
+                            }
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -2337,6 +2784,16 @@
                                 "minLength": 1,
                                 "maxLength": 2000
                               }
+                            }
+                          },
+                          "withoutProperties": {
+                            "description": "Indexed trace properties, by name, that the trace has no value of.",
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 100
                             }
                           },
                           "and": {
@@ -2399,6 +2856,36 @@
                                     "maxLength": 2000
                                   }
                                 },
+                                "users": {
+                                  "description": "End users (user_id): one of them.",
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "sessions": {
+                                  "description": "Sessions (session_id): one of them.",
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
+                                "tasks": {
+                                  "description": "Tasks, by id (list_tasks): the trace ran in one of them.",
+                                  "maxItems": 1000,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2000
+                                  }
+                                },
                                 "status": {
                                   "type": "string",
                                   "enum": [
@@ -2429,6 +2916,16 @@
                                       "minLength": 1,
                                       "maxLength": 2000
                                     }
+                                  }
+                                },
+                                "withoutProperties": {
+                                  "description": "Indexed trace properties, by name, that the trace has no value of.",
+                                  "maxItems": 20,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 100
                                   }
                                 }
                               },

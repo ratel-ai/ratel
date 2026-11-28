@@ -56,6 +56,7 @@ export function TraceFilterBar({
   searchable = true,
   entities = false,
   only,
+  more,
 }: {
   tab: TraceTab;
   /** The current query string, with its `?`. */
@@ -72,8 +73,17 @@ export function TraceFilterBar({
   entities?: boolean;
   /** The fields it offers; every one of the tab without it. */
   only?: readonly FilterField["id"][];
+  /** More ways to add a filter, after "Filter": the trace property pickers of a console form. */
+  more?: ReactNode;
 }) {
-  const options = useMemo(() => ({ entities }), [entities]);
+  const taskNames = useMemo(
+    () =>
+      facets.task
+        ? Object.fromEntries(facets.task.map(({ value, label }) => [value, label ?? value]))
+        : undefined,
+    [facets.task],
+  );
+  const options = useMemo(() => ({ entities, taskNames }), [entities, taskNames]);
   const chips = useMemo(() => filterChips(tab, search, options), [tab, search, options]);
   const fields = useMemo(
     () => filterFields(tab, search, facets, options).filter(({ id }) => !only || only.includes(id)),
@@ -143,6 +153,7 @@ export function TraceFilterBar({
               onSearchChange((current) => withFilterToggled(tab, current, field, value))
             }
           />
+          {more}
           {filtered ? (
             <Button
               variant="ghost"

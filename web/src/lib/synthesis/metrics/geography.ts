@@ -46,7 +46,7 @@ export async function runGeography(
     db,
   );
   const { scorer: _, ...own } = filters;
-  const condition = traceFilterCondition(withClause<TraceFilter>(own, scope.filter));
+  const condition = traceFilterCondition(projectId, withClause<TraceFilter>(own, scope.filter));
   const [count] = rowsOf<{ matched: number | string; located: number | string }>(
     await db.execute(sql`
       select count(*)::int as matched, count(${column})::int as located

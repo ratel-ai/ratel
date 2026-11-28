@@ -96,8 +96,7 @@ const LIST_DIMENSIONS: Partial<
   model: { list: "models", values: (filter) => filter.models },
   tool: { list: "tools", values: (filter) => filter.tools },
   agent: { list: "agents", values: (filter) => filter.agents },
-  // A metric's filter names no task: the groups of a task are every task the trace ran in.
-  task: { list: "tasks", values: () => undefined },
+  task: { list: "tasks", values: (filter) => filter.tasks },
 };
 
 const TIME_COLUMNS: Record<Table, string> = {
@@ -324,6 +323,9 @@ function filterConditions(filter: TraceFilter, table: Exclude<Table, "prompts">)
   oneOf("service_name", filter.services);
   oneOf("environment", filter.environments);
   anyOf("mcp_servers", filter.mcpServers);
+  oneOf("user_id", filter.users);
+  oneOf("session_id", filter.sessions);
+  anyOf("tasks", filter.tasks);
   if (filter.status === "failed") parts.push(column.hasError);
   if (filter.status === "ok") parts.push(`not ${column.hasError}`);
   const minCostUsd = positive(filter.minCostUsd);
@@ -335,6 +337,8 @@ function filterConditions(filter: TraceFilter, table: Exclude<Table, "prompts">)
     if (kept.length > 0)
       parts.push(`properties[${literal(name)}] in (${kept.map(literal).join(", ")})`);
   }
+  for (const name of cleaned(filter.withoutProperties))
+    parts.push(`properties[${literal(name)}] is null`);
   for (const clause of filter.and ?? []) parts.push(...filterConditions(clause, table));
   return parts;
 }

@@ -138,8 +138,17 @@ test("the form compiler and the text of the form agree for every measure, group-
     { properties: { plan: ["pro"] } },
     { properties: { organization: ["acme", "globex"] }, and: [{ properties: { plan: ["team"] } }] },
     { environments: ["prod"], properties: { organization: ["globex"] } },
+    // RTL-397: the absence of a property, users and sessions.
+    { withoutProperties: ["plan"] },
+    { users: ["u1"], and: [{ sessions: ["s1", "s2"] }] },
+    { tasks: ["checkout"] },
   ];
-  const pages: TraceFilter[] = [{}, { properties: { organization: ["acme"] } }];
+  const pages: TraceFilter[] = [
+    {},
+    { properties: { organization: ["acme"] } },
+    { sessions: ["s1", "s2"], withoutProperties: ["organization"] },
+    { users: ["u1", "u2"] },
+  ];
   const failures: string[] = [];
   let cells = 0;
   for (const [measure, aggregation] of measures)
@@ -171,7 +180,7 @@ test("the form compiler and the text of the form agree for every measure, group-
   assert.ok(cells >= 400, `${cells} cells`);
 });
 
-test("the form's task group-by gives the numbers of the RQL written by hand, of the project only", async () => {
+test("the form's task filter and group-by give the numbers of the RQL written by hand, of the project only", async () => {
   const form = formOf(
     metricQuery("trace_count", "count", {
       dimensions: ["task"],
@@ -185,6 +194,11 @@ test("the form's task group-by gives the numbers of the RQL written by hand, of 
   // t1 ran in checkout (its own turn) and refund (a step of a runtime turn), t2 in refund.
   assert.deepEqual(byForm, { checkout: 1, refund: 2 });
   assert.deepEqual(byHand, byForm);
+  const filtered = formOf(metricQuery("latency", "avg", { filters: { tasks: ["checkout"] } }));
+  assert.deepEqual(
+    await rows(metricAsRql(filtered, "number", "day").replace("select ", "select 'x', ")),
+    await rows("select 'x', avg(duration_ms) from traces where contains(tasks, 'checkout')"),
+  );
   // The other project's run of t3 is no task of this project.
   const all = await rows("select each(tasks) as task, count(*) from traces group by task");
   assert.deepEqual(Object.keys(all).sort(), ["checkout", "refund"]);

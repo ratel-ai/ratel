@@ -76,8 +76,8 @@ query object or of a page filter that is not indexed, with the same code.
 **Tasks: a `tasks` list (decision `rql-tasks`, RTL-397).** `traces` and `scores` have `tasks`, the
 sorted ids of the tasks the trace ran in, read by the rule of the task scorers: the trace's own
 OTLP turn, or a turn with a step on an event of the trace, with its `workflow_id`. It is a list, not
-one `task_id`, because a trace can be a step of runs of more than one task. RQL filters it with
-`contains(tasks, 'id')`. The metric form writes `each(tasks) as task` for the group-by `task`, as it
+one `task_id`, because a trace can be a step of runs of more than one task. The metric form writes
+`contains(tasks, 'id')` for a task filter and `each(tasks) as task` for the group-by `task`, as it
 writes a model; the form compiler reads the same runs (`traceTasks`), so the two agree. A score whose
 trace summary is gone has no task, as it has no other trace column.
 

@@ -3,6 +3,7 @@ import { filterProblem } from "@/lib/contracts/filter-budget";
 import { type Query, traceFilterShape } from "@/lib/contracts/query";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/synthesis/dashboard";
 import { withClause } from "@/lib/synthesis/traces/trace-filter-clauses";
+import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   type FilterFieldId,
   packFilter,
@@ -15,7 +16,9 @@ import { isFilterable, metricOfForm, queryFilter, withFilter } from "@/lib/views
 
 /**
  * A dashboard's filters in its address. The address wins over the saved ones as a whole; one
- * parameter says "no filter at all", so cleared filters do not come back, or has long filters packed. Safe for the browser.
+ * parameter says "no filter at all", so cleared filters do not come back, or has long filters packed.
+ * A trace property (ADR-0012) is a parameter of its own, `prop.<name>`, as on the Traces page.
+ * Safe for the browser.
  */
 
 /** The fields of the filter bar. */
@@ -28,12 +31,13 @@ export const DASHBOARD_FILTER_FIELDS: readonly FilterFieldId[] = [
 
 const NO_FILTERS = { param: "filters", value: "none" } as const;
 const PARAMS = ["facetEnvironment", "facetService", "facetModel", "facetAgent"] as const;
+const PROPERTY_PREFIX = "prop.";
 
-const { environments, services, models, agents } = traceFilterShape;
+const { environments, services, models, agents, properties } = traceFilterShape;
 /** A longer address has its panels, or its query, in the fragment. */
 export const MAX_SEARCH_CHARS = 3_000;
 export const dashboardFiltersSchema = z
-  .strictObject({ environments, services, models, agents })
+  .strictObject({ environments, services, models, agents, properties })
   .refine((filters) => filterProblem(filters) === null, {
     error: ({ input }) => filterProblem(input as object) ?? "",
   });
@@ -63,7 +67,8 @@ export function barSearch(search: string, saved: DashboardFilters): string {
   const packed = unpackFilter(params.get(NO_FILTERS.param) ?? "");
   const said = packed ? new URLSearchParams(searchFromTraceFilter(packed)) : params;
   const own = new URLSearchParams();
-  for (const name of PARAMS) for (const value of said.getAll(name)) own.append(name, value);
+  for (const name of ownParams(said))
+    for (const value of said.getAll(name)) own.append(name, value);
   return own.size > 0 ? `?${own}` : "";
 }
 
@@ -73,10 +78,17 @@ export function withBarSearch(search: string, bar: string, saved: DashboardFilte
   const next = new URLSearchParams(bar);
   if (bar.length > MAX_PLAIN_CHARS)
     params.set(NO_FILTERS.param, packFilter(traceFilterFromSearch(bar, { entities: true })));
-  else for (const name of PARAMS) for (const value of next.getAll(name)) params.append(name, value);
+  else
+    for (const name of ownParams(next))
+      for (const value of next.getAll(name)) params.append(name, value);
   if (next.size === 0 && Object.keys(saved).length > 0)
     params.set(NO_FILTERS.param, NO_FILTERS.value);
   return params.size > 0 ? `?${params}` : "";
+}
+
+/** The bar's query string after an edit of its filter: how the property pickers change the bar. */
+export function withBarFilter(bar: string, edit: (filter: TraceFilter) => TraceFilter): string {
+  return searchFromTraceFilter(edit(traceFilterFromSearch(bar, { entities: true })));
 }
 
 /** The address that shows the saved filters and time range. */
@@ -130,17 +142,34 @@ export function filtersProblem(queries: readonly Query[], page: DashboardFilters
 }
 
 function hasOwnFilters(params: URLSearchParams): boolean {
-  return params.has(NO_FILTERS.param) || PARAMS.some((name) => params.has(name));
+  return params.has(NO_FILTERS.param) || ownParams(params).length > 0;
+}
+
+/** The bar's parameters in a query string: the fixed ones, then each property's, once each. */
+function ownParams(params: URLSearchParams): string[] {
+  const properties = [...params.keys()].filter(
+    (key) => key.startsWith(PROPERTY_PREFIX) && key.length > PROPERTY_PREFIX.length,
+  );
+  return [...PARAMS.filter((name) => params.has(name)), ...new Set(properties)];
 }
 
 function withoutOwnFilters(search: string): string {
   const params = new URLSearchParams(search);
-  for (const name of [NO_FILTERS.param, ...PARAMS]) params.delete(name);
+  for (const name of [NO_FILTERS.param, ...ownParams(params)]) params.delete(name);
   return params.toString();
 }
 
-function canonical({ environments, services, models, agents }: DashboardFilters): string {
-  return JSON.stringify(
-    [environments, services, models, agents].map((values) => [...(values ?? [])].sort()),
-  );
+function canonical({
+  environments,
+  services,
+  models,
+  agents,
+  properties,
+}: DashboardFilters): string {
+  return JSON.stringify([
+    ...[environments, services, models, agents].map((values) => [...(values ?? [])].sort()),
+    Object.entries(properties ?? {})
+      .map(([name, values]) => [name, [...values].sort()])
+      .sort(([a], [b]) => (a < b ? -1 : 1)),
+  ]);
 }

@@ -169,7 +169,7 @@ export const SUMMARY_GROUPS = {
   environment: { column: sql`s.environment`, array: false, filtered: (f) => f.environments },
   user: { column: sql`s.end_user_id`, array: false },
   session: { column: sql`s.session_id`, array: false },
-  task: { column: traceTasks(sql`s`), array: true },
+  task: { column: traceTasks(sql`s`), array: true, filtered: (f) => f.tasks },
 } as const satisfies Partial<Record<Dimension, MetricGroup>>;
 
 /** A group of one trace property: the value of the summary `s`, as text. */
@@ -418,7 +418,7 @@ function aggregateSql(
   }
   const { table } = source;
   const time = scope.by === "known" ? (source.knownAt ?? source.time) : source.time;
-  const condition = traceFilterCondition(traceFilter);
+  const condition = traceFilterCondition(projectId, traceFilter);
   return sql`
     with measured as (
       select ${textArray(groups.map(({ value }) => value))} as grp,

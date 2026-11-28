@@ -34,6 +34,7 @@ import { addDashboardWidgetToOverview } from "@/app/(console)/project/[projectId
 import { type CardEdit, CardFrame, focusToolbar } from "@/components/console/grid/CardFrame";
 import { CardGrid } from "@/components/console/grid/CardGrid";
 import { EditModeBar, focusSoon, InertHeader } from "@/components/console/grid/EditBar";
+import { PropertyFilterFields } from "@/components/console/properties/PropertyFilterFields";
 import { useScorers } from "@/components/console/scorers/ScorerPickerProvider";
 import { useTraceNavigation } from "@/components/console/traces/navigation";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
@@ -62,6 +63,7 @@ import {
   barSearch,
   DASHBOARD_FILTER_FIELDS,
   sameDefaults,
+  withBarFilter,
   withoutOwnView,
 } from "@/lib/views/dashboards/filters";
 import { cardOf, layoutsOf, MIN_WIDGET } from "@/lib/views/dashboards/layout";
@@ -171,6 +173,18 @@ export function DashboardView({
     filters,
     range: shownRange(timeWindow.preset, defaults.range),
   };
+
+  /** A change of the page filter: in the address, unless a widget cannot take it. */
+  function changeBar(next: string | ((bar: string) => string)) {
+    // Together with each widget's own they are one filter of the traces.
+    const change = barChange(next, {
+      search,
+      saved: defaults.filters,
+      queries: widgets.flatMap(({ widget }) => (isBroken(widget) ? [] : [widget.query])),
+    });
+    setFiltersRefused(change.refused);
+    if (!change.refused) go(change.go);
+  }
 
   // The expanded widget is in the address: a link opens it, and Back closes it.
   const expandedId = expandedOf(search);
@@ -437,16 +451,14 @@ export function DashboardView({
           pending={pending}
           facets={facets}
           search={barSearch(search, defaults.filters)}
-          onSearchChange={(next) => {
-            // Together with each widget's own they are one filter of the traces.
-            const change = barChange(next, {
-              search,
-              saved: defaults.filters,
-              queries: widgets.flatMap(({ widget }) => (isBroken(widget) ? [] : [widget.query])),
-            });
-            setFiltersRefused(change.refused);
-            if (!change.refused) go(change.go);
-          }}
+          onSearchChange={changeBar}
+          more={
+            <PropertyFilterFields
+              filter={filters}
+              chips={false}
+              onChange={(edit) => changeBar((bar) => withBarFilter(bar, edit))}
+            />
+          }
           end={
             sameDefaults(shown, defaults) ? null : (
               <>

@@ -51,7 +51,7 @@ export async function loadTraceSteps(
   db: MetricsDb,
   cap = TRACE_CAP,
 ): Promise<{ sample: TraceSample; traces: SteppedTrace[] }> {
-  const condition = traceFilterCondition(withClause<TraceFilter>(filters, scope.filter));
+  const condition = traceFilterCondition(projectId, withClause<TraceFilter>(filters, scope.filter));
   const steps = kinds.map((kind) => STEPS_OF[kind](projectId));
   const rows = rowsOf<Row>(
     await db.execute(sql`

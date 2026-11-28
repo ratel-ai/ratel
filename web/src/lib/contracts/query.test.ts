@@ -5,11 +5,14 @@ import { MAX_FILTER_BYTES } from "./filter-budget";
 import {
   AGGREGATIONS,
   DIMENSIONS,
+  flowQuery,
+  geographyQuery,
   MAX_SQL_TEXT,
   MEASURE_IDS,
   MEASURES,
   parseQuery,
   portableQuerySchema,
+  queryProperties,
   stepFlowQuery,
 } from "./query";
 
@@ -353,7 +356,32 @@ test("a filter holds properties: of one name any value, names combine, in every 
     assert.ok(!filtered({ properties }).ok, JSON.stringify(properties).slice(0, 60));
 });
 
-test("a metric of traces or of scores groups by task (RTL-397)", () => {
+test("a filter names users, sessions, tasks and the properties a trace has no value of", () => {
+  const filters = {
+    users: ["u1"],
+    sessions: ["s1"],
+    tasks: ["checkout"],
+    withoutProperties: ["plan"],
+    and: [{ withoutProperties: ["release"] }],
+  };
+  for (const query of [
+    flowQuery("tool"),
+    stepFlowQuery("tool"),
+    geographyQuery("trace_count", "count"),
+  ])
+    assert.ok(parseQuery({ ...query, filters }).ok, query.kind);
+  assert.deepEqual(queryProperties({ filters }), ["plan", "release"]);
+  for (const withoutProperties of [["user"], [""], Array.from({ length: 21 }, (_, i) => `p${i}`)])
+    assert.ok(
+      !parseQuery({ ...flowQuery("tool"), filters: { withoutProperties } }).ok,
+      JSON.stringify(withoutProperties).slice(0, 40),
+    );
+});
+
+test("a metric takes users, sessions and tasks, and groups by task (RTL-397)", () => {
+  assert.ok(parseQuery({ ...BASE, filters: { users: ["u1"], sessions: ["s1"] } }).ok);
+  for (const filters of [{ tasks: ["checkout"] }, { and: [{ tasks: ["checkout"] }] }])
+    assert.ok(parseQuery({ ...BASE, filters }).ok, JSON.stringify(filters));
   assert.ok(parseQuery({ ...BASE, dimensions: ["task"] }).ok);
   assert.ok(
     parseQuery({
