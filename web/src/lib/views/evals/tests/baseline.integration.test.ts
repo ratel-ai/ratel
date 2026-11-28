@@ -87,6 +87,10 @@ async function setup() {
       {
         projectId: PROJECT_ID,
         organizationId: ORGANIZATION_ID,
+        evalId: null,
+        datasetId: null,
+        variants: [],
+        changes: {},
         sandboxVersionId: crypto.randomUUID(),
         sandboxName: "support-demo",
         name: null,
@@ -126,6 +130,7 @@ test("a person pins a completed experiment. The pin stores who and when", async 
   const response = await handlePinByMember(pin(id), PROJECT_ID, t.member());
   assert.equal(response.status, 200);
   assert.deepEqual(await t.baselines.get(PROJECT_ID), {
+    evalId: null,
     experimentId: id,
     pinnedBy: "user_1",
     pinnedAt: NOW,

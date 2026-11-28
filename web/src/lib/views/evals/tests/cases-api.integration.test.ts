@@ -310,13 +310,14 @@ test("a wrong body and a wrong id are refused", async () => {
   assert.equal((await t.put("nope", edit(), made)).status, 404);
 });
 
-test("a label refers to no row: the tables of cases reference projects, cases and evals only", async () => {
+test("a label refers to no row: the tables of cases reference projects, cases, datasets and evals only", async () => {
   const t = await setup();
   const { rows } = await t.client.query<{ target: string }>(`
     select distinct confrelid::regclass::text as target from pg_constraint
     where contype = 'f' and conrelid::regclass::text like 'eval_case%'`);
   assert.deepEqual(rows.map(({ target }) => target).sort(), [
     "eval_cases",
+    "eval_datasets",
     "eval_definitions",
     "projects",
   ]);
@@ -372,6 +373,9 @@ test("save options: a turn of one task whose eval does not exist yet gets a new 
     name: "Refund an order",
     taskId: "wf-refunds",
     content: {
+      datasetId: null,
+      sandboxVersionId: null,
+      matrix: {},
       sandboxName: "support-demo",
       params: {},
       trials: 3,

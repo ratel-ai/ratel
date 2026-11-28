@@ -6,6 +6,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import {
   CONTENT_WITHHELD_HINT,
+  credentialMayReadContent,
   defaultContentAccessDeps,
   mayReadContent,
 } from "@/lib/mcp/operations/content-access";
@@ -39,6 +40,7 @@ import {
 import { type CompareRefusal, type Comparison, compare } from "@/lib/views/evals/domain/compare";
 import {
   currentVersion,
+  datasetOf,
   type EvalDefinition,
   type EvalScorer,
   evalContentSchema,
@@ -56,17 +58,20 @@ import {
 } from "@/lib/views/evals/domain/experiment";
 import { type CaseFromTurn, caseFromTurn } from "@/lib/views/evals/domain/from-turn";
 import { deltaKey } from "@/lib/views/evals/domain/suite";
-import { advance, experimentDeps } from "@/lib/views/evals/experiment-deps";
-import { caseCounts, trialsByCase } from "@/lib/views/evals/experiment-view";
 import {
-  type StartExperiment,
-  type StartExperimentResult,
-  startExperiment,
-} from "@/lib/views/evals/experiments";
+  type EachRunPart,
+  type EvalRunChanges,
+  startEachEvalRun,
+  startEvalRun,
+} from "@/lib/views/evals/eval-runs";
+import { advance, experimentDeps } from "@/lib/views/evals/experiment-deps";
+import { caseCounts, runFields, trialsByCase } from "@/lib/views/evals/experiment-view";
+import type { StartExperimentResult } from "@/lib/views/evals/experiments";
 import { evalsEnabledForProject, evalsOrganizationIds } from "@/lib/views/evals/gate";
 import type { Baseline } from "@/lib/views/evals/ports/baseline-store";
-import type { NewCase } from "@/lib/views/evals/ports/case-store";
-import type { NewEval } from "@/lib/views/evals/ports/eval-store";
+import type { CaseStore, NewCase } from "@/lib/views/evals/ports/case-store";
+import type { EvalStore, NewEval } from "@/lib/views/evals/ports/eval-store";
+import { rowOfSandboxRun } from "@/lib/views/evals/sandbox-rows";
 import { type SaveOptions, type SaveSource, saveOptions } from "@/lib/views/evals/save-target";
 import { suiteTable } from "@/lib/views/evals/suite-view";
 import { loadTurnContent } from "@/lib/views/evals/turn-content";
@@ -95,14 +100,25 @@ export interface EvalsOperationDeps {
   saveOptions(projectId: string, source: SaveSource, task: string | null): Promise<SaveOptions>;
   /** A case made from a turn. Null when the turn is not there or has no input. Captured text. */
   turnCase(projectId: string, turnId: string): Promise<CaseFromTurn | null>;
-  /** The pinned baseline run with its trials. Null when none is pinned. */
-  pinnedRun(projectId: string): Promise<ComparedRun | null>;
+  /** The pinned baseline run of an eval (of the suite runs: null) with its trials. Null: no pin. */
+  pinnedRun(projectId: string, evalId: string | null): Promise<ComparedRun | null>;
   getCase(projectId: string, caseId: string): Promise<EvalCase | null>;
   /** One case for each input, in one transaction. */
-  createCases(inputs: readonly NewCase[]): Promise<EvalCase[] | "eval_not_found">;
+  createCases(inputs: readonly NewCase[]): ReturnType<CaseStore["createAll"]>;
   getEvalByName(projectId: string, name: string): Promise<EvalDefinition | null>;
-  createEval(input: NewEval): Promise<EvalDefinition | "name_taken">;
-  startExperiment(subject: UsageSubject, start: StartExperiment): Promise<StartExperimentResult>;
+  createEval(input: NewEval): ReturnType<EvalStore["create"]>;
+  /** A run of one eval, or one run for each eval (or for the evals named). */
+  startRuns(
+    subject: UsageSubject,
+    start: {
+      eval?: string;
+      evals?: string[];
+      startedBy: string;
+      /** May the caller copy captured text into the run? A query dataset needs it. */
+      mayCopyContent: boolean;
+      changes: EvalRunChanges;
+    },
+  ): Promise<{ ok: true; runs: EachRunPart[] } | Extract<StartExperimentResult, { ok: false }>>;
   /**
    * Drives a new eval run in this process until it closes, so an agent does not wait for the
    * sweep. The sweep still takes the steps that this process does not. It must not throw.
@@ -114,7 +130,8 @@ export interface EvalsOperationDeps {
   trials(experimentId: string): Promise<Trial[]>;
   trialEvidence(projectId: string, trialId: string): Promise<TrialEvidence | null>;
   caseVersion(versionId: string): Promise<CaseVersion | null>;
-  getBaseline(projectId: string): Promise<Baseline | null>;
+  /** The pin of an eval. With no eval: the pin of the suite runs. */
+  getBaseline(projectId: string, evalId?: string | null): Promise<Baseline | null>;
   pinBaseline(projectId: string, experimentId: string, pinnedBy: string): Promise<PinResult>;
   compareWithBaseline(projectId: string, experimentId: string): Promise<ComparisonResult>;
   getSandboxRun(projectId: string, runId: string): Promise<SandboxRun | null>;
@@ -151,12 +168,32 @@ const defaultDeps: EvalsOperationDeps = {
     const turn = await loadTurnContent(projectId, turnId);
     return turn ? caseFromTurn(turn, await readOnlyTools(projectId)) : null;
   },
-  pinnedRun: (projectId) => pinnedRun(projectId, baselineDeps()),
+  pinnedRun: (projectId, evalId) => pinnedRun(projectId, baselineDeps(), evalId),
   getCase: (projectId, caseId) => createDrizzleCaseStore(getDb()).get(projectId, caseId),
   createCases: (inputs) => createDrizzleCaseStore(getDb()).createAll(inputs),
   getEvalByName: (projectId, name) => createDrizzleEvalStore(getDb()).getByName(projectId, name),
   createEval: (input) => createDrizzleEvalStore(getDb()).create(input),
-  startExperiment: (subject, start) => startExperiment(subject, start, experimentDeps()),
+  startRuns: async (subject, { eval: one, evals, startedBy, mayCopyContent, changes }) => {
+    if (one === undefined) {
+      return startEachEvalRun(
+        subject,
+        { ...(evals ? { evals } : {}), startedBy, mayCopyContent, changes },
+        experimentDeps(),
+      );
+    }
+    const result = await startEvalRun(
+      subject,
+      { eval: one, startedBy, mayCopyContent, changes },
+      experimentDeps(),
+    );
+    if (!result.ok) return result;
+    const { experiment } = result;
+    const name = experiment.evalVersions[0]?.name ?? one;
+    return {
+      ok: true,
+      runs: [{ eval: name, evalId: experiment.evalId ?? "", ok: true, experiment, note: null }],
+    };
+  },
   advance: (experiment) => {
     void drive(experiment).catch((error: unknown) => {
       // The sweep takes the next step of a running eval run.
@@ -170,7 +207,7 @@ const defaultDeps: EvalsOperationDeps = {
   trialEvidence: (projectId, id) =>
     createDrizzleExperimentStore(getDb()).trialEvidence(projectId, id),
   caseVersion: (id) => createDrizzleExperimentStore(getDb()).caseVersion(id),
-  getBaseline: (projectId) => baselineDeps().baselines.get(projectId),
+  getBaseline: (projectId, evalId) => baselineDeps().baselines.get(projectId, evalId ?? null),
   pinBaseline: (projectId, id, by) => pinBaseline(projectId, id, by, baselineDeps()),
   compareWithBaseline: (projectId, id) => compareWithBaseline(projectId, id, baselineDeps()),
   getSandboxRun: getRun,
@@ -238,11 +275,11 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           deps.listEvals(ctx.projectId),
           deps.listCases(ctx.projectId),
         ]);
-        const byEval = Map.groupBy(cases, ({ evalId }) => evalId);
+        const byDataset = Map.groupBy(cases, ({ datasetId }) => datasetId);
         return {
           data: {
             evals: evals.map((definition) => {
-              const dataset = byEval.get(definition.id) ?? [];
+              const dataset = byDataset.get(datasetOf(definition)) ?? [];
               const version = currentVersion(definition);
               return {
                 evalId: definition.id,
@@ -377,6 +414,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
             reason: "name_taken",
           });
         }
+        if (created === "dataset_not_found") throw notFound("dataset");
         const problem = runProblem(currentVersion(created));
         return {
           data: { evalId: created.id, name: created.name, version: 1 },
@@ -392,7 +430,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "List eval cases",
       description:
         "Use this tool to see the cases of the datasets of the project, or of one eval. It returns each case with its id, name, eval id, labels and the number of the version that counts. Each case counts in an eval run: the newest version of each.",
-      keywords: ["evals", "eval cases", "dataset"],
+      keywords: ["evals", "eval cases"],
       scope: "project",
       mutates: false,
       apiKeyScope: "evals:read",
@@ -532,6 +570,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           })),
         );
         if (created === "eval_not_found") throw notFound("eval");
+        if (created === "dataset_not_fixed") throw notFixed();
         const cases = created.map((evalCase, n) => {
           const target = targets[n];
           const problem = target ? runProblem(currentVersion(target)) : null;
@@ -557,69 +596,111 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
     defineOperation({
       id: "evals_start_run",
       domain: "evals",
-      title: "Start an eval run",
+      title: "Start eval runs",
       description:
-        "Use this tool to run the suite, or chosen evals, on a sandbox version. The suite is each eval of the sandbox with a case and a gating scorer. This tool changes data: it starts VM runs. It returns the run id, the state, the eval names, and the numbers of cases and trials. Call evals_get_run until the state is completed.",
-      keywords: ["evals", "start eval run"],
+        "Use this tool to start a run of one eval (eval), or one run for each eval. This tool changes data: it starts VM runs. A run can change, for itself only, the dataset, the runtime version, the params, a matrix and the trials. It returns each run id and its state. Call evals_get_run until the state is completed.",
+      keywords: ["evals", "start eval run", "matrix"],
       scope: "project",
       mutates: true,
       apiKeyScope: "evals:write",
       params: z.object({
         ...projectScoped,
-        sandboxVersion: z
-          .union([z.literal("latest"), uuidParam()])
-          .default("latest")
-          .describe("A sandbox version id, or latest for the newest ready version."),
+        eval: evalParam.optional().describe("The eval to run. Omit it to run each eval."),
         evals: z
           .array(evalParam)
           .min(1)
           .max(100)
           .optional()
-          .describe("The evals to run (names or ids). Omit it to run the suite."),
+          .describe("The evals to run, one run each (names or ids). Omit it to run each eval."),
+        sandboxVersion: z
+          .union([z.literal("latest"), uuidParam()])
+          .optional()
+          .describe(
+            "A runtime version id, or latest. It applies only to the evals of its sandbox. Omit it to use the runtime of each eval.",
+          ),
+        dataset: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Another dataset (name or id), for these runs only."),
         trials: z
           .number()
           .int()
           .min(1)
           .max(MAX_TRIALS)
           .optional()
-          .describe("The runs of each case. Omit it to use the trials of each eval."),
+          .describe("The runs of each row. Omit it to use the trials of each eval."),
         params: z
           .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
           .default({})
           .describe(
-            "Values for the params of the sandbox version. They go over the defaults of each eval.",
+            "Values for the params of the runtime. They go over the defaults of each eval.",
+          ),
+        matrix: z
+          .record(z.string(), z.array(z.union([z.string(), z.number(), z.boolean()])).min(1))
+          .optional()
+          .describe(
+            "For each param, the values to try. A run has one variant for each combination, at most 12.",
           ),
       }),
       async execute(ctx, params) {
         await requireEvals(deps, ctx.projectId);
+        if (params.eval !== undefined && params.evals !== undefined) {
+          throw invalidParams("Give eval or evals, not both.", [
+            { path: "evals", message: "Give eval or evals, not both." },
+          ]);
+        }
         const organizationId = ctx.organizationId ?? (await deps.organizationIdOf(ctx.projectId));
         if (!organizationId) throw notFound("project");
-        const result = await deps.startExperiment(
+        const changes = {
+          ...(params.sandboxVersion === undefined ? {} : { sandboxVersion: params.sandboxVersion }),
+          ...(params.dataset === undefined ? {} : { dataset: params.dataset }),
+          ...(params.trials === undefined ? {} : { trials: params.trials }),
+          ...(params.matrix === undefined ? {} : { matrix: params.matrix }),
+          ...(Object.keys(params.params).length === 0 ? {} : { params: params.params }),
+        };
+        const result = await deps.startRuns(
           { projectId: ctx.projectId, organizationId },
           {
-            sandboxVersion: params.sandboxVersion,
-            ...(params.trials === undefined ? {} : { trialsPerCase: params.trials }),
+            ...(params.eval ? { eval: params.eval } : {}),
             ...(params.evals ? { evals: params.evals } : {}),
-            params: params.params,
             startedBy: requester(ctx.auth),
+            // A query dataset copies captured text into the run. The run start refuses it for a
+            // key with no `content:read` scope, and reads the opt-in of the project itself.
+            mayCopyContent: credentialMayReadContent(ctx.auth),
+            changes,
           },
         );
         if (!result.ok) throw startRefusal(result);
-        const { experiment } = result;
-        deps.advance(experiment);
-        return {
-          data: {
+        const runs = result.runs.map((part) => {
+          if (!part.ok) {
+            return { eval: part.eval, error: part.reason, message: part.message };
+          }
+          const { experiment } = part;
+          deps.advance(experiment);
+          return {
+            eval: part.eval,
             runId: experiment.id,
             state: experiment.state,
             sandboxVersionId: experiment.sandboxVersionId,
-            evals: experiment.evalVersions.map(({ name }) => name),
+            variants: experiment.variants.length,
             cases: experiment.caseVersions.length,
-            trials: experiment.caseVersions.reduce(
-              (sum, frozen) => sum + trialsOfCase(experiment, frozen),
-              0,
-            ),
-          },
-          hint: `The eval run started. Call evals_get_run with runId "${experiment.id}". It waits up to ${RUN_WAIT_MS / 1000} seconds for the run to end. Call it again while the state is running.`,
+            trials:
+              experiment.caseVersions.reduce(
+                (sum, frozen) => sum + trialsOfCase(experiment, frozen),
+                0,
+              ) * Math.max(1, experiment.variants.length),
+            ...(part.note ? { note: part.note } : {}),
+          };
+        });
+        const first = runs.find((run) => "runId" in run);
+        return {
+          data: { runs },
+          hint: first
+            ? `The runs started. Call evals_get_run with runId "${first.runId}" and the other run ids. It waits up to ${RUN_WAIT_MS / 1000} seconds for a run to end. Call it again while the state is running.`
+            : "No run started. Each part says why.",
         };
       },
     }),
@@ -640,14 +721,23 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
           deps.listExperiments(ctx.projectId, LIST_LIMIT),
           deps.getBaseline(ctx.projectId),
         ]);
+        // A run of one eval is the baseline when it is the pin of its eval.
+        const evalIds = [...new Set(experiments.flatMap(({ evalId }) => evalId ?? []))];
+        const pins = new Set(
+          (await Promise.all(evalIds.map((id) => deps.getBaseline(ctx.projectId, id)))).flatMap(
+            (pin) => pin?.experimentId ?? [],
+          ),
+        );
+        if (baseline) pins.add(baseline.experimentId);
         const runs = await Promise.all(
           experiments.map(async (experiment) => ({
             runId: experiment.id,
+            evalId: experiment.evalId,
             state: experiment.state,
             sandboxVersionId: experiment.sandboxVersionId,
             sandboxName: experiment.sandboxName,
             counts: countTrials(await deps.trials(experiment.id)),
-            baseline: baseline?.experimentId === experiment.id,
+            baseline: pins.has(experiment.id),
             createdAt: experiment.createdAt.toISOString(),
           })),
         );
@@ -679,11 +769,15 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
         const [trials, readable, baseline] = await Promise.all([
           deps.trials(experiment.id),
           deps.mayReadContent(ctx),
-          deps.pinnedRun(ctx.projectId),
+          deps.pinnedRun(ctx.projectId, experiment.evalId),
         ]);
         const view = await runView(deps, ctx.projectId, experiment, trials, readable);
         return {
-          data: { ...view.data, ...suiteView(suiteTable({ experiment, trials }, baseline)) },
+          data: {
+            ...view.data,
+            ...suiteView(suiteTable({ experiment, trials }, baseline)),
+            ...runFields(experiment, trials, baseline),
+          },
           ...(view.truncated ? { truncated: true } : {}),
           hint: [
             experiment.state === "running"
@@ -883,19 +977,9 @@ function versionView(version: CaseVersion, readable: boolean) {
 async function runSource(deps: EvalsOperationDeps, projectId: string, runId: string) {
   const run = await deps.getSandboxRun(projectId, runId);
   if (!run) throw notFound("sandbox run");
-  if (run.status === "queued" || run.status === "running") {
-    throw new McpOperationError(
-      "conflict",
-      `The sandbox run is ${run.status}. Call sandbox_get_run until it ends, then save it.`,
-      { reason: "run_active" },
-    );
-  }
-  const output = run.result?.output ?? run.response?.output ?? null;
-  return {
-    input: run.request.input,
-    output: output === null ? null : typeof output === "string" ? output : JSON.stringify(output),
-    traceId: run.traceId ?? null,
-  };
+  const found = rowOfSandboxRun(run);
+  if (!found.ok) throw new McpOperationError("conflict", found.message, { reason: "run_active" });
+  return { ...found, traceId: run.traceId ?? null };
 }
 
 type CaseSourceParams = {
@@ -1034,10 +1118,19 @@ async function createTaskEval(
     content: target.content,
     createdBy: requester(ctx.auth),
   });
+  if (created === "dataset_not_found") throw notFound("dataset");
   if (created !== "name_taken") return created;
   const made = await deps.getEvalByName(ctx.projectId, target.name);
   if (!made) throw notFound("eval");
   return made;
+}
+
+function notFixed(): McpOperationError {
+  return new McpOperationError(
+    "conflict",
+    "The dataset of the eval is a query: a run resolves its rows. Add the row to a fixed dataset.",
+    { reason: "dataset_not_fixed" },
+  );
 }
 
 /** An eval by its name, else by its id. */
@@ -1080,6 +1173,7 @@ async function evalNamed(
     content: content.data,
     createdBy: requester(ctx.auth),
   });
+  if (created === "dataset_not_found") throw notFound("dataset");
   if (created !== "name_taken") return created;
   // Another call made it at the same time.
   const made = await deps.getEvalByName(ctx.projectId, name);
@@ -1123,6 +1217,11 @@ const START_REFUSAL = {
   too_many_trials: "invalid_params",
   invalid_params: "invalid_params",
   wrong_sandbox: "conflict",
+  no_content_access: "forbidden",
+  query_failed: "invalid_params",
+  too_many_rows: "invalid_params",
+  invalid_scorers: "invalid_params",
+  shared_dataset: "conflict",
 } as const;
 
 function startRefusal(result: Extract<StartExperimentResult, { ok: false }>): McpOperationError {

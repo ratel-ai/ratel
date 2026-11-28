@@ -16,11 +16,21 @@ import { type AgentScript, scriptAgent } from "@/lib/views/sandboxes/tests/fake-
 import { createFakeProvider } from "@/lib/views/sandboxes/tests/fake-provider";
 import { bundleInfo, COMMIT, IMAGE, tarGz } from "@/lib/views/sandboxes/tests/support";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
 import { advanceExperiment, type ExperimentDeps, startExperiment } from "../experiments";
-import { content, createEvalsDb, inEval, ORGANIZATION_ID, PROJECT_ID, seedEval } from "./support";
+import {
+  content,
+  createEvalsDb,
+  fakeLibrary,
+  fakeTraceSource,
+  inEval,
+  ORGANIZATION_ID,
+  PROJECT_ID,
+  seedEval,
+} from "./support";
 
 /**
  * An eval trial through the real runs of Ratel sandboxes (a fake provider): the evals engine reads
@@ -89,6 +99,9 @@ async function setup(agent: AgentScript = {}) {
     cases,
     evals: createDrizzleEvalStore(db),
     experiments,
+    datasets: createDrizzleDatasetStore(db),
+    traces: fakeTraceSource(),
+    library: fakeLibrary(),
     sandboxes: {
       enabled: async () => true,
       listVersions: async () => [summary],
@@ -117,7 +130,13 @@ async function setup(agent: AgentScript = {}) {
     assert.ok(made.versions[0]);
     const started = await startExperiment(
       SUBJECT,
-      { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "user_1" },
+      {
+        mayCopyContent: true,
+        sandboxVersion: "latest",
+        trialsPerCase: 1,
+        params: {},
+        startedBy: "user_1",
+      },
       deps(more),
     );
     assert.ok(started.ok, JSON.stringify(started));

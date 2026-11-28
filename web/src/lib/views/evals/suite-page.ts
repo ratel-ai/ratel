@@ -1,7 +1,7 @@
 import type { Compared } from "./baseline";
 import { currentVersion as currentRow, type EvalCase } from "./domain/case";
 import type { CaseChange, CaseStatus } from "./domain/compare";
-import { currentVersion, type EvalDefinition, type EvalScorer } from "./domain/eval";
+import { currentVersion, datasetOf, type EvalDefinition, type EvalScorer } from "./domain/eval";
 import type { Counts, Trial } from "./domain/experiment";
 import { deltaKey, type ScorerScore } from "./domain/suite";
 import type { ExperimentRow } from "./page-model";
@@ -132,9 +132,9 @@ export function suitePageModel({
 }): SuitePageModel {
   const table = run ? suiteTable(run, baseline) : null;
   const byEval = new Map(table?.rows.map((row) => [deltaKey(row), row]) ?? []);
-  const datasets = Map.groupBy(cases, ({ evalId }) => evalId);
+  const datasets = Map.groupBy(cases, ({ datasetId }) => datasetId);
   const rows: SuiteRowView[] = evals.map((definition) => {
-    const dataset = datasets.get(definition.id) ?? [];
+    const dataset = datasets.get(datasetOf(definition)) ?? [];
     const row = byEval.get(definition.id);
     return {
       evalId: definition.id,

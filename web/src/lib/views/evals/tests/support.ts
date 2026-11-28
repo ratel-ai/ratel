@@ -5,6 +5,8 @@ import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import type { CaseContent, EvalCase } from "../domain/case";
 import type { EvalContent, EvalDefinition, EvalScorer } from "../domain/eval";
 import type { CaseStore, NewCase } from "../ports/case-store";
+import type { ScorerLibrary } from "../ports/scorer-library";
+import type { TraceSource } from "../ports/trace-source";
 
 export const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 export const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -41,7 +43,16 @@ export function content(over: Partial<CaseContent> = {}): CaseContent {
 }
 
 export function evalContent(over: Partial<EvalContent> = {}): EvalContent {
-  return { sandboxName: null, params: {}, trials: 3, scorers: [NO_REFUND], ...over };
+  return {
+    datasetId: null,
+    sandboxVersionId: null,
+    matrix: {},
+    sandboxName: null,
+    params: {},
+    trials: 3,
+    scorers: [NO_REFUND],
+    ...over,
+  };
 }
 
 /** An eval of the project, with `NO_REFUND` unless the content says other scorers. */
@@ -57,7 +68,7 @@ export async function seedEval(
     content: evalContent(over.content),
     createdBy: "user_1",
   });
-  if (created === "name_taken") throw new Error("the eval name is taken");
+  if (typeof created === "string") throw new Error(`the eval is not made: ${created}`);
   return created;
 }
 
@@ -72,8 +83,28 @@ export function inEval(
     ...store,
     async create(input) {
       const made = await store.create({ evalId, ...input });
-      if (made === "eval_not_found") throw new Error("the eval is not there");
+      if (typeof made === "string") throw new Error(`the case is not made: ${made}`);
       return made;
     },
+  };
+}
+
+/** A library with no project scorer, unless `over` gives some. */
+export function fakeLibrary(over: Partial<ScorerLibrary> = {}): ScorerLibrary {
+  return { projectScorers: async () => [], ...over };
+}
+
+/** A trace source with no trace, unless `over` gives some. */
+export function fakeTraceSource(over: Partial<TraceSource> = {}): TraceSource {
+  return {
+    readContent: async () => true,
+    lastTurns: async () => [],
+    taskTurns: async () => [],
+    runRql: async () => ({ ok: true, columns: [{ name: "trace_id" }], rows: [] }),
+    turnsOfTraces: async () => new Map(),
+    chooseTurns: async () => [],
+    loadTurn: async () => null,
+    readOnlyTools: async () => new Set(),
+    ...over,
   };
 }

@@ -135,13 +135,14 @@ export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
   },
   "evals:read": {
     group: "Evals",
-    label: "Read eval runs",
-    description: "GET /api/v1/evals/experiments",
+    label: "Read evals, runs and datasets",
+    description: "GET /api/v1/evals, /api/v1/evals/experiments and /api/v1/evals/datasets",
   },
   "evals:write": {
     group: "Evals",
-    label: "Start eval runs",
-    description: "POST /api/v1/evals/experiments (ratel eval run)",
+    label: "Start eval runs, create evals and datasets",
+    description:
+      "POST /api/v1/evals/runs (ratel eval run), /api/v1/evals and /api/v1/evals/datasets",
   },
 };
 

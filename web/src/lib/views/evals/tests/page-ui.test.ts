@@ -126,6 +126,7 @@ const gridTrial = (over: Partial<Trial>): Trial => ({
   id: crypto.randomUUID(),
   experimentId: "e1",
   caseVersionId: "v1",
+  variant: 0,
   index: 0,
   state: "done",
   result: "pass",
@@ -149,6 +150,10 @@ const gridExperiment: Experiment = {
   id: "e1",
   projectId: PROJECT_ID,
   organizationId: "o1",
+  evalId: null,
+  datasetId: null,
+  variants: [],
+  changes: {},
   name: "Refunds with the new prompt",
   labelFilter: "refunds",
   sandboxVersionId: "sv1",
@@ -400,6 +405,9 @@ function suiteEval(id: string) {
     createdAt: new Date(0),
     versions: [
       {
+        datasetId: id,
+        sandboxVersionId: null,
+        matrix: {},
         sandboxName: null,
         params: {},
         trials: 3,

@@ -6,7 +6,12 @@ import {
   refuse,
   reply,
 } from "@/lib/console/scope/member-access";
-import { currentVersion, evalContentSchema, evalDetailsSchema } from "./domain/eval";
+import {
+  currentVersion,
+  evalContentSchema,
+  evalDetailsSchema,
+  matrixValueSchema,
+} from "./domain/eval";
 import { readJson } from "./experiments-api";
 import type { EvalStore } from "./ports/eval-store";
 
@@ -19,7 +24,16 @@ export type EvalsApiDeps = MemberAccessDeps & { evals: () => EvalStore; now: () 
 const definitionSchema = evalDetailsSchema.extend({
   content: evalContentSchema.default(evalContentSchema.parse({})),
 });
-const editSchema = definitionSchema.extend({ base: z.uuid() });
+/** An edit that does not give the pinned runtime version or the matrix keeps them. */
+const editSchema = evalDetailsSchema.extend({
+  content: evalContentSchema
+    .extend({
+      sandboxVersionId: z.uuid().nullable().optional(),
+      matrix: matrixValueSchema.optional(),
+    })
+    .default(evalContentSchema.parse({})),
+  base: z.uuid(),
+});
 
 export function handleCreateEval(
   request: Request,
@@ -33,6 +47,7 @@ export function handleCreateEval(
       .evals()
       .create({ ...body.data, projectId: member.projectId, createdBy: member.externalId });
     if (made === "name_taken") return nameTaken();
+    if (made === "dataset_not_found") return datasetNotFound();
     const version = currentVersion(made);
     return reply(201, { evalId: made.id, versionId: version.id, number: version.number });
   });
@@ -58,9 +73,14 @@ export function handleEditEval(
       return refuse(409, "changed", "Another person changed this eval. Read it again.");
     }
     if (saved === "name_taken") return nameTaken();
+    if (saved === "dataset_not_found") return datasetNotFound();
     const version = currentVersion(saved);
     return reply(200, { evalId, versionId: version.id, number: version.number });
   });
+}
+
+function datasetNotFound(): Response {
+  return refuse(404, "dataset_not_found", "There is no such dataset.");
 }
 
 function write(

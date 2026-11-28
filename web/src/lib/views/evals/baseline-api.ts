@@ -50,9 +50,15 @@ export function handleUnpinByKey(request: Request, deps: BaselineKeyDeps): Promi
   );
 }
 
-export function handleGetBaselineByKey(deps: BaselineKeyDeps): Promise<Response> {
+/** `?eval=<id>`: the pin of that eval. With no eval: the pin of the suite runs from before. */
+export function handleGetBaselineByKey(
+  deps: BaselineKeyDeps,
+  request: Request | null = null,
+): Promise<Response> {
   return forKey(deps, "get_baseline", async ({ projectId }) => {
-    const baseline = await deps.baselines().baselines.get(projectId);
+    const wanted = request ? new URL(request.url).searchParams.get("eval") : null;
+    if (wanted !== null && !z.uuid().safeParse(wanted).success) return notFound();
+    const baseline = await deps.baselines().baselines.get(projectId, wanted);
     return reply(200, { baseline: baseline && baselineView(projectId, baseline, deps) });
   });
 }
@@ -197,8 +203,9 @@ function comparisonView(
 }
 
 function baselineView(projectId: string, baseline: Baseline, deps: BaselineApiDeps) {
-  const { experimentId, pinnedBy, pinnedAt } = baseline;
+  const { evalId, experimentId, pinnedBy, pinnedAt } = baseline;
   return {
+    evalId,
     experimentId,
     url: urlOf({ projectId, id: experimentId }, deps),
     pinnedBy,

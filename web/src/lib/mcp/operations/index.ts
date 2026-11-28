@@ -9,6 +9,7 @@ import {
   editionRegistrations,
   placeEditionOperations,
 } from "@/lib/mcp/operations/edition";
+import { evalDatasetsOperations } from "@/lib/mcp/operations/eval-datasets";
 import { evalsOperations } from "@/lib/mcp/operations/evals";
 import { experimentOperations } from "@/lib/mcp/operations/experiments";
 import { healthOperations } from "@/lib/mcp/operations/health";
@@ -104,7 +105,9 @@ export function assembleOperations(
     ...joinsOperations(),
     ...playgroundOperations(),
     ...shipOperations(),
-    ...(options.evals ? [...sandboxOperations(), ...evalsOperations()] : []),
+    ...(options.evals
+      ? [...sandboxOperations(), ...evalsOperations(), ...evalDatasetsOperations()]
+      : []),
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),

@@ -10,12 +10,15 @@ import {
   sandboxesEnabledForProject,
   startRun,
 } from "@/lib/views/sandboxes";
+import { listScorers } from "@/lib/views/scorers/store";
 import { createDrizzleCaseStore } from "./adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "./adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "./adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "./adapters/drizzle-experiment-store";
+import { createTraceSource } from "./adapters/trace-source";
 import { pinnedRun } from "./baseline";
 import { baselineDeps } from "./baseline-deps";
-import { evalsAccess } from "./console-deps";
+import { evalsAccess, readOnlyTools } from "./console-deps";
 import type { Experiment } from "./domain/experiment";
 import { advanceExperiment, type ExperimentDeps } from "./experiments";
 import type { ConsoleDeps, ExperimentsApiDeps } from "./experiments-api";
@@ -28,6 +31,9 @@ export function experimentDeps(): ExperimentDeps {
     experiments: createDrizzleExperimentStore(db),
     cases: createDrizzleCaseStore(db),
     evals: createDrizzleEvalStore(db),
+    datasets: createDrizzleDatasetStore(db),
+    traces: createTraceSource(db, { readOnlyTools, now: () => new Date() }),
+    library: { projectScorers: (projectId) => listScorers(projectId, db) },
     sandboxes: {
       enabled: (projectId) => sandboxesEnabledForProject(projectId),
       listVersions: listSandboxVersions,
@@ -61,7 +67,7 @@ export async function advance(
 
 export const experimentsApiDeps: ExperimentsApiDeps = {
   experiments: experimentDeps,
-  baseline: (projectId) => pinnedRun(projectId, baselineDeps()),
+  baseline: (projectId, evalId) => pinnedRun(projectId, baselineDeps(), evalId),
   advance: (experiment) =>
     after(async () => {
       await advance(experiment);

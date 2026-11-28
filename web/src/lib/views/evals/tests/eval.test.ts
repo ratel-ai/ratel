@@ -27,6 +27,9 @@ test("an eval has a name, an optional task, and defaults for the sandbox, the pa
   });
   assert.equal(evalDetailsSchema.safeParse({ name: " " }).success, false);
   assert.deepEqual(evalContentSchema.parse({}), {
+    datasetId: null,
+    sandboxVersionId: null,
+    matrix: {},
     sandboxName: null,
     params: {},
     trials: 3,
@@ -114,12 +117,20 @@ test("a suite freezes the newest version of each eval that can run, and the newe
 });
 
 function definition(id: string, name: string, versions: EvalDefinition["versions"]) {
-  return { id, projectId: PROJECT_ID, name, taskId: null, createdAt: new Date(0), versions };
+  return {
+    id,
+    projectId: PROJECT_ID,
+    name,
+    taskId: null,
+    createdAt: new Date(0),
+    versions,
+  };
 }
 
 function version(id: string, number: number, scorers: (typeof NO_REFUND)[]) {
   return {
     ...evalContent({ scorers }),
+    datasetId: id.slice(0, 2),
     id,
     evalId: id.slice(0, 2),
     number,
@@ -133,6 +144,7 @@ function evalCase(id: string, evalId: string, count: number, labels: string[] = 
   return {
     id,
     projectId: PROJECT_ID,
+    datasetId: evalId,
     evalId,
     name: id,
     labels,

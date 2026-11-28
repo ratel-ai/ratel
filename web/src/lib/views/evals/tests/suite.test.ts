@@ -264,7 +264,7 @@ test("an old run whose cases have other scorers has no score", () => {
   assert.deepEqual(all?.counts, { pass: 2, fail: 0, invalid: 0, open: 0 });
 });
 
-test("the score delta counts only the scorers rated on both sides", () => {
+test("the score delta is the score minus the baseline score, and a scorer rated on one side has no delta of its own", () => {
   const side = (id: string, scorers: Record<string, ScorerResult["status"]>) =>
     run(id, {
       refunds: {
@@ -273,14 +273,23 @@ test("the score delta counts only the scorers rated on both sides", () => {
       },
     });
   const baseline = side("base", { "no-refund": "pass", polite: "fail" });
-  // Polite did not run: it has no pass rate, so it does not move the delta.
+  // Polite did not run in the candidate. Baseline: (1 + 0) / 2. Candidate: 1.
   const delta = evalDeltas(baseline, side("next", { "no-refund": "pass" })).get("refunds");
   assert.ok(delta?.ok);
-  assert.equal(delta.score, 0);
-  const none = evalDeltas(
+  assert.equal(delta.score, 0.5);
+  assert.deepEqual(delta.scorers, [
+    { scorerId: "no-refund", delta: 0 },
+    { scorerId: "polite", delta: null },
+  ]);
+  // No scorer is rated on both sides: each side still has its score.
+  const apart = evalDeltas(
     side("base", { "no-refund": "pass" }),
-    side("next", { polite: "pass" }),
+    side("next", { polite: "fail" }),
   ).get("refunds");
+  assert.ok(apart?.ok);
+  assert.equal(apart.score, -1);
+  // A side with no score at all gives no delta value.
+  const none = evalDeltas(side("base", {}), side("next", { polite: "pass" })).get("refunds");
   assert.ok(none?.ok);
   assert.equal(none.score, null);
 });

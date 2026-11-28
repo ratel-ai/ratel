@@ -1,3 +1,4 @@
+import type { Compared } from "./baseline";
 import {
   type Counts,
   countTrials,
@@ -5,6 +6,7 @@ import {
   type FrozenCase,
   type Trial,
 } from "./domain/experiment";
+import { runDelta, runScore } from "./domain/suite";
 import type { SuiteTable } from "./suite-view";
 
 /** One case of an experiment with its raw counts. */
@@ -20,6 +22,7 @@ export function experimentView(
   trials: readonly Trial[],
   url: string,
   suite: SuiteTable | null = null,
+  baseline: Compared | null = null,
 ) {
   const byCase = trialsByCase(trials);
   return {
@@ -49,8 +52,44 @@ export function experimentView(
       })),
     })),
     ...(suite ? suiteFields(suite) : {}),
+    ...runFields(experiment, trials, baseline),
     createdAt: experiment.createdAt.toISOString(),
     finishedAt: experiment.finishedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * The fields of a run of one eval (decision `runs-per-eval`): its eval, its dataset, its variants,
+ * its score with the rule, and its delta against the baseline of its eval. Null for a suite run.
+ */
+export function runFields(
+  experiment: Experiment,
+  trials: readonly Trial[],
+  baseline: Compared | null,
+) {
+  const { evalId, datasetId, variants } = experiment;
+  if (evalId === null) {
+    return { evalId, datasetId, variants, run: null, runDelta: null, runDeltaRefusal: null };
+  }
+  const scored = runScore({ experiment, trials });
+  const other = baseline && baseline.experiment.id !== experiment.id ? baseline : null;
+  const delta = other ? runDelta(other, { experiment, trials }) : null;
+  return {
+    evalId,
+    datasetId,
+    variants,
+    run: {
+      score: scored.score,
+      rule: scored.rule,
+      variants: scored.variants.map(({ variant, score }) => ({
+        index: variant?.index ?? null,
+        params: variant?.params ?? {},
+        score: score.score,
+        counts: score.counts,
+      })),
+    },
+    runDelta: delta?.ok ? { score: delta.score } : null,
+    runDeltaRefusal: delta && !delta.ok ? { reason: delta.reason, message: delta.message } : null,
   };
 }
 

@@ -9,8 +9,10 @@ import type {
 } from "@/lib/views/sandboxes";
 import { EVAL_TRIAL_PREFIX } from "@/lib/views/sandboxes/domain/run";
 import { refusedParam } from "@/lib/views/sandboxes/run-form";
-import { type CaseVersion, runInputOf } from "./domain/case";
-import { currentVersion, type EvalDefinition, runProblem } from "./domain/eval";
+import { resolveDataset } from "./datasets";
+import { type CaseVersion, type EvalCase, runInputOf } from "./domain/case";
+import { isQueryKind } from "./domain/dataset";
+import { currentVersion, datasetOf, type EvalDefinition, runProblem } from "./domain/eval";
 import {
   type Experiment,
   type FrozenSuite,
@@ -24,8 +26,11 @@ import {
 import { type JudgeOutcome, scoreTrial, type TrialRecord } from "./domain/score";
 import { type JudgeDeps, judgeTrial } from "./judge";
 import type { CaseStore } from "./ports/case-store";
+import type { DatasetStore } from "./ports/dataset-store";
 import type { EvalStore } from "./ports/eval-store";
 import type { ExperimentStore } from "./ports/experiment-store";
+import type { ScorerLibrary } from "./ports/scorer-library";
+import type { TraceSource } from "./ports/trace-source";
 
 /** The public interface of the sandboxes module, as an experiment uses it. */
 export type SandboxPort = {
@@ -44,6 +49,10 @@ export type ExperimentDeps = {
   experiments: ExperimentStore;
   cases: Pick<CaseStore, "list">;
   evals: Pick<EvalStore, "list">;
+  datasets: Pick<DatasetStore, "get" | "getByName" | "keepResolved" | "rows" | "addRunRows">;
+  library: ScorerLibrary;
+  /** The traces that a query dataset resolves when a run starts. */
+  traces: TraceSource;
   sandboxes: SandboxPort;
   judge: JudgeDeps;
   now: () => Date;
@@ -64,6 +73,8 @@ export type StartExperiment = {
   /** The names of the evals to run. Absent: the suite, each eval of the sandbox. */
   evals?: string[];
   startedBy: string;
+  /** May the caller copy captured text into the run? A query dataset needs it. */
+  mayCopyContent: boolean;
   /** Only the cases with this label. All of them when it is not there. */
   label?: string;
   name?: string;
@@ -80,7 +91,12 @@ export type StartRefusal =
   | "too_many_running"
   | "too_many_trials"
   | "invalid_params"
-  | "wrong_sandbox";
+  | "wrong_sandbox"
+  | "no_content_access"
+  | "query_failed"
+  | "too_many_rows"
+  | "invalid_scorers"
+  | "shared_dataset";
 
 /** The open trials of one project at a time. The others wait. */
 export const OPEN_TRIALS = 20;
@@ -94,7 +110,8 @@ const LATEST_OF = 100;
 const logger = getLogger("evals/experiments");
 
 /**
- * Freezes the evals, the newest version of each of their cases, and their scorers. The suite is each eval of the sandbox
+ * Freezes the evals, the newest version of each row of their datasets, and their scorers. A query
+ * dataset is resolved now, and the run freezes the rows that it found. The suite is each eval of the sandbox
  * of the version (or of no sandbox). Chosen evals run by name. The trials start with
  * `advanceExperiment`.
  */
@@ -106,6 +123,7 @@ export async function startExperiment(
     trialsPerCase,
     params,
     startedBy,
+    mayCopyContent,
     label,
     name,
     evals,
@@ -114,7 +132,7 @@ export async function startExperiment(
 ): Promise<StartExperimentResult> {
   const { projectId, organizationId } = subject;
   if (!(await deps.sandboxes.enabled(projectId))) {
-    return refused("sandboxes_off", "Ratel sandboxes are not on for this project.");
+    return refused("sandboxes_off", "Sandboxes are not on for this project.");
   }
   const [allEvals, allCases] = await Promise.all([
     deps.evals.list(projectId),
@@ -130,7 +148,12 @@ export async function startExperiment(
   if (runRefusal) return refused("invalid_params", runRefusal);
   const chosen = chooseEvals(allEvals, evals, version.name);
   if (!chosen.ok) return chosen;
-  const frozen = freezeSuite(chosen.evals, allCases, label ?? null, {
+  const shared = sharedDataset(chosen.evals);
+  if (shared) return refused("shared_dataset", shared);
+  const by = { startedBy, mayCopyContent };
+  const resolved = await resolveQueryDatasets(projectId, chosen.evals, by, deps);
+  if (!resolved.ok) return resolved;
+  const frozen = freezeSuite(chosen.evals, [...allCases, ...resolved.cases], label ?? null, {
     params,
     ...(trialsPerCase === undefined ? {} : { trials: trialsPerCase }),
   });
@@ -154,6 +177,10 @@ export async function startExperiment(
     ...frozen,
     projectId,
     organizationId,
+    evalId: null,
+    datasetId: null,
+    variants: [],
+    changes: {},
     sandboxVersionId: version.id,
     sandboxName: version.name,
     name: name ?? null,
@@ -319,7 +346,7 @@ async function startTrial(
         projectId,
         organizationId,
         requestedBy: `${EVAL_TRIAL_PREFIX}${trial.id}`,
-        params: paramsOfTrial(experiment, trial.caseVersionId),
+        params: paramsOfTrial(experiment, trial),
         fixtures: version.toolFixtures,
       },
     );
@@ -383,6 +410,31 @@ async function finishTrial(
   return true;
 }
 
+/**
+ * The rows of each query dataset of the evals, resolved now and kept, one time for each dataset. A
+ * refusal of one dataset refuses the run with its reason.
+ */
+async function resolveQueryDatasets(
+  projectId: string,
+  evals: readonly EvalDefinition[],
+  { startedBy, mayCopyContent }: Pick<StartExperiment, "startedBy" | "mayCopyContent">,
+  deps: ExperimentDeps,
+): Promise<{ ok: true; cases: EvalCase[] } | Extract<StartExperimentResult, { ok: false }>> {
+  const cases: EvalCase[] = [];
+  for (const datasetId of new Set(evals.map(datasetOf))) {
+    const dataset = await deps.datasets.get(projectId, datasetId);
+    if (!dataset || !isQueryKind(dataset.query)) continue;
+    const result = await resolveDataset(projectId, dataset.query, deps.traces, { mayCopyContent });
+    if (!result.ok) {
+      const reason =
+        result.reason === "no_rows" || result.reason === "not_a_query" ? "no_cases" : result.reason;
+      return refused(reason, `The dataset "${dataset.name}": ${result.message}`);
+    }
+    cases.push(...(await deps.datasets.keepResolved(projectId, datasetId, result.rows, startedBy)));
+  }
+  return { ok: true, cases };
+}
+
 /** The evals with these names, or the suite of the sandbox. */
 function chooseEvals(
   all: readonly EvalDefinition[],
@@ -408,6 +460,23 @@ function chooseEvals(
     evals.push(found);
   }
   return { ok: true, evals };
+}
+
+/**
+ * Why the evals of a suite cannot share one run, or null. A trial is of one row version, so two
+ * evals that read the same dataset would score the same trials. A run of each eval has no such
+ * limit (`eval-runs.ts`).
+ */
+function sharedDataset(evals: readonly EvalDefinition[]): string | null {
+  const seen = new Map<string, string>();
+  for (const one of evals) {
+    const other = seen.get(datasetOf(one));
+    if (other) {
+      return `The evals "${other}" and "${one.name}" read the same dataset. Start one run for each eval (POST /api/v1/evals/runs, ratel eval run).`;
+    }
+    seen.set(datasetOf(one), one.name);
+  }
+  return null;
 }
 
 /** Why a chosen eval is not in the run, or null. The suite leaves such evals out. */

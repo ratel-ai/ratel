@@ -5,6 +5,7 @@ import {
   type Experiment,
   type FrozenCase,
   type Trial,
+  type Variant,
 } from "./experiment";
 import type { ScorerSnapshot } from "./score";
 
@@ -20,8 +21,11 @@ export type ScoredRun = {
   experiment: Pick<
     Experiment,
     "id" | "state" | "caseVersions" | "evalVersions" | "scorerSnapshots"
+  > &
+    Partial<Pick<Experiment, "variants">>;
+  trials: ReadonlyArray<
+    Pick<Trial, "caseVersionId" | "result" | "scorers"> & Partial<Pick<Trial, "variant">>
   >;
-  trials: ReadonlyArray<Pick<Trial, "caseVersionId" | "result" | "scorers">>;
 };
 
 export type ScorerScore = {
@@ -55,6 +59,14 @@ export type EvalDelta =
   | { ok: true; score: number | null; scorers: Array<{ scorerId: string; delta: number | null }> }
   | { ok: false; reason: DeltaRefusal; message: string; changes: ScorerChange[] };
 
+/** The score of one variant of a run of one eval. `variant` is null for a run with no matrix. */
+export type VariantScore = { variant: Variant | null; score: EvalScore };
+export type RunScore = { score: number | null; rule: string; variants: VariantScore[] };
+
+/** How the score of a run of one eval comes from its trials. */
+export const RUN_SCORE_RULE =
+  "The score of a run is the mean of its scorer pass rates over all the valid trials of the run. A matrix run pools the trials of its variants. Each variant also has its own score, from its own trials.";
+
 export const LEGACY_GROUP = "All cases";
 /** The key of the group of a run from before evals had definitions. */
 const LEGACY_KEY = "";
@@ -62,6 +74,44 @@ const LEGACY_KEY = "";
 /** In the order of the run. */
 export function evalScores(run: ScoredRun): EvalScore[] {
   return evalGroups(run.experiment).map((group) => scoreOf(group, run.trials));
+}
+
+/**
+ * The score of a run of one eval (`RUN_SCORE_RULE`): the mean of the scorer pass rates over all
+ * the valid trials of the run, the same value as its entry of `evalScores`. Each variant keeps the
+ * score of its own trials. The score of the run is not their mean: a variant with few valid trials
+ * would count as much as one with many.
+ */
+export function runScore(run: ScoredRun): RunScore {
+  const variants = run.experiment.variants ?? [];
+  const scores: VariantScore[] =
+    variants.length === 0
+      ? evalScores(run).map((score) => ({ variant: null, score }))
+      : variants.flatMap((variant) =>
+          evalScores({
+            ...run,
+            trials: run.trials.filter((trial) => (trial.variant ?? 0) === variant.index),
+          }).map((score) => ({ variant, score })),
+        );
+  return {
+    score: mean(evalScores(run).map(({ score }) => score)),
+    rule: RUN_SCORE_RULE,
+    variants: scores,
+  };
+}
+
+/**
+ * The delta of a run of one eval against its baseline run: the run score minus the baseline run
+ * score, the same value as its entry of `evalDeltas`. No value, with the reason, when the eval is
+ * not in the baseline or its scorers differ.
+ */
+export function runDelta(baseline: ScoredRun, candidate: ScoredRun): EvalDelta {
+  const [key] = evalGroups(candidate.experiment).map((group) => group.key);
+  const checked = key === undefined ? undefined : evalDeltas(baseline, candidate).get(key);
+  if (!checked) return missing(baseline.experiment.evalVersions.length === 0);
+  if (!checked.ok) return checked;
+  const before = runScore(baseline).score;
+  return { ...checked, score: minus(runScore(candidate).score, before) };
 }
 
 /** The delta of each eval of the candidate, by its id (`""` for a run with no eval). */
@@ -194,14 +244,17 @@ function scoreOf(group: Group, allTrials: ScoredRun["trials"]): EvalScore {
   };
 }
 
-/** The score delta is the mean delta of the scorers rated on both sides. */
+/**
+ * The score delta is the score of the candidate minus the score of the baseline: the one rule of
+ * each delta (`runDelta` too). Each scorer has its own delta, when both sides rated it.
+ */
 function deltaOf(baseline: EvalScore, candidate: EvalScore): EvalDelta {
   const before = new Map(baseline.scorers.map((scorer) => [pairKey(scorer), scorer]));
   const scorers = candidate.scorers.map((scorer) => ({
     scorerId: scorer.scorerId,
     delta: minus(scorer.passRate, before.get(pairKey(scorer))?.passRate ?? null),
   }));
-  return { ok: true, score: mean(scorers.map(({ delta }) => delta)), scorers };
+  return { ok: true, score: minus(candidate.score, baseline.score), scorers };
 }
 
 function sideOf(group: Group, run: ScoredRun) {

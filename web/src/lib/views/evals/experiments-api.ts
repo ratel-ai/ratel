@@ -9,6 +9,7 @@ import {
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
+import type { ApiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { storable } from "@/lib/platform/storable";
 import type { Compared } from "./baseline";
 import { MAX_SANDBOX_NAME_CHARS } from "./domain/eval";
@@ -27,8 +28,11 @@ export type ExperimentsApiDeps = {
   advance: (experiment: Experiment) => void;
   track: (experiment: Experiment, by: { externalId?: string; surface: string }) => Promise<void>;
   publicUrl: (path: string) => string;
-  /** The pinned baseline run of the project, with its trials. Null when none is pinned. */
-  baseline: (projectId: string) => Promise<Compared | null>;
+  /**
+   * The pinned baseline run of an eval (of the suite runs: null), with its trials. Null when none
+   * is pinned.
+   */
+  baseline: (projectId: string, evalId: string | null) => Promise<Compared | null>;
 };
 
 /** Who may call the routes of a project key. */
@@ -67,11 +71,21 @@ const STATUS: Record<StartRefusal, number> = {
   too_many_trials: 413,
   invalid_params: 400,
   wrong_sandbox: 409,
+  no_content_access: 403,
+  query_failed: 422,
+  too_many_rows: 413,
+  invalid_scorers: 400,
+  shared_dataset: 409,
 };
 
 export function handleStartByKey(request: Request, deps: KeyDeps): Promise<Response> {
-  return forKey(deps, "start_experiment", async (subject, apiKeyId) =>
-    start(request, subject, { startedBy: `key:${apiKeyId}`, surface: "api" }, deps),
+  return forKey(deps, "start_experiment", async (subject, apiKeyId, policy) =>
+    start(
+      request,
+      subject,
+      { startedBy: `key:${apiKeyId}`, surface: "api", mayCopyContent: mayCopyContent(policy) },
+      deps,
+    ),
   );
 }
 
@@ -108,7 +122,12 @@ export function handleStartByMember(
       start(
         request,
         member,
-        { startedBy: member.externalId, externalId: member.externalId, surface: "console" },
+        {
+          startedBy: member.externalId,
+          externalId: member.externalId,
+          surface: "console",
+          mayCopyContent: true,
+        },
         deps,
       ),
     { write: true },
@@ -133,7 +152,15 @@ export function handleTrialEvidence(
 async function start(
   request: Request,
   { projectId, organizationId }: UsageSubject,
-  by: { startedBy: string; externalId?: string; surface: string },
+  {
+    mayCopyContent: mayCopy,
+    ...by
+  }: {
+    startedBy: string;
+    externalId?: string;
+    surface: string;
+    mayCopyContent: boolean;
+  },
   deps: ExperimentsApiDeps,
 ): Promise<Response> {
   const body = startSchema.safeParse(await readJson(request));
@@ -152,6 +179,7 @@ async function start(
       ...(evals ? { evals } : {}),
       params,
       startedBy: by.startedBy,
+      mayCopyContent: mayCopy,
       ...(label ? { label } : {}),
       ...(name ? { name } : {}),
     },
@@ -179,27 +207,39 @@ async function get(
   if (!experiment) return notFound();
   const [trials, baseline] = await Promise.all([
     experiments.trials(experiment.id),
-    deps.baseline(projectId),
+    deps.baseline(projectId, experiment.evalId),
   ]);
   const suite = suiteTable({ experiment, trials }, baseline);
-  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite));
+  return reply(200, experimentView(experiment, trials, urlOf(experiment, deps), suite, baseline));
 }
 
 export async function forKey(
   deps: KeyAccess,
   operation: string,
-  work: (subject: UsageSubject, apiKeyId: string) => Promise<Response>,
+  work: (subject: UsageSubject, apiKeyId: string, policy: ApiKeyPolicy) => Promise<Response>,
 ): Promise<Response> {
   if (deps.offForAll()) return notFound();
   const resolved = await deps.authenticate();
   if (!resolved.ok) return resolved.response;
-  const { projectId, apiKeyId } = resolved;
+  const { projectId, apiKeyId, policy } = resolved;
   if (!(await deps.enabled(projectId))) return notFound();
   const organizationId = await deps.organizationIdOf(projectId);
   if (!organizationId) return notFound();
-  return withFeatureSpan("evals", operation, () => work({ projectId, organizationId }, apiKeyId), {
-    attributes: { "project.id": projectId },
-  });
+  return withFeatureSpan(
+    "evals",
+    operation,
+    () => work({ projectId, organizationId }, apiKeyId, policy),
+    { attributes: { "project.id": projectId } },
+  );
+}
+
+/**
+ * May this key copy captured text into a run? It needs its `content:read` scope, as each copy of
+ * captured text does (`lib/mcp/operations/content-access.ts`). The opt-in of the project is read
+ * where the rows are built.
+ */
+export function mayCopyContent(policy: ApiKeyPolicy): boolean {
+  return policy.allows("content:read");
 }
 
 export function urlOf(

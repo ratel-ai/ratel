@@ -5,10 +5,12 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { EvalJudge } from "@/lib/contracts/eval-judge";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { SandboxRun, SandboxVersionSummary, StartRunResult } from "@/lib/views/sandboxes";
 import { createDrizzleCaseStore } from "../adapters/drizzle-case-store";
+import { createDrizzleDatasetStore } from "../adapters/drizzle-dataset-store";
 import { createDrizzleEvalStore } from "../adapters/drizzle-eval-store";
 import { createDrizzleExperimentStore } from "../adapters/drizzle-experiment-store";
 import { createDrizzleJudgeBudget } from "../adapters/drizzle-judge-budget";
@@ -35,6 +37,8 @@ import {
   content,
   createEvalsDb,
   evalContent,
+  fakeLibrary,
+  fakeTraceSource,
   inEval,
   NO_REFUND,
   ORGANIZATION_ID,
@@ -97,6 +101,9 @@ async function setup() {
     cases,
     evals,
     experiments,
+    datasets: createDrizzleDatasetStore(db),
+    traces: fakeTraceSource(),
+    library: fakeLibrary(),
     sandboxes: {
       enabled: async () => true,
       listVersions: async () => versions,
@@ -160,7 +167,14 @@ async function setup() {
   const start = async (over: Partial<Parameters<typeof startExperiment>[1]> = {}) => {
     const result = await startExperiment(
       SUBJECT,
-      { sandboxVersion: "latest", trialsPerCase: 3, params: {}, startedBy: "user_1", ...over },
+      {
+        mayCopyContent: true,
+        sandboxVersion: "latest",
+        trialsPerCase: 3,
+        params: {},
+        startedBy: "user_1",
+        ...over,
+      },
       deps,
     );
     assert.ok(result.ok, JSON.stringify(result));
@@ -260,7 +274,14 @@ test("a run with a label takes only the cases with that label, with its name", a
   assert.equal(all.name, null);
   const none = await startExperiment(
     SUBJECT,
-    { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "u", label: "nope" },
+    {
+      mayCopyContent: true,
+      sandboxVersion: "latest",
+      trialsPerCase: 1,
+      params: {},
+      startedBy: "u",
+      label: "nope",
+    },
     t.deps,
   );
   assert.deepEqual(none, {
@@ -276,7 +297,7 @@ test("a param that the version does not declare, or of the wrong type, is refuse
   const start = (params: Record<string, unknown>) =>
     startExperiment(
       SUBJECT,
-      { sandboxVersion: "latest", trialsPerCase: 1, params, startedBy: "u" },
+      { mayCopyContent: true, sandboxVersion: "latest", trialsPerCase: 1, params, startedBy: "u" },
       t.deps,
     );
   assert.deepEqual(await start({ temperature: 1 }), {
@@ -551,7 +572,7 @@ test("refusals of a start", async () => {
   const start = (sandboxVersion = "latest", trialsPerCase = 3) =>
     startExperiment(
       SUBJECT,
-      { sandboxVersion, trialsPerCase, params: {}, startedBy: "u" },
+      { mayCopyContent: true, sandboxVersion, trialsPerCase, params: {}, startedBy: "u" },
       t.deps,
     ).then((result) => (result.ok ? "ok" : result.reason));
   assert.equal(await start(), "no_cases");
@@ -578,7 +599,7 @@ function keyDeps(t: Awaited<ReturnType<typeof setup>>, over: Partial<KeyDeps> = 
     baseline: async () => null,
     offForAll: () => false,
     authenticate: async () =>
-      ({ ok: true, projectId: PROJECT_ID, apiKeyId: "k1" }) as Awaited<
+      ({ ok: true, projectId: PROJECT_ID, apiKeyId: "k1", policy: apiKeyPolicy(["*"]) }) as Awaited<
         ReturnType<KeyDeps["authenticate"]>
       >,
     enabled: async () => true,
@@ -672,7 +693,7 @@ test("one eval runs alone by name. An unknown eval, another sandbox and an eval 
   const refusal = async (evals: string[]) => {
     const result = await startExperiment(
       SUBJECT,
-      { sandboxVersion: "latest", params: {}, startedBy: "u", evals },
+      { mayCopyContent: true, sandboxVersion: "latest", params: {}, startedBy: "u", evals },
       t.deps,
     );
     assert.ok(!result.ok);
@@ -728,7 +749,13 @@ test("latest is the newest ready version of the sandbox of the run, never of ano
   // Evals of two sandboxes do not run in one experiment.
   const mixed = await startExperiment(
     SUBJECT,
-    { sandboxVersion: "latest", params: {}, startedBy: "u", evals: ["Support", "Commands"] },
+    {
+      mayCopyContent: true,
+      sandboxVersion: "latest",
+      params: {},
+      startedBy: "u",
+      evals: ["Support", "Commands"],
+    },
     t.deps,
   );
   assert.deepEqual(mixed.ok ? null : [mixed.reason, mixed.message], [
@@ -738,7 +765,13 @@ test("latest is the newest ready version of the sandbox of the run, never of ano
   // A version id of another sandbox is refused.
   const wrong = await startExperiment(
     SUBJECT,
-    { sandboxVersion: command.id, sandbox: "support-demo", params: {}, startedBy: "u" },
+    {
+      mayCopyContent: true,
+      sandboxVersion: command.id,
+      sandbox: "support-demo",
+      params: {},
+      startedBy: "u",
+    },
     t.deps,
   );
   assert.deepEqual(wrong.ok ? null : [wrong.reason, wrong.message], [
@@ -748,7 +781,7 @@ test("latest is the newest ready version of the sandbox of the run, never of ano
   // A sandbox with no ready version.
   const none = await startExperiment(
     SUBJECT,
-    { sandboxVersion: "latest", sandbox: "nope", params: {}, startedBy: "u" },
+    { mayCopyContent: true, sandboxVersion: "latest", sandbox: "nope", params: {}, startedBy: "u" },
     t.deps,
   );
   assert.deepEqual(none.ok ? null : [none.reason, none.message], [
@@ -922,7 +955,13 @@ test("the drain gives each project a turn, and a project has a limit of running 
   for (let n = 0; n < MAX_RUNNING_EXPERIMENTS; n += 1) await t.start({ trialsPerCase: 1 });
   const more = await startExperiment(
     SUBJECT,
-    { sandboxVersion: "latest", trialsPerCase: 1, params: {}, startedBy: "u" },
+    {
+      mayCopyContent: true,
+      sandboxVersion: "latest",
+      trialsPerCase: 1,
+      params: {},
+      startedBy: "u",
+    },
     t.deps,
   );
   assert.ok(!more.ok && more.reason === "too_many_running");

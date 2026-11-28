@@ -293,5 +293,11 @@ async function insertOldCase(
 }
 
 async function migrate(client: PGlite) {
-  await client.exec(readFileSync(join(MIGRATIONS_DIR, MIGRATION), "utf8"));
+  // The later migrations too: the stores read the tables as they are now.
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  for (const file of files.filter((name) => name >= MIGRATION)) {
+    await client.exec(readFileSync(join(MIGRATIONS_DIR, file), "utf8"));
+  }
 }
