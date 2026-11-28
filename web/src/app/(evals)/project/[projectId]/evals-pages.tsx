@@ -7,6 +7,7 @@ import { EvalView } from "@/components/console/evals/EvalView";
 import { RunView } from "@/components/console/evals/RunView";
 import { TrialView } from "@/components/console/evals/TrialView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { composition } from "@/lib/composition/ports";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -65,7 +66,17 @@ export async function evalsPage(projectId: string, openNew: boolean): Promise<Re
   if ("unavailable" in context) return context.unavailable;
   const { project, canEdit } = context;
   const { model, dialog } = await span("load_page", project.id, () => loadEvalsPage(project.id));
-  return <EvalsList model={model} dialog={dialog} canEdit={canEdit} openNew={openNew && canEdit} />;
+  return (
+    <EvalsList model={model} dialog={dialog} canEdit={canEdit} openNew={openNew && canEdit}>
+      {await judgeSettings(project.id)}
+    </EvalsList>
+  );
+}
+
+/** The judge settings section of an edition (`EditionUi.EvalJudgeSettings`). Null with none. */
+export async function judgeSettings(projectId: string): Promise<ReactNode> {
+  const JudgeSettings = (await composition.ui?.())?.EvalJudgeSettings;
+  return JudgeSettings ? <JudgeSettings projectId={projectId} /> : null;
 }
 
 export async function evalPage(projectId: string, evalId: string): Promise<ReactNode> {

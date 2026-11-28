@@ -1,7 +1,13 @@
 import type { z } from "zod";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
-import { type SandboxRun, sandboxRunView, startRunRequestSchema } from "./domain/run";
+import type { ApiKeyPolicy } from "@/lib/platform/api-keys/policy";
+import {
+  EVAL_TRIAL_PREFIX,
+  type SandboxRun,
+  sandboxRunView,
+  startRunRequestSchema,
+} from "./domain/run";
 import type { SandboxVersion } from "./domain/version";
 import { sandboxesHref, sandboxHref } from "./paths";
 import type { VersionStore } from "./ports/version-store";
@@ -22,11 +28,15 @@ export type SandboxRunsApiDeps = {
   runDeps: () => RunDeps;
   /** The configured public origin of this deployment, or null when none is configured. */
   publicOrigin: () => string | null;
+  /** Whether the project lets Ratel read captured text. */
+  contentOptIn: (projectId: string) => Promise<boolean>;
 };
 
 type Refusal = Exclude<StartRunResult, { ok: true }>;
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
+/** The error message of a withheld run. `sandbox-run.schema.json` needs a text there, not null. */
+const ERROR_TEXT_WITHHELD = "The error text is withheld.";
 const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const STATUS: Record<Refusal["reason"], number> = {
   not_found: 404,
@@ -75,25 +85,63 @@ export function handleGetSandboxRun(
   runId: string,
   deps: SandboxRunsApiDeps,
 ): Promise<Response> {
-  return forProject(deps, "get_sandbox_run", async ({ projectId }) => {
+  return forProject(deps, "get_sandbox_run", async ({ projectId, apiKeyId, policy }) => {
     const run = UUID.test(runId) ? await getRun(projectId, runId, deps.runDeps()) : null;
     if (!run) return json(404, refusal("not_found", "There is no such run."));
     const version = await deps.versions().get(projectId, run.versionId);
-    return json(200, view(req, run, version?.name ?? null, deps));
+    const shown = view(req, run, version?.name ?? null, deps);
+    if (await mayReadRun(run, { projectId, apiKeyId, policy }, deps)) return json(200, shown);
+    const {
+      input: _input,
+      params: _params,
+      output: _output,
+      toolCalls: _calls,
+      logs: _logs,
+      error,
+      ...rest
+    } = shown;
+    return json(200, {
+      ...rest,
+      ...(error ? { error: { ...error, message: ERROR_TEXT_WITHHELD } } : {}),
+      contentWithheld: true,
+    });
   });
 }
+
+/**
+ * The input, output, tool calls and logs of a run that a trial of an eval started are captured
+ * text (a dataset row from a trace). So are its error message (the agent writes it and can repeat
+ * its input there) and its params (they are of the eval). A key reads them with `content:read` and
+ * the project's opt-in, as the MCP tools do. Any other run (`ratel run`, the Playground) shows
+ * them.
+ */
+async function mayReadRun(
+  run: SandboxRun,
+  caller: { projectId: string; apiKeyId: string; policy: ApiKeyPolicy },
+  deps: Pick<SandboxRunsApiDeps, "contentOptIn">,
+): Promise<boolean> {
+  if (!run.requestedBy.startsWith(EVAL_TRIAL_PREFIX)) return true;
+  if (!caller.policy.allows("content:read")) return false;
+  try {
+    return await deps.contentOptIn(caller.projectId);
+  } catch {
+    return false;
+  }
+}
+
+type Caller = { projectId: string; apiKeyId: string; policy: ApiKeyPolicy };
 
 async function forProject(
   deps: SandboxRunsApiDeps,
   operation: string,
-  work: (project: { projectId: string; apiKeyId: string }) => Promise<Response>,
+  work: (caller: Caller) => Promise<Response>,
 ): Promise<Response> {
   if (deps.offForAll()) return notFound();
   const resolved = await deps.authenticate();
   if (!resolved.ok) return resolved.response;
-  const { projectId, apiKeyId } = resolved;
+  const { projectId, apiKeyId, policy } = resolved;
   if (!(await deps.enabled(projectId))) return notFound();
-  return withFeatureSpan("sandboxes", operation, () => work({ projectId, apiKeyId }), {
+  return withFeatureSpan("sandboxes", operation, () => work({ projectId, apiKeyId, policy }), {
     attributes: { "project.id": projectId },
   });
 }

@@ -557,3 +557,21 @@ test("a run grid hides the input of a trace row when the project does not let Ra
   assert.equal(typed.rows[0]?.input, "refund A200");
   assert.equal(typed.contentWithheld, false);
 });
+
+test("in the run grid a trial whose agent failed is a fail for every scorer", () => {
+  const made = evalRun("r1", "e1", 1, ["pass"]);
+  const [first] = made.trials;
+  assert.ok(first);
+  // The agent failed: `scoreRun` records a fail with no scorer result.
+  made.trials.push({ ...first, id: "t-crash", index: 1, result: "fail", scorers: [] });
+  const model = runPageModel({
+    projectId: PROJECT_ID,
+    evalId: "e1",
+    experiment: made.experiment,
+    trials: made.trials,
+    versions: [],
+    outputs: new Map(),
+  });
+  assert.deepEqual(model.rows[0]?.cells[0]?.scorers["No refund"], { pass: 1, rated: 2 });
+  assert.equal(model.score, 0.5);
+});

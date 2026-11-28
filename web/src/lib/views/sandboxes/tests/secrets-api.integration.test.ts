@@ -291,3 +291,19 @@ test("the declared names come from the newest version of the sandbox", async () 
     ["NEW_KEY"],
   );
 });
+
+test("a value with a line break is refused at set, at both levels, with a reason that has no value", async () => {
+  const t = await setup();
+  await t.push(["PEM_KEY"]);
+  for (const value of ["line one\nline two", "a\r\nb", "trailing\n"]) {
+    const project = await t.set("PEM_KEY", value);
+    assert.equal(project.status, 400);
+    assert.equal(project.body.error, "invalid_value");
+    assert.match(project.body.message, /line break/);
+    assert.equal(project.body.message.includes(value), false);
+    const sandbox = await t.atSandbox.set(CONFIG.name, "PEM_KEY", value);
+    assert.equal(sandbox.status, 400);
+    assert.match(sandbox.body.message, /line break/);
+  }
+  assert.deepEqual(await t.store.readSealed(PROJECT_ID, ["PEM_KEY"]), []);
+});

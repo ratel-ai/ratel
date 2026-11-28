@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   judgeCommandAnswer,
   judgeHttpAnswer,
+  MAX_ERROR_MESSAGE_CHARS,
+  MAX_RESPONSE_BYTES,
   redact,
   smokeRequest,
   tailOf,
@@ -84,4 +86,33 @@ test("logs lose each secret value and keep their end", () => {
   assert.equal(tail.length, 64 * 1024);
   assert.ok(tail.endsWith("END"));
   assert.equal(tailOf("a\0b"), "ab");
+});
+
+test("an answer larger than the cap is too_large, and an error message has a maximum length", () => {
+  const big = JSON.stringify({ output: "x".repeat(MAX_RESPONSE_BYTES) });
+  const http = judgeHttpAnswer(200, big);
+  assert.equal(!http.ok && http.error.code, "too_large");
+  assert.match(!http.ok ? http.error.message : "", /1 MiB/);
+  const command = judgeCommandAnswer(0, "y".repeat(MAX_RESPONSE_BYTES + 1));
+  assert.equal(!command.ok && command.error.code, "too_large");
+  // At the cap it is still read.
+  assert.equal(judgeCommandAnswer(0, "y".repeat(MAX_RESPONSE_BYTES)).ok, true);
+  const long = JSON.stringify({
+    error: { code: "run_failed", message: "m".repeat(MAX_ERROR_MESSAGE_CHARS + 1) },
+  });
+  const refused = judgeHttpAnswer(500, long);
+  assert.equal(!refused.ok && refused.error.code, "invalid_error");
+  const toolError = {
+    output: 1,
+    toolCalls: [
+      {
+        name: "x",
+        args: {},
+        mode: "live",
+        error: { code: "e", message: "m".repeat(MAX_ERROR_MESSAGE_CHARS + 1) },
+      },
+    ],
+  };
+  const tool = judgeHttpAnswer(200, JSON.stringify(toolError));
+  assert.equal(!tool.ok && tool.error.code, "invalid_response");
 });

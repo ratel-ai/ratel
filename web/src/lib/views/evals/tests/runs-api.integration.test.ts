@@ -424,3 +424,19 @@ function authenticate(scope: ApiKeyScope, key: { projectId: string; scopes: stri
       },
     );
 }
+
+test("a key cannot create an RQL dataset when RQL (customMonitoring) is off for the project", async () => {
+  const { deps } = await setup();
+  const off = deps();
+  const engine = off.experiments();
+  const rqlOff = {
+    ...off,
+    experiments: () => ({ ...engine, traces: { ...engine.traces, rqlEnabled: async () => false } }),
+  };
+  const rql = { name: "By RQL", query: { kind: "rql", text: "select trace_id from traces" } };
+  const refused = await json(handleCreateDatasetByKey(post(rql), rqlOff));
+  assert.equal(refused.status, 403);
+  assert.equal(refused.body.error, "rql_off");
+  const made = await json(handleCreateDatasetByKey(post(rql), deps()));
+  assert.equal(made.status, 201);
+});

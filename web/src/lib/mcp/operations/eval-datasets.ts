@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
-import { defaultContentAccessDeps, mayReadContent } from "@/lib/mcp/operations/content-access";
+import {
+  defaultContentAccessDeps,
+  mayCopyContent,
+  mayReadContent,
+} from "@/lib/mcp/operations/content-access";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows } from "@/lib/mcp/serialize";
@@ -15,6 +19,7 @@ import { createDrizzleExperimentStore } from "@/lib/views/evals/adapters/drizzle
 import { createTraceSource } from "@/lib/views/evals/adapters/trace-source";
 import type { Compared } from "@/lib/views/evals/baseline";
 import { readOnlyTools } from "@/lib/views/evals/console-deps";
+import { rqlRefusal } from "@/lib/views/evals/datasets";
 import { currentVersion as currentRow } from "@/lib/views/evals/domain/case";
 import {
   DATASET_KINDS,
@@ -59,6 +64,8 @@ export interface EvalDatasetsDeps {
   ): Promise<{ content: NewRowContent; sourceOutput: string | null } | null>;
   getSandboxRun(projectId: string, runId: string): Promise<SandboxRun | null>;
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
+  /** Whether a row or case may copy captured text: the project's opt-in, for every caller. */
+  mayCopyContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
   /** The traces, tasks and RQL that a query dataset reads. */
   traces(): TraceSource;
   now(): Date;
@@ -99,6 +106,7 @@ const defaultDeps: EvalDatasetsDeps = {
   },
   getSandboxRun: getRun,
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
+  mayCopyContent: (ctx) => mayCopyContent(ctx, defaultContentAccessDeps),
   traces: () => createTraceSource(getDb(), { readOnlyTools, now: () => new Date() }),
   now: () => new Date(),
 };
@@ -238,6 +246,10 @@ export function evalDatasetsOperations(deps: EvalDatasetsDeps = defaultDeps): Mc
           throw invalidParams(issue?.message ?? "The query is not valid.", [
             { path: String(issue?.path[0] ?? "kind"), message: issue?.message ?? "Not valid." },
           ]);
+        }
+        const rqlOff = await rqlRefusal(ctx.projectId, query.data, deps.traces());
+        if (rqlOff) {
+          throw new McpOperationError("forbidden", rqlOff.message, { reason: rqlOff.reason });
         }
         const made = await deps.datasets().create({
           projectId: ctx.projectId,
@@ -507,7 +519,7 @@ async function rowOf(
   const labels = params.labels ? { labels: [...new Set(params.labels)] } : {};
   const expectedOutput = params.expectedOutput ?? null;
   if (params.turnId) {
-    if (!(await deps.mayReadContent(ctx))) {
+    if (!(await deps.mayCopyContent(ctx))) {
       throw new McpOperationError(
         "forbidden",
         "A row from a turn copies captured text. This key or this project does not allow it.",

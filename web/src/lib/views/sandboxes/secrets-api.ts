@@ -132,6 +132,14 @@ async function setAt(
   const body = bodySchema.safeParse(await request.json().catch(() => null));
   // The message of the check is our own: the issue could hold a part of the value.
   if (!body.success) return refuse(400, "invalid_value", "Give a value of at most 32 KB.");
+  // A value is one line of the env file of the container (`envFile`): a line break never runs.
+  if (/[\r\n]/.test(body.data.value)) {
+    return refuse(
+      400,
+      "invalid_value",
+      "A secret value cannot hold a line break: the agent gets it as one environment variable. Encode a multi-line value (a PEM key, a JSON file) as base64 and decode it in the agent.",
+    );
+  }
   const sealing = deps.sealingKey();
   if (!sealing.ok) return refuse(503, "not_configured", sealing.message);
   const owner = { ...level, name: parsedName.data };

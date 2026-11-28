@@ -8,7 +8,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { FlaskConical } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { type EvalListRow, type EvalsPageModel, filterEvals } from "@/lib/views/evals/evals-page";
 import type { DialogData } from "@/lib/views/evals/pages-load";
 import { percent } from "@/lib/views/evals/score-chart";
@@ -25,12 +25,15 @@ export function EvalsList({
   dialog,
   canEdit,
   openNew,
+  children,
 }: {
   model: EvalsPageModel;
   dialog: DialogData;
   canEdit: boolean;
   /** Opens "New eval" at once (the old address of the new-eval page). */
   openNew: boolean;
+  /** A section at the foot of the page (an edition's judge settings). */
+  children?: ReactNode;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -130,6 +133,7 @@ export function EvalsList({
             }
           />
         </div>
+        {children}
       </PageBody>
       {canEdit ? (
         <EvalDialog

@@ -74,6 +74,28 @@ export async function mayReadContent(
   }
 }
 
+/**
+ * Whether this caller may copy captured text into a dataset row or an eval case. A copy is sent to
+ * the sandbox and to the judge on every run, so it is Ratel reading the text: it needs the
+ * project's opt-in for every caller, a signed-in member too, as the console asks. An API key also
+ * needs its `content:read` scope. A failed opt-in read refuses the copy.
+ */
+export async function mayCopyContent(
+  ctx: Pick<OperationContext, "auth" | "projectId">,
+  deps: ContentAccessDeps,
+): Promise<boolean> {
+  if (!credentialMayReadContent(ctx.auth)) return false;
+  try {
+    return await deps.contentOptIn(ctx.projectId);
+  } catch (err) {
+    logger.error(
+      { err, project_id: ctx.projectId },
+      "content opt-in read failed; no captured text copied",
+    );
+    return false;
+  }
+}
+
 /** The experiment attribute carrying the search an end user ran (`selection-view.ts` reads it). */
 export const EXPERIMENT_QUERY_ATTRIBUTE = "ratel.experiment.query";
 

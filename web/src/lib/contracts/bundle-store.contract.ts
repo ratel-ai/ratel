@@ -30,6 +30,17 @@ export function bundleStoreContract(label: string, make: () => BundleStore | Pro
       assert.deepEqual(await readAll(store, "p1/v1"), BODY);
     });
 
+    test("a deleted bundle is gone, and deleting a key with no bundle is no error", async () => {
+      const store = await make();
+      // `delete` is optional: an adapter without it keeps every bundle.
+      if (!store.delete) return;
+      await store.put("p1/v3", chunks(BODY), info(BODY));
+      await store.delete("p1/v3");
+      assert.equal(await store.open("p1/v3"), null);
+      await store.delete("p1/v3");
+      await store.delete("p1/never");
+    });
+
     test("a body that is not the announced bundle is not stored", async () => {
       const store = await make();
       const mismatch = { ok: false, reason: "mismatch" };

@@ -379,3 +379,29 @@ test("the scorers of one run follow the rules of an eval: at most five judges, u
   );
   assert.equal(twice.ok ? null : twice.reason, "invalid_scorers");
 });
+
+test("an RQL dataset is refused at create, preview and eval save when RQL (customMonitoring) is off", async () => {
+  const { deps } = await setup();
+  const off: ActionDeps = { ...deps, traces: { ...deps.traces, rqlEnabled: async () => false } };
+  const rql = { kind: "rql" as const, text: "select trace_id from traces", limit: 5 };
+  const made = await createDataset(
+    PROJECT_ID,
+    ACTOR,
+    { name: "By RQL", description: null, query: rql },
+    off,
+  );
+  assert.equal(made.ok ? null : made.reason, "rql_off");
+  assert.deepEqual(await deps.datasets.list(PROJECT_ID), []);
+  const preview = await previewQuery(PROJECT_ID, ACTOR, rql, off);
+  assert.equal(preview.ok ? null : preview.reason, "rql_off");
+  const saved = await createEval(PROJECT_ID, ACTOR, { ...EVAL, dataset: { query: rql } }, off);
+  assert.equal(saved.ok ? null : saved.reason, "rql_off");
+  // With RQL on, the same dataset is made.
+  const on = await createDataset(
+    PROJECT_ID,
+    ACTOR,
+    { name: "By RQL", description: null, query: rql },
+    deps,
+  );
+  assert.ok(on.ok);
+});

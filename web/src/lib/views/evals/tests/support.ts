@@ -100,6 +100,7 @@ export function fakeTraceSource(over: Partial<TraceSource> = {}): TraceSource {
     readContent: async () => true,
     lastTurns: async () => [],
     taskTurns: async () => [],
+    rqlEnabled: async () => true,
     runRql: async () => ({ ok: true, columns: [{ name: "trace_id" }], rows: [] }),
     turnsOfTraces: async () => new Map(),
     chooseTurns: async () => [],

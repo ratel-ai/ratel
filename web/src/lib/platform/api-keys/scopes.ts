@@ -126,7 +126,8 @@ export const API_KEY_SCOPE_INFO: Readonly<Record<ApiKeyScope, ScopeInfo>> = {
   "sandboxes:write": {
     group: "Sandboxes",
     label: "Push sandboxes",
-    description: "POST /api/v1/sandboxes/versions (ratel sandbox push)",
+    description:
+      "POST /api/v1/sandboxes/versions (ratel sandbox push). A pushed agent gets each secret that its ratel.yaml declares, so this key can use the project's secrets",
   },
   "sandboxes:run": {
     group: "Sandboxes",

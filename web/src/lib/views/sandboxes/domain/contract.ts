@@ -16,6 +16,7 @@ export type ContractErrorCode =
   | "timeout"
   | "no_answer"
   | "run_failed"
+  | "too_large"
   | (string & {});
 
 export type ContractError = { code: ContractErrorCode; message: string };
@@ -38,13 +39,21 @@ export type ContainerAnswer =
 
 /** The logs of a container keep their end, at most this many characters. */
 export const MAX_LOG_CHARS = 64 * 1024;
+/**
+ * The largest answer of a container (HTTP body or command stdout), as large as the largest
+ * `run-request` (`MAX_REQUEST_BYTES`). The VM sends at most one byte more (`head -c`), so a larger
+ * answer never reaches Ratel whole; it is the contract error `too_large`.
+ */
+export const MAX_RESPONSE_BYTES = 1024 * 1024;
+/** The longest `error.message` of an answer or of a tool call. */
+export const MAX_ERROR_MESSAGE_CHARS = 4000;
 const REDACTED = "[redacted]";
 
 const errorCode = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
 const errorBodySchema = z
   .object({
     code: errorCode,
-    message: z.string().min(1),
+    message: z.string().min(1).max(MAX_ERROR_MESSAGE_CHARS),
     limit: z.string().min(1).optional(),
     max: z.number().optional(),
     current: z.number().optional(),
@@ -112,6 +121,7 @@ export function smokeRequest(config: RatelYaml, runId: string) {
 
 /** Judges the answer of `POST /ratel/run` (HTTP mode). */
 export function judgeHttpAnswer(status: number, body: string): ContainerAnswer {
+  if (tooLarge(body)) return failed("too_large", tooLargeMessage("POST /ratel/run"));
   const parsed = parseJson(body);
   if (status !== 200) {
     const error = parsed.ok ? errorSchema.safeParse(parsed.value) : null;
@@ -131,6 +141,7 @@ export function judgeHttpAnswer(status: number, body: string): ContainerAnswer {
 
 /** Judges the end of the command (command mode): stdout is the answer when it exits 0. */
 export function judgeCommandAnswer(exitCode: number, stdout: string): ContainerAnswer {
+  if (tooLarge(stdout)) return failed("too_large", tooLargeMessage("The command"));
   if (exitCode !== 0) {
     return failed(
       "run_failed",
@@ -170,6 +181,15 @@ function response(value: unknown, what: string): ContainerAnswer {
     "invalid_response",
     `${what} that is not a run response: ${where ? `${where}: ` : ""}${issue?.message ?? "invalid"}.`,
   );
+}
+
+/** More bytes than the cap: the VM cut it, or it is too large. Checked before `JSON.parse`. */
+export function tooLarge(text: string): boolean {
+  return text.length > MAX_RESPONSE_BYTES || Buffer.byteLength(text) > MAX_RESPONSE_BYTES;
+}
+
+function tooLargeMessage(what: string): string {
+  return `${what} answered more than ${MAX_RESPONSE_BYTES / (1024 * 1024)} MiB. Return a smaller output.`;
 }
 
 function failed(code: ContractErrorCode, message: string): ContainerAnswer {

@@ -108,6 +108,8 @@ export async function runImageBuild(
   });
   try {
     const outcome = await build(version, provider, deps);
+    // Ready or failed, the version is never built again: its bundle goes after the finish.
+    const dropBundle = () => deleteBundle(deps.bundles, version);
     // A version that is not ready keeps no snapshot.
     const dropUnkept = async () => {
       if (outcome.status === "ready") await dropSnapshot(provider, outcome.imageRef, versionId);
@@ -118,6 +120,7 @@ export async function runImageBuild(
         await dropUnkept();
         throw error;
       });
+    await dropBundle();
     if (!finished) {
       // Another process ended the version first, e.g. the reaper after a lost heartbeat.
       await dropUnkept();
@@ -134,6 +137,19 @@ export async function runImageBuild(
     return { status: outcome.status };
   } finally {
     stop();
+  }
+}
+
+/** Deletes the bundle of an ended version. A failure is logged: the build keeps its outcome. */
+async function deleteBundle(bundles: BundleStore, version: SandboxVersion): Promise<void> {
+  if (!bundles.delete) return;
+  try {
+    await bundles.delete(bundleKey(version));
+  } catch (error) {
+    logger.warn(
+      { project_id: version.projectId, version_id: version.id, err: error },
+      "sandbox bundle not deleted",
+    );
   }
 }
 

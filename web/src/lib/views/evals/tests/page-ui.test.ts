@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
+import { judgeSettings } from "@/app/(evals)/project/[projectId]/evals-pages";
 import { DatasetsList } from "@/components/console/evals/DatasetsList";
 import { DatasetView } from "@/components/console/evals/DatasetView";
 import { EvalDialog } from "@/components/console/evals/EvalDialog";
@@ -12,6 +13,7 @@ import { SaveAsEvalCase } from "@/components/console/evals/SaveAsEvalCase";
 import { ScoreChart } from "@/components/console/evals/ScoreChart";
 import { TrialPanel } from "@/components/console/evals/TrialPanel";
 import { resolveConfig } from "@/config";
+import { composition } from "@/lib/composition/ports";
 import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import type { Trial } from "../domain/experiment";
@@ -27,6 +29,10 @@ const labels = (evalsPage: boolean) =>
   flattenNav(consoleNav({ projectId: PROJECT_ID, additions: [], evalsPage })).map(
     ({ label }) => label,
   );
+const Nothing = () => null;
+/** The judge settings section of an edition, as Cloud fills the slot. */
+const JudgeSettings = ({ projectId }: { projectId: string }) =>
+  createElement("section", null, `Who judges the project ${projectId}`);
 const DIALOG: DialogData = {
   sandboxes: [{ name: "support-demo", versions: [{ id: "v1", label: "abc1234", params: [] }] }],
   library: [],
@@ -142,6 +148,37 @@ test("the Evals page is a chart and a table of four columns, with New eval and a
     ),
   );
   assert.doesNotMatch(readOnly, /New eval/);
+});
+
+test("the Evals page draws the judge settings of an edition at its foot, and nothing with no edition", async () => {
+  const editionUi = composition.ui;
+  try {
+    composition.ui = undefined;
+    assert.equal(await judgeSettings(PROJECT_ID), null);
+    composition.ui = async () => ({
+      RootProvider: Nothing,
+      AccountMenuItems: Nothing,
+      EvalJudgeSettings: JudgeSettings,
+    });
+    const slot = await judgeSettings(PROJECT_ID);
+    const html = render(
+      createElement(
+        EvalsList,
+        {
+          model: { projectId: PROJECT_ID, chart: scoreChart([]), rows: [] },
+          dialog: DIALOG,
+          canEdit: true,
+          openNew: false,
+        },
+        slot,
+      ),
+    );
+    assert.match(visibleText(html), new RegExp(`Who judges the project ${PROJECT_ID}`));
+    // The section is under the table of evals.
+    assert.ok(html.indexOf("Who judges") > html.indexOf("No eval yet"));
+  } finally {
+    composition.ui = editionUi;
+  }
 });
 
 test("a chart with no run says so, and one run says that a line starts with the second", () => {

@@ -8,6 +8,7 @@ import {
   CONTENT_WITHHELD_HINT,
   credentialMayReadContent,
   defaultContentAccessDeps,
+  mayCopyContent,
   mayReadContent,
 } from "@/lib/mcp/operations/content-access";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
@@ -150,6 +151,8 @@ export interface EvalsOperationDeps {
   compareWithBaseline(projectId: string, experimentId: string): Promise<ComparisonResult>;
   getSandboxRun(projectId: string, runId: string): Promise<SandboxRun | null>;
   mayReadContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
+  /** Whether a row or case may copy captured text: the project's opt-in, for every caller. */
+  mayCopyContent(ctx: Pick<OperationContext, "auth" | "projectId">): Promise<boolean>;
   organizationIdOf(projectId: string): Promise<string | null>;
   now(): Date;
   sleep(ms: number): Promise<void>;
@@ -228,6 +231,7 @@ const defaultDeps: EvalsOperationDeps = {
   compareWithBaseline: (projectId, id) => compareWithBaseline(projectId, id, baselineDeps()),
   getSandboxRun: getRun,
   mayReadContent: (ctx) => mayReadContent(ctx, defaultContentAccessDeps),
+  mayCopyContent: (ctx) => mayCopyContent(ctx, defaultContentAccessDeps),
   organizationIdOf: async (projectId) => (await getProjectById(projectId))?.organizationId ?? null,
   now: () => new Date(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -1218,7 +1222,7 @@ async function caseSource(
 }> {
   const expectedOutput = params.expectedOutput ?? null;
   if (params.turnId) {
-    if (!(await deps.mayReadContent(ctx))) {
+    if (!(await deps.mayCopyContent(ctx))) {
       throw new McpOperationError(
         "forbidden",
         "A case from a turn copies captured text. This key or this project does not allow it.",
@@ -1433,6 +1437,7 @@ const START_REFUSAL = {
   invalid_params: "invalid_params",
   wrong_sandbox: "conflict",
   no_content_access: "forbidden",
+  rql_off: "forbidden",
   query_failed: "invalid_params",
   too_many_rows: "invalid_params",
   invalid_scorers: "invalid_params",
@@ -1732,5 +1737,6 @@ async function actorOf(
   deps: EvalsOperationDeps,
   ctx: Pick<OperationContext, "auth" | "projectId">,
 ): Promise<Actor> {
-  return { by: requester(ctx.auth), mayReadContent: await deps.mayReadContent(ctx) };
+  // The actions copy text from turns into rows: the rule of a copy, as the console's.
+  return { by: requester(ctx.auth), mayReadContent: await deps.mayCopyContent(ctx) };
 }

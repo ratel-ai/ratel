@@ -4,8 +4,10 @@ import {
   type ContainerAnswer,
   judgeCommandAnswer,
   judgeHttpAnswer,
+  MAX_RESPONSE_BYTES,
   redact,
   tailOf,
+  tooLarge,
 } from "./domain/contract";
 import { envFile } from "./secret-values";
 import type { VmSession } from "./vm-session";
@@ -63,6 +65,8 @@ const SLACK_S = 30;
 const DOCKER_STEP_S = 120;
 /** The shell keeps at most this end of the logs, before the redaction cuts it again. */
 const SHELL_LOG_BYTES = 256 * 1024;
+/** The VM sends at most this much of an answer: one byte more than the cap shows that it is over. */
+const ANSWER_BYTES = MAX_RESPONSE_BYTES + 1;
 /** Exit codes of the health wait. */
 const STOPPED = 2;
 const NOTHING_LISTENS = 3;
@@ -76,7 +80,12 @@ const logger = getLogger("sandboxes/container-run");
 export async function runContainer(vm: VmSession, input: ContainerRunInput): Promise<ContainerRun> {
   const { config, secrets, filePrefix } = input;
   const port = config.run?.port ?? DEFAULT_PORT;
-  const files = { env: `${filePrefix}env`, request: `${filePrefix}request.json` };
+  const files = {
+    env: `${filePrefix}env`,
+    request: `${filePrefix}request.json`,
+    exit: `${filePrefix}exit`,
+    stderr: `${filePrefix}stderr`,
+  };
   const env = envFile({
     ...secrets,
     ...input.env,
@@ -113,7 +122,10 @@ export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-type Run = ContainerRunInput & { port: number; files: { env: string; request: string } };
+type Run = ContainerRunInput & {
+  port: number;
+  files: { env: string; request: string; exit: string; stderr: string };
+};
 type Ran = { answer: ContainerAnswer; durationMs: number; logs: string };
 
 async function httpMode(vm: VmSession, run: Run): Promise<Ran> {
@@ -154,12 +166,20 @@ async function httpMode(vm: VmSession, run: Run): Promise<Ran> {
     return await ended(vm, run, healthFailure(health.exitCode, port), 0);
   }
   const startedAt = Date.now();
+  // The answer goes through `head -c`: the VM never sends more than the cap and a byte. The exit
+  // code of curl goes through a file, as a pipe ends with the code of its last command.
   const answered = await vm.exec({
-    command: `curl -sS --max-time ${timeoutS} -X POST -H 'content-type: application/json' --data-binary @${files.request} -w '\\n%{http_code}' ${base}/ratel/run; code=$?; rm -f ${files.request}; exit $code`,
+    command: `{ curl -sS --max-time ${timeoutS} -X POST -H 'content-type: application/json' --data-binary @${files.request} -w '\\n%{http_code}' ${base}/ratel/run; echo $? > ${files.exit}; } | head -c ${ANSWER_BYTES}; code=$(cat ${files.exit} 2>/dev/null || echo 1); rm -f ${files.request} ${files.exit}; exit $code`,
     timeoutS: timeoutS + SLACK_S,
   });
   const durationMs = Date.now() - startedAt;
-  if (answered.timedOut || answered.exitCode === CURL_TIMEOUT) {
+  if (answered.timedOut) {
+    return await ended(vm, run, timedOut(timeoutS, "POST /ratel/run"), durationMs);
+  }
+  if (tooLarge(answered.stdout)) {
+    return await ended(vm, run, judgeHttpAnswer(200, answered.stdout), durationMs);
+  }
+  if (answered.exitCode === CURL_TIMEOUT) {
     return await ended(vm, run, timedOut(timeoutS, "POST /ratel/run"), durationMs);
   }
   if (answered.exitCode !== 0) {
@@ -181,11 +201,16 @@ async function commandMode(vm: VmSession, run: Run): Promise<Ran> {
   const args = (config.run?.command ?? []).map(shellQuote).join(" ");
   const startedAt = Date.now();
   const ran = await vm.exec({
-    command: `docker create -i --name ${name} --env-file ${files.env} ${tag} ${args} >/dev/null; code=$?; rm -f ${files.env}; [ $code -eq 0 ] || exit $code; timeout ${timeoutS} docker start -ai ${name} < ${files.request}; code=$?; rm -f ${files.request}; exit $code`,
+    // stdout goes through `head -c` (the cap and a byte), stderr through a file of which the VM
+    // sends the end only.
+    command: `docker create -i --name ${name} --env-file ${files.env} ${tag} ${args} >/dev/null; code=$?; rm -f ${files.env}; [ $code -eq 0 ] || exit $code; { timeout ${timeoutS} docker start -ai ${name} < ${files.request} 2> ${files.stderr}; echo $? > ${files.exit}; } | head -c ${ANSWER_BYTES}; code=$(cat ${files.exit} 2>/dev/null || echo 1); tail -c ${SHELL_LOG_BYTES} ${files.stderr} >&2 2>/dev/null; rm -f ${files.request} ${files.exit} ${files.stderr}; exit $code`,
     timeoutS: timeoutS + SLACK_S,
   });
   const durationMs = Date.now() - startedAt;
   const logs = tailOf(ran.stderr, SHELL_LOG_BYTES);
+  if (tooLarge(ran.stdout)) {
+    return { answer: judgeCommandAnswer(0, ran.stdout), durationMs, logs };
+  }
   if (ran.timedOut || ran.exitCode === COMMAND_TIMEOUT || ran.exitCode === null) {
     return { answer: timedOut(timeoutS, "The command"), durationMs, logs };
   }
@@ -245,7 +270,7 @@ async function ended(
 async function clean(vm: VmSession, run: Run): Promise<boolean> {
   try {
     const removed = await vm.exec({
-      command: `docker rm -f -v ${run.name} >/dev/null 2>&1; rm -f ${run.files.env} ${run.files.request}; true`,
+      command: `docker rm -f -v ${run.name} >/dev/null 2>&1; rm -f ${run.files.env} ${run.files.request} ${run.files.exit} ${run.files.stderr}; true`,
       timeoutS: DOCKER_STEP_S,
     });
     return removed.exitCode === 0;
