@@ -11,7 +11,7 @@ import { listDestinations } from "@/lib/views/alerts/destinations";
 import { loadScorerPicker } from "@/lib/views/scorers/picker";
 import { getSlackConnection } from "@/lib/views/slack/store";
 import { metricFeatures } from "../dashboards/context";
-import { loadFormProperties } from "../dashboards/property-data";
+import { loadFormCompletionUsage, loadFormProperties } from "../dashboards/property-data";
 import type { FeaturePage } from "../feature-page";
 
 const WEEK_MS = 7 * 86_400_000;
@@ -24,6 +24,8 @@ export async function loadAlertForm(page: FeaturePage) {
   const { projectId } = page;
   const features = await metricFeatures(page);
   const since = new Date(Date.now() - WEEK_MS);
+  // Not awaited: the page streams it to the RQL field, which keeps its start order until then.
+  const usage = loadFormCompletionUsage(projectId, features.customMonitoring);
   const [facets, scorers, destinations, slack, properties] = await Promise.all([
     loadOrFallback({
       operation: "alert_facets",
@@ -44,6 +46,7 @@ export async function loadAlertForm(page: FeaturePage) {
     features,
     scorers,
     properties,
+    usage,
     form: {
       facets,
       destinations,

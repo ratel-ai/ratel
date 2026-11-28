@@ -1,5 +1,6 @@
 import { RQL_FUNCTIONS, RQL_TABLES, type RqlTableName, type RqlType } from "./catalog";
 import { describeRqlSchema } from "./describe";
+import { pairKey, type RqlCompletionUsage, usageKey } from "./usage";
 
 /**
  * What the RQL field of the console offers as a person writes, by the place of the cursor: the
@@ -98,8 +99,11 @@ export function rqlEditorData(
 
 /**
  * The completions at `pos` of `text`, or null when there are none: inside a string or a comment,
- * or, unless the person asked (`explicit`), where no word is being typed. What it offers follows
- * the place of the cursor, in the order a person reads the list:
+ * or, unless the person asked (`explicit`), where no word is being typed and the text does not end
+ * with a space, a comma, an opening parenthesis or an operator. So the list opens by itself after
+ * `select `, `from `, `where `, a comma and an operator, and not right after `*` or `)`. What it
+ * offers follows the place of the cursor, in the order of the catalog (`rankRqlCompletions` orders
+ * it by the project's usage):
  * - after FROM: the tables;
  * - where an operand starts (after SELECT, WHERE, AND, OR, NOT, HAVING, GROUP BY, ORDER BY, ON, a
  *   comma, an opening parenthesis or a binary operator): the columns of the table in FROM, then
@@ -119,7 +123,7 @@ export function rqlCompletions(
   if (property) return propertyCompletions(pos - property[1].length, data.properties);
   if (insideStringOrComment(before)) return null;
   const word = /[A-Za-z_][\w]*$/.exec(before);
-  if (!word && !explicit) return null;
+  if (!word && !explicit && !OPENS_BY_ITSELF.test(before)) return null;
   const from = word ? pos - word[0].length : pos;
   const tokens = tokensOf(before.slice(0, from));
   const last = tokens.at(-1);
@@ -132,7 +136,60 @@ export function rqlCompletions(
   return options.length > 0 ? { from, options } : null;
 }
 
+/**
+ * The completions of `rqlCompletions` in the order of a score (decision `completion-ranking`).
+ * Each kind keeps its place in the list, and a property that is not indexed stays last. Inside
+ * one kind, a name goes up when it holds data in the project, then by how often the saved queries
+ * that name a name already in `text` name it too, then by the saved queries that name it. Equal
+ * names keep the fixed start order: the order of the catalog. The same names, only reordered: the
+ * typed prefix decides which ones match. Pure.
+ */
+export function rankRqlCompletions(
+  text: string,
+  found: { from: number; options: RqlCompletion[] },
+  usage: RqlCompletionUsage,
+): RqlCompletion[] {
+  const before = text.slice(0, found.from);
+  const inProperty = PROPERTY_KEY.test(before);
+  const table = tableOf(text) as RqlTableName | undefined;
+  const word = /^[\w]*/.exec(text.slice(found.from))?.[0] ?? "";
+  const present = textNames(`${before} ${text.slice(found.from + word.length)}`);
+  const groups = [...new Set(found.options.map(groupOf))];
+  const scored = found.options.map((option, index) => {
+    const key = keyOf(option, inProperty);
+    // For each name of the text, the share of its saved queries that name this one too: a name
+    // that every query has (the table, `count`) adds as much to each option.
+    const together = key
+      ? present.reduce(
+          (sum, name) =>
+            sum + (usage.together[pairKey(key, name)] ?? 0) / Math.max(1, usage.uses[name] ?? 0),
+          0,
+        )
+      : 0;
+    return {
+      option,
+      index,
+      group: groups.indexOf(groupOf(option)),
+      data: hasNoData(option, inProperty, table, usage) ? 0 : 1,
+      together,
+      uses: key ? (usage.uses[key] ?? 0) : 0,
+    };
+  });
+  return scored
+    .sort(
+      (a, b) =>
+        a.group - b.group ||
+        b.data - a.data ||
+        b.together - a.together ||
+        b.uses - a.uses ||
+        a.index - b.index,
+    )
+    .map(({ option }) => option);
+}
+
 const DATA = rqlEditorData();
+/** The end of a text after which the list opens by itself: a space, `,`, `(` or an operator. */
+const OPENS_BY_ITSELF = /[\s,(=<>!+\-/]$/;
 /** The start of a property name being typed: `properties['` and what follows, to the cursor. */
 const PROPERTY_KEY = /\bproperties\s*\[\s*'([^'\n]*)$/;
 const NOT_INDEXED_INFO =
@@ -301,6 +358,53 @@ function propertyCompletions(
     })),
   ];
   return options.length > 0 ? { from, options } : null;
+}
+
+/** The part of the list an option ranks in: its kind, and a property that is not indexed apart. */
+function groupOf(option: RqlCompletion): string {
+  return option.disabled ? `${option.type}:off` : option.type;
+}
+
+/** The usage key of an option, or null for a keyword or an operator, which keep their place. */
+function keyOf(option: RqlCompletion, inProperty: boolean): string | null {
+  if (inProperty) return usageKey("property", option.label);
+  if (option.type === "class") return usageKey("table", option.label);
+  if (option.type === "property") return usageKey("column", option.label);
+  if (option.type === "function") return usageKey("function", option.label);
+  return null;
+}
+
+/**
+ * Whether the project's data says the option holds none: a column of a table that was read and
+ * holds no value in it (before FROM: in no table read), or a property with no value. No reading
+ * is no evidence.
+ */
+function hasNoData(
+  option: RqlCompletion,
+  inProperty: boolean,
+  table: RqlTableName | undefined,
+  { columnsWithData, propertiesWithData }: RqlCompletionUsage,
+): boolean {
+  if (inProperty) return propertiesWithData !== null && !propertiesWithData.includes(option.label);
+  if (option.type !== "property") return false;
+  const tables = table
+    ? [table]
+    : DATA.tables
+        .filter(({ columns }) => columns.some(({ name }) => name === option.label))
+        .map(({ name }) => name);
+  const read = tables.filter((name) => columnsWithData[name] !== undefined);
+  return read.length > 0 && read.every((name) => !columnsWithData[name]?.includes(option.label));
+}
+
+/** The usage keys a text may name: each word as a table, a column or a function, and each property key. */
+function textNames(text: string): string[] {
+  const names = new Set<string>();
+  for (const { kind, text: word } of tokensOf(text))
+    if (kind === "word" && !isKeyword(word))
+      for (const as of ["table", "column", "function"] as const) names.add(usageKey(as, word));
+  for (const [, name] of text.matchAll(/\bproperties\s*\[\s*'([^'\n]+)'/g))
+    names.add(usageKey("property", name));
+  return [...names];
 }
 
 /** Whether the end of `before` is inside a 'string' or after `--` on its line. */

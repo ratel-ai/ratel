@@ -29,7 +29,7 @@ export default async function AlertPage({
   const id = parseProjectUuid(ruleId);
   const rule = id ? await getAlertRule(page.projectId, id) : null;
   if (!rule) notFound();
-  const [{ scorers, properties, form }, events] = await Promise.all([
+  const [{ scorers, properties, usage, form }, events] = await Promise.all([
     loadAlertForm(page),
     listAlertEvents(page.projectId, rule.id),
   ]);
@@ -42,7 +42,7 @@ export default async function AlertPage({
       events={events.map((event) => ({ ...event, at: event.at.toISOString() }))}
     >
       <ScorerPickerProvider projectId={page.projectId} data={scorers}>
-        <PropertyChoicesProvider projectId={page.projectId} choices={properties}>
+        <PropertyChoicesProvider projectId={page.projectId} choices={properties} usage={usage}>
           <AlertForm projectId={page.projectId} rule={rule} start={null} {...form} />
         </PropertyChoicesProvider>
       </ScorerPickerProvider>

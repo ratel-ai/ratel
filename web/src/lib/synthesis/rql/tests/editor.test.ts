@@ -97,8 +97,8 @@ test("nothing the compiler refuses: no Postgres function, nothing in a string or
     assert.ok(!options.includes(refused), refused);
   assert.equal(at("select count(*) from traces where service_name = 'tr|'"), null);
   assert.equal(at("select count(*) from traces -- tr|"), null);
-  // While typing a word, without asking, only a word starts a list.
-  assert.equal(rqlCompletions("select count(*) ", 16, false), null);
+  // Without asking, right after a closing parenthesis: no list until a space or a word.
+  assert.equal(rqlCompletions("select count(*)", 15, false), null);
 });
 
 test("inside properties[' the editor offers the project's properties: the detected ones off", () => {
@@ -292,8 +292,46 @@ test("a list the person asked for with no word typed follows the same places", (
     [...new Set(explicit("select count(*) from traces where has_error "))],
     ["keyword", "operator"],
   );
-  // Not asked for, and no word: no list.
-  assert.equal(rqlCompletions("select ", 7, false), null);
+});
+
+test("the list opens by itself where a table, an operand or a keyword is expected", () => {
+  const opens = (text: string) =>
+    rqlCompletions(text, text.length, false)?.options.map((option) => option.label) ?? null;
+  const operand = (text: string) => assert.ok(opens(text)?.includes("duration_ms"), text);
+  operand("select ");
+  operand("select count(*) from traces where ");
+  operand("select service_name,");
+  operand("select service_name, ");
+  operand("select count(*) from traces where duration_ms >");
+  operand("select count(*) from traces where duration_ms >= ");
+  operand("select count(*) from traces where duration_ms !=");
+  operand("select count(*) from traces where duration_ms + ");
+  operand("select count(");
+  operand("select count(*)\nfrom traces\nwhere ");
+  assert.deepEqual(
+    opens("select count(*) from "),
+    RQL_TABLES.map((t) => t.name),
+  );
+  assert.deepEqual(opens("select count(*) from traces "), [
+    "where",
+    "group by",
+    "order by",
+    "limit",
+  ]);
+  // Not inside a string or a comment, nor after AS, LIMIT or an attribute key.
+  for (const text of [
+    "select count(*) from traces where service_name = 'a ",
+    "select count(*) from traces where service_name = 'a,",
+    "select count(*) from traces -- where ",
+    "select count(*) from traces -- a, ",
+    "select count(*) as ",
+    "select count(*) from traces limit ",
+    "select attributes[",
+  ])
+    assert.equal(rqlCompletions(text, text.length, false), null, text);
+  // Right after `*` or `)`, a space comes first.
+  assert.equal(rqlCompletions("select *", 8, false), null);
+  assert.equal(rqlCompletions("select count(*)", 15, false), null);
 });
 
 test("a comment and a string do not change the place", () => {

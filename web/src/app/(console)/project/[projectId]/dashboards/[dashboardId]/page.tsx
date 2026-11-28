@@ -62,8 +62,8 @@ export default async function ScopedDashboardPage({
     organizationId: scope.organization.id,
     actor: scope.user.externalId,
   });
-  const [results, { facets, scorers, properties, taskNames }, alerts, readOnly] = await Promise.all(
-    [
+  const [results, { facets, scorers, properties, usage, taskNames }, alerts, readOnly] =
+    await Promise.all([
       loadWidgets(
         scope.project.id,
         problem ? [] : dashboard.widgets,
@@ -77,13 +77,12 @@ export default async function ScopedDashboardPage({
         actor: scope.user.externalId,
       }),
       isRestrictedBySupportSession(),
-    ],
-  );
+    ]);
   const overview = await focusedConsoleEnabled(scope.organization);
   const added = scorers?.scorers.find(({ id }) => id === search[ADD_SCORER_PARAM]);
   return (
     <ScorerPickerProvider projectId={scope.project.id} data={scorers}>
-      <PropertyChoicesProvider projectId={scope.project.id} choices={properties}>
+      <PropertyChoicesProvider projectId={scope.project.id} choices={properties} usage={usage}>
         <TaskNamesProvider names={taskNames}>
           <DashboardView
             alerts={alerts}

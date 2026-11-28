@@ -31,7 +31,7 @@ export default async function NewAlertPage({
         Alerts need a database. Set DATABASE_URL to connect one.
       </DatabaseUnavailable>
     );
-  const { features, scorers, properties, form } = await loadAlertForm(page);
+  const { features, scorers, properties, usage, form } = await loadAlertForm(page);
   const search = await searchParams;
   const value = search[NEW_ALERT_PARAM];
   const inFragment = value === IN_FRAGMENT;
@@ -42,7 +42,7 @@ export default async function NewAlertPage({
   return (
     <NewAlertFrame projectId={page.projectId}>
       <ScorerPickerProvider projectId={page.projectId} data={scorers}>
-        <PropertyChoicesProvider projectId={page.projectId} choices={properties}>
+        <PropertyChoicesProvider projectId={page.projectId} choices={properties} usage={usage}>
           <NewAlertForm
             projectId={page.projectId}
             start={start.ok ? start.query : null}

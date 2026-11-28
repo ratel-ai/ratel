@@ -53,19 +53,20 @@ export default async function ScopedExplorePage({
       : filtersProblem(decoded?.panels.map(({ query }) => query) ?? [], filters));
   const panels = decoded?.ok && !problem ? decoded.panels : [];
   const features = await metricFeatures(page);
-  const [results, { facets, scorers, properties, taskNames }, dashboards] = await Promise.all([
-    loadWidgets(projectId, panels, { ...range, filter: filters }, features),
-    loadWidgetForm(projectId, range, features),
-    loadOrFallback({
-      operation: "explore_dashboards",
-      distinctId: `project:${projectId}`,
-      fallback: [],
-      load: () => listDashboards(projectId),
-    }),
-  ]);
+  const [results, { facets, scorers, properties, usage, taskNames }, dashboards] =
+    await Promise.all([
+      loadWidgets(projectId, panels, { ...range, filter: filters }, features),
+      loadWidgetForm(projectId, range, features),
+      loadOrFallback({
+        operation: "explore_dashboards",
+        distinctId: `project:${projectId}`,
+        fallback: [],
+        load: () => listDashboards(projectId),
+      }),
+    ]);
   return (
     <ScorerPickerProvider projectId={projectId} data={scorers}>
-      <PropertyChoicesProvider projectId={projectId} choices={properties}>
+      <PropertyChoicesProvider projectId={projectId} choices={properties} usage={usage}>
         <TaskNamesProvider names={taskNames}>
           <ExploreView
             projectId={projectId}

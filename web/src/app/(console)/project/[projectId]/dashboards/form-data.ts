@@ -14,12 +14,12 @@ import {
   UNREAD_SCORERS,
 } from "@/lib/views/scorers/picker";
 import { loadTaskOptions } from "../scorers/tasks";
-import { loadFormProperties } from "./property-data";
+import { loadFormCompletionUsage, loadFormProperties } from "./property-data";
 
 /**
  * What the widget fields offer: the filter values of the range (with the project's tasks by name,
  * RTL-397, while custom monitoring is on), the scorer picker (null while scorers are off), and the
- * trace properties with their values.
+ * trace properties with their values, and what the RQL field orders its list by.
  */
 export async function loadWidgetForm(
   projectId: string,
@@ -27,6 +27,8 @@ export async function loadWidgetForm(
   features: MetricFeatures,
 ) {
   const distinctId = `project:${projectId}`;
+  // Not awaited: the page streams it to the RQL field, which keeps its start order until then.
+  const usage = loadFormCompletionUsage(projectId, features.customMonitoring);
   const [facets, scorers, properties, tasks] = await Promise.all([
     loadOrFallback({
       operation: "dashboard_facets",
@@ -62,6 +64,7 @@ export async function loadWidgetForm(
     facets: task.length > 0 ? { ...facets, task } : facets,
     scorers,
     properties,
+    usage,
     taskNames: Object.fromEntries(tasks.map(({ id, name }) => [id, name])),
   };
 }
