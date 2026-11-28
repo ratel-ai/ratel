@@ -269,7 +269,7 @@ export function evalsOperations(deps: EvalsOperationDeps = defaultDeps): McpOper
       title: "Read an eval",
       description:
         "Use this tool to read one eval by its name or id. It returns its newest version: the sandbox, the default params, the trials, and each scorer with its check or its judge question. It also returns the cases of its dataset with the number of the version that counts.",
-      keywords: ["evals", "eval definition", "dataset", "scorers"],
+      keywords: ["evals", "eval definition"],
       scope: "project",
       mutates: false,
       apiKeyScope: "evals:read",
