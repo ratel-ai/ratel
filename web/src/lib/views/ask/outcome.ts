@@ -11,6 +11,9 @@ import type { AskOutcome } from "./domain";
  * ask replaced the draft).
  */
 
+/** The address parameter of a dashboard that an ask built: the dashboard names what it left out. */
+export const BUILT_BY_ASK_PARAM = "ask";
+
 /** The parts of a widget that a person can change: its title, query and chart. */
 type Shown = Pick<WidgetInput, "title" | "query" | "chart">;
 

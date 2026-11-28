@@ -93,6 +93,16 @@ export interface DashboardActionDeps {
     actor: string;
     action: DashboardActionInput["action"];
   }): Promise<void>;
+  /**
+   * After a change is stored: the dashboard, the action and the widget an add, an edit or a
+   * removal touched. Ask in words follows the outcome of its drafts with it.
+   */
+  afterChange?(change: {
+    projectId: string;
+    dashboardId: string;
+    action: DashboardActionInput["action"];
+    widgetId?: string;
+  }): Promise<void>;
 }
 
 /** The refusals a person can act on. Anything else is a failure. */
@@ -124,17 +134,16 @@ export async function changeDashboard(
   const actor = user.externalId;
   const editor = { updatedBy: actor, updatedByName: user.name || user.username || user.email };
   try {
-    const { id: dashboardId, missingScorers } = await apply(
-      input,
-      scope.project.id,
-      editor,
-      deps,
-      () =>
-        deps.features({
-          projectId: scope.project.id,
-          organizationId: scope.organization.id,
-          actor,
-        }),
+    const {
+      id: dashboardId,
+      missingScorers,
+      widgetId,
+    } = await apply(input, scope.project.id, editor, deps, () =>
+      deps.features({
+        projectId: scope.project.id,
+        organizationId: scope.organization.id,
+        actor,
+      }),
     );
     await deps.observe({
       project_id: scope.project.id,
@@ -142,6 +151,12 @@ export async function changeDashboard(
       dashboard_id: dashboardId,
       actor,
       action: input.action as DashboardActionInput["action"],
+    });
+    await deps.afterChange?.({
+      projectId: scope.project.id,
+      dashboardId,
+      action: input.action as DashboardActionInput["action"],
+      ...(widgetId ? { widgetId } : {}),
     });
     return { ok: true, dashboardId, ...(missingScorers?.length ? { missingScorers } : {}) };
   } catch (err) {
@@ -157,7 +172,7 @@ async function apply(
   editor: DashboardEditor,
   { store, scorers }: DashboardActionDeps,
   features: () => Promise<MetricFeatures>,
-): Promise<{ id: string; missingScorers?: string[] }> {
+): Promise<{ id: string; missingScorers?: string[]; widgetId?: string }> {
   switch (input.action) {
     case "create":
     case "create-starter": {
@@ -209,43 +224,56 @@ async function apply(
     case "save-layout":
     case "remove-widget": {
       const id = dashboardIdOf(input);
-      const change = await widgetChange(input, features);
+      const { change, widgetId } = await widgetChange(input, features);
       const outcome = await store.changeWidgets({ projectId, id, change, ...editor });
       if (outcome === "missing") throw new Refusal(MISSING);
-      return { id };
+      return { id, ...(widgetId ? { widgetId } : {}) };
     }
     default:
       throw new Refusal(INVALID);
   }
 }
 
-/** The next widget list. */
+type WidgetsChange = (widgets: DashboardWidget[], filters: DashboardFilters) => DashboardWidget[];
+
+/** The next widget list, and the widget an add, an edit or a removal touches. */
 async function widgetChange(
   input: Record<string, unknown>,
   features: () => Promise<MetricFeatures>,
-): Promise<(widgets: DashboardWidget[], filters: DashboardFilters) => DashboardWidget[]> {
+): Promise<{ change: WidgetsChange; widgetId?: string }> {
   if (input.action === "add-widget") {
     const widget = checkedWidget(input.widget, await features());
     const missing = text(input.missingScorer).slice(0, 200);
     if (!hasNoNul(missing)) throw new Refusal(NUL_PROBLEM);
     const back = gridPositionSchema.safeParse(input.layout);
-    return (widgets, filters) => {
-      checkFilters([widget], filters);
-      if (widgets.length >= MAX_WIDGETS)
-        throw new Refusal(`A dashboard can have ${MAX_WIDGETS} widgets.`);
-      const layout = back.success ? back.data : freePosition(widgets, defaultSize(widget.chart));
-      const added = { ...withId(widget, layout), ...(missing ? { missingScorer: missing } : {}) };
-      return compacted<DashboardWidget>([...widgets, added], added.id);
+    const widgetId = randomUUID();
+    return {
+      widgetId,
+      change: (widgets, filters) => {
+        checkFilters([widget], filters);
+        if (widgets.length >= MAX_WIDGETS)
+          throw new Refusal(`A dashboard can have ${MAX_WIDGETS} widgets.`);
+        const layout = back.success ? back.data : freePosition(widgets, defaultSize(widget.chart));
+        const added = {
+          ...widget,
+          id: widgetId,
+          layout,
+          ...(missing ? { missingScorer: missing } : {}),
+        };
+        return compacted<DashboardWidget>([...widgets, added], added.id);
+      },
     };
   }
   if (input.action === "save-layout") {
     const saved = layoutsSchema.safeParse(input.layouts);
     if (!saved.success) throw new Refusal(INVALID);
     // Only where they are: a widget added or removed meanwhile stays added or removed.
-    return (widgets) =>
-      compacted(
-        widgets.map((widget) => ({ ...widget, layout: saved.data[widget.id] ?? widget.layout })),
-      );
+    return {
+      change: (widgets) =>
+        compacted(
+          widgets.map((widget) => ({ ...widget, layout: saved.data[widget.id] ?? widget.layout })),
+        ),
+    };
   }
   const widgetId = text(input.widgetId);
   const indexIn = (widgets: DashboardWidget[]) => {
@@ -255,13 +283,16 @@ async function widgetChange(
   };
   if (input.action === "edit-widget") {
     const widget = checkedWidget(input.widget, await features());
-    return (widgets, filters) => {
-      checkFilters([widget], filters);
-      const index = indexIn(widgets);
-      return widgets.with(index, { ...widget, id: widgetId, layout: widgets[index].layout });
+    return {
+      widgetId,
+      change: (widgets, filters) => {
+        checkFilters([widget], filters);
+        const index = indexIn(widgets);
+        return widgets.with(index, { ...widget, id: widgetId, layout: widgets[index].layout });
+      },
     };
   }
-  return (widgets) => compacted(widgets.toSpliced(indexIn(widgets), 1));
+  return { widgetId, change: (widgets) => compacted(widgets.toSpliced(indexIn(widgets), 1)) };
 }
 
 function checkedWidget(raw: unknown, features: MetricFeatures): WidgetInput {

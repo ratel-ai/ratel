@@ -1,5 +1,7 @@
 import { DashboardsListView } from "@/components/console/dashboards/DashboardsListView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
+import { askConfigured } from "@/lib/views/ask/model";
 import { listDashboards } from "@/lib/views/dashboards/store";
 import { dashboardsScope } from "./context";
 
@@ -12,11 +14,16 @@ export async function DashboardsList({ projectId }: { projectId: string }) {
         Dashboards become available once setup finishes.
       </DatabaseUnavailable>
     );
-  const dashboards = await listDashboards(scope.project.id);
+  const [dashboards, restricted] = await Promise.all([
+    listDashboards(scope.project.id),
+    isRestrictedBySupportSession(),
+  ]);
   return (
     <DashboardsListView
       projectId={scope.project.id}
       now={new Date().toISOString()}
+      // A support session may not ask for a draft.
+      ask={askConfigured() && !restricted}
       dashboards={dashboards.map(({ id, name, widgetCount, updatedAt, updatedByName }) => ({
         id,
         name,

@@ -46,6 +46,7 @@ import {
 } from "@/lib/synthesis/metrics/catalog";
 import { RQL_VERSION } from "@/lib/synthesis/rql/compile";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
+import { followDashboardChange } from "@/lib/views/ask/store";
 import { changeDashboard } from "@/lib/views/dashboards/actions";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { dashboardDocumentSchema, exportDashboard } from "@/lib/views/dashboards/document";
@@ -768,6 +769,8 @@ async function run(
         changeWidgets: (input) => store.changeWidgets(input, db),
       },
       observe: observeChange(deps, ctx, "dashboard_changed"),
+      // Ask in words: a change to a dashboard that an ask made sets the ask's outcome.
+      afterChange: (change) => followDashboardChange(change, deps.now(), db),
     },
   );
   if (!result.ok) throw refusal(result.error);

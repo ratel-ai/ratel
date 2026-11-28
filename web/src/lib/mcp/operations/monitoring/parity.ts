@@ -84,6 +84,9 @@ export const PARITY: Readonly<Record<string, Covered>> = {
   "app/(console)/project/[projectId]/dashboards/ask-actions.ts#draftWidgetsAction": "draft_widgets",
   "app/(console)/project/[projectId]/dashboards/ask-actions.ts#askSuggestionsAction":
     "suggest_prompts",
+  "app/(console)/project/[projectId]/dashboards/ask-actions.ts#buildDashboardAction": {
+    none: "an agent drafts the widgets and imports the dashboard in two calls, which it can check between",
+  },
   "app/(console)/project/[projectId]/dashboards/ask-actions.ts#setAskOutcomeAction": {
     none: "the outcome is what a person did with a draft in a dialog of the console",
   },

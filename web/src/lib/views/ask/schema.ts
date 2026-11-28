@@ -25,8 +25,10 @@ export const askRequests = pgTable(
     // Where the ask came from: `console` or `mcp`.
     surface: text("surface").$type<"console" | "mcp">().notNull(),
     target: text("target").$type<AskTarget>().notNull(),
-    // The dashboard of a widget ask. Null for a new dashboard.
+    // The dashboard of a widget ask, or the dashboard a dashboard ask made. Null before one is made.
     dashboardId: uuid("dashboard_id"),
+    // The ids of the widgets the ask made, once it made a dashboard: their later changes set the outcome.
+    widgetIds: jsonb("widget_ids").$type<string[]>(),
     words: text("words").notNull(),
     // Null until the model answered.
     draft: jsonb("draft").$type<StoredDraft>(),

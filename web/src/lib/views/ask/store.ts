@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
-import type { AskOutcome, AskTarget, EarlierAsk } from "./domain";
+import type { AskOutcome, AskTarget, EarlierAsk, RefusedWidget } from "./domain";
 import { ASK_EARLIER_ASKS, ASK_LIMITS } from "./limits";
 import { askRequests, type StoredDraft } from "./schema";
 
@@ -132,6 +132,83 @@ export async function settleAsk(
     .update(askRequests)
     .set({ usd, ...(draft ? { draft } : {}) })
     .where(eq(askRequests.id, askId));
+}
+
+/**
+ * A dashboard ask made its dashboard (decision `ask-no-confirm`): the ask keeps the dashboard and
+ * the ids of the widgets it made, and its outcome is kept until one of them changes.
+ */
+export async function linkAsk(
+  projectId: string,
+  askId: string,
+  made: { dashboardId: string; widgetIds: readonly string[] },
+  now: Date = new Date(),
+  db: Pick<AskDb, "update"> = getDb(),
+): Promise<void> {
+  await db
+    .update(askRequests)
+    .set({
+      dashboardId: made.dashboardId,
+      widgetIds: [...made.widgetIds],
+      outcome: "kept",
+      outcomeAt: now,
+    })
+    .where(and(eq(askRequests.projectId, projectId), eq(askRequests.id, askId)));
+}
+
+/** A change to a dashboard, as the dashboard actions report it. */
+export interface DashboardChange {
+  projectId: string;
+  dashboardId: string;
+  action: string;
+  /** The widget an edit or a removal changed. */
+  widgetId?: string;
+}
+
+/**
+ * The outcome of the asks that made a dashboard, after a change to it: edited when one of their
+ * widgets is changed or removed, discarded when the dashboard is deleted. Other changes keep it.
+ */
+export async function followDashboardChange(
+  change: DashboardChange,
+  now: Date = new Date(),
+  db: Pick<AskDb, "update"> = getDb(),
+): Promise<void> {
+  const made = and(
+    eq(askRequests.projectId, change.projectId),
+    eq(askRequests.dashboardId, change.dashboardId),
+    eq(askRequests.target, "dashboard"),
+    isNotNull(askRequests.widgetIds),
+  );
+  if (change.action === "delete") {
+    await db.update(askRequests).set({ outcome: "discarded", outcomeAt: now }).where(made);
+    return;
+  }
+  if ((change.action === "edit-widget" || change.action === "remove-widget") && change.widgetId)
+    await db
+      .update(askRequests)
+      .set({ outcome: "edited", outcomeAt: now })
+      .where(
+        and(
+          made,
+          eq(askRequests.outcome, "kept"),
+          sql`${askRequests.widgetIds} ? ${change.widgetId}`,
+        ),
+      );
+}
+
+/** The widgets a stored ask of the project left out, with their reason; null for no such ask. */
+export async function askLeftOut(
+  projectId: string,
+  askId: string,
+  db: Pick<AskDb, "select"> = getDb(),
+): Promise<RefusedWidget[] | null> {
+  const [row] = await db
+    .select({ draft: askRequests.draft })
+    .from(askRequests)
+    .where(and(eq(askRequests.projectId, projectId), eq(askRequests.id, askId)))
+    .limit(1);
+  return row ? (row.draft?.refused ?? []) : null;
 }
 
 /**

@@ -9,9 +9,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { formatInteger, formatRelativeTime, MISSING } from "@/lib/synthesis/traces/v2/format";
+import { BUILT_BY_ASK_PARAM } from "@/lib/views/ask/outcome";
 import { dashboardHref } from "@/lib/views/dashboards/links";
+import { CreateDashboardDialog } from "./CreateDashboardDialog";
 import { ImportDialog } from "./ImportDialog";
-import { NameDialog } from "./NameDialog";
 import { useDashboardAction } from "./use-dashboard-action";
 
 export interface DashboardRow {
@@ -27,10 +28,13 @@ export function DashboardsListView({
   projectId,
   now,
   dashboards,
+  ask = false,
 }: {
   projectId: string;
   now: string;
   dashboards: readonly DashboardRow[];
+  /** This deployment can draft widgets from words: Create dashboard can build one. */
+  ask?: boolean;
 }) {
   const router = useRouter();
   const { change, saving } = useDashboardAction(projectId);
@@ -138,13 +142,18 @@ export function DashboardsListView({
           />
         )}
       </PageBody>
-      <NameDialog
+      <CreateDashboardDialog
         open={naming}
         onOpenChange={setNaming}
-        title="Create dashboard"
-        submitLabel="Create dashboard"
+        projectId={projectId}
+        ask={ask}
         saving={saving}
-        onSubmit={(name) => void create({ action: "create", name })}
+        onCreateBlank={(name) => void create({ action: "create", name })}
+        onBuilt={(id, askId) =>
+          router.push(
+            `${dashboardHref(projectId, id)}?${new URLSearchParams({ [BUILT_BY_ASK_PARAM]: askId })}`,
+          )
+        }
       />
       <ImportDialog
         open={importing}
