@@ -121,16 +121,24 @@ export async function holdAsk(input: AskHoldInput, db: AskDb = getDb()): Promise
   });
 }
 
-/** The calls of a draft ended: store what they cost, and the draft when there is one. */
+/** What the calls of a draft used. */
+export interface AskUsage {
+  usd: number;
+  inputTokens: number;
+  outputTokens: number;
+  repairRounds: number;
+}
+
+/** The calls of a draft ended: store what they used, and the draft when there is one. */
 export async function settleAsk(
   askId: string,
-  usd: number,
+  usage: AskUsage,
   draft: StoredDraft | null,
   db: AskDb = getDb(),
 ): Promise<void> {
   await db
     .update(askRequests)
-    .set({ usd, ...(draft ? { draft } : {}) })
+    .set({ ...usage, ...(draft ? { draft } : {}) })
     .where(eq(askRequests.id, askId));
 }
 

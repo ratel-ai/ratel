@@ -45,6 +45,11 @@ export type RqlCompileResult =
       /** The most rows the query gives: its LIMIT, lowered to `maxLimit`. */
       limit: number;
       /**
+       * The limit is the query's own LIMIT under `maxLimit`, not a cap of Ratel (the default, or
+       * `maxLimit`): rows past it are no cut of the result.
+       */
+      ownLimit: boolean;
+      /**
        * The query gives one row at most: no GROUP BY, and each column an aggregate. What an alert
        * compares needs it. HAVING can still keep no row.
        */
@@ -89,6 +94,8 @@ export function compileQuery(
       table: select.table.name,
       window: { from: window.from.toISOString(), to: window.to.toISOString() },
       limit,
+      // A LIMIT of maxLimit or more is the cap itself: the metric form writes it to read all rows.
+      ownLimit: select.limit !== undefined && select.limit < RQL_LIMITS.maxLimit,
       oneRow:
         select.groupBy.length === 0 &&
         !select.distinct &&

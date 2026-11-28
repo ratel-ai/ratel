@@ -43,7 +43,7 @@ export function sqlResultNotes(result: SqlResult): string[] {
   return [
     ...(result.truncated
       ? [
-          `Truncated: the query had more rows than its limit, or a cell or the rows were cut at the result cap. These are the first ${result.rows.length} rows. Add a LIMIT, a GROUP BY or a shorter range to read the rest.`,
+          `Truncated: a cap of Ratel cut the result (the rows of a query with no LIMIT, the most rows of one query (1,000), or the size of a cell or of the rows). These are the first ${result.rows.length} rows. Add a LIMIT, a GROUP BY or a shorter range to read the rest.`,
         ]
       : []),
   ];
@@ -158,6 +158,17 @@ export function drawnChart<Chart extends string>(
 ): Chart | "table" {
   if (result?.kind !== "sql" || !(chart in CHART_KINDS)) return chart;
   return chartChoices(result as SqlResult)[chart as MetricChartKind] ? "table" : chart;
+}
+
+/**
+ * Whether a card scrolls the widget's body inside it: a table, a number, and a list of text bars,
+ * which grows with its rows, do. A line or a bar over time takes the card's height, and its readout
+ * may reach out of it, so it does not.
+ */
+export function scrollsInCard(chart: string, result: { kind: string } | null): boolean {
+  const drawn = drawnChart(chart, result);
+  if (drawn !== "line" && drawn !== "bar") return true;
+  return result?.kind === "sql" && sqlAsMetric(result as SqlResult) === null;
 }
 
 const CHART_KINDS: Readonly<Record<MetricChartKind, true>> = {

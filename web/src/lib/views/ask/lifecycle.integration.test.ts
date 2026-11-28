@@ -72,7 +72,9 @@ function deps(): DashboardActionDeps {
 }
 
 /** A build as the console's action does it: a draft, one import, then the link. */
-async function build(): Promise<{ askId: string; dashboardId: string; widgetIds: string[] }> {
+async function build(
+  range?: unknown,
+): Promise<{ askId: string; dashboardId: string; widgetIds: string[] }> {
   const draft = await draftWidgets(
     {
       projectId: PROJECT,
@@ -87,7 +89,7 @@ async function build(): Promise<{ askId: string; dashboardId: string; widgetIds:
         model: ASK_MODEL,
         standIn: false,
         complete: async () => ({
-          text: JSON.stringify({ widgets: [...GOOD, BROKEN] }),
+          text: JSON.stringify({ widgets: [...GOOD, BROKEN], range }),
           usage: { inputTokens: 1, outputTokens: 1 },
         }),
       },
@@ -101,7 +103,7 @@ async function build(): Promise<{ askId: string; dashboardId: string; widgetIds:
     {
       projectId: PROJECT,
       action: "import",
-      document: draftedDashboard("Agent", draft.widgets),
+      document: draftedDashboard("Agent", draft.widgets, draft.range),
     },
     deps(),
   );
@@ -182,4 +184,13 @@ test("a removal of a drafted widget makes it edited, and a delete of the dashboa
   assert.equal(await outcomeOf(askId), "edited");
   await changeDashboard({ projectId: PROJECT, action: "delete", dashboardId }, deps());
   assert.equal(await outcomeOf(askId), "discarded");
+});
+
+test("a build from words that name a range of the page opens on it; another range leaves the default", async () => {
+  const named = await build("14d");
+  assert.equal((await store.getDashboard(PROJECT, named.dashboardId, db))?.range, "14d");
+  for (const outside of ["2d", ""]) {
+    const other = await build(outside);
+    assert.equal((await store.getDashboard(PROJECT, other.dashboardId, db))?.range, null);
+  }
 });

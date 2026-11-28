@@ -13,17 +13,20 @@ export interface ShapedRows {
   truncated: boolean;
 }
 
-/** The first `limit` rows, typed, cut to the cell cap and to the byte cap. */
+/**
+ * The first `limit` rows, typed, cut to the cell cap and to the byte cap. Rows past `limit` mark
+ * the result truncated only when the limit is `capped`: a cap of Ratel, not the query's own LIMIT.
+ */
 export function shapeRows(
   raw: readonly unknown[][],
   types: readonly (RqlType | undefined)[],
-  limit: number,
+  { limit, capped }: { limit: number; capped: boolean },
 ): ShapedRows {
   const rows: unknown[][] = [];
   // The executor stops reading once the rows pass the cap as it measures them, before typing: rows
   // past that measure mean it stopped, even when they fit the cap once typed.
   const read = raw.reduce((sum, row) => sum + shapedRowBytes(row), 0);
-  let truncated = raw.length > limit || read > RQL_LIMITS.maxResultBytes;
+  let truncated = (capped && raw.length > limit) || read > RQL_LIMITS.maxResultBytes;
   let bytes = 2; // the brackets of the JSON array
   for (const rawRow of raw.slice(0, limit)) {
     const cut = cutRow(rawRow.map((value, i) => normalizeValue(value, types[i])));

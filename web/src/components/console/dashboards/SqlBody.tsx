@@ -74,9 +74,9 @@ export function SqlBody({
         <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
           <MetricChart
             chart={drawn}
-            model={chartModel(timed, "avg", "count", drawn)}
+            model={chartModel(timed, "avg", "number", drawn)}
             result={timed}
-            unit="count"
+            unit="number"
             label={label}
             fill={fill}
           />

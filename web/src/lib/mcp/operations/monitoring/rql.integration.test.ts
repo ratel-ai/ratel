@@ -173,14 +173,15 @@ test("run_rql reads the window it is given, and refuses a window over the most R
   assert.match(JSON.stringify(wide), new RegExp(`${RQL_LIMITS.maxWindowDays} days`));
 });
 
-test("run_rql says when the query had more rows than its limit", async () => {
+test("run_rql does not call a result cut when only the query's own LIMIT stopped it", async () => {
   const result = (await m.call("run_rql", {
     text: "select trace_id from traces order by trace_id limit 1",
   })) as DispatchSuccess;
   assert.ok(result.ok);
-  assert.equal((result.data as Table).truncated, true);
-  assert.equal(result.truncated, true);
-  assert.match((result.data as Table).summary, /more rows than its limit/);
+  assert.equal((result.data as Table).rows.length, 1);
+  assert.equal((result.data as Table).truncated, false);
+  assert.ok(!result.truncated);
+  assert.doesNotMatch((result.data as Table).summary, /Truncated/);
 });
 
 test("an RQL error reaches the agent as RQL wrote it: the code, the message and the fix", async () => {

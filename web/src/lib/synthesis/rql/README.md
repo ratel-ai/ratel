@@ -132,8 +132,10 @@ the compiled SQL with its params and the one at `limitParam` (the `LIMIT`) repla
 or a number is a JS number (pg gives `bigint` and `numeric` as strings), a timestamp is an ISO
 string. A cell over `RQL_LIMITS.maxCellChars` (2000) is cut to that length: a text keeps its
 start, and a list or `attributes` becomes the start of its JSON, a text. The rows stop before
-their JSON passes `RQL_LIMITS.maxResultBytes` (1 MB). `truncated` is true when the query had more
-than `limit` rows, a cell was cut, or the rows stopped at the byte cap.
+their JSON passes `RQL_LIMITS.maxResultBytes` (1 MB). `truncated` is true when a cap of Ratel cut
+the result: the query had more rows than the default limit or `maxLimit` (also a LIMIT of
+`maxLimit` or more), a cell was cut, or the rows stopped at the byte cap. Rows past the query's own
+LIMIT under `maxLimit` are no cut.
 
 | Code | When |
 |---|---|

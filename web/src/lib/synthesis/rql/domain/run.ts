@@ -8,8 +8,9 @@ import { shapeRows } from "./result";
 
 /**
  * Runs a compiled query on the executor: the gate of the project first, then one row more than
- * the limit (only the parameter at `limitParam` changes), so a result the cap cut is marked
- * `truncated`. The rows are cut to the cell and byte caps of `RQL_LIMITS` (`result.ts`), and a
+ * the limit (only the parameter at `limitParam` changes), so a result that a cap of Ratel cut (the
+ * default limit, or `maxLimit`, which a LIMIT of that size or more reads as) is marked
+ * `truncated`. Rows past the query's own LIMIT under `maxLimit` are no cut: it asked for that many. The rows are cut to the cell and byte caps of `RQL_LIMITS` (`result.ts`), and a
  * cut marks the result `truncated` too. Database errors become RQL errors with a code, a message
  * and a fix, as the compiler's errors.
  */
@@ -40,8 +41,8 @@ export type RqlRunResult =
       columns: { name: string; type: RqlType }[];
       rows: unknown[][];
       /**
-       * The result is not whole: the query had more rows than its limit, a cell was cut to
-       * `maxCellChars`, or the rows stopped at `maxResultBytes`.
+       * A cap of Ratel cut the result: the query had more rows than the default limit or
+       * `maxLimit`, a cell was cut to `maxCellChars`, or the rows stopped at `maxResultBytes`.
        */
       truncated: boolean;
     }
@@ -78,7 +79,7 @@ export async function executeCompiled(
     const shaped = shapeRows(
       rows,
       compiled.columns.map(({ type }) => type),
-      compiled.limit,
+      { limit: compiled.limit, capped: !compiled.ownLimit },
     );
     return { ok: true, columns: compiled.columns, ...shaped };
   } catch (error) {

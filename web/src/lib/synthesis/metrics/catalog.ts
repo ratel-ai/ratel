@@ -14,7 +14,8 @@ import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
  * from. Pure data, safe for the browser, so every form is built from it.
  */
 
-export type MetricUnit = "count" | "ratio" | "ms" | "tokens" | "usd" | "score";
+/** `number`: a number column of an RQL query, of any scale (a rate, a cost, an average). */
+export type MetricUnit = "count" | "ratio" | "ms" | "tokens" | "usd" | "score" | "number";
 
 /** Where the numbers come from: one row per trace, one row per captured prompt, or one per scorer result. */
 export type MetricSource = "traces" | "context" | "scores";

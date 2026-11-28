@@ -11,6 +11,7 @@ import {
   setAskOutcomeAction,
 } from "@/app/(console)/project/[projectId]/dashboards/ask-actions";
 import { CardFrame } from "@/components/console/grid/CardFrame";
+import { RANGE_PRESETS } from "@/lib/synthesis/dashboard";
 import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
 import { askOutcome, isChoice } from "@/lib/views/ask/outcome";
 import { hasUnsavedChanges } from "@/lib/views/dashboards/expanded";
@@ -191,7 +192,14 @@ function NewWidgetForm({
       draft.current = { askId: result.askId, widget: filled };
       setWidget(filled);
       setChosen(true);
-      setNote("Drafted from your words. Change anything before you add it.");
+      setNote(
+        [
+          "Drafted from your words. Change anything before you add it.",
+          rangeNote(result.range, range.preset),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
     } catch {
       setProblem("Could not ask for a draft. Try again.");
     } finally {
@@ -322,7 +330,8 @@ function WidgetPreview({
           preview.ok ? (
             <WidgetCardBody
               projectId={projectId}
-              widget={preview.widget}
+              // The read has no title (a title changes no number): the chart is named as the card.
+              widget={{ ...preview.widget, title: widget.title }}
               result={preview.result}
               range={range}
               filters={filters}
@@ -338,6 +347,14 @@ function WidgetPreview({
       </CardFrame>
     </div>
   );
+}
+
+/** Said when the words name a range other than the dashboard's: the widget reads the dashboard's. */
+function rangeNote(named: string | null, shown: string): string | null {
+  if (!named || named === shown) return null;
+  const label = (id: string) => RANGE_PRESETS.find((preset) => preset.id === id)?.label;
+  const page = label(shown);
+  return `Your words name ${label(named)?.toLowerCase()}. The widget reads the range of the dashboard${page ? `: ${page.toLowerCase()}` : ""}.`;
 }
 
 function settle(projectId: string, askId: string, outcome: "kept" | "edited" | "discarded") {
