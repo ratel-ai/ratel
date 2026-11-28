@@ -81,12 +81,13 @@ async function runSqlQuery(
       ...(scope.filter ? { filter: scope.filter } : {}),
     });
     if (!compiled.ok) {
-      const { code, message, fix } = compiled.error;
+      const { code, message, fix, at } = compiled.error;
       throw new QueryError(
         query.rqlVersion < rqlVersion
           ? `The query was written for RQL version ${query.rqlVersion}, and no longer compiles in version ${rqlVersion}: ${message}`
           : message,
-        { code, fix },
+        // Where in the text: the field marks it.
+        { code, fix, ...(at ? { at: { start: at.start, end: at.end } } : {}) },
       );
     }
     const timeoutMs = alert

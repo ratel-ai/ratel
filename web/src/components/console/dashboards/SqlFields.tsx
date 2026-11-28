@@ -3,14 +3,18 @@
 import { Button } from "@ratel/design-system/button";
 import { Field, Textarea } from "@ratel/design-system/input";
 import { Play } from "lucide-react";
-import { useState } from "react";
+import { type ComponentType, useEffect, useState } from "react";
 import { MAX_SQL_TEXT } from "@/lib/contracts/query";
 import type { WidgetResult } from "@/lib/views/dashboards/types";
+import type { RqlEditor as RqlEditorType } from "./RqlEditor";
+
+type Editor = ComponentType<Parameters<typeof RqlEditorType>[0]>;
 
 /**
  * The RQL text of a widget. The text runs when the person asks (Run, or ⌘Enter), not at each key.
  * A refusal of RQL shows its message and its fix under the editor. A text from outside (a change
- * of a dropdown of the form) replaces the draft.
+ * of a dropdown of the form) replaces the draft. The editor with highlighting and completion loads
+ * only where the field is shown; the plain text area stands in while it loads, and if it fails.
  */
 export function SqlFields({
   text,
@@ -27,6 +31,7 @@ export function SqlFields({
   onRun: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(text);
+  const editor = useRqlEditor();
   const [shown, setShown] = useState(text);
   if (text !== shown) {
     setShown(text);
@@ -51,24 +56,35 @@ export function SqlFields({
           ) : undefined
         }
       >
-        {(control) => (
-          <Textarea
-            {...control}
-            value={draft}
-            maxLength={MAX_SQL_TEXT}
-            spellCheck={false}
-            autoComplete="off"
-            rows={Math.min(14, Math.max(5, draft.split("\n").length + 1))}
-            className="font-mono text-xs"
-            onChange={(event) => setDraft(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault();
-                run();
-              }
-            }}
-          />
-        )}
+        {(control) =>
+          editor.Editor ? (
+            <editor.Editor
+              value={draft}
+              maxLength={MAX_SQL_TEXT}
+              errorAt={refusal?.at && refusal.at.end <= draft.length ? refusal.at : null}
+              onChange={setDraft}
+              onRun={run}
+              control={control}
+            />
+          ) : (
+            <Textarea
+              {...control}
+              value={draft}
+              maxLength={MAX_SQL_TEXT}
+              spellCheck={false}
+              autoComplete="off"
+              rows={Math.min(14, Math.max(5, draft.split("\n").length + 1))}
+              className="font-mono text-xs"
+              onChange={(event) => setDraft(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  run();
+                }
+              }}
+            />
+          )
+        }
       </Field>
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={!changed || !draft.trim()} onClick={run}>
@@ -79,4 +95,22 @@ export function SqlFields({
       </div>
     </div>
   );
+}
+
+/** The RQL editor, imported on demand: null until it loads, and when it cannot. */
+function useRqlEditor(): { Editor: Editor | null } {
+  const [Editor, setEditor] = useState<Editor | null>(null);
+  useEffect(() => {
+    let live = true;
+    import("./RqlEditor")
+      .then((module) => {
+        if (live) setEditor(() => module.RqlEditor);
+      })
+      // The text area stays: the field still works.
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  return { Editor };
 }
